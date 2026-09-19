@@ -763,6 +763,50 @@ The subject expression is evaluated exactly once, no matter how many `case` arms
 
 Case values are tested in source order and testing stops at the first match, so a later arm's value expression is never evaluated once an earlier one matches -- safe to rely on if a value expression is a function call with side effects.  Several values on one `case` are separated by commas (a trailing comma is allowed, e.g. `case 1, 2,`); `case 1 | 2` is the bitwise-or expression `3`, not an or-pattern matching either value.
 
+A `case` value can also be a `lo:hi` range, and any value or range in the list can be followed by a `when` guard that must also be true for the arm to match:
+
+<!-- syntran-begin mode=repl group=switch-range -->
+```rust
+fn grade(score: i32): str
+{
+    switch score
+    {
+        case 90:101
+        {
+            return "A";
+        }
+        case 80:90
+        {
+            return "B";
+        }
+        case 0:80 when score >= 60
+        {
+            return "C";
+        }
+        default
+        {
+            return "F";
+        }
+    }
+}
+
+println(grade(95));
+println(grade(85));
+println(grade(65));
+println(grade(50));
+```
+<!-- syntran-expect
+A
+B
+C
+F
+-->
+<!-- syntran-end -->
+
+A range is half-open, like every other `:` range in syntran (e.g. `[0: 5]`): `case lo:hi` matches `lo <= subj < hi`, both bounds are required, and `hi` is only evaluated once `subj < lo` is known to be false.  Ranges work on numeric and `str` subjects (compared lexicographically), but not `bool` or `enum` ones, since there's no ordering between their values for `<` to use.
+
+A `when` guard is checked only once one of the arm's values or ranges has already matched the subject, and only once per arm; if the guard is false, matching continues with the *next* `case` arm (not `default`), so a later arm can still catch what a guarded earlier one rejected.  A guard covers the whole comma-separated value list it follows, and must be spelled `when` -- `case v if cond { ... }` already means something else: `v` as the case value and the if-statement as the arm's body.
+
 ## Arrays
 
 Recall the syntax for a for-loop:

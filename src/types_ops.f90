@@ -349,6 +349,9 @@ module integer function get_keyword_kind(text) result(kind)
 		case ("default")
 			kind = default_keyword
 
+		case ("when")
+			kind = when_keyword
+
 		case default
 			kind = identifier_token
 
@@ -388,7 +391,7 @@ module logical function is_identifier_or_keyword(kind)
 		let_keyword, if_keyword, else_keyword, for_keyword, in_keyword, &
 		while_keyword, fn_keyword, struct_keyword, enum_keyword, include_keyword, &
 		return_keyword, break_keyword, continue_keyword, use_keyword, &
-		switch_keyword, case_keyword, default_keyword &
+		switch_keyword, case_keyword, default_keyword, when_keyword &
 	])
 
 end function is_identifier_or_keyword

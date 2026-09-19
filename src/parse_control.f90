@@ -880,29 +880,117 @@ logical function at_case_body_start(parser) result(at_body)
 	! trailing comma in the value list, e.g. `case 1, 2, { ... }`, consistent
 	! with enum declarations (parse_fn.f90's at_method_start() neighbor) and
 	! array literals (parse_array.f90's trailing-comma check).  Kind list
-	! mirrors parse_statement()'s select-case dispatch above
+	! mirrors parse_statement()'s select-case dispatch above.  when_keyword is
+	! included too, so a trailing comma before a guard, e.g. `case 1, 2, when
+	! c { ... }`, also terminates the value list
 
 	class(parser_t) :: parser
 
 	at_body = any(parser%current_kind() == [lbrace_token, return_keyword, &
 		if_keyword, for_keyword, while_keyword, switch_keyword, &
-		break_keyword, continue_keyword, let_keyword, use_keyword])
+		break_keyword, continue_keyword, let_keyword, use_keyword, &
+		when_keyword])
 
 end function at_case_body_start
 
 !===============================================================================
 
+subroutine check_case_range_bound(parser, subj_type, bound, beg, end_)
+
+	! Shared type check for both ends of a `case lo:hi` range: the bound must
+	! be orderable against the switch subject with `<`, mirroring the
+	! eequals_token check that plain case values get in parse_case_clause()
+	! below.  is_binary_op_allowed()'s greater/less-token branch already
+	! restricts ordering to numeric-vs-numeric or str-vs-str, which is exactly
+	! what excludes bool and enum range bounds
+
+	class(parser_t) :: parser
+	integer, intent(in) :: subj_type, beg, end_
+	type(syntax_node_t), intent(in) :: bound
+
+	!********
+
+	integer :: bound_type
+	logical :: is_op_allowed
+	type(text_span_t) :: span
+
+	bound_type = bound%val%type
+
+	if (subj_type == unknown_type .or. bound_type == unknown_type) then
+		! Stop cascading errors.  May happen on pass 0 when the subject or a
+		! range bound depends on a fn declared later in the file
+		is_op_allowed = .true.
+	else
+		is_op_allowed = bound_type /= array_type .and. &
+			is_binary_op_allowed(subj_type, less_token, bound_type, &
+			unknown_type, unknown_type)
+	end if
+
+	if (.not. is_op_allowed) then
+		span = new_span(beg, end_ - beg + 1)
+		call parser%diagnostics%push(err_bad_case_range_type( &
+			parser%context(), span, parser%text(beg, end_), &
+			kind_name(bound_type), kind_name(subj_type)))
+	end if
+
+end subroutine check_case_range_bound
+
+!===============================================================================
+
+recursive subroutine parse_case_range(parser, subj_type, lo, lo_beg, lo_end, range)
+
+	! Parse the `:hi` half of a `case lo:hi` range, given the already-parsed
+	! `lo` bound.  Half-open like every other `:` range in syntran (e.g.
+	! `[0: 5]`): matches when lo <= subj < hi.
+	!
+	! AST shape:
+	!
+	!   case_range   %lbound_ = lower bound (inclusive)
+	!                %ubound_ = upper bound (exclusive)
+
+	class(parser_t) :: parser
+	integer, intent(in) :: subj_type
+	type(syntax_node_t), intent(inout) :: lo
+	integer, intent(in) :: lo_beg, lo_end
+	type(syntax_node_t), intent(out) :: range
+
+	!********
+
+	integer :: hi_beg, hi_end
+	type(syntax_node_t) :: hi
+
+	call check_case_range_bound(parser, subj_type, lo, lo_beg, lo_end)
+
+	hi_beg = parser%peek_pos(0)
+	call parser%parse_expr(expr = hi)
+	hi_end = parser%peek_pos(0) - 1
+
+	call check_case_range_bound(parser, subj_type, hi, hi_beg, hi_end)
+
+	range%kind = case_range
+	range%val%type = lo%val%type
+
+	call syntax_node_move(lo, range%lbound_)
+	call syntax_node_move(hi, range%ubound_)
+
+end subroutine parse_case_range
+
+!===============================================================================
+
 recursive subroutine parse_case_clause(parser, subj_type, subj_val, clause)
 
-	! Parse one `case <val>, <val>, ... <body>` arm.  Not a parser_t
-	! type-bound procedure -- purely a local helper for
+	! Parse one `case <val>, <val>, ... [when <cond>] <body>` arm.  Not a
+	! parser_t type-bound procedure -- purely a local helper for
 	! parse_switch_statement(), following the backpatch_breaks precedent in
 	! compile_ctrl.f90.
 	!
 	! AST shape:
 	!
-	!   case_clause   %elems(:) = this arm's match-value expressions
-	!                 %body     = this arm's body statement
+	!   case_clause   %elems(:)   = this arm's match-value/case_range
+	!                               expressions, in source order
+	!                 %condition  = optional `when` guard, checked only after
+	!                               a value/range has already matched
+	!                 %body       = this arm's body statement
 
 	class(parser_t) :: parser
 	integer, intent(in) :: subj_type
@@ -911,12 +999,12 @@ recursive subroutine parse_case_clause(parser, subj_type, subj_val, clause)
 
 	!********
 
-	integer :: i, val_beg, val_end, val_type
+	integer :: i, val_beg, val_end, val_type, cond_beg, cond_end
 	logical :: is_op_allowed
 
-	type(syntax_node_t)  :: val_tmp, body
+	type(syntax_node_t)  :: val_tmp, range_tmp, guard, body
 	type(syntax_node_vector_t) :: vals
-	type(syntax_token_t) :: case_token, comma
+	type(syntax_token_t) :: case_token, comma, colon, when_token
 	type(text_span_t) :: span
 
 	call parser%match(case_keyword, case_token)
@@ -928,51 +1016,87 @@ recursive subroutine parse_case_clause(parser, subj_type, subj_val, clause)
 		call parser%parse_expr(expr = val_tmp)
 		val_end = parser%peek_pos(0) - 1
 
-		val_type = val_tmp%val%type
+		if (parser%current_kind() == colon_token) then
 
-		if (subj_type == unknown_type .or. val_type == unknown_type) then
-			! Stop cascading errors.  May happen on pass 0 when the subject
-			! or a case value depends on a fn declared later in the file
-			is_op_allowed = .true.
+			! `case lo:hi` range, e.g. `case 1:10`
+			call parser%match(colon_token, colon)
+			call parse_case_range(parser, subj_type, val_tmp, val_beg, val_end, &
+				range_tmp)
+			call vals%push_move(range_tmp)
+
 		else
-			! left_arr/right_arr must always be passed explicitly (as
-			! unknown_type when the operand isn't an array): the eequals_token
-			! branch of is_binary_op_allowed() dereferences them unconditionally,
-			! c.f. the larrtype/rarrtype locals in parse_expr.f90's binary_expr loop
-			is_op_allowed = val_type /= array_type .and. &
-				is_binary_op_allowed(subj_type, eequals_token, val_type, &
-				unknown_type, unknown_type)
 
-			if (is_op_allowed .and. subj_type == enum_type) then
-				! Mirrors the enum_cookie identity check in parse_expr.f90:
-				! is_binary_op_allowed() alone doesn't know that two
-				! same-kind enum_type values can still belong to different
-				! enums (e.g. `Suit.Hearts == Card.Jack`)
-				if (allocated(subj_val%enum_cookie) .and. &
-					allocated(val_tmp%val%enum_cookie)) then
-					if (subj_val%enum_cookie /= val_tmp%val%enum_cookie) &
+			val_type = val_tmp%val%type
+
+			if (subj_type == unknown_type .or. val_type == unknown_type) then
+				! Stop cascading errors.  May happen on pass 0 when the subject
+				! or a case value depends on a fn declared later in the file
+				is_op_allowed = .true.
+			else
+				! left_arr/right_arr must always be passed explicitly (as
+				! unknown_type when the operand isn't an array): the eequals_token
+				! branch of is_binary_op_allowed() dereferences them unconditionally,
+				! c.f. the larrtype/rarrtype locals in parse_expr.f90's binary_expr loop
+				is_op_allowed = val_type /= array_type .and. &
+					is_binary_op_allowed(subj_type, eequals_token, val_type, &
+					unknown_type, unknown_type)
+
+				if (is_op_allowed .and. subj_type == enum_type) then
+					! Mirrors the enum_cookie identity check in parse_expr.f90:
+					! is_binary_op_allowed() alone doesn't know that two
+					! same-kind enum_type values can still belong to different
+					! enums (e.g. `Suit.Hearts == Card.Jack`)
+					if (allocated(subj_val%enum_cookie) .and. &
+						allocated(val_tmp%val%enum_cookie)) then
+						if (subj_val%enum_cookie /= val_tmp%val%enum_cookie) &
+							is_op_allowed = .false.
+					else if (subj_val%enum_name /= val_tmp%val%enum_name) then
 						is_op_allowed = .false.
-				else if (subj_val%enum_name /= val_tmp%val%enum_name) then
-					is_op_allowed = .false.
+					end if
 				end if
 			end if
-		end if
 
-		if (.not. is_op_allowed) then
-			span = new_span(val_beg, val_end - val_beg + 1)
-			call parser%diagnostics%push(err_bad_case_type( &
-				parser%context(), span, parser%text(val_beg, val_end), &
-				kind_name(val_type), kind_name(subj_type)))
-		end if
+			if (.not. is_op_allowed) then
+				span = new_span(val_beg, val_end - val_beg + 1)
+				call parser%diagnostics%push(err_bad_case_type( &
+					parser%context(), span, parser%text(val_beg, val_end), &
+					kind_name(val_type), kind_name(subj_type)))
+			end if
 
-		call vals%push_move(val_tmp)
+			call vals%push_move(val_tmp)
+
+		end if
 
 		if (parser%current_kind() /= comma_token) exit
 		call parser%match(comma_token, comma)
 
-		! Allow a trailing comma before the body, e.g. `case 1, 2, { ... }`
+		! Allow a trailing comma before the body or a guard, e.g.
+		! `case 1, 2, { ... }` or `case 1, 2, when c { ... }`
 		if (at_case_body_start(parser)) exit
 	end do
+
+	if (parser%current_kind() == when_keyword) then
+
+		! `when <cond>` guard, checked only once one of this arm's values or
+		! ranges has already matched.  Must be spelled `when`, never `if`:
+		! `case 1 if c { ... }` already parses as value `1` with the
+		! if-statement as the arm's body (see core.f90's switch TODO)
+		call parser%match(when_keyword, when_token)
+
+		cond_beg = parser%peek_pos(0)
+		call parser%parse_expr(expr = guard)
+		cond_end = parser%peek_pos(0) - 1
+
+		if (guard%val%type /= bool_type .and. guard%val%type /= unknown_type) then
+			span = new_span(cond_beg, cond_end - cond_beg + 1)
+			call parser%diagnostics%push(err_non_bool_condition( &
+				parser%context(), span, parser%text(cond_beg, cond_end), &
+				"case-guard"))
+		end if
+
+		call syntax_node_move(guard, clause%condition)
+
+	end if
 
 	call parser%parse_statement(body)
 
@@ -994,7 +1118,7 @@ recursive module subroutine parse_switch_statement(parser, statement)
 	!
 	!   switch <subject>
 	!   {
-	!       case <val1>, <val2>, ... { <body> }
+	!       case <val1>, <lo>:<hi>, ... [when <cond>] { <body> }
 	!       ...
 	!       default { <body> }
 	!   }
@@ -1002,10 +1126,14 @@ recursive module subroutine parse_switch_statement(parser, statement)
 	! The subject is evaluated exactly once (compile_ctrl.f90 caches it in a
 	! hidden slot), arms are tested top-to-bottom, and the first match wins;
 	! there is no fallthrough.  `default` is optional and its position among
-	! the arms doesn't matter.
+	! the arms doesn't matter.  A `lo:hi` value is a half-open range
+	! (lo <= subj < hi, like every other `:` range in syntran), and an
+	! optional `when` guard is checked only once one of the arm's values or
+	! ranges has already matched -- a false guard falls through to the next
+	! arm, not to `default`.
 	!
-	! AST shape (no new syntax_node_t members -- see parse_case_clause() above
-	! for case_clause's shape):
+	! AST shape (no new syntax_node_t members -- see parse_case_clause() and
+	! parse_case_range() above for case_clause's and case_range's shapes):
 	!
 	!   switch_statement   %condition   = subject expression
 	!                      %members(:)  = case_clause nodes, in source order

@@ -176,6 +176,7 @@ module procedure get_all_error_codes
 	call codes%push(EC_BAD_SWITCH_TYPE)
 	call codes%push(EC_BAD_CASE_TYPE)
 	call codes%push(EC_DUP_DEFAULT)
+	call codes%push(EC_BAD_CASE_RANGE_TYPE)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -565,6 +566,19 @@ module procedure err_dup_default
 		//" duplicate default arm"//color_reset
 
 end procedure err_dup_default
+
+!===============================================================================
+
+module procedure err_bad_case_range_type
+
+	err = err_pre(EC_BAD_CASE_RANGE_TYPE) &
+		//'range bound `'//trimw(bound)//'` has type '//bound_type &
+		//', which cannot be ordered against the switch subject''s type ' &
+		//switch_type &
+		//underline(context, span) &
+		//" bad case range bound type"//color_reset
+
+end procedure err_bad_case_range_type
 
 
 !===============================================================================

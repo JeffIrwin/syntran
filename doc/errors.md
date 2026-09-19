@@ -669,6 +669,12 @@ A `switch`-statement has more than one `default` arm.
 
 [Example](../src/tests/test-src/errors/E109-dup-default.syntran)
 
+### E110 -- bad-case-range-type
+
+A `case lo:hi` range bound's type can't be ordered (with `<`) against its `switch`-statement's subject type.
+
+[Example](../src/tests/test-src/errors/E110-bad-case-range-type.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type

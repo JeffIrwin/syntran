@@ -150,6 +150,8 @@ module procedure kind_token
 			"default              ", & ! 136
 			"switch statement     ", & ! 137
 			"case clause          ", & ! 138
+			"case range           ", & ! 139
+			"when                 ", & ! 140
 			"unknown              "  & ! inf
 		]
 
@@ -305,6 +307,8 @@ module procedure kind_name
 			"default_keyword      ", & ! 136
 			"switch_statement     ", & ! 137
 			"case_clause          ", & ! 138
+			"case_range           ", & ! 139
+			"when_keyword         ", & ! 140
 			"unknown              "  & ! inf (trailing comma hack)
 		]
 

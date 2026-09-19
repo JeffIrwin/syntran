@@ -4562,6 +4562,8 @@ subroutine unit_test_switch(npass, nfail)
 			interpret_file(path//'test-10.syntran', quiet) == 'true', &
 			interpret_file(path//'test-11.syntran', quiet) == 'true', &
 			interpret_file(path//'test-12.syntran', quiet) == 'true', &
+			interpret_file(path//'test-13.syntran', quiet) == 'true', &
+			interpret_file(path//'test-14.syntran', quiet) == 'true', &
 
 			! Short inline scripts, not worth their own test-src file
 			eval_i32('let x = 2; let y = 0; ' &
@@ -4586,6 +4588,22 @@ subroutine unit_test_switch(npass, nfail)
 				//'let y = 0; switch 1 ' &
 				//'{ case mark("a", 1) { y = 1; } case mark("b", 2) { y = 2; } ' &
 				//'default { y = 3; } } log;', quiet) == 'a', &
+
+			! A range's hi bound is evaluated lazily: it's never reached when
+			! subj < lo, so mark("hi", ...) never fires here
+			eval_str('let log = ""; ' &
+				//'fn mark(tag: str, x: i32): i32 { log = log + tag; return x; } ' &
+				//'switch mark("s", 5) ' &
+				//'{ case mark("lo", 10): mark("hi", 20) { } default { } } log;', &
+				quiet) == 'slo', &
+
+			! A guard is evaluated only after one of the arm's values already
+			! matched: guard()'s side effect proves it never fires when the
+			! arm's only value doesn't match the subject
+			eval_str('let log = ""; ' &
+				//'fn guard(tag: str, b: bool): bool { log = log + tag; return b; } ' &
+				//'switch 1 { case 2 when guard("g", true) { } default { } } log;', &
+				quiet) == '', &
 
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
@@ -7956,6 +7974,26 @@ subroutine unit_test_error_codes(npass, nfail)
 					'let x = 5; switch x { default {} default {} }'), &
 					EC_DUP_DEFAULT) == 1, &
 
+				! E110: case-range bound type can't be ordered against the
+				! switch subject
+				diag_has_code(get_diags( &
+					'let x = 5; switch x { case 1:"z" {} }'), &
+					EC_BAD_CASE_RANGE_TYPE), &
+				diag_count_code(get_diags( &
+					'let x = 5; switch x { case 1:"z" {} }'), &
+					EC_BAD_CASE_RANGE_TYPE) == 1, &
+				! No cascading E110 once E107 fires (subject treated as
+				! unknown_type for the rest of the switch)
+				diag_count_code(get_diags( &
+					'let a = [1,2,3]; switch a { case 1:2 {} }'), &
+					EC_BAD_CASE_RANGE_TYPE) == 0, &
+
+				! `when` guard must be bool, reusing E52 (non-bool condition)
+				! rather than a dedicated code
+				diag_has_code(get_diags( &
+					'switch 1 { case 1 when 7 {} }'), &
+					EC_NON_BOOL_CONDITION), &
+
 				! No stray E20/E28 cascade once E106 recovers
 				diag_count_code(get_diags( &
 					'add(a: i32): i32 { return a; } println(add(1));'), &
@@ -8777,7 +8815,11 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E109-dup-default.syntran'), &
 				EC_DUP_DEFAULT, P//'E109-dup-default.syntran', 12, 2, 7), &
 			diag_count_code(get_diags_file(P//'E109-dup-default.syntran'), &
-				EC_DUP_DEFAULT) == 1 &
+				EC_DUP_DEFAULT) == 1, &
+			diag_loc_ok(get_diags_file(P//'E110-bad-case-range-type.syntran'), &
+				EC_BAD_CASE_RANGE_TYPE, P//'E110-bad-case-range-type.syntran', 8, 9, 3), &
+			diag_count_code(get_diags_file(P//'E110-bad-case-range-type.syntran'), &
+				EC_BAD_CASE_RANGE_TYPE) == 1 &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

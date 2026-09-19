@@ -52,18 +52,26 @@ module syntran__core_m
 	!      arm-type unification and an exhaustiveness rule.  `switch` in
 	!      expression position is a clean E20 parse error today, so this is
 	!      purely additive and the statement form must keep working as-is
-	!    * pattern matching: ranges (case 1:10) and a wildcard (case _) are
-	!      both free to add -- `:` and `_` are parse errors in that
-	!      position today.  But some spellings are already claimed:
-	!      + guards must be spelled `case v when cond` (or `where`), NOT
-	!        `if`: `case 1 if c { ... }` already parses, with `1` as the
-	!        case value and the if-statement as the arm's body, so `if`
-	!        would silently change the meaning of existing code
+	!    * pattern matching: ranges (case 1:10, half-open like every other `:`
+	!      range) and guards (case v when cond) are done -- see README.md
+	!      "Switch statements".  A wildcard (case _) is still free to add --
+	!      `_` is a parse error in that position today (it lexes as a plain
+	!      identifier, which fails name resolution).  But some spellings are
+	!      already claimed:
+	!      + `where` was deliberately not taken as a second guard spelling
+	!        alongside `when` -- one reserved word is cheaper than two, and
+	!        nothing parsed `case v where cond` before now anyway
 	!      + or-patterns must stay comma-separated, not `|`: `case 1 | 2`
 	!        already parses as the bitwise-or expression `3`
 	!      + a bare identifier in a case value compares against it, it
 	!        never binds, so binding the matched value to a name needs
 	!        its own syntax, e.g. a `let`-prefixed pattern
+	!      + omitted range bounds (case :10, case 5:) and stepped ranges
+	!        (case 1:2:10) are still parse errors, free to add later
+	!      + an inverted or empty range (case 10:1) is legal but silently
+	!        matches nothing, same reasoning as the existing
+	!        duplicate-case-value non-diagnosis below: a constant-folded
+	!        subset could be warned about later
 	!    * duplicate-case-value detection: not possible in general since
 	!      values are arbitrary expressions; a constant-folded subset could
 	!      be diagnosed later.  Likewise, enum-subject exhaustiveness
