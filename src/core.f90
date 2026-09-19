@@ -42,49 +42,6 @@ module syntran__core_m
 	!    * took a big chunk out already
 	!    * continue one file at a time
 	!    * '''grep -c  'TODO' src/* | sort -t: -k2 -n'''
-	!  - switch/match/case follow-ups (basic switch/case, working with strings,
-	!    and array subjects done -- see README.md "Switch statements"):
-	!    * array subjects are matched by whole-array equality (OP_EQ_ARRAY), and
-	!      an array `case` of a different rank is E49 at parse time but a
-	!      different extent is a runtime non-match.  OP_EQ_ARRAY reads the
-	!      subject straight out of its hidden slot, so it's never re-copied
-	!    * switch as an expression (like rust's match): the bytecode already
-	!      leaves one value on the stack, so the backend is ready; missing is
-	!      arm-type unification and an exhaustiveness rule.  `switch` in
-	!      expression position is a clean E20 parse error today, so this is
-	!      purely additive and the statement form must keep working as-is
-	!    * pattern matching: ranges (case 1:10, half-open like every other `:`
-	!      range), guards (case v when cond), and guard-only arms (case when
-	!      cond) are done -- see README.md "Switch statements".  A wildcard
-	!      (case _) is still free to add -- `_` is a parse error in that
-	!      position today (it lexes as a plain identifier, which fails name
-	!      resolution).  If it lands, `case when c` must stay equivalent to
-	!      `case _ when c`.  But some spellings are already claimed:
-	!      + `where` was deliberately not taken as a second guard spelling
-	!        alongside `when` -- one reserved word is cheaper than two, and
-	!        nothing parsed `case v where cond` before now anyway
-	!      + or-patterns must stay comma-separated, not `|`: `case 1 | 2`
-	!        already parses as the bitwise-or expression `3`
-	!      + a bare identifier in a case value compares against it, it
-	!        never binds, so binding the matched value to a name needs
-	!        its own syntax, e.g. a `let`-prefixed pattern
-	!      + omitted range bounds (case :10, case 5:) and stepped ranges
-	!        (case 1:2:10) are still parse errors, free to add later
-	!      + an inverted or empty range (case 10:1) is legal but silently
-	!        matches nothing, same reasoning as the existing
-	!        duplicate-case-value non-diagnosis below: a constant-folded
-	!        subset could be warned about later
-	!    * duplicate-case-value detection: not possible in general since
-	!      values are arbitrary expressions; a constant-folded subset could
-	!      be diagnosed later.  Likewise, enum-subject exhaustiveness
-	!      checking must arrive as a warning (or only in a future
-	!      expression form): existing default-less switches are legal and
-	!      must stay legal
-	!    * a dense jump table for integer subjects: prog%fn_entry(:) (used by
-	!      OP_CALL_PTR) is a working precedent for an indirect jump through an
-	!      integer table.  Pure optimization, gated behind a
-	!      switch_table_ok(node) predicate a la index_native_ok/
-	!      for_setup_native_ok; only ever helps i32/i64 subjects
 	!  - stack trace for runtime errors
 	!  - short circuit logic?
 	!    * useful e.g. for scanning a string, or anything where you need a
@@ -476,6 +433,15 @@ module syntran__core_m
 	!    include quick-start and links in top-level README?
 	!    * github automatically includes a Table of Contents in a menu, so maybe
 	!      it's better as-is
+	!  - switch/case follow-ups (mvp done):
+	!    * switch as an expression (like rust's match)
+	!    * beyond simple ranges:
+	!      + omitted range bounds (case :10, case 5:) and stepped ranges
+	!        (case 1:2:10) are still parse errors, free to add later
+	!      + inverted or empty range (case 10:1) is legal but silently
+	!        matches nothing
+	!    * duplicate-case-value detection: not possible in general
+	!    * a dense jump table for integer subjects
 	!  - minval, maxval fns
 	!    * done
 	!    * until now, i had delayed these over confusion about whether
