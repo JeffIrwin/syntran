@@ -795,7 +795,7 @@ other
 -->
 <!-- syntran-end -->
 
-Case values are tested in source order and testing stops at the first match, so a later arm's value expression is never evaluated once an earlier one matches -- safe to rely on if a value expression is a function call with side effects.  Several values on one `case` are separated by commas (a trailing comma is allowed, e.g. `case 1, 2,`); `case 1 | 2` is the bitwise-or expression `3`, not an or-pattern matching either value.
+Case values are tested in source order and testing stops at the first match, so a later arm's value expression is never evaluated once an earlier one matches -- safe to rely on if a value expression is a function call with side effects.  Several values on one `case` are separated by commas (a trailing comma is allowed, e.g. `case 1, 2, { ... }`, as long as the arm's body is a block or a keyword statement like `return` -- an expression-statement body such as `case 1 println("hi");` must follow the last value directly, because after a comma it would read as another case value); `case 1 | 2` is the bitwise-or expression `3`, not an or-pattern matching either value.
 
 A `case` value can also be a `lo:hi` range, and any value or range in the list can be followed by a `when` guard that must also be true for the arm to match:
 
@@ -882,6 +882,8 @@ positive
 <!-- syntran-end -->
 
 A `case` with neither values nor a guard is still an error.
+
+`switch`, `case`, `default`, and `when` are reserved words, so they can no longer be used as identifiers (variable, function, or field names).
 
 ## Arrays
 
