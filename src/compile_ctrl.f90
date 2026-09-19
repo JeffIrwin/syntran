@@ -335,6 +335,9 @@ subroutine emit_switch_load_subj(prog, node, subj_type)
 	! subject once per test rather than duplicating it on the stack (OP_EQ_STR
 	! frees both of its operand stack slots, so a persistent copy has to live
 	! in a slot, not on the stack).
+	!
+	! Not used for array subjects: OP_EQ_ARRAY takes the subject slot as an
+	! operand instead, since reloading an array is a deep copy
 
 	type(program_t),     intent(inout) :: prog
 	type(syntax_node_t), intent(in)    :: node
@@ -373,6 +376,8 @@ recursive subroutine compile_switch_statement(prog, cs, node)
 	!
 	!   ; arm i, in source order
 	!   LOAD subj ; [v_i1]  ; EQ ; JUMP_IF_TRUE T_i    ; plain value
+	!   [v_i1]  ; EQ_ARRAY subj ; JUMP_IF_TRUE T_i      ; array subject: no LOAD subj,
+	!                                                   ; the slot is an operand
 	!   LOAD subj ; [lo_i2] ; LT ; JUMP_IF_TRUE S_i2    ; range: subj < lo, no match
 	!   LOAD subj ; [hi_i2] ; LT ; JUMP_IF_TRUE T_i     ; range: subj < hi, match
 	!   S_i2:                                           ; next value/range in arm i
@@ -467,15 +472,27 @@ recursive subroutine compile_switch_statement(prog, cs, node)
 
 			else
 
-				! LOAD subj ; [value] ; EQ ; JUMP_IF_TRUE match
-				call emit_switch_load_subj(prog, node, subj_type)
-				call compile_node(prog, cs, node%members(i)%elems(j))
-				val_type = node%members(i)%elems(j)%val%type
-				typed_op = binop_typed_opcode(eequals_token, subj_type, val_type)
-				if (typed_op /= 0) then
-					call emit(prog, typed_op)
+				if (subj_type == array_type) then
+					! [value] ; EQ_ARRAY subj ; JUMP_IF_TRUE match
+					!
+					! Whole-array equality, not the elementwise `==` that
+					! OP_BINOP would do: OP_JUMP_IF_TRUE needs a scalar bool.
+					! No emit_switch_load_subj(): OP_EQ_ARRAY reads the subject
+					! out of its slot itself, so it's never deep-copied per test
+					call compile_node(prog, cs, node%members(i)%elems(j))
+					call emit(prog, OP_EQ_ARRAY, a = node%id_index, &
+						c = merge(1_8, 0_8, node%is_loc))
 				else
-					call emit(prog, OP_BINOP, a = eequals_token, b = bool_type)
+					! LOAD subj ; [value] ; EQ ; JUMP_IF_TRUE match
+					call emit_switch_load_subj(prog, node, subj_type)
+					call compile_node(prog, cs, node%members(i)%elems(j))
+					val_type = node%members(i)%elems(j)%val%type
+					typed_op = binop_typed_opcode(eequals_token, subj_type, val_type)
+					if (typed_op /= 0) then
+						call emit(prog, typed_op)
+					else
+						call emit(prog, OP_BINOP, a = eequals_token, b = bool_type)
+					end if
 				end if
 				match_ips(j) = prog%len_ + 1
 				call emit(prog, OP_JUMP_IF_TRUE, a = 0)

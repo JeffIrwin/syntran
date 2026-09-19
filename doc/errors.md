@@ -653,7 +653,7 @@ A function (or struct method) declaration omitted the leading `fn` keyword, e.g.
 
 ### E107 -- bad-switch-type
 
-The subject of a `switch`-statement has a type that can't be matched by equality (e.g. an array or a struct).
+The subject of a `switch`-statement has a type that can't be matched by equality, e.g. a struct or an array of structs.  Arrays of `bool`, `i32`, `i64`, `f32`, `f64`, `str`, and `enum` values are valid subjects, matched by whole-array equality.
 
 [Example](../src/tests/test-src/errors/E107-bad-switch-type.syntran)
 
@@ -671,7 +671,7 @@ A `switch`-statement has more than one `default` arm.
 
 ### E110 -- bad-case-range-type
 
-A `case lo:hi` range bound's type can't be ordered (with `<`) against its `switch`-statement's subject type.
+A `case lo:hi` range bound's type can't be ordered (with `<`) against its `switch`-statement's subject type.  This includes any range on an array subject, since `<` on arrays is elementwise.
 
 [Example](../src/tests/test-src/errors/E110-bad-case-range-type.syntran)
 

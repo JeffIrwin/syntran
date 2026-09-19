@@ -4564,6 +4564,8 @@ subroutine unit_test_switch(npass, nfail)
 			interpret_file(path//'test-12.syntran', quiet) == 'true', &
 			interpret_file(path//'test-13.syntran', quiet) == 'true', &
 			interpret_file(path//'test-14.syntran', quiet) == 'true', &
+			interpret_file(path//'test-15.syntran', quiet) == 'true', &
+			interpret_file(path//'test-16.syntran', quiet) == 'true', &
 
 			! Short inline scripts, not worth their own test-src file
 			eval_i32('let x = 2; let y = 0; ' &
@@ -4604,6 +4606,22 @@ subroutine unit_test_switch(npass, nfail)
 				//'fn guard(tag: str, b: bool): bool { log = log + tag; return b; } ' &
 				//'switch 1 { case 2 when guard("g", true) { } default { } } log;', &
 				quiet) == '', &
+
+			! Array subjects are matched whole, so a different-length case value
+			! simply doesn't match instead of aborting on a shape mismatch the
+			! way `all(subj == val)` would
+			eval_str('let a = [1,2,3]; let y = "none"; switch a ' &
+				//'{ case [1,2,3] { y = "got it"; } case [4,5] { y = "other"; } ' &
+				//'default { y = "none"; } } y;', quiet) == 'got it', &
+			eval_str('let a = [1,2,3]; let y = "none"; switch a ' &
+				//'{ case [4,5] { y = "other"; } default { y = "dflt"; } } y;', &
+				quiet) == 'dflt', &
+
+			! Stop at first match applies to array values too
+			eval_str('let log = ""; ' &
+				//'fn mark(tag: str, x: i32): [i32; :] { log = log + tag; return [x]; } ' &
+				//'switch [1] { case mark("a", 1) { } case mark("b", 1) { } ' &
+				//'default { } } log;', quiet) == 'a', &
 
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
@@ -7947,16 +7965,25 @@ subroutine unit_test_error_codes(npass, nfail)
 
 				! E107: switch-statement subject type can't be matched by equality
 				diag_has_code(get_diags( &
-					'let a = [1,2,3]; switch a { case 1 {} }'), &
+					'struct P{x: i32} let p = P{x=1}; switch p { case 1 {} }'), &
 					EC_BAD_SWITCH_TYPE), &
 				diag_count_code(get_diags( &
-					'let a = [1,2,3]; switch a { case 1 {} }'), &
+					'struct P{x: i32} let p = P{x=1}; switch p { case 1 {} }'), &
 					EC_BAD_SWITCH_TYPE) == 1, &
 				! No cascading E108 once E107 fires (subject treated as
 				! unknown_type for the rest of the switch)
 				diag_count_code(get_diags( &
-					'let a = [1,2,3]; switch a { case 1 {} }'), &
+					'struct P{x: i32} let p = P{x=1}; switch p { case 1 {} }'), &
 					EC_BAD_CASE_TYPE) == 0, &
+				! An array subject is legal (whole-array equality), but only if
+				! its element type supports equality
+				diag_count_code(get_diags( &
+					'struct P{x: i32} let p = P{x=1}; let a = [p, p]; ' &
+					//'switch a { default {} }'), &
+					EC_BAD_SWITCH_TYPE) == 1, &
+				diag_count_code(get_diags( &
+					'let a = [1,2,3]; switch a { case [1,2,3] {} default {} }'), &
+					EC_BAD_SWITCH_TYPE) == 0, &
 
 				! E108: case value type can't be compared to the switch subject
 				diag_has_code(get_diags( &
@@ -7965,6 +7992,25 @@ subroutine unit_test_error_codes(npass, nfail)
 				diag_count_code(get_diags( &
 					'let x = 5; switch x { case "foo" {} }'), &
 					EC_BAD_CASE_TYPE) == 1, &
+				! Whole-array equality is all-or-nothing: an array subject needs
+				! array case values and vice versa, and element types must match
+				diag_count_code(get_diags( &
+					'let a = [1,2,3]; switch a { case 1 {} }'), &
+					EC_BAD_CASE_TYPE) == 1, &
+				diag_count_code(get_diags( &
+					'let x = 5; switch x { case [1,2] {} }'), &
+					EC_BAD_CASE_TYPE) == 1, &
+				diag_count_code(get_diags( &
+					'let a = [1,2,3]; switch a { case ["x"] {} }'), &
+					EC_BAD_CASE_TYPE) == 1, &
+				! Arrays of different enums
+				diag_count_code(get_diags( &
+					'enum A {X} enum B {Y} switch [A.X] { case [B.Y] {} }'), &
+					EC_BAD_CASE_TYPE) == 1, &
+				! Rank mismatch reuses E49, same as `subj == val`
+				diag_has_code(get_diags( &
+					'let a = [1,2,3]; switch a { case [1,2,3,4; 2,2] {} }'), &
+					EC_BINARY_RANKS), &
 
 				! E109: more than one `default` arm
 				diag_has_code(get_diags( &
@@ -7985,8 +8031,13 @@ subroutine unit_test_error_codes(npass, nfail)
 				! No cascading E110 once E107 fires (subject treated as
 				! unknown_type for the rest of the switch)
 				diag_count_code(get_diags( &
-					'let a = [1,2,3]; switch a { case 1:2 {} }'), &
+					'struct P{x: i32} let p = P{x=1}; switch p { case 1:2 {} }'), &
 					EC_BAD_CASE_RANGE_TYPE) == 0, &
+				! An array subject can't take a range either (`<` on arrays is
+				! elementwise), reported once for the range, not once per bound
+				diag_count_code(get_diags( &
+					'let a = [1,2,3]; switch a { case 1:2 {} }'), &
+					EC_BAD_CASE_RANGE_TYPE) == 1, &
 
 				! `when` guard must be bool, reusing E52 (non-bool condition)
 				! rather than a dedicated code
@@ -8805,7 +8856,7 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_count_code(get_diags_file(P//'E106-missing-fn-kw.syntran'), &
 				EC_MISSING_FN_KW) == 1, &
 			diag_loc_ok(get_diags_file(P//'E107-bad-switch-type.syntran'), &
-				EC_BAD_SWITCH_TYPE, P//'E107-bad-switch-type.syntran', 6, 8, 3), &
+				EC_BAD_SWITCH_TYPE, P//'E107-bad-switch-type.syntran', 21, 8, 6), &
 			diag_count_code(get_diags_file(P//'E107-bad-switch-type.syntran'), &
 				EC_BAD_SWITCH_TYPE) == 1, &
 			diag_loc_ok(get_diags_file(P//'E108-bad-case-type.syntran'), &

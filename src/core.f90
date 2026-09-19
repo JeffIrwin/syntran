@@ -43,10 +43,11 @@ module syntran__core_m
 	!    * continue one file at a time
 	!    * '''grep -c  'TODO' src/* | sort -t: -k2 -n'''
 	!  - switch/match/case follow-ups (basic switch/case, working with strings,
-	!    done -- see README.md "Switch statements"):
-	!    * array subjects: `==` on arrays yields bool_array_type, which can't
-	!      drive a conditional jump.  Would need an all(...) wrapper or a
-	!      dedicated whole-array-equality opcode
+	!    and array subjects done -- see README.md "Switch statements"):
+	!    * array subjects are matched by whole-array equality (OP_EQ_ARRAY), and
+	!      an array `case` of a different rank is E49 at parse time but a
+	!      different extent is a runtime non-match.  OP_EQ_ARRAY reads the
+	!      subject straight out of its hidden slot, so it's never re-copied
 	!    * switch as an expression (like rust's match): the bytecode already
 	!      leaves one value on the stack, so the backend is ready; missing is
 	!      arm-type unification and an exhaustiveness rule.  `switch` in

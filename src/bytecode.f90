@@ -225,7 +225,22 @@ module syntran__bytecode_m
 		OP_LT_STR           = 1242, &
 		OP_LE_STR           = 1243, &
 		OP_GT_STR           = 1244, &
-		OP_GE_STR           = 1245
+		OP_GE_STR           = 1245, &
+		OP_EQ_ARRAY         = 1247
+
+	! OP_EQ_ARRAY: whole-array equality for switch-statement case tests.
+	!   Pushes a SCALAR bool.  True iff the subject and the case value have
+	!   the same rank, the same extents, and all elements are equal.  A shape mismatch is simply .false., never an error -- a `case`
+	!   value of a different length has to fall through to the next arm, so
+	!   this can't reuse the elementwise `==` in is_eq_value_t(), which has no
+	!   shape check at all (c.f. its array_type x array_type branch).
+	!   a = subject slot_id, c = is_local (0 = global, 1 = local).  Like
+	!   OP_SIZE_NAT, the subject is read straight out of its slot rather than
+	!   loaded, so a switch with N array `case` values doesn't deep-copy it N
+	!   times.  Only the case value is on the stack; it's reset before the
+	!   bool is written, so the next pop sees a clean bool_type slot.
+	!   Stack before:  [case_value]
+	!   Stack after:   [bool]       (len_ unchanged; TOS rewritten in place)
 
 	! Native array construction opcodes.
 	!

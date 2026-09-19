@@ -2793,6 +2793,26 @@ module subroutine vm_run(prog, state, res)
 			stack%v(stack%len_-1)%type = bool_type
 			stack%len_ = stack%len_ - 1
 			end block
+		! Whole-array equality for a switch case test: scalar bool result, false
+		! (not an error) on any shape mismatch.  See is_array_eq() in bool.f90.
+		! The subject is read straight out of its hidden slot (a = slot_id,
+		! c = is_local), never loaded, so it isn't deep-copied once per case
+		! test -- same idea as OP_SIZE_NAT.  Only the case value is on the
+		! stack, and it's reset before the bool is written so the next pop
+		! sees a clean bool_type slot with no stale allocatable.  Never reset
+		! the subject slot itself: it has to survive the remaining case tests
+		case (OP_EQ_ARRAY)
+			block
+			logical :: b_
+			if (instr%c == 1_8) then
+				b_ = is_array_eq(state%locs%vals(instr%a), stack%v(stack%len_))
+			else
+				b_ = is_array_eq(state%vars%vals(instr%a), stack%v(stack%len_))
+			end if
+			call value_reset(stack%v(stack%len_))
+			stack%v(stack%len_)%sca%bool = b_
+			stack%v(stack%len_)%type = bool_type
+			end block
 		case (OP_NE_STR)
 			block
 			logical :: b_

@@ -759,7 +759,41 @@ black
 
 The subject expression is evaluated exactly once, no matter how many `case` arms it's tested against, so it's safe to switch on a function call that has side effects.  A `switch` is a statement (not an expression, unlike Rust's `match`), and `break`/`continue` inside an arm's body refer to the nearest enclosing loop, exactly as they would inside an `if`-clause.
 
-`switch` can compare `bool`, `i32`, `i64`, `f32`, `f64`, `str`, and `enum` subjects.  Arrays and structs can't be `switch` subjects, since equality on them isn't a single true/false result that a `switch` can branch on.
+`switch` can compare `bool`, `i32`, `i64`, `f32`, `f64`, `str`, and `enum` subjects, and arrays of any of those.  Structs (and arrays of them) can't be `switch` subjects, since equality on them isn't defined.
+
+An array subject is matched *whole*: a `case` value matches only if it's an array with the same rank, the same shape, and the same elements as the subject.  A `case` array of a different length just doesn't match, it's not an error.  This is stricter than the elementwise `==` operator on arrays, and a scalar `case` value is not allowed against an array subject:
+
+<!-- syntran-begin mode=repl group=switch-array -->
+```rust
+fn name_of(rgb: [i32; :]): str
+{
+    switch rgb
+    {
+        case [255, 0, 0]
+        {
+            return "red";
+        }
+        case [0, 255, 0], [0, 128, 0]
+        {
+            return "green-ish";
+        }
+        default
+        {
+            return "other";
+        }
+    }
+}
+
+println(name_of([255, 0, 0]));
+println(name_of([0, 128, 0]));
+println(name_of([255, 0]));
+```
+<!-- syntran-expect
+red
+green-ish
+other
+-->
+<!-- syntran-end -->
 
 Case values are tested in source order and testing stops at the first match, so a later arm's value expression is never evaluated once an earlier one matches -- safe to rely on if a value expression is a function call with side effects.  Several values on one `case` are separated by commas (a trailing comma is allowed, e.g. `case 1, 2,`); `case 1 | 2` is the bitwise-or expression `3`, not an or-pattern matching either value.
 
@@ -803,7 +837,7 @@ F
 -->
 <!-- syntran-end -->
 
-A range is half-open, like every other `:` range in syntran (e.g. `[0: 5]`): `case lo:hi` matches `lo <= subj < hi`, both bounds are required, and `hi` is only evaluated once `subj < lo` is known to be false.  Ranges work on numeric and `str` subjects (compared lexicographically), but not `bool` or `enum` ones, since there's no ordering between their values for `<` to use.
+A range is half-open, like every other `:` range in syntran (e.g. `[0: 5]`): `case lo:hi` matches `lo <= subj < hi`, both bounds are required, and `hi` is only evaluated once `subj < lo` is known to be false.  Ranges work on numeric and `str` subjects (compared lexicographically), but not `bool`, `enum`, or array ones, since there's no ordering between their values for `<` to use.
 
 A `when` guard is checked only once one of the arm's values or ranges has already matched the subject, and only once per arm; if the guard is false, matching continues with the *next* `case` arm (not `default`), so a later arm can still catch what a guarded earlier one rejected.  A guard covers the whole comma-separated value list it follows, and must be spelled `when` -- `case v if cond { ... }` already means something else: `v` as the case value and the if-statement as the arm's body.
 

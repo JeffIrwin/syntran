@@ -921,7 +921,10 @@ subroutine check_case_range_bound(parser, subj_type, bound, beg, end_)
 		! range bound depends on a fn declared later in the file
 		is_op_allowed = .true.
 	else
-		is_op_allowed = bound_type /= array_type .and. &
+		! There's no ordering on whole arrays, so an array subject can't take
+		! a range either
+		is_op_allowed = subj_type /= array_type .and. &
+			bound_type /= array_type .and. &
 			is_binary_op_allowed(subj_type, less_token, bound_type, &
 			unknown_type, unknown_type)
 	end if
@@ -965,7 +968,13 @@ recursive subroutine parse_case_range(parser, subj_type, lo, lo_beg, lo_end, ran
 	call parser%parse_expr(expr = hi)
 	hi_end = parser%peek_pos(0) - 1
 
-	call check_case_range_bound(parser, subj_type, hi, hi_beg, hi_end)
+	! An array subject makes both bounds unorderable for the same one reason,
+	! so it's reported on lo only
+	if (subj_type == array_type) then
+		call check_case_range_bound(parser, unknown_type, hi, hi_beg, hi_end)
+	else
+		call check_case_range_bound(parser, subj_type, hi, hi_beg, hi_end)
+	end if
 
 	range%kind = case_range
 	range%val%type = lo%val%type
@@ -999,8 +1008,10 @@ recursive subroutine parse_case_clause(parser, subj_type, subj_val, clause)
 
 	!********
 
-	integer :: i, val_beg, val_end, val_type, cond_beg, cond_end
+	integer :: i, val_beg, val_end, val_type, cond_beg, cond_end, subj_arr, &
+		val_arr
 	logical :: is_op_allowed
+	character(len = :), allocatable :: val_name, subj_name
 
 	type(syntax_node_t)  :: val_tmp, range_tmp, guard, body
 	type(syntax_node_vector_t) :: vals
@@ -1037,15 +1048,28 @@ recursive subroutine parse_case_clause(parser, subj_type, subj_val, clause)
 				! unknown_type when the operand isn't an array): the eequals_token
 				! branch of is_binary_op_allowed() dereferences them unconditionally,
 				! c.f. the larrtype/rarrtype locals in parse_expr.f90's binary_expr loop
-				is_op_allowed = val_type /= array_type .and. &
-					is_binary_op_allowed(subj_type, eequals_token, val_type, &
-					unknown_type, unknown_type)
+				subj_arr = unknown_type
+				val_arr  = unknown_type
+				if (subj_type == array_type .and. allocated(subj_val%array)) &
+					subj_arr = subj_val%array%type
+				if (val_type == array_type .and. allocated(val_tmp%val%array)) &
+					val_arr = val_tmp%val%array%type
 
-				if (is_op_allowed .and. subj_type == enum_type) then
+				! Array vs scalar is never allowed here: an array subject only
+				! matches whole-array values, and vice versa
+				is_op_allowed = (subj_type == array_type) .eqv. &
+					(val_type == array_type)
+				if (is_op_allowed) is_op_allowed = &
+					is_binary_op_allowed(subj_type, eequals_token, val_type, &
+					subj_arr, val_arr)
+
+				if (is_op_allowed .and. (subj_type == enum_type .or. &
+					subj_arr == enum_type)) then
 					! Mirrors the enum_cookie identity check in parse_expr.f90:
 					! is_binary_op_allowed() alone doesn't know that two
 					! same-kind enum_type values can still belong to different
-					! enums (e.g. `Suit.Hearts == Card.Jack`)
+					! enums (e.g. `Suit.Hearts == Card.Jack`).  Arrays of enums carry
+					! the same fields at the array level, as in parse_expr.f90
 					if (allocated(subj_val%enum_cookie) .and. &
 						allocated(val_tmp%val%enum_cookie)) then
 						if (subj_val%enum_cookie /= val_tmp%val%enum_cookie) &
@@ -1058,9 +1082,27 @@ recursive subroutine parse_case_clause(parser, subj_type, subj_val, clause)
 
 			if (.not. is_op_allowed) then
 				span = new_span(val_beg, val_end - val_beg + 1)
+				val_name  = kind_name(val_type)
+				subj_name = kind_name(subj_type)
+				if (val_arr /= unknown_type) &
+					val_name = kind_name(val_arr)//" "//val_name
+				if (subj_arr /= unknown_type) &
+					subj_name = kind_name(subj_arr)//" "//subj_name
 				call parser%diagnostics%push(err_bad_case_type( &
 					parser%context(), span, parser%text(val_beg, val_end), &
-					kind_name(val_type), kind_name(subj_type)))
+					val_name, subj_name))
+
+			else if (subj_type == array_type .and. val_type == array_type) then
+				! Rank is static and `==` between arrays of different rank is
+				! E49 in parse_expr.f90, so `case v` (defined as `subj == v`)
+				! reports the same.  A differing *extent* is a runtime
+				! non-match instead, since sizes aren't static
+				if (subj_val%array%rank /= val_tmp%val%array%rank) then
+					span = new_span(val_beg, val_end - val_beg + 1)
+					call parser%diagnostics%push(err_binary_ranks( &
+						parser%context(), span, "==", &
+						subj_val%array%rank, val_tmp%val%array%rank))
+				end if
 			end if
 
 			call vals%push_move(val_tmp)
@@ -1147,7 +1189,8 @@ recursive module subroutine parse_switch_statement(parser, statement)
 	!********
 
 	integer :: i, subj_beg, subj_end, subj_type, pos0
-	logical :: has_default
+	logical :: has_default, bad_subj
+	character(len = :), allocatable :: type_name
 
 	type(syntax_node_t)  :: subject, def_body, clause
 	type(syntax_node_vector_t) :: arms
@@ -1161,15 +1204,28 @@ recursive module subroutine parse_switch_statement(parser, statement)
 	subj_end  = parser%peek_pos(0) - 1
 
 	! Whitelist rather than is_binary_op_allowed(): that helper permits
-	! void == void, and an array_type subject would make `==` yield
-	! bool_array_type, which can't drive a scalar conditional jump
+	! void == void.  An array subject is matched by whole-array equality
+	! (OP_EQ_ARRAY) rather than the elementwise `==`, which would yield a
+	! bool array that can't drive a scalar conditional jump.  Its element type
+	! must be one that equality supports, so struct arrays are still out
 	subj_type = subject%val%type
-	if (.not. any(subj_type == [bool_type, i32_type, i64_type, f32_type, &
-			f64_type, str_type, enum_type, unknown_type])) then
+	bad_subj = .not. any(subj_type == [bool_type, i32_type, i64_type, &
+		f32_type, f64_type, str_type, enum_type, array_type, unknown_type])
+	if (subj_type == array_type .and. .not. bad_subj) then
+		if (allocated(subject%val%array)) then
+			bad_subj = .not. any(subject%val%array%type == [bool_type, &
+				i32_type, i64_type, f32_type, f64_type, str_type, enum_type, &
+				unknown_type])
+		end if
+	end if
+	if (bad_subj) then
+		type_name = kind_name(subj_type)
+		if (subj_type == array_type .and. allocated(subject%val%array)) &
+			type_name = kind_name(subject%val%array%type)//" "//type_name
 		span = new_span(subj_beg, subj_end - subj_beg + 1)
 		call parser%diagnostics%push(err_bad_switch_type( &
 			parser%context(), span, parser%text(subj_beg, subj_end), &
-			kind_name(subj_type)))
+			type_name))
 		! Stop cascading errors: treat the subject as unknown_type so
 		! parse_case_clause() doesn't also flag every case value as
 		! incomparable to it
