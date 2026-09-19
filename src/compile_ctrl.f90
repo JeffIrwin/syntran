@@ -387,6 +387,12 @@ recursive subroutine compile_switch_statement(prog, cs, node)
 	!        [body_i] ; JUMP L_END                ; leaves one value on the stack
 	!   A_(i+1): ...                              ; next arm, or L_DEF after the last one
 	!
+	! A guard-only arm (`case when c`) has no value tests and no "nothing
+	! matched" jump; it starts directly at T_i:
+	!
+	!   [guard] ; JUMP_IF_FALSE A_(i+1)
+	!   [body_i] ; JUMP L_END
+	!
 	!   L_DEF: [default body]  -- or, when absent, LOAD_CONST unknown_type
 	!   L_END:                                    ; every path converges here
 	!
@@ -502,9 +508,14 @@ recursive subroutine compile_switch_statement(prog, cs, node)
 		end do
 
 		! Nothing in this arm matched: skip its guard and body, straight to
-		! the next arm (or the default arm, for the last one)
-		next_arm_ip = prog%len_ + 1
-		call emit(prog, OP_JUMP, a = 0)
+		! the next arm (or the default arm, for the last one).  A guard-only arm
+		! (nelems == 0) has no values that can fail to match, so it gets no such
+		! jump -- control falls straight into the guard below, whose
+		! JUMP_IF_FALSE alone handles the fall-through to the next arm
+		if (nelems > 0) then
+			next_arm_ip = prog%len_ + 1
+			call emit(prog, OP_JUMP, a = 0)
+		end if
 
 		! A match jumps here: the guard (if any), then the body
 		l_body = prog%len_ + 1
@@ -525,7 +536,7 @@ recursive subroutine compile_switch_statement(prog, cs, node)
 		call emit(prog, OP_JUMP, a = 0)
 
 		! Both "nothing matched" and "guard false" land at the next arm
-		call patch_jump(prog, next_arm_ip, prog%len_ + 1)
+		if (nelems > 0) call patch_jump(prog, next_arm_ip, prog%len_ + 1)
 		if (has_guard) call patch_jump(prog, guard_jf_ip, prog%len_ + 1)
 
 	end do

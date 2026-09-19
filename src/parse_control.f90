@@ -988,7 +988,8 @@ end subroutine parse_case_range
 
 recursive subroutine parse_case_clause(parser, subj_type, subj_val, clause)
 
-	! Parse one `case <val>, <val>, ... [when <cond>] <body>` arm.  Not a
+	! Parse one `case <val>, <val>, ... [when <cond>] <body>` arm, or a
+	! guard-only `case when <cond> <body>` arm.  Not a
 	! parser_t type-bound procedure -- purely a local helper for
 	! parse_switch_statement(), following the backpatch_breaks precedent in
 	! compile_ctrl.f90.
@@ -996,9 +997,12 @@ recursive subroutine parse_case_clause(parser, subj_type, subj_val, clause)
 	! AST shape:
 	!
 	!   case_clause   %elems(:)   = this arm's match-value/case_range
-	!                               expressions, in source order
+	!                               expressions, in source order.  Zero-length
+	!                               for a guard-only arm, which matches any
+	!                               subject and so always has a %condition
 	!                 %condition  = optional `when` guard, checked only after
-	!                               a value/range has already matched
+	!                               a value/range has already matched (or
+	!                               immediately, for a guard-only arm)
 	!                 %body       = this arm's body statement
 
 	class(parser_t) :: parser
@@ -1023,6 +1027,16 @@ recursive subroutine parse_case_clause(parser, subj_type, subj_val, clause)
 	vals = new_syntax_node_vector()
 
 	do
+		! A guard-only arm, `case when <cond> { ... }`, has no match values at
+		! all: it matches any subject for which the guard holds.  Leave elems(:)
+		! zero-length -- compile_switch_statement() then falls straight into the
+		! guard instead of emitting a "nothing matched" jump.  Only reachable on
+		! the first iteration, since a trailing comma already exits the loop via
+		! at_case_body_start().  This is sugar for the wildcard `case _ when
+		! <cond>` reserved in core.f90's switch TODO, and must keep meaning the
+		! same thing if `_` ever lands
+		if (parser%current_kind() == when_keyword .and. vals%len_ == 0) exit
+
 		val_beg = parser%peek_pos(0)
 		call parser%parse_expr(expr = val_tmp)
 		val_end = parser%peek_pos(0) - 1

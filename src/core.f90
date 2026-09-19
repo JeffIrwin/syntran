@@ -54,11 +54,12 @@ module syntran__core_m
 	!      expression position is a clean E20 parse error today, so this is
 	!      purely additive and the statement form must keep working as-is
 	!    * pattern matching: ranges (case 1:10, half-open like every other `:`
-	!      range) and guards (case v when cond) are done -- see README.md
-	!      "Switch statements".  A wildcard (case _) is still free to add --
-	!      `_` is a parse error in that position today (it lexes as a plain
-	!      identifier, which fails name resolution).  But some spellings are
-	!      already claimed:
+	!      range), guards (case v when cond), and guard-only arms (case when
+	!      cond) are done -- see README.md "Switch statements".  A wildcard
+	!      (case _) is still free to add -- `_` is a parse error in that
+	!      position today (it lexes as a plain identifier, which fails name
+	!      resolution).  If it lands, `case when c` must stay equivalent to
+	!      `case _ when c`.  But some spellings are already claimed:
 	!      + `where` was deliberately not taken as a second guard spelling
 	!        alongside `when` -- one reserved word is cheaper than two, and
 	!        nothing parsed `case v where cond` before now anyway

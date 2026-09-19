@@ -4566,6 +4566,7 @@ subroutine unit_test_switch(npass, nfail)
 			interpret_file(path//'test-14.syntran', quiet) == 'true', &
 			interpret_file(path//'test-15.syntran', quiet) == 'true', &
 			interpret_file(path//'test-16.syntran', quiet) == 'true', &
+			interpret_file(path//'test-17.syntran', quiet) == 'true', &
 
 			! Short inline scripts, not worth their own test-src file
 			eval_i32('let x = 2; let y = 0; ' &
@@ -4606,6 +4607,17 @@ subroutine unit_test_switch(npass, nfail)
 				//'fn guard(tag: str, b: bool): bool { log = log + tag; return b; } ' &
 				//'switch 1 { case 2 when guard("g", true) { } default { } } log;', &
 				quiet) == '', &
+
+			! A guard-only arm never evaluates any case value, but the subject is
+			! still evaluated exactly once: mark()'s side effect fires once
+			eval_str('let log = ""; ' &
+				//'fn mark(tag: str, x: i32): i32 { log = log + tag; return x; } ' &
+				//'switch mark("s", 1) { case when false { } case when true { } ' &
+				//'default { } } log;', quiet) == 's', &
+
+			! A false guard-only guard falls to `default`
+			eval_i32('let y = 0; switch 1 { case when false { y = 1; } ' &
+				//'default { y = 2; } } y;', quiet) == 2, &
 
 			! Array subjects are matched whole, so a different-length case value
 			! simply doesn't match instead of aborting on a shape mismatch the

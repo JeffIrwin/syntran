@@ -841,6 +841,48 @@ A range is half-open, like every other `:` range in syntran (e.g. `[0: 5]`): `ca
 
 A `when` guard is checked only once one of the arm's values or ranges has already matched the subject, and only once per arm; if the guard is false, matching continues with the *next* `case` arm (not `default`), so a later arm can still catch what a guarded earlier one rejected.  A guard covers the whole comma-separated value list it follows, and must be spelled `when` -- `case v if cond { ... }` already means something else: `v` as the case value and the if-statement as the arm's body.
 
+The value list can be left out entirely when there is a guard.  A guard-only arm, `case when cond { ... }`, matches any subject for which `cond` is true, which makes it a conditional catch-all -- something `default` can't be, since `default` is unconditional.  Arms are still tried in source order, so a guard-only arm shadows every later arm whenever its guard holds, and a false guard falls through to the *next* arm, not to `default`:
+
+<!-- syntran-begin mode=repl group=switch-guard -->
+```rust
+fn describe(n: i32, verbose: bool): str
+{
+    switch n
+    {
+        case 0
+        {
+            return "zero";
+        }
+        case when n < 0
+        {
+            return "negative";
+        }
+        case when verbose
+        {
+            return "positive (verbose)";
+        }
+        default
+        {
+            return "positive";
+        }
+    }
+}
+
+println(describe(0, true));
+println(describe(-3, false));
+println(describe(3, true));
+println(describe(3, false));
+```
+<!-- syntran-expect
+zero
+negative
+positive (verbose)
+positive
+-->
+<!-- syntran-end -->
+
+A `case` with neither values nor a guard is still an error.
+
 ## Arrays
 
 Recall the syntax for a for-loop:
