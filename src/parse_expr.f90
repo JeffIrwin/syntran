@@ -434,11 +434,15 @@ recursive module subroutine parse_expr_statement(parser, expr)
 				expr%member%val        = field_val
 				expr%member%identifier = identifier
 				call parser%parse_subscripts(expr%member)
-				expr%val = expr%member%val
+				! Call value_copy() directly instead of `=`: with expr%member nested inside expr,
+				! gfortran's defined-assignment temp shallow-copies the source and then
+				! deep-frees the shared nested allocatables (fn_ret%array of a fn-typed
+				! member), leaving expr%member%val dangling.  c.f. syntax_token_copy()
+				call value_copy(expr%val, expr%member%val)
 				if (parser%current_kind() == dot_token) then
 					expr%member%identifier = identifier
 					call parser%parse_dot(expr%member)
-					expr%val = expr%member%val
+					call value_copy(expr%val, expr%member%val)
 				end if
 				is_const_var = .false.
 			end if
@@ -1025,10 +1029,10 @@ recursive module subroutine parse_name_expr(parser, expr)
 					expr%member%val        = field_val
 					expr%member%identifier = identifier
 					call parser%parse_subscripts(expr%member)
-					expr%val = expr%member%val
+					call value_copy(expr%val, expr%member%val)
 					if (parser%current_kind() == dot_token) then
 						call parser%parse_dot(expr%member)
-						expr%val = expr%member%val
+						call value_copy(expr%val, expr%member%val)
 					end if
 					return
 				end if

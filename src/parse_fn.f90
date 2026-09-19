@@ -31,6 +31,7 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 
 	integer :: i, io, io_std, id_index, id_index_tmp, pos0, rank, arr_type_result, arr_type_src, slot
 	integer :: var_io, var_id_index, method_slot, method_fn_id
+	integer :: field_id, field_io
 
 	logical :: has_rank, has_arr_type, param_is_ref, param_is_const_ref, &
 		arg_is_ref, is_ok, is_const_var, var_is_loc
@@ -42,13 +43,13 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 	type(integer_vector_t) :: pos_args
 	type(logical_vector_t) :: is_ref
 
-	type(syntax_node_t) :: arg, self_receiver
+	type(syntax_node_t) :: arg, self_receiver, member_receiver
 	type(syntax_node_vector_t) :: args
 	type(syntax_token_t) :: identifier_, comma, lparen, rparen, dummy, amp, self_token
 
 	type(text_span_t) :: span
 
-	type(value_t) :: param_val, var_val, self_val
+	type(value_t) :: param_val, var_val, self_val, field_val
 
 	!print *, ''
 	!print *, 'parse_fn_call'
@@ -253,6 +254,52 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 					lparen%pos, rparen%pos)
 				fn_call%id_index = var_id_index
 				fn_call%is_loc = var_is_loc
+
+				return
+
+			end if
+
+		end if
+
+		! Bare-name fn-typed-member call: inside a method body, `f(args)` where
+		! `f` is a member of the struct being parsed (and not a free fn or
+		! fn-pointer variable, both checked above) is an indirect call through
+		! that member on the implicit self, i.e. `self.f(args)`.  Mirrors
+		! parse_dot's `s.f(x)` branch (parse_expr.f90), and compiles through
+		! the same fn_call_ptr_expr + node%left member-chain path
+		if (.not. present(module_prefix) .and. parser%in_method) then
+
+			call parser%method_struct%vars%search(identifier_%text, &
+				field_id, field_io, field_val)
+
+			if (field_io == exit_success) then
+
+				if (field_val%type /= fn_type) then
+					span = new_span(identifier_%pos, len(identifier_%text))
+					call parser%diagnostics%push( &
+						err_not_callable(parser%context(), &
+						span, identifier_%text, type_name(field_val)))
+					fn_call%val%type = unknown_type
+					return
+				end if
+
+				! Receiver: the member read `0self.<field>`, same shape as the
+				! implicit-self read in parse_name_expr (parse_expr.f90)
+				member_receiver%kind       = dot_expr
+				member_receiver%id_index   = parser%self_loc_id
+				member_receiver%is_loc     = .true.
+				member_receiver%identifier = identifier_
+				allocate(member_receiver%member)
+				member_receiver%member%id_index   = field_id
+				member_receiver%member%identifier = identifier_
+				call value_copy(member_receiver%member%val, field_val)
+				call value_copy(member_receiver%val, member_receiver%member%val)
+
+				call build_fn_ptr_call_node(parser, fn_call, field_val, &
+					identifier_%text, args, is_ref, pos_args, &
+					lparen%pos, rparen%pos)
+				if (fn_call%val%type == unknown_type) return
+				call syntax_node_move(member_receiver, fn_call%left)
 
 				return
 

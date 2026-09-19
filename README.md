@@ -1613,7 +1613,8 @@ println(f(21));
 A struct member can also be a fn pointer -- useful for e.g. passing a
 function whose root is being found (and its derivative) into a solver.
 Calling a fn-typed member directly (`args.f(x)`) works just like calling a
-plain fn-pointer variable:
+plain fn-pointer variable.  Inside a struct's own methods, a bare `f(x)` calls
+the member on the implicit self:
 
 <!-- syntran-begin mode=file group=fn-ptr-struct-member -->
 ```rust
@@ -1641,8 +1642,25 @@ fn newton_step(args: SolverArgs, x: f64): f64
 let args = SolverArgs{f = square_minus_two, fprime = dsquare_minus_two};
 println(newton_step(args, 1.0));
 // 1.500000000000000E+00
+
+// The same step as a method: `f` and `fprime` are called on the implicit self
+struct Solver
+{
+    f: fn(f64): f64,
+    fprime: fn(f64): f64,
+
+    fn step(x: f64): f64
+    {
+        return x - f(x) / fprime(x);
+    }
+}
+
+let solver = Solver{f = square_minus_two, fprime = dsquare_minus_two};
+println(solver.step(1.0));
+// 1.500000000000000E+00
 ```
 <!-- syntran-expect
+    1.500000000000000E+00
     1.500000000000000E+00
 -->
 <!-- syntran-end -->
@@ -1653,8 +1671,9 @@ Limitations of the current implementation:
 - A function with any `&`-reference parameter cannot be pointed to, since a
   function-pointer signature has no way to express reference-ness.
 - Function-pointer parameters are always passed by value.
-- The callee in an indirect call (`f(...)`) must be a plain variable name or
-  a dot-chain ending in a fn-typed struct member (`s.f(...)`, `o.i.f(...)`),
+- The callee in an indirect call (`f(...)`) must be a plain variable name, a
+  dot-chain ending in a fn-typed struct member (`s.f(...)`, `o.i.f(...)`), or
+  (inside a method) a bare fn-typed member of the same struct,
   not a more general expression like `arr[i](...)` or `get_dbl()(...)`.  Bind
   such a fn-pointer value to a plain variable first, then call through that.
 - There are no closures or anonymous (lambda) functions; only a named,

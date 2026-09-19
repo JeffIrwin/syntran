@@ -1,0 +1,90 @@
+// A method referencing / calling a fn-typed struct member through implicit
+// self.
+//
+// Regression: a bare reference to a member of type `fn(...): [T; :]` inside a
+// method used to abort with "pointer being freed was not allocated".  The
+// implicit-self read did `expr%val = expr%member%val`, whose gfortran
+// defined-assignment temp shallow-copied and then deep-freed the member's
+// nested fn_ret%array.  Also covers `f(x)` inside a method (== `self.f(x)`),
+// which used to be E29 "function `f` has not been defined"
+
+let nfail = 0;
+
+fn check(cond: bool, msg: str)
+{
+	if not cond
+	{
+		println("FAIL: ", msg);
+		nfail += 1;
+	}
+}
+
+fn dbl(x: i32): i32
+{
+	return 2 * x;
+}
+fn dbl_vec(x: [f64; :]): [f64; :]
+{
+	return 2.0 * x;
+}
+fn id_mat(n: i32): [f64; :, :]
+{
+	return [1.0, 0.0, 0.0, 1.0; 2, 2];
+}
+
+struct S
+{
+	f: fn([f64; :]): [f64; :],
+	g: fn(i32): [f64; :, :],
+	h: fn(i32): i32,
+	n: i32,
+
+	// bare references (array-returning and rank-2 fn members)
+	fn bare(): i32
+	{
+		let a = f;
+		let b = (f);
+		let c = g;
+		return 0;
+	}
+
+	// assignment to a fn-typed member
+	fn reassign(): i32
+	{
+		f = f;
+		return 0;
+	}
+
+	// implicit-self calls
+	fn call_vec(x: [f64; :]): [f64; :]
+	{
+		return f(x);
+	}
+	fn call_mat(): [f64; :, :]
+	{
+		return g(2);
+	}
+	const fn call_scalar(x: i32): i32
+	{
+		return h(x) + 1;
+	}
+}
+
+let s = S{f = dbl_vec, g = id_mat, h = dbl, n = 0};
+
+check(s.bare() == 0, "bare fn-member refs in a method");
+check(s.reassign() == 0, "assign fn member in a method");
+
+const v = s.call_vec([1.0, 2.0]);
+check(v[0] == 2.0 and v[1] == 4.0, "implicit-self call returning array");
+
+const m = s.call_mat();
+check(m[0, 0] == 1.0 and m[1, 1] == 1.0 and m[0, 1] == 0.0, "implicit-self call returning rank-2 array");
+
+check(s.call_scalar(20) == 41, "implicit-self call from a const fn");
+
+// Free fns / fn-pointer locals still take precedence over members
+let fp = dbl;
+check(fp(4) == 8, "plain fn-pointer local call unaffected");
+
+return nfail == 0;

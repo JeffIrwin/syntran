@@ -3835,6 +3835,10 @@ subroutine unit_test_fns(npass, nfail)
 			! and a by-ref array-valued member called in a loop (the
 			! numa.syntran shape)
 			interpret_file(path//'test-43.syntran', quiet) == 'true', &
+			! A method referencing a fn-typed member (array/rank-2 return) --
+			! used to abort on a double free -- and calling one via implicit
+			! self (`f(x)` == `self.f(x)`), which used to be E29
+			interpret_file(path//'test-44.syntran', quiet) == 'true', &
 			! Printing a struct with a fn-pointer member renders the
 			! member's signature via value_to_str()'s fn_type case, same as
 			! a bare fn-pointer value (test-33 above)
@@ -7633,6 +7637,15 @@ subroutine unit_test_error_codes(npass, nfail)
 				'fn dbl(n:i32):i32{return 2*n;} struct S{f:fn(i32):i32} ' // &
 				'let s=S{f=dbl}; s.f(true);'), &
 				EC_BAD_ARG_TYPE), &
+			! Same, via implicit self inside a method: `n(1)` on a non-fn member
+			! is E88 exactly once; `f(1)` on a fn-typed member is not
+			diag_count_code(get_diags( &
+				'struct S{n:i32, fn go():i32{return n(1);}} return 0;'), &
+				EC_NOT_CALLABLE) == 1, &
+			.not. diag_has_code(get_diags( &
+				'fn dbl(n:i32):i32{return 2*n;} ' // &
+				'struct S{f:fn(i32):i32, fn go():i32{return f(1);}} return 0;'), &
+				EC_NOT_CALLABLE), &
 			! positive: calling through an actual fn-typed member is fine,
 			! no E88/E20 cascade
 			.not. diag_has_code(get_diags( &
