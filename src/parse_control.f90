@@ -1106,11 +1106,13 @@ recursive subroutine parse_case_clause(parser, subj_type, subj_val, clause)
 					parser%context(), span, parser%text(val_beg, val_end), &
 					val_name, subj_name))
 
-			else if (subj_type == array_type .and. val_type == array_type) then
+			else if (subj_type == array_type .and. val_type == array_type .and. &
+				allocated(subj_val%array) .and. allocated(val_tmp%val%array)) then
 				! Rank is static and `==` between arrays of different rank is
 				! E49 in parse_expr.f90, so `case v` (defined as `subj == v`)
 				! reports the same.  A differing *extent* is a runtime
-				! non-match instead, since sizes aren't static
+				! non-match instead, since sizes aren't static.  The allocated()
+				! guards mirror the subj_arr/val_arr computation above
 				if (subj_val%array%rank /= val_tmp%val%array%rank) then
 					span = new_span(val_beg, val_end - val_beg + 1)
 					call parser%diagnostics%push(err_binary_ranks( &

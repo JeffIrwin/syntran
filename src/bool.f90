@@ -546,6 +546,11 @@ logical function is_array_eq(left, right) result(eq)
 	if (allocated(left%array%size) .and. allocated(right%array%size)) then
 		if (any(left%array%size(1: left%array%rank) /= &
 			right%array%size(1: right%array%rank))) return
+	else if (left%array%rank > 1) then
+		! No %size to compare, and len_ alone can't tell a 2x3 from a 3x2, so
+		! don't claim a match.  Not reachable today -- rank > 1 arrays always
+		! carry %size -- but a wrong .true. here would be a silently wrong `case`
+		return
 	end if
 
 	n = left%array%len_

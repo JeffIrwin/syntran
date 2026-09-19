@@ -360,6 +360,31 @@ end subroutine emit_switch_load_subj
 
 !===============================================================================
 
+subroutine emit_case_cmp(prog, op, subj_type, val_type)
+
+	! Emit one switch case comparison: the typed opcode when there is one for
+	! this operand pair, else the generic OP_BINOP.  Shared by the `==` value
+	! test and both `<` bounds of a `case lo:hi` range in
+	! compile_switch_statement(), so the three sites can't drift apart
+
+	type(program_t), intent(inout) :: prog
+	integer,         intent(in)    :: op, subj_type, val_type
+
+	!*******
+
+	integer :: typed_op
+
+	typed_op = binop_typed_opcode(op, subj_type, val_type)
+	if (typed_op /= 0) then
+		call emit(prog, typed_op)
+	else
+		call emit(prog, OP_BINOP, a = op, b = bool_type)
+	end if
+
+end subroutine emit_case_cmp
+
+!===============================================================================
+
 recursive subroutine compile_switch_statement(prog, cs, node)
 
 	! Bytecode pattern for a switch-statement.  The subject is compiled once
@@ -452,12 +477,7 @@ recursive subroutine compile_switch_statement(prog, cs, node)
 				call emit_switch_load_subj(prog, node, subj_type)
 				call compile_node(prog, cs, node%members(i)%elems(j)%lbound_)
 				val_type = node%members(i)%elems(j)%lbound_%val%type
-				typed_op = binop_typed_opcode(less_token, subj_type, val_type)
-				if (typed_op /= 0) then
-					call emit(prog, typed_op)
-				else
-					call emit(prog, OP_BINOP, a = less_token, b = bool_type)
-				end if
+				call emit_case_cmp(prog, less_token, subj_type, val_type)
 				skip_ip = prog%len_ + 1
 				call emit(prog, OP_JUMP_IF_TRUE, a = 0)
 
@@ -465,12 +485,7 @@ recursive subroutine compile_switch_statement(prog, cs, node)
 				call emit_switch_load_subj(prog, node, subj_type)
 				call compile_node(prog, cs, node%members(i)%elems(j)%ubound_)
 				val_type = node%members(i)%elems(j)%ubound_%val%type
-				typed_op = binop_typed_opcode(less_token, subj_type, val_type)
-				if (typed_op /= 0) then
-					call emit(prog, typed_op)
-				else
-					call emit(prog, OP_BINOP, a = less_token, b = bool_type)
-				end if
+				call emit_case_cmp(prog, less_token, subj_type, val_type)
 				match_ips(j) = prog%len_ + 1
 				call emit(prog, OP_JUMP_IF_TRUE, a = 0)
 
@@ -493,12 +508,7 @@ recursive subroutine compile_switch_statement(prog, cs, node)
 					call emit_switch_load_subj(prog, node, subj_type)
 					call compile_node(prog, cs, node%members(i)%elems(j))
 					val_type = node%members(i)%elems(j)%val%type
-					typed_op = binop_typed_opcode(eequals_token, subj_type, val_type)
-					if (typed_op /= 0) then
-						call emit(prog, typed_op)
-					else
-						call emit(prog, OP_BINOP, a = eequals_token, b = bool_type)
-					end if
+					call emit_case_cmp(prog, eequals_token, subj_type, val_type)
 				end if
 				match_ips(j) = prog%len_ + 1
 				call emit(prog, OP_JUMP_IF_TRUE, a = 0)

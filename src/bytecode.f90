@@ -724,7 +724,7 @@ end function add_node
 subroutine patch_jump(prog, ip, tgt)
 
 	! Backpatch the jump target (field `a`) of a previously emitted
-	! OP_JUMP or OP_JUMP_IF_FALSE instruction at position ip.
+	! OP_JUMP, OP_JUMP_IF_FALSE, or OP_JUMP_IF_TRUE instruction at position ip.
 
 	type(program_t), intent(inout) :: prog
 	integer, intent(in) :: ip, tgt
