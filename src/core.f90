@@ -43,6 +43,26 @@ module syntran__core_m
 	!    * continue one file at a time
 	!    * '''grep -c  'TODO' src/* | sort -t: -k2 -n'''
 	!  - stack trace for runtime errors
+	!  - declare variable types without initializing them, and/or
+	!    conditional initialization.  Rust discourages mutability, instead
+	!    preferring patterns like this:
+	!
+	!         let x = if condition
+	!         {
+	!             y
+	!         }
+	!         else
+	!         {
+	!             z
+	!         };
+	!
+	!    * may be hard, as it would require checking that the types of both
+	!      condition branches match the LHS type
+	!    * parse_let_expr() would probably parse the RHS with something like
+	!      parse_statement() instead of parse_expr_statement(), peeking for an
+	!      if_keyword first
+	!    * this is just the ternary operator, unless we also extend it to switch
+	!      expressions
 	!  - short circuit logic?
 	!    * useful e.g. for scanning a string, or anything where you need a
 	!      bounds check plus some condition on an array element in the same if

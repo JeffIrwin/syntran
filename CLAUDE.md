@@ -17,6 +17,13 @@ When using the Edit tool:
 4. NEVER convert tabs to spaces in your `old_string` or `new_string` - preserve the exact tab characters
 5. If Edit fails with "String to replace not found", the most common cause is tab/space mismatch - check the raw file content
 
+## Fortran Submodule Gotcha
+
+When adding a procedure to a submodule (`src/parse_*.f90`, `src/types_*.f90`,
+etc.), prefix it with `module function` / `module subroutine`, both in the
+submodule and in the parent module's interface block. gfortran doesn't care
+if you forget, but Intel Fortran refuses to compile it.
+
 ## Build Commands
 
 Two build systems are supported: FPM (Fortran Package Manager) and CMake.

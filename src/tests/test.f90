@@ -6817,6 +6817,13 @@ subroutine unit_test_modules(npass, nfail)
 			interpret_file(path//'test-struct-transitive.syntran', quiet) == 'true', &
 			interpret_file(path//'test-enum-mod.syntran', quiet) == 'true', &
 			interpret_file(path//'test-enum-mod-qualified.syntran', quiet) == 'true', &
+			interpret_file(path//'test-qual-assign-ok.syntran', quiet) == 'true', &
+			! Qualified assignment of a different struct/enum type is E48, c.f.
+			! the unqualified struct_cookie/enum_cookie checks
+			diag_has_code(get_diags_file(path//'test-qual-assign-struct-mismatch.syntran'), &
+				EC_BINARY_TYPES), &
+			diag_has_code(get_diags_file(path//'test-qual-assign-enum-mismatch.syntran'), &
+				EC_BINARY_TYPES), &
 			interpret_file(path//'test-circular.syntran', quiet) == '', &
 			interpret_file(path//'test-duplicate-import.syntran', quiet) == '', &
 			interpret_file(path//'test-duplicate-alias.syntran', quiet) == '', &
@@ -7569,6 +7576,12 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_has_code(get_diags('const N = 10; N = 20;'), EC_CONST_ASSIGN), &
 			diag_has_code(get_diags('const N = 10; N += 5;'), EC_CONST_ASSIGN), &
 			diag_has_code(get_diags('const A = [1, 2, 3]; A[0] = 5;'), EC_CONST_ASSIGN), &
+			! `const` inside a fn body takes the locs path of parse_let_expr()
+			diag_has_code(get_diags('fn f() -> i32 { const n = 1; n = 2; return n; } f();'), &
+				EC_CONST_ASSIGN), &
+			! ...while plain `let` in a fn body must stay assignable
+			.not. diag_has_code(get_diags('fn f() -> i32 { let n = 1; n = 2; return n; } f();'), &
+				EC_CONST_ASSIGN), &
 			! passing const to mutable ref param
 			diag_has_code(get_diags('fn f(x: &i32) { x = 0; } const N = 10; f(&N);'), EC_CONST_ASSIGN), &
 			! &const param: assigning inside fn body is blocked

@@ -7,10 +7,6 @@ submodule (syntran__parse_m) syntran__parse_fn
 
 	implicit none
 
-	! FIXME: remember to prepend routines like `module function` or `module
-	! subroutine` when pasting them into a submodule.  gfortran doesn't care but
-	! intel fortran will refuse to compile otherwise
-
 !===============================================================================
 
 contains
@@ -220,15 +216,8 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		! `let f = dbl; f(21);`.  Restricted to plain (unqualified) names in v1
 		if (.not. present(module_prefix)) then
 
-			var_io = exit_failure
-			if (parser%is_loc) then
-				call parser%locs%search(identifier_%text, var_id_index, var_io, var_val)
-				var_is_loc = var_io == exit_success
-			end if
-			if (var_io /= exit_success) then
-				call parser%vars%search(identifier_%text, var_id_index, var_io, var_val)
-				var_is_loc = .false.
-			end if
+			call parser%search(identifier_%text, var_id_index, var_io, var_val, &
+				var_is_loc)
 
 			if (var_io == exit_success) then
 

@@ -1,0 +1,14 @@
+
+// The identity checks added for qualified assignment must not reject an
+// assignment of the *same* struct/enum type
+
+use qual_assign_mod;
+
+let a2 = qual_assign_mod::Apple{weight = 7};
+qual_assign_mod::apple = a2;
+
+qual_assign_mod::fruit = qual_assign_mod::Fruit.Plum;
+
+return qual_assign_mod::apple.weight == 7 and
+	qual_assign_mod::fruit == qual_assign_mod::Fruit.Plum;
+

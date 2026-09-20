@@ -8,10 +8,6 @@ submodule (syntran__parse_m) syntran__parse_control
 
 	implicit none
 
-	! FIXME: remember to prepend routines like `module function` or `module
-	! subroutine` when pasting them into a submodule.  gfortran doesn't care but
-	! intel fortran will refuse to compile otherwise
-
 !===============================================================================
 
 contains
@@ -755,15 +751,7 @@ recursive module subroutine parse_for_statement(parser, statement)
 	call parser%parse_primary_expr(array)
 	arr_end  = parser%peek_pos(0) - 1
 
-	if (parser%is_loc) then
-		parser%num_locs = parser%num_locs + 1
-		statement%id_index = parser%num_locs
-		statement%is_loc = .true.
-	else
-		parser%num_vars = parser%num_vars + 1
-		statement%id_index = parser%num_vars
-		statement%is_loc = .false.
-	end if
+	call parser%push_var(statement)
 
 	! Auto declare loop iterator in for statement (HolyC doesn't let you do
 	! that!).  The 'let' keyword is not used:
@@ -1058,10 +1046,7 @@ recursive subroutine parse_case_clause(parser, subj_type, subj_val, clause)
 				! or a case value depends on a fn declared later in the file
 				is_op_allowed = .true.
 			else
-				! left_arr/right_arr must always be passed explicitly (as
-				! unknown_type when the operand isn't an array): the eequals_token
-				! branch of is_binary_op_allowed() dereferences them unconditionally,
-				! c.f. the larrtype/rarrtype locals in parse_expr.f90's binary_expr loop
+				! Element types, for the diagnostic below
 				subj_arr = unknown_type
 				val_arr  = unknown_type
 				if (subj_type == array_type .and. allocated(subj_val%array)) &
@@ -1073,25 +1058,10 @@ recursive subroutine parse_case_clause(parser, subj_type, subj_val, clause)
 				! matches whole-array values, and vice versa
 				is_op_allowed = (subj_type == array_type) .eqv. &
 					(val_type == array_type)
+				! The _val wrapper also catches two same-kind enum_type values
+				! that belong to different enums, e.g. `Suit.Hearts == Card.Jack`
 				if (is_op_allowed) is_op_allowed = &
-					is_binary_op_allowed(subj_type, eequals_token, val_type, &
-					subj_arr, val_arr)
-
-				if (is_op_allowed .and. (subj_type == enum_type .or. &
-					subj_arr == enum_type)) then
-					! Mirrors the enum_cookie identity check in parse_expr.f90:
-					! is_binary_op_allowed() alone doesn't know that two
-					! same-kind enum_type values can still belong to different
-					! enums (e.g. `Suit.Hearts == Card.Jack`).  Arrays of enums carry
-					! the same fields at the array level, as in parse_expr.f90
-					if (allocated(subj_val%enum_cookie) .and. &
-						allocated(val_tmp%val%enum_cookie)) then
-						if (subj_val%enum_cookie /= val_tmp%val%enum_cookie) &
-							is_op_allowed = .false.
-					else if (subj_val%enum_name /= val_tmp%val%enum_name) then
-						is_op_allowed = .false.
-					end if
-				end if
+					is_binary_op_allowed_val(subj_val, eequals_token, val_tmp%val)
 			end if
 
 			if (.not. is_op_allowed) then
@@ -1251,15 +1221,7 @@ recursive module subroutine parse_switch_statement(parser, statement)
 	! Hidden subject slot, mirroring the for-loop iterator idiom in
 	! parse_for_statement() above.  Not inserted into any symbol table (it
 	! has no name), so no scope needs to be pushed for it
-	if (parser%is_loc) then
-		parser%num_locs = parser%num_locs + 1
-		statement%id_index = parser%num_locs
-		statement%is_loc = .true.
-	else
-		parser%num_vars = parser%num_vars + 1
-		statement%id_index = parser%num_vars
-		statement%is_loc = .false.
-	end if
+	call parser%push_var(statement)
 
 	call parser%match(lbrace_token, lbrace)
 

@@ -5,10 +5,6 @@ submodule (syntran__parse_m) syntran__parse_array
 
 	implicit none
 
-	! FIXME: remember to prepend routines like `module function` or `module
-	! subroutine` when pasting them into a submodule.  gfortran doesn't care but
-	! intel fortran will refuse to compile otherwise
-
 !===============================================================================
 
 contains

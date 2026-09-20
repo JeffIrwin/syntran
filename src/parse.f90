@@ -98,12 +98,15 @@ module syntran__parse_m
 				next => next_token, &
 				peek_index, &
 				check_type_clash, &
+				push_var, &
+				search, &
 				check_enum_name_value, &
 				check_var_clash, &
 				parse_array_expr, &
 				parse_block_statement, &
 				parse_expr, &
 				parse_expr_statement, &
+				parse_let_expr, &
 				parse_fn_declaration, &
 				parse_method_declaration, &
 				parse_fn_call, &
@@ -361,6 +364,12 @@ module syntran__parse_m
 	interface
 		! Implemented in parse_expr.f90
 
+		recursive module subroutine parse_let_expr(parser, is_const, expr)
+			class(parser_t) :: parser
+			logical, intent(in) :: is_const
+			type(syntax_node_t), intent(out) :: expr
+		end subroutine parse_let_expr
+
 		recursive module subroutine parse_expr_statement(parser, expr)
 			class(parser_t) :: parser
 			type(syntax_node_t), intent(out) :: expr
@@ -398,6 +407,23 @@ module syntran__parse_m
 			class(parser_t) :: parser
 			character(len = :), allocatable :: str_
 		end function tokens_str
+
+		! Allocate the next local/global variable slot and save its index in
+		! `node`
+		module subroutine push_var(parser, node)
+			class(parser_t) :: parser
+			type(syntax_node_t), intent(inout) :: node
+		end subroutine push_var
+
+		! Search locals (if in a fn body) then globals for a variable name
+		module subroutine search(parser, key, id_index, iostat, val, is_loc, is_const)
+			class(parser_t) :: parser
+			character(len = *), intent(in) :: key
+			integer, intent(out) :: id_index, iostat
+			type(value_t), intent(out) :: val
+			logical, intent(out) :: is_loc
+			logical, intent(out), optional :: is_const
+		end subroutine search
 
 		! At a variable-binding site (let/const/for-iterator/fn-param), check
 		! whether `name` clashes with an already-declared enum or struct type

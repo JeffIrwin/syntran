@@ -815,6 +815,12 @@ module syntran__types_m
 			integer, intent(in), optional :: left_arr, right_arr
 		end function is_binary_op_allowed
 
+		module logical function is_binary_op_allowed_val(left, op, right) &
+				result(allowed)
+			type(value_t), intent(in) :: left, right
+			integer, intent(in) :: op
+		end function is_binary_op_allowed_val
+
 		module logical function is_unary_op_allowed(op, right, right_arr)
 			integer, intent(in) :: op, right, right_arr
 		end function is_unary_op_allowed

@@ -1,0 +1,7 @@
+
+// Qualified assignment must reject an enum value of a different enum type
+
+use qual_assign_mod;
+
+qual_assign_mod::fruit = qual_assign_mod::Nut.Pecan;
+

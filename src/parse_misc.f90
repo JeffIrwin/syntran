@@ -5,13 +5,63 @@ submodule (syntran__parse_m) syntran__parse_misc
 
 	implicit none
 
-	! FIXME: remember to prepend routines like `module function` or `module
-	! subroutine` when pasting them into a submodule.  gfortran doesn't care but
-	! intel fortran will refuse to compile otherwise
-
 !===============================================================================
 
 contains
+
+!===============================================================================
+
+module subroutine push_var(parser, node)
+
+	! Allocate the next variable slot, local if we're inside a fn body or
+	! global otherwise, and save its index in the node.  Used for anything
+	! that binds a variable: let/const declarations, for-loop iterators, and
+	! the hidden switch subject
+
+	class(parser_t) :: parser
+	type(syntax_node_t), intent(inout) :: node
+
+	if (parser%is_loc) then
+		parser%num_locs = parser%num_locs + 1
+		node%id_index   = parser%num_locs
+		node%is_loc     = .true.
+	else
+		parser%num_vars = parser%num_vars + 1
+		node%id_index   = parser%num_vars
+		node%is_loc     = .false.
+	end if
+
+end subroutine push_var
+
+!===============================================================================
+
+module subroutine search(parser, key, id_index, iostat, val, is_loc, is_const)
+
+	! Look up a variable name, trying local scope first (if inside a fn body)
+	! and then falling back to globals.  On return, is_loc says which table the
+	! name was found in
+
+	class(parser_t) :: parser
+	character(len = *), intent(in) :: key
+	integer, intent(out) :: id_index, iostat
+	type(value_t), intent(out) :: val
+	logical, intent(out) :: is_loc
+	logical, intent(out), optional :: is_const
+
+	iostat = exit_failure
+	is_loc = .false.
+	if (present(is_const)) is_const = .false.
+
+	if (parser%is_loc) then
+		call parser%locs%search(key, id_index, iostat, val, is_const = is_const)
+		is_loc = iostat == exit_success
+	end if
+
+	if (.not. is_loc) then
+		call parser%vars%search(key, id_index, iostat, val, is_const = is_const)
+	end if
+
+end subroutine search
 
 !===============================================================================
 

@@ -5,13 +5,80 @@ submodule (syntran__parse_m) syntran__parse_expr
 
 	implicit none
 
-	! FIXME: remember to prepend routines like `module function` or `module
-	! subroutine` when pasting them into a submodule.  gfortran doesn't care but
-	! intel fortran will refuse to compile otherwise
-
 !===============================================================================
 
 contains
+
+!===============================================================================
+
+recursive module subroutine parse_let_expr(parser, is_const, expr)
+
+	! Parse `let x = ...` or, if is_const, `const x = ...`.  The caller has
+	! already peeked the keyword, identifier, and equals tokens
+
+	class(parser_t) :: parser
+	logical, intent(in) :: is_const
+	type(syntax_node_t), intent(out) :: expr
+
+	!********
+
+	logical :: overwrite
+
+	integer :: io
+
+	type(syntax_node_t) :: right
+	type(syntax_token_t) :: let, identifier, op
+
+	type(text_span_t) :: span
+
+	! The caller already verified tokens, so we can use next() instead of
+	! match() here
+
+	call parser%next(let)
+	call parser%next(identifier)
+	call parser%check_type_clash(identifier%text, identifier%pos)
+
+	call parser%next(op)
+
+	call parser%parse_expr_statement(right)
+	call parser%check_enum_name_value(right)
+
+	if (right%val%type ==  void_type) then
+		span = new_span(let%pos, parser%current_pos() - let%pos)
+		call parser%diagnostics%push( &
+			err_void_assign(parser%context(), &
+			span, identifier%text))
+	end if
+
+	call new_declaration_expr(identifier, op, right, expr)
+
+	! Increment the variable array index and save it in the expr node
+	call parser%push_var(expr)
+
+	overwrite = .true.
+	if (parser%ipass == 0) overwrite = .false.
+
+	! Insert the identifier's type into the dict and check that it hasn't
+	! already been declared
+	if (parser%is_loc) then
+		call parser%locs%insert(identifier%text, expr%val, &
+			expr%id_index, io, overwrite = overwrite, is_const = is_const)
+	else
+		call parser%vars%insert(identifier%text, expr%val, &
+			expr%id_index, io, overwrite = overwrite, is_const = is_const)
+
+		! Track module-level variable names (like fn_names for functions)
+		if (parser%ipass == 0) call parser%var_names%push(identifier%text)
+	end if
+
+	if (io /= exit_success) then
+		span = new_span(identifier%pos, len(identifier%text))
+		call parser%diagnostics%push( &
+			err_redeclare_var(parser%context(), &
+			span, identifier%text))
+	end if
+
+end subroutine parse_let_expr
 
 !===============================================================================
 
@@ -22,178 +89,32 @@ recursive module subroutine parse_expr_statement(parser, expr)
 
 	!********
 
-	logical :: is_op_allowed, overwrite, is_const_var
+	logical :: is_op_allowed, is_const_var
 
-	integer :: io, ltype, rtype, pos0, lrank, rrank, larrtype, &
-		rarrtype, search_io, ndiag0, field_id, field_io, root_val_type
+	integer :: ltype, rtype, pos0, lrank, rrank, search_io, ndiag0, &
+		field_id, field_io, root_val_type
 
 	type(value_t) :: field_val, self_val
 
 	type(syntax_node_t) :: right
-	type(syntax_token_t) :: let, identifier, op
+	type(syntax_token_t) :: identifier, op
 
 	type(text_span_t) :: span
 
 	!print *, 'starting parse_expr_statement()'
 
-	! TODO: provide a way to declare variable types without initializing them?
-	! Rust discourages mutability, instead preferring patterns like this:
-	!
-	!      let x = if condition
-	!      {
-	!          y
-	!      }
-	!      else
-	!      {
-	!          z
-	!      };
-	!
-	! The above might be hard to do, as it would require checking that the types
-	! of both condition branches match the LHS type
-
 	if (parser%peek_kind(0) == const_keyword     .and. &
 	    parser%peek_kind(1) == identifier_token .and. &
 	    parser%peek_kind(2) == equals_token) then
-
-		call parser%next(let)
-		call parser%next(identifier)
-		call parser%check_type_clash(identifier%text, identifier%pos)
-		call parser%next(op)
-
-		call parser%parse_expr_statement(right)
-		call parser%check_enum_name_value(right)
-
-		if (right%val%type ==  void_type) then
-			span = new_span(let%pos, parser%current_pos() - let%pos)
-			call parser%diagnostics%push( &
-				err_void_assign(parser%context(), &
-				span, identifier%text))
-		end if
-
-		call new_declaration_expr(identifier, op, right, expr)
-
-		if (parser%is_loc) then
-			parser%num_locs = parser%num_locs + 1
-			expr%id_index   = parser%num_locs
-			expr%is_loc = .true.
-		else
-			parser%num_vars = parser%num_vars + 1
-			expr%id_index   = parser%num_vars
-			expr%is_loc = .false.
-		end if
-
-		overwrite = .true.
-		if (parser%ipass == 0) overwrite = .false.
-
-		if (parser%is_loc) then
-			call parser%locs%insert(identifier%text, expr%val, &
-				expr%id_index, io, overwrite = overwrite, is_const = .true.)
-		else
-			call parser%vars%insert(identifier%text, expr%val, &
-				expr%id_index, io, overwrite = overwrite, is_const = .true.)
-
-			if (parser%ipass == 0) call parser%var_names%push(identifier%text)
-		end if
-
-		if (io /= exit_success) then
-			span = new_span(identifier%pos, len(identifier%text))
-			call parser%diagnostics%push( &
-				err_redeclare_var(parser%context(), &
-				span, identifier%text))
-		end if
-
+		call parser%parse_let_expr(.true., expr)
 		return
-
 	end if
 
 	if (parser%peek_kind(0) == let_keyword      .and. &
 	    parser%peek_kind(1) == identifier_token .and. &
 	    parser%peek_kind(2) == equals_token) then
-
-		! TODO: refactor this as parse_let_expr()
-
-		!print *, 'let expr'
-
-		! The if-statement above already verifies tokens, so we can use next()
-		! instead of match() here
-
-		call parser%next(let)
-		call parser%next(identifier)
-		!print *, 'let ident = ', identifier%text
-		call parser%check_type_clash(identifier%text, identifier%pos)
-
-		call parser%next(op)
-
-		call parser%parse_expr_statement(right)
-		!right      = parser%parse_expr()
-		call parser%check_enum_name_value(right)
-
-		if (right%val%type ==  void_type) then
-			span = new_span(let%pos, parser%current_pos() - let%pos)
-			call parser%diagnostics%push( &
-				err_void_assign(parser%context(), &
-				span, identifier%text))
-		end if
-
-		!! I think the way to get conditional initialization like rust is
-		!! something like this.  May need to peek current and check if it's
-		!! if_keyword or not
-		!right      = parser%parse_statement()
-		!!call parser%match(semicolon_token, semi)
-
-		call new_declaration_expr(identifier, op, right, expr)
-
-		!print *, "right type = ", kind_name(right%val%type)
-		!print *, "expr  type = ", kind_name(expr %val%type)
-		!print *, "right struct = ", right%val%struct_name
-		!print *, "expr  struct = ", expr %val%struct_name
-
-		! Increment the variable array index and save it in the expr node.
-		! TODO: make this a push_var fn?  parse_for_statement uses it too
-		if (parser%is_loc) then
-			parser%num_locs = parser%num_locs + 1
-			expr%id_index   = parser%num_locs
-			expr%is_loc = .true.
-		else
-			parser%num_vars = parser%num_vars + 1
-			expr%id_index   = parser%num_vars
-			expr%is_loc = .false.
-		end if
-
-		!if (expr%val%type == array_type) then
-		!	print *, 'array_type'
-		!	print *, 'rank = ', expr%val%array%rank
-		!end if
-
-		overwrite = .true.
-		if (parser%ipass == 0) overwrite = .false.
-
-		! Insert the identifier's type into the dict and check that it
-		! hasn't already been declared
-		!print *, "inserting var"
-		!print *, "parser is_loc = ", parser%is_loc
-		if (parser%is_loc) then
-			call parser%locs%insert(identifier%text, expr%val, &
-				expr%id_index, io, overwrite = overwrite)
-		else
-			call parser%vars%insert(identifier%text, expr%val, &
-				expr%id_index, io, overwrite = overwrite)
-
-			! Track module-level variable names (like fn_names for functions)
-			if (parser%ipass == 0) call parser%var_names%push(identifier%text)
-		end if
-
-		!print *, 'io = ', io
-		if (io /= exit_success) then
-			!print *, "expr redeclare"
-			span = new_span(identifier%pos, len(identifier%text))
-			call parser%diagnostics%push( &
-				err_redeclare_var(parser%context(), &
-				span, identifier%text))
-		end if
-
+		call parser%parse_let_expr(.false., expr)
 		return
-
 	end if
 
 	! Handle qualified assignment: mod::var = value, mod::arr[i] = value,
@@ -307,24 +228,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			ltype = expr%val%type
 			rtype = expr%right%val%type
 
-			larrtype = unknown_type
-			rarrtype = unknown_type
-			if (ltype == array_type) larrtype = expr%val%array%type
-			if (rtype == array_type) rarrtype = expr%right%val%array%type
-
-			is_op_allowed = is_binary_op_allowed(ltype, op%kind, rtype, larrtype, rarrtype)
-			if (ltype == fn_type .and. is_op_allowed) then
-				! Fn-pointer assignment must match the full signature, not
-				! just fn_type == fn_type: the call site's arity is frozen at
-				! parse time from the LHS signature (parse_fn.f90's
-				! fn_call_ptr_expr), so a mismatched RHS would desync
-				! OP_CALL_PTR's arg pops.  c.f. the struct_cookie/enum_cookie
-				! checks in the unqualified assignment branch below -- this
-				! qualified (`mod::f = g`) branch has no such override for
-				! struct/enum either, only for fn
-				if (types_match(expr%val, expr%right%val) /= TYPE_MATCH) &
-					is_op_allowed = .false.
-			end if
+			is_op_allowed = is_binary_op_allowed_val(expr%val, op%kind, expr%right%val)
 
 			if (.not. is_op_allowed) then
 				span = new_span(op%pos, len(op%text))
@@ -395,23 +299,9 @@ recursive module subroutine parse_expr_statement(parser, expr)
 
 		! Delay the error-handling on search_io because we might end up rewinding
 
-		! TODO: make this a parser%search() fn to wrap loc and vars (global)
-		! searches?
-
-		!print *, "searching identifier ", identifier%text
-
 		is_const_var = .false.
-		if (parser%is_loc) then
-			call parser%locs%search(identifier%text, expr%id_index, search_io, expr%val, &
-				is_const = is_const_var)
-		end if
-
-		if (parser%is_loc .and. search_io == 0) then
-			expr%is_loc = .true.
-		else
-			call parser%vars%search(identifier%text, expr%id_index, search_io, expr%val, &
-				is_const = is_const_var)
-		end if
+		call parser%search(identifier%text, expr%id_index, search_io, expr%val, &
+			expr%is_loc, is_const = is_const_var)
 		root_val_type = expr%val%type
 
 		! Check if this is an implicit field access inside a method body
@@ -541,54 +431,10 @@ recursive module subroutine parse_expr_statement(parser, expr)
 		ltype = expr%val%type
 		rtype = expr%right%val%type
 
-		larrtype = unknown_type
-		rarrtype = unknown_type
-		if (ltype == array_type) larrtype = expr%val%array%type
-		if (rtype == array_type) rarrtype = expr%right%val%array%type
+		is_op_allowed = is_binary_op_allowed_val(expr%val, op%kind, expr%right%val)
 
-		!print *, "larrtype = ", kind_name(larrtype)
-		!print *, "rarrtype = ", kind_name(rarrtype)
-		!print *, "ltype    = ", kind_name(ltype)
-		!print *, "rtype    = ", kind_name(rtype)
-
-		is_op_allowed = is_binary_op_allowed(ltype, op%kind, rtype, larrtype, rarrtype)
-		if (ltype == struct_type .and. is_op_allowed) then
-			! Prefer the alias-independent struct_cookie (set at struct
-			! declaration time) so the same struct reached via two different
-			! module aliases/import paths is still recognized as the same
-			! type.  Fall back to struct_name if either side lacks a cookie
-			if (allocated(expr%val%struct_cookie) .and. &
-				allocated(expr%right%val%struct_cookie)) then
-				if (expr%val%struct_cookie /= expr%right%val%struct_cookie) &
-					is_op_allowed = .false.
-			else if (expr%val%struct_name /= expr%right%val%struct_name) then
-				! TODO: this is a one-off check for assignment of one struct to
-				! another. It should really be inside of is_binary_op_allowed(),
-				! but I should change is_binary_op_allowed() to take 2 value_t
-				! args, instead of a bunch of int args as-is
-				is_op_allowed = .false.
-			end if
-		else if (ltype == enum_type .and. is_op_allowed) then
-			! Mirrors the struct_type cookie check above, for the same reason
-			if (allocated(expr%val%enum_cookie) .and. &
-				allocated(expr%right%val%enum_cookie)) then
-				if (expr%val%enum_cookie /= expr%right%val%enum_cookie) &
-					is_op_allowed = .false.
-			else if (expr%val%enum_name /= expr%right%val%enum_name) then
-				is_op_allowed = .false.
-			end if
-		else if (ltype == fn_type .and. is_op_allowed) then
-			! Fn-pointer assignment must match the full signature, not just
-			! fn_type == fn_type: the call site's arity is frozen at parse
-			! time from the LHS signature (parse_fn.f90's fn_call_ptr_expr),
-			! so a mismatched RHS would desync OP_CALL_PTR's arg pops.
-			! c.f. the struct_cookie/enum_cookie checks above
-			if (types_match(expr%val, expr%right%val) /= TYPE_MATCH) &
-				is_op_allowed = .false.
-		end if
-
-		! This check could be moved inside of is_binary_op_allowed, but we would
-		! need to pass parser to it to push diagnostics
+		! is_binary_op_allowed_val() can't push diagnostics itself, since it
+		! doesn't have the parser
 		if (.not. is_op_allowed) then
 			!print *, 'bin not allowed in parse_expr_statement'
 			span = new_span(op%pos, len(op%text))
@@ -638,8 +484,7 @@ recursive module subroutine parse_expr(parser, parent_prec, expr)
 
 	!********
 
-	integer :: parent_precl, prec, ltype, rtype, larrtype, rarrtype, &
-		lrank, rrank
+	integer :: parent_precl, prec, ltype, rtype, rarrtype, lrank, rrank
 
 	logical :: is_op_allowed
 
@@ -688,41 +533,7 @@ recursive module subroutine parse_expr(parser, parent_prec, expr)
 		ltype = expr%left %val%type
 		rtype = expr%right%val%type
 
-		larrtype = unknown_type
-		rarrtype = unknown_type
-		if (ltype == array_type) larrtype = expr%left %val%array%type
-		if (rtype == array_type) rarrtype = expr%right%val%array%type
-
-		!print *, 'larrtype = ', kind_name(larrtype)
-		!print *, 'rarrtype = ', kind_name(rarrtype)
-		!print *, 'ltype = ', kind_name(ltype)
-		!print *, 'rtype = ', kind_name(rtype)
-
-		is_op_allowed = is_binary_op_allowed(ltype, op%kind, rtype, larrtype, rarrtype)
-		if ((ltype == enum_type .or. larrtype == enum_type) .and. is_op_allowed) then
-			! Mirrors the enum_cookie check in parse_expr_statement, for
-			! comparisons (e.g. `==`) that don't go through that
-			! assignment-only path.  Also covers arrays of enum values (e.g.
-			! `[C.A] == [D.X]`): expr%left/right%val%enum_name/enum_cookie
-			! are set at the array level too (c.f. parse_array_expr), so the
-			! same check works unchanged for either scalar or array operands
-			if (allocated(expr%left%val%enum_cookie) .and. &
-				allocated(expr%right%val%enum_cookie)) then
-				if (expr%left%val%enum_cookie /= expr%right%val%enum_cookie) &
-					is_op_allowed = .false.
-			else if (expr%left%val%enum_name /= expr%right%val%enum_name) then
-				is_op_allowed = .false.
-			end if
-		end if
-
-		if (ltype == fn_type .and. is_op_allowed) then
-			! Fn-pointer (in)equality is only implemented for same-signature
-			! operands -- c.f. the fn_type arm added to is_eq_value_t
-			! (bool.f90), which compares dispatch keys.  Mirrors the
-			! enum_cookie check above
-			if (types_match(expr%left%val, expr%right%val) /= TYPE_MATCH) &
-				is_op_allowed = .false.
-		end if
+		is_op_allowed = is_binary_op_allowed_val(expr%left%val, op%kind, expr%right%val)
 
 		if (.not. is_op_allowed) then
 
@@ -770,7 +581,7 @@ recursive module subroutine parse_primary_expr(parser, expr)
 
 	!********
 
-	logical :: bool, exists, is_var
+	logical :: bool, exists, is_var, dummy_is_loc
 
 	integer :: dummy_id, dummy_io
 
@@ -848,17 +659,9 @@ recursive module subroutine parse_primary_expr(parser, expr)
 					! programs `is_var` is always false here.  The live-variable
 					! tiebreak below still runs anyway, purely as error recovery
 					! so parsing doesn't cascade after that diagnostic fires
-					is_var = .false.
-					if (parser%is_loc) then
-						call parser%locs%search( &
-							parser%current_text(), dummy_id, dummy_io, dummy_val)
-						is_var = dummy_io == 0
-					end if
-					if (.not. is_var) then
-						call parser%vars%search( &
-							parser%current_text(), dummy_id, dummy_io, dummy_val)
-						is_var = dummy_io == 0
-					end if
+					call parser%search(parser%current_text(), dummy_id, &
+						dummy_io, dummy_val, dummy_is_loc)
+					is_var = dummy_io == exit_success
 
 					if (is_var) then
 						call parser%parse_name_expr(expr)
@@ -981,6 +784,8 @@ recursive module subroutine parse_name_expr(parser, expr)
 
 	integer :: io, id_index, field_id, field_io, slot, i
 
+	logical :: is_loc
+
 	type(syntax_token_t) :: identifier
 	type(text_span_t) :: span
 
@@ -999,16 +804,13 @@ recursive module subroutine parse_name_expr(parser, expr)
 
 	!print *, 'searching'
 
-	if (parser%is_loc) then
-		call parser%locs%search(identifier%text, id_index, io, var)
-	end if
+	call parser%search(identifier%text, id_index, io, var, is_loc)
 
-	if (parser%is_loc .and. io == 0) then
+	if (is_loc) then
 		call new_name_expr(identifier, var, expr)
 		expr%id_index = id_index
 		expr%is_loc = .true.
 	else
-		call parser%vars%search(identifier%text, id_index, io, var)
 		call new_name_expr(identifier, var, expr)
 		expr%id_index = id_index
 		expr%is_loc = .false.

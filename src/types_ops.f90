@@ -638,6 +638,65 @@ end function is_binary_op_allowed
 
 !===============================================================================
 
+module logical function is_binary_op_allowed_val(left, op, right) &
+		result(allowed)
+
+	! Like is_binary_op_allowed(), but takes whole values instead of a bunch of
+	! type ints, so it can also check that struct, enum, and fn operands are
+	! the *same* struct/enum/fn type, not just the same kind
+
+	type(value_t), intent(in) :: left, right
+	integer, intent(in) :: op
+
+	!********
+
+	integer :: larrtype, rarrtype
+
+	larrtype = unknown_type
+	rarrtype = unknown_type
+	if (left %type == array_type .and. allocated(left %array)) larrtype = left %array%type
+	if (right%type == array_type .and. allocated(right%array)) rarrtype = right%array%type
+
+	allowed = is_binary_op_allowed(left%type, op, right%type, larrtype, rarrtype)
+	if (.not. allowed) return
+
+	if (left%type == struct_type) then
+		! Prefer the alias-independent struct_cookie (set at struct
+		! declaration time) so the same struct reached via two different
+		! module aliases/import paths is still recognized as the same type.
+		! Fall back to struct_name if either side lacks a cookie
+		if (allocated(left%struct_cookie) .and. allocated(right%struct_cookie)) then
+			if (left%struct_cookie /= right%struct_cookie) allowed = .false.
+		else if (left%struct_name /= right%struct_name) then
+			allowed = .false.
+		end if
+
+	else if (left%type == enum_type .or. larrtype == enum_type) then
+		! Same idea as struct_cookie above.  Also covers arrays of enum values
+		! (e.g. `[C.A] == [D.X]`): enum_name/enum_cookie are set at the array
+		! level too (c.f. parse_array_expr), so the same check works unchanged
+		! for either scalar or array operands
+		if (allocated(left%enum_cookie) .and. allocated(right%enum_cookie)) then
+			if (left%enum_cookie /= right%enum_cookie) allowed = .false.
+		else if (left%enum_name /= right%enum_name) then
+			allowed = .false.
+		end if
+
+	else if (left%type == fn_type) then
+		! Fn-pointer assignment must match the full signature, not just fn_type
+		! == fn_type: the call site's arity is frozen at parse time from the
+		! LHS signature (parse_fn.f90's fn_call_ptr_expr), so a mismatched RHS
+		! would desync OP_CALL_PTR's arg pops.  Likewise, fn-pointer (in)equality
+		! is only implemented for same-signature operands, c.f. the fn_type arm
+		! of is_eq_value_t (bool.f90), which compares dispatch keys
+		if (types_match(left, right) /= TYPE_MATCH) allowed = .false.
+
+	end if
+
+end function is_binary_op_allowed_val
+
+!===============================================================================
+
 module logical function is_unary_op_allowed(op, right, right_arr)
 
 	! Is a unary operation allowed with kinds operator op and right operand?
