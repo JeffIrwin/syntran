@@ -126,6 +126,7 @@ module syntran__errors_m
 		EC_BAD_CASE_TYPE = "E108", &
 		EC_DUP_DEFAULT = "E109", &
 		EC_BAD_CASE_RANGE_TYPE = "E110", &
+		EC_COMPOUND_SUBSTR = "E111", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -449,6 +450,13 @@ module syntran__errors_m
 			character(len = :), allocatable :: err
 			character(len = *), intent(in) :: bound, bound_type, switch_type
 		end function err_bad_case_range_type
+
+		module function err_compound_substr(context, span, op) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+			character(len = *), intent(in) :: op
+		end function err_compound_substr
 
 		module function err_unexpected_char(context, span, c) result(err)
 			type(text_context_t) :: context

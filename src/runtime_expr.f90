@@ -36,7 +36,7 @@ recursive module subroutine eval_name_expr(node, state, res, slots)
 	!********
 
 	integer :: id, rank_slice, idim_, idim_res, sub_kind, type_, nelem
-	integer(kind = 8) :: i8, index_, diff
+	integer(kind = 8) :: i8, index_
 	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:)
 
 	logical :: has_char_sub
@@ -137,8 +137,7 @@ recursive module subroutine eval_name_expr(node, state, res, slots)
 				sub_kind = node%lsubscripts(idim_)%sub_kind
 				select case (sub_kind)
 				case (step_sub, range_sub, all_sub)
-					diff = usubs(idim_) - lsubs(idim_)
-					res%array%size(idim_res) = divceil(diff, ssubs(idim_))
+					res%array%size(idim_res) = slice_len(lsubs(idim_), ssubs(idim_), usubs(idim_))
 					idim_res = idim_res + 1
 				case (arr_sub)
 					res%array%size(idim_res) = size(asubs(idim_)%v)
@@ -227,8 +226,7 @@ recursive module subroutine eval_name_expr(node, state, res, slots)
 				select case (sub_kind)
 				case (step_sub, range_sub, all_sub)
 
-					diff = usubs(idim_) - lsubs(idim_)
-					res%array%size(idim_res) = divceil(diff, ssubs(idim_))
+					res%array%size(idim_res) = slice_len(lsubs(idim_), ssubs(idim_), usubs(idim_))
 					idim_res = idim_res + 1
 
 				case (arr_sub)

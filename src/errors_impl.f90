@@ -177,6 +177,7 @@ module procedure get_all_error_codes
 	call codes%push(EC_BAD_CASE_TYPE)
 	call codes%push(EC_DUP_DEFAULT)
 	call codes%push(EC_BAD_CASE_RANGE_TYPE)
+	call codes%push(EC_COMPOUND_SUBSTR)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -248,6 +249,7 @@ module procedure get_all_error_codes
 	call codes%push(RC_ARRAY_STEP_ZERO_F)
 	call codes%push(RC_SUBSCRIPT_STEP_ZERO)
 	call codes%push(RC_CLOSE_STANDARD)
+	call codes%push(RC_GETENV_UNSET)
 	call codes%push(RC_WRITELN_FAIL)
 	call codes%push(RC_CLOSE_FAIL)
 	call codes%push(RC_ENUM_CAST_RANGE)
@@ -580,6 +582,17 @@ module procedure err_bad_case_range_type
 
 end procedure err_bad_case_range_type
 
+!===============================================================================
+
+module procedure err_compound_substr
+
+	err = err_pre(EC_COMPOUND_SUBSTR) &
+		//'compound operator `'//op//'` cannot be used on a character subscript ' &
+		//'or substring, since it cannot change the string''s length' &
+		//underline(context, span) &
+		//" invalid compound substring assignment"//color_reset
+
+end procedure err_compound_substr
 
 !===============================================================================
 

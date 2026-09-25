@@ -86,8 +86,13 @@ recursive module subroutine eval_assignment_expr(node, state, res, rhs_in, slots
 		! Eval the RHS
 		res = rhs_in
 
-		! TODO: test int/float casting.  It should be an error during
-		! parsing
+		! Int/float casting here is intentionally asymmetric: plain `=` is
+		! already a parse-time error (types_ops.f90's is_binary_op_allowed
+		! equals_token arm requires int<->int or float<->float), while a
+		! compound op (`+=` etc.) shares the plain arithmetic arms there
+		! (is_num_type only) and truncates to the LHS type via the
+		! "! compound assignment" cases in math_bin_*.f90 -- see
+		! test.f90's `let i = 20; i += 5.1;` == '25' assertions
 
 		!print *, 'lhs type = ', kind_name( state%vars%vals(id)%type )
 
@@ -152,7 +157,10 @@ recursive module subroutine eval_assignment_expr(node, state, res, rhs_in, slots
 		if (type_ == str_type) then
 			!print *, 'str_type'
 
-			! TODO: ban compound character substring assignment
+			! Compound substring assignment (s[1:3] += "x") is banned at
+			! parse time (E111, parse_expr.f90): a fixed-width character
+			! slice can't express a length-changing op like +=, so node%op
+			! reaching this branch is always equals_token
 
 			! str_slice_bounds() handles scalar_sub/range_sub/step_sub/all_sub
 			! uniformly, so stepped/reversed slice assignment (e.g.
@@ -165,6 +173,14 @@ recursive module subroutine eval_assignment_expr(node, state, res, rhs_in, slots
 					state, il, iu, sstep, slots)
 			end if
 			if (state%rt_halt) return
+
+			! The RHS string must exactly fill the selected window: a
+			! fixed-width character slice can't grow or shrink the string
+			if (int(len(res%str%s), 8) /= slice_len(il, sstep, iu)) then
+				call rt_throw(state, err_rt(RC_ARRAY_SIZE_MISMATCH, &
+					"size of RHS does not match size of LHS slice"))
+				return
+			end if
 
 			i8 = il
 			j8 = 1
@@ -200,9 +216,7 @@ recursive module subroutine eval_assignment_expr(node, state, res, rhs_in, slots
 					if (allocated(asubs(j8)%v)) then
 						size_i = size(asubs(j8)%v)
 					else
-						size_i = divceil(usubs(j8) - lsubs(j8), ssubs(j8))
-						if (lsubs(j8) > usubs(j8) .and. ssubs(j8) > 0) size_i = 0
-						if (lsubs(j8) < usubs(j8) .and. ssubs(j8) < 0) size_i = 0
+						size_i = slice_len(lsubs(j8), ssubs(j8), usubs(j8))
 					end if
 					len8 = len8 * size_i
 				end do
@@ -256,16 +270,7 @@ recursive module subroutine eval_assignment_expr(node, state, res, rhs_in, slots
 				if (allocated(asubs(i8)%v)) then
 					size_i = size(asubs(i8)%v)
 				else
-					size_i = divceil(usubs(i8) - lsubs(i8), ssubs(i8))
-
-					! Empty step slice?
-					!
-					! TODO: c.f. step_array cases (literals and for loops) for
-					! ways to do this without branching (or at least, without
-					! obvious branching)
-					if (lsubs(i8) > usubs(i8) .and. ssubs(i8) > 0) size_i = 0
-					if (lsubs(i8) < usubs(i8) .and. ssubs(i8) < 0) size_i = 0
-
+					size_i = slice_len(lsubs(i8), ssubs(i8), usubs(i8))
 				end if
 
 				len8 = len8 * size_i
@@ -277,8 +282,19 @@ recursive module subroutine eval_assignment_expr(node, state, res, rhs_in, slots
 			end do
 			!print *, "len8 = ", len8
 
-			! TODO: some size/shape checking might be needed here between
-			! LHS and RHS
+			! An array RHS must have exactly the LHS slice's length (scalar
+			! RHS broadcasts to every selected element instead, so it's
+			! exempt).  Without this, get_array_val() below reads past the
+			! end of a too-short RHS -- raw Fortran UB (garbage in a release
+			! build, a bounds-check abort in a debug one) -- and a too-long
+			! RHS silently has its extra elements dropped
+			if (res%type == array_type) then
+				if (res%array%len_ /= len8) then
+					call rt_throw(state, err_rt(RC_ARRAY_SIZE_MISMATCH, &
+						"size of RHS does not match size of LHS slice"))
+					return
+				end if
+			end if
 
 			! Scalar rhs
 			if (res%type /= array_type) array_val = res
@@ -430,6 +446,14 @@ contains
 				state, il, iu, step, slots)
 		end if
 		if (state%rt_halt) return
+
+		! The RHS string must exactly fill the selected window: a
+		! fixed-width character slice can't grow or shrink the element
+		if (int(len(rhs%str%s), 8) /= slice_len(il, step, iu)) then
+			call rt_throw(state, err_rt(RC_ARRAY_SIZE_MISMATCH, &
+				"size of RHS does not match size of LHS slice"))
+			return
+		end if
 
 		i8 = il
 		j8 = 1

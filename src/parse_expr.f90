@@ -92,7 +92,8 @@ recursive module subroutine parse_expr_statement(parser, expr)
 	logical :: is_op_allowed, is_const_var
 
 	integer :: ltype, rtype, pos0, lrank, rrank, search_io, ndiag0, &
-		field_id, field_io, root_val_type
+		field_id, field_io, root_val_type, lhs_root_type, lhs_root_arr_type, &
+		lhs_root_rank
 
 	type(value_t) :: field_val, self_val
 
@@ -158,6 +159,17 @@ recursive module subroutine parse_expr_statement(parser, expr)
 		call parser%vars%search(expr%module_prefix // "::" // identifier%text, &
 			expr%id_index, search_io, expr%val, is_const = is_const_var)
 		root_val_type = expr%val%type
+
+		! Capture the pre-subscript LHS type so the compound-substring-
+		! assignment ban below (E111) can check it before parse_subscripts
+		! narrows expr%val
+		lhs_root_type = expr%val%type
+		lhs_root_arr_type = unknown_type
+		lhs_root_rank = 0
+		if (lhs_root_type == array_type .and. allocated(expr%val%array)) then
+			lhs_root_arr_type = expr%val%array%type
+			lhs_root_rank = expr%val%array%rank
+		end if
 
 		! Parse subscripts and dot access for qualified names
 		call parser%parse_subscripts(expr)
@@ -251,6 +263,21 @@ recursive module subroutine parse_expr_statement(parser, expr)
 				end if
 			end if
 
+			! `s[1:3] += "x"` etc.: a fixed-width character subscript/slice
+			! can't grow or shrink, so `+=` (the only compound op that
+			! survives is_binary_op_allowed_val for str operands) can't be
+			! given it a sound meaning here.  Whole-string ops (`s += "x"`,
+			! `v[0] += "x"`, `v[0:2] += "x"`) stay legal
+			if (op%kind == plus_equals_token) then
+				if ((lhs_root_type == str_type .and. allocated(expr%lsubscripts)) .or. &
+				    (lhs_root_arr_type == str_type .and. allocated(expr%lsubscripts) .and. &
+				     size(expr%lsubscripts) == lhs_root_rank + 1)) then
+					span = new_span(op%pos, len(op%text))
+					call parser%diagnostics%push( &
+						err_compound_substr(parser%context(), span, op%text))
+				end if
+			end if
+
 			return
 		end if
 	end if
@@ -336,6 +363,18 @@ recursive module subroutine parse_expr_statement(parser, expr)
 				end if
 				is_const_var = .false.
 			end if
+		end if
+
+		! Capture the pre-subscript LHS type (a plain var, or field_val for
+		! an implicit self-field access above) so the compound-substring-
+		! assignment ban below (E111) can check it before parse_subscripts
+		! narrows expr%val
+		lhs_root_type = expr%val%type
+		lhs_root_arr_type = unknown_type
+		lhs_root_rank = 0
+		if (lhs_root_type == array_type .and. allocated(expr%val%array)) then
+			lhs_root_arr_type = expr%val%array%type
+			lhs_root_rank = expr%val%array%rank
 		end if
 
 		call parser%parse_subscripts(expr)
@@ -457,6 +496,21 @@ recursive module subroutine parse_expr_statement(parser, expr)
 					span, op%text, &
 					lrank, &
 					rrank))
+			end if
+		end if
+
+		! `s[1:3] += "x"` etc.: a fixed-width character subscript/slice can't
+		! grow or shrink, so `+=` (the only compound op that survives
+		! is_binary_op_allowed_val for str operands) can't be given a sound
+		! meaning here.  Whole-string ops (`s += "x"`, `v[0] += "x"`,
+		! `v[0:2] += "x"`) stay legal
+		if (op%kind == plus_equals_token) then
+			if ((lhs_root_type == str_type .and. allocated(expr%lsubscripts)) .or. &
+			    (lhs_root_arr_type == str_type .and. allocated(expr%lsubscripts) .and. &
+			     size(expr%lsubscripts) == lhs_root_rank + 1)) then
+				span = new_span(op%pos, len(op%text))
+				call parser%diagnostics%push( &
+					err_compound_substr(parser%context(), span, op%text))
 			end if
 		end if
 

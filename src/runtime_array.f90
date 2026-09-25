@@ -855,9 +855,7 @@ module subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, r
 			if (node%lsubscripts(i)%sub_kind == arr_sub) then
 				call check_arr_sub_bound(state, i, rank_, asubs(i), sz)
 			else
-				len_ = divceil(usubs(i) - lsubs(i), ssubs(i))
-				if (lsubs(i) > usubs(i) .and. ssubs(i) > 0) len_ = 0_8
-				if (lsubs(i) < usubs(i) .and. ssubs(i) < 0) len_ = 0_8
+				len_ = slice_len(lsubs(i), ssubs(i), usubs(i))
 				call check_range_bound(state, i, rank_, lsubs(i), ssubs(i), len_, sz)
 			end if
 			if (state%rt_halt) return
@@ -1401,9 +1399,7 @@ module subroutine eval_slice_rank1(node, state, res, slots)
 	call eval_subscript_1d(node, state, 1, lsub, ssub, usub, asub_unused, cr_unused, slots)
 	if (state%rt_halt) return
 
-	len_ = divceil(usub - lsub, ssub)
-	if (lsub > usub .and. ssub > 0) len_ = 0_8
-	if (lsub < usub .and. ssub < 0) len_ = 0_8
+	len_ = slice_len(lsub, ssub, usub)
 
 	if (bounds_check) then
 		if (node%is_loc) then
@@ -1473,9 +1469,7 @@ module subroutine eval_assign_slice_rank1(node, state, id, res, slots)
 	call eval_subscript_1d(node, state, 1, lsub, ssub, usub, asub_unused, cr_unused, slots)
 	if (state%rt_halt) return
 
-	len_ = divceil(usub - lsub, ssub)
-	if (lsub > usub .and. ssub > 0) len_ = 0_8
-	if (lsub < usub .and. ssub < 0) len_ = 0_8
+	len_ = slice_len(lsub, ssub, usub)
 
 	if (bounds_check) then
 		if (node%is_loc) then
@@ -1484,6 +1478,18 @@ module subroutine eval_assign_slice_rank1(node, state, id, res, slots)
 			call check_range_bound(state, 1, 1, lsub, ssub, len_, state%vars%vals(id)%array%size(1))
 		end if
 		if (state%rt_halt) return
+	end if
+
+	! An array RHS must have exactly the LHS slice's length (scalar RHS
+	! broadcasts instead, so it's exempt).  Without this, get_array_val()
+	! below reads past the end of a too-short RHS -- raw Fortran UB -- and a
+	! too-long RHS silently has its extra elements dropped
+	if (res%type == array_type) then
+		if (res%array%len_ /= len_) then
+			call rt_throw(state, err_rt(RC_ARRAY_SIZE_MISMATCH, &
+				"size of RHS does not match size of LHS slice"))
+			return
+		end if
 	end if
 
 	! For scalar RHS, capture it now before building result_val.
@@ -1648,9 +1654,7 @@ module subroutine field_slice_bounds(member_node, field_val, state, rank_slice, 
 			if (member_node%lsubscripts(i)%sub_kind == arr_sub) then
 				call check_arr_sub_bound(state, i, rank_, asubs(i), sz)
 			else
-				len_ = divceil(usub - lsub, ssub)
-				if (lsub > usub .and. ssub > 0) len_ = 0_8
-				if (lsub < usub .and. ssub < 0) len_ = 0_8
+				len_ = slice_len(lsub, ssub, usub)
 				call check_range_bound(state, i, rank_, lsub, ssub, len_, sz)
 			end if
 			if (state%rt_halt) return
@@ -1793,7 +1797,7 @@ module subroutine get_field_slice_val(member_node, field_val, state, res, slots)
 	!********
 
 	integer :: rank_slice, idim_, idim_res
-	integer(kind = 8) :: diff, i8, index_
+	integer(kind = 8) :: i8, index_
 	type(value_t) :: tmp
 	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:)
 	type(i64_vector_t), allocatable :: asubs(:)
@@ -1812,11 +1816,7 @@ module subroutine get_field_slice_val(member_node, field_val, state, res, slots)
 	do idim_ = 1, field_val%array%rank
 		select case (member_node%lsubscripts(idim_)%sub_kind)
 		case (step_sub, range_sub, all_sub)
-			diff = usubs(idim_) - lsubs(idim_)
-			! Clamp reversed/empty ranges to 0 (mirrors eval_slice_rank1 and
-			! the sibling set_field_slice_val), otherwise divceil can return
-			! a negative size, leading to a negative-size array allocation.
-			res%array%size(idim_res) = max(0_8, divceil(diff, ssubs(idim_)))
+			res%array%size(idim_res) = slice_len(lsubs(idim_), ssubs(idim_), usubs(idim_))
 			idim_res = idim_res + 1
 		case (arr_sub)
 			res%array%size(idim_res) = size(asubs(idim_)%v)
@@ -1867,7 +1867,7 @@ module subroutine set_field_slice_val(member_node, field_val, state, val, slots)
 	do idim_ = 1, field_val%array%rank
 		select case (member_node%lsubscripts(idim_)%sub_kind)
 		case (step_sub, range_sub, all_sub)
-			lhs_len = lhs_len * max(0_8, divceil(usubs(idim_) - lsubs(idim_), ssubs(idim_)))
+			lhs_len = lhs_len * slice_len(lsubs(idim_), ssubs(idim_), usubs(idim_))
 		case (arr_sub)
 			lhs_len = lhs_len * size(asubs(idim_)%v, kind = 8)
 		end select
@@ -2039,7 +2039,7 @@ subroutine set_str_member_val(member_node, field_val, state, val, slots)
 	do idim_ = 1, nelem
 		select case (member_node%lsubscripts(idim_)%sub_kind)
 		case (step_sub, range_sub, all_sub)
-			len8 = len8 * max(0_8, divceil(usubs(idim_) - lsubs(idim_), ssubs(idim_)))
+			len8 = len8 * slice_len(lsubs(idim_), ssubs(idim_), usubs(idim_))
 		case (arr_sub)
 			len8 = len8 * size(asubs(idim_)%v, kind = 8)
 		end select

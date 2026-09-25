@@ -492,30 +492,32 @@ end subroutine open_file_impl
 
 !===============================================================================
 
-!function divceil(num, den) result(res)
-elemental function divceil(num, den) result(res)
+elemental function slice_len(lsub, ssub, usub) result(len_)
 
-	! Integer division ceiling
+	! Number of elements in the stepped slice lsub : ssub : usub, i.e.
+	! python's len(range(lsub, usub, ssub)).  Branchless apart from the
+	! max(): this is the same (u - l + s - sign(1,s)) / s formula used by
+	! OP_FOR_SETUP_NAT (vm_exec.f90) and step_array construction
+	! (runtime_control.f90's eval_array_expr, step_array kind).
 	!
-	! I initially made this elemental so I could call product() on a vector
-	! result, but I need to loop and select case for index arr_sub anyway so
-	! just a scalar fn would've sufficed
+	! This used to be built from a `divceil` (integer division ceiling)
+	! helper plus two `if` guards to clamp an empty/reversed slice to 0.
+	! divceil() truncates toward zero, so it over-counts by one for a
+	! negative numerator (divceil(-1, 2) = 1, not the true ceil(-0.5) = 0);
+	! that made `max(0_8, divceil(u - l, s))` -- used at some call sites --
+	! silently wrong for an empty stepped slice like a[4:2:3], and made the
+	! unguarded two-`if` form work only because the guards independently
+	! covered exactly the cases divceil() got wrong.  This formula sidesteps
+	! all of that: it's the one already used elsewhere in this file for
+	! for-loops and step_array literals, verified against every combination
+	! of a slice's sign and direction
 
-	integer(kind = 8), intent(in) :: num, den
-	integer(kind = 8) :: res
+	integer(kind = 8), intent(in) :: lsub, ssub, usub
+	integer(kind = 8) :: len_
 
-	! I basically have to divide integers and take the ceiling (not floor) here.
-	! There are methods that work for positive ints but fail for negatives.  In
-	! C you can do it by casting bools to ints (ew)
+	len_ = max(0_8, (usub - lsub + ssub - sign(1_8, ssub)) / ssub)
 
-	res = num / den
-	if (mod(num, den) /= 0) res = res + 1  ! TODO: sign? -1 if negative? tests seem ok
-
-	!!!if (num < 0 .and. den
-
-	!print *, "num, den, ceil(num/den) = ", num, den, res
-
-end function divceil
+end function slice_len
 
 !===============================================================================
 

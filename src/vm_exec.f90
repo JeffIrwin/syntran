@@ -2512,6 +2512,18 @@ module subroutine vm_run(prog, state, res)
 				lens_(k_) = max(0_8, ub_(k_) - lb_(k_))
 			end do
 
+			! RHS must have exactly the LHS slice's length: store_slice_nat_ok
+			! guarantees an array RHS here (never a scalar to broadcast), so
+			! unlike the eval_assignment_expr fallback there's no scalar case
+			! to exempt.  Without this, the array-section assignments below
+			! read/write past the end of a too-short RHS -- raw Fortran UB --
+			! and a too-long RHS silently has its extra elements dropped
+			if (right%array%len_ /= product(lens_(1:ndim_))) then
+				call rt_throw(state, err_rt(RC_ARRAY_SIZE_MISMATCH, &
+					"size of RHS does not match size of LHS slice"))
+				exit
+			end if
+
 			if (instr%c == 1_8) then
 				associate(dst => state%locs%vals(instr%a)%array)
 				if (ndim_ == 1) then

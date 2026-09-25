@@ -1,0 +1,12 @@
+// R21: array-size-mismatch (LHS slice assignment form)
+// An array-typed RHS assigned into a rank-1 LHS slice must have exactly the
+// slice's length.  Before this check existed, a too-short RHS like the one
+// below made OP_STORE_SLICE_NAT (vm_exec.f90) read past the end of `right`
+// while copying it into the slice -- raw Fortran undefined behavior (a
+// bounds-check abort in a debug build, silent garbage in a release one)
+// instead of ever reaching this diagnostic.  A too-long RHS has the same gap
+// in the other direction: it used to have its extra elements silently
+// dropped rather than raising an error
+
+let a = [0; 5];
+a[1:4] = [1, 2];

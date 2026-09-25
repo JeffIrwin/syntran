@@ -675,6 +675,12 @@ A `case lo:hi` range bound's type can't be ordered (with `<`) against its `switc
 
 [Example](../src/tests/test-src/errors/E110-bad-case-range-type.syntran)
 
+### E111 -- compound-substr
+
+A compound operator (`s[1:3] += "xy"`, or the same on a string array's character subscript) was used on a character subscript or substring assignment. Only plain `=` is allowed there, since a fixed-width character slice can't grow or shrink the way a compound op like `+=` would require.
+
+[Example](../src/tests/test-src/errors/E111-compound-substr.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type
@@ -983,7 +989,7 @@ An unrecognized subscript kind was encountered while evaluating a name expressio
 
 ### R21 -- array-size-mismatch
 
-An explicitly-shaped array literal's element count doesn't match its declared size. This also applies when a `for` loop iterates such a literal directly, without binding it to a variable first.
+An explicitly-shaped array literal's element count doesn't match its declared size. This also applies when a `for` loop iterates such a literal directly, without binding it to a variable first, and when an array or string RHS assigned into a subscripted LHS slice (`a[1:4] = rhs`, `s[1:3] = rhs`, a struct field slice, etc.) doesn't have exactly the slice's length.
 
 ### R22 -- struct-array-slice
 

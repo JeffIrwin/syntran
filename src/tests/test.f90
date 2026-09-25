@@ -3490,6 +3490,16 @@ subroutine unit_test_rhs_slc_1(npass, nfail)
 			! handler's fixed-size local lb_/ub_/lens_ buffers
 			eval('let a = [0; 2,2,2,2,2]; a[0,0,0,0,0] = 42;'// &
 				' sum(a[0:1,0:1,0:1,0:1,0:1]);', quiet) == '42', &
+			! Regression: a rank-2+ read slice with an empty reversed-stepped
+			! dimension used to store a negative extent into the result's
+			! %size (an unclamped divceil()), which happened to still work
+			! out to an empty result via allocate()'s handling of a negative
+			! extent, but is now computed correctly and explicitly via
+			! slice_len() instead
+			eval('' &
+				//'let m = [0,1,2,3,4,5,6,7,8,9,10,11; 3,4];' &
+				//'return std::shape(m[0:2, 4:2:3]);' &
+				, quiet) == '[2, 0]', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -5635,6 +5645,22 @@ subroutine unit_test_struct_arr3(npass, nfail)
 			    //'d0.m[2] = "a";' &
 			    //'return d0.m;' &
 				, quiet) == 'Sea', &
+
+			! Regression: an empty reversed-stepped slice on a struct field
+			! array used to wrongly return a 1-element result (e.g. [14])
+			! because get_field_slice_val/set_field_slice_val computed the
+			! slice length as max(0_8, divceil(...)), and divceil() rounds a
+			! negative numerator toward zero instead of down -- see
+			! slice_len() in runtime.f90.  The same slice on a plain array
+			! (eval_slice_rank1's guarded divceil, unaffected by this bug)
+			! already correctly returns [], so this pins struct fields to
+			! the same answer
+			eval('' &
+				//'struct S{v:[i32;:]}' &
+				//'let s = S{v=[10,11,12,13,14,15]};' &
+				//'return s.v[4:2:3];' &
+				, quiet) == '[]', &
+			eval('let a = [10,11,12,13,14,15]; return a[4:2:3];', quiet) == '[]', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -8105,6 +8131,51 @@ subroutine unit_test_error_codes(npass, nfail)
 					'fn caller(cb: fn(): &i32): i32 { return 0; }'), &
 					EC_REF_TYPE) == 1, &
 
+				! E111: compound substring assignment is banned -- only plain
+				! `=` is allowed on a char subscript or substring, since a
+				! fixed-width character slice can't grow or shrink the way
+				! a compound op like `+=` would require.  Covers a scalar
+				! str's substring slice, its single-char scalar subscript
+				! (a different VM opcode, OP_STORE_IDX, but the same parser
+				! check), and a string array's char subscript (scalar or
+				! sliced) too
+				diag_count_code(get_diags( &
+					'let s = "hello"; s[1:3] += "XY";'), &
+					EC_COMPOUND_SUBSTR) == 1, &
+				diag_has_code(get_diags( &
+					'let s = "hello"; s[1] += "X";'), &
+					EC_COMPOUND_SUBSTR), &
+				diag_has_code(get_diags( &
+					'let v = ["hello","world"]; v[0, 1:3] += "XY";'), &
+					EC_COMPOUND_SUBSTR), &
+				diag_has_code(get_diags( &
+					'let v = ["hello","world"]; v[0, 1] += "X";'), &
+					EC_COMPOUND_SUBSTR), &
+				! Must stay legal: whole-string `+=` (no char subscript)
+				diag_count_code(get_diags('let s = "ab"; s += "!";'), &
+					EC_COMPOUND_SUBSTR) == 0, &
+				diag_count_code(get_diags( &
+					'let v = ["ab","cd"]; v += "!";'), &
+					EC_COMPOUND_SUBSTR) == 0, &
+				diag_count_code(get_diags( &
+					'let v = ["ab","cd"]; v[0] += "!";'), &
+					EC_COMPOUND_SUBSTR) == 0, &
+				diag_count_code(get_diags( &
+					'let v = ["ab","cd"]; v[0:2] += "!";'), &
+					EC_COMPOUND_SUBSTR) == 0, &
+
+				! Int/float assignment is rejected at parse time (E48).  This
+				! used to be marked by a "TODO: test int/float casting" note
+				! in runtime_control.f90's eval_assignment_expr, with no
+				! actual test anywhere covering the rejection -- compound
+				! ops (`x += 1.6;`) are deliberately exempt and truncate to
+				! the LHS type instead, see unit_test_compound_assignment
+				diag_has_code(get_diags('let x = 1; x = 1.0;'), &
+					EC_BINARY_TYPES), &
+				diag_has_code(get_diags( &
+					'let a = [1,2,3]; a[0] = 1.0;'), &
+					EC_BINARY_TYPES), &
+
 			! 4. direct constructor / prefix-helper spot checks.  RC_MATMUL_DIM
 			! is no longer spot-checked here since it's tested end-to-end (under
 			! both backends) in unit_test_runtime_errors() below.  IC_EVAL_NODE
@@ -8163,6 +8234,14 @@ subroutine unit_test_runtime_errors(npass, nfail)
 	! that used to skip the check entirely, letting OP_FOR_NEXT read past
 	! the end of the array literal's elements and crash with a raw
 	! Fortran bounds-check abort instead of ever raising R21.
+	! R21-slice-assign-size-mismatch.syntran covers a third, unrelated code
+	! path: an array or string RHS assigned into a subscripted LHS slice
+	! (`a[1:4] = rhs`, `s[1:3] = rhs`) now must have exactly the slice's
+	! length, checked in eval_assignment_expr/eval_assign_slice_rank1
+	! (runtime_control.f90/runtime_array.f90) and OP_STORE_SLICE_NAT
+	! (vm_exec.f90) -- previously unchecked, so a too-short RHS read past its
+	! own end (raw Fortran UB) and a too-long one silently dropped its extra
+	! elements.
 	!
 	! Excluded from this end-to-end coverage:
 	!   - RC_TRANSPOSE_RANK (R18): std::transpose()'s parameter is statically
@@ -8292,6 +8371,76 @@ subroutine unit_test_runtime_errors(npass, nfail)
 			diag_has_code(get_diags( &
 				'let n = 3; for i in [1,2,3,4,5; n,1] {}'), &
 				RC_ARRAY_SIZE_MISMATCH), &
+
+			! R21, LHS slice-assignment form: an array or string RHS assigned
+			! into a subscripted LHS slice must have exactly the slice's
+			! length.  Before this check existed, a too-short RHS made the
+			! native OP_STORE_SLICE_NAT handler (vm_exec.f90) read past the
+			! end of the RHS array -- raw Fortran UB, a bounds-check abort in
+			! a debug build -- and a too-long RHS silently had its extra
+			! elements dropped (see the fixture's header comment)
+			rt_code_both_file( &
+				P//'R21-slice-assign-size-mismatch.syntran', RC_ARRAY_SIZE_MISMATCH), &
+			diag_count_code(get_diags_file( &
+				P//'R21-slice-assign-size-mismatch.syntran'), &
+				RC_ARRAY_SIZE_MISMATCH) == 1, &
+			! Same mismatch, too-long direction, still OP_STORE_SLICE_NAT
+			diag_has_code(get_diags( &
+				'let a = [0; 5]; a[1:4] = [1,2,3,4,5];'), &
+				RC_ARRAY_SIZE_MISMATCH), &
+			! Rank-1 stepped fast path (eval_assign_slice_rank1,
+			! runtime_array.f90), both directions
+			diag_has_code(get_diags( &
+				'let a = [0; 8]; a[1:2:6] = [7,8];'), &
+				RC_ARRAY_SIZE_MISMATCH), &
+			diag_has_code(get_diags( &
+				'let a = [0; 8]; a[1:2:6] = [7,8,9,10];'), &
+				RC_ARRAY_SIZE_MISMATCH), &
+			! General rank-2+/arr_sub path (eval_assignment_expr,
+			! runtime_control.f90), both directions
+			diag_has_code(get_diags( &
+				'let m = [0; 3,3]; m[[0,1],0:2] = [7,8;2,1];'), &
+				RC_ARRAY_SIZE_MISMATCH), &
+			diag_has_code(get_diags( &
+				'let m = [0; 3,3]; m[[0,1],0:2] = [1,2,3,4,5,6,7,8;4,2];'), &
+				RC_ARRAY_SIZE_MISMATCH), &
+			! Scalar RHS still broadcasts (exempt from the length check) on
+			! every path above
+			diag_count_code(get_diags('let a = [0; 5]; a[1:4] = 7;'), &
+				RC_ARRAY_SIZE_MISMATCH) == 0, &
+			diag_count_code(get_diags('let a = [0; 8]; a[1:2:6] = 7;'), &
+				RC_ARRAY_SIZE_MISMATCH) == 0, &
+			diag_count_code(get_diags( &
+				'let m = [0; 3,3]; m[[0,1],0:2] = 7;'), &
+				RC_ARRAY_SIZE_MISMATCH) == 0, &
+			! Exact-length RHS on every path stays legal
+			diag_count_code(get_diags('let a = [0; 5]; a[1:4] = [1,2,3];'), &
+				RC_ARRAY_SIZE_MISMATCH) == 0, &
+			diag_count_code(get_diags('let a = [0; 8]; a[1:2:6] = [7,8,9];'), &
+				RC_ARRAY_SIZE_MISMATCH) == 0, &
+			diag_count_code(get_diags( &
+				'let m = [0; 3,3]; m[[0,1],0:2] = [7,8;2,1;2,2];'), &
+				RC_ARRAY_SIZE_MISMATCH) == 0, &
+
+			! R21, substring/char-subscript slice-assignment forms: same
+			! check, but on a str's substring (runtime_control.f90's
+			! eval_assignment_expr str_type branch) and a str array's
+			! char subscript (str_arr_char_assign).  Both used to raw-abort
+			! on a Fortran "substring out of bounds" runtime error instead of
+			! reaching this diagnostic
+			diag_has_code(get_diags('let s = "hello"; s[1:3] = "A";'), &
+				RC_ARRAY_SIZE_MISMATCH), &
+			diag_has_code(get_diags('let s = "hello"; s[1:3] = "ABCDE";'), &
+				RC_ARRAY_SIZE_MISMATCH), &
+			diag_has_code(get_diags( &
+				'let v = ["hello","world"]; v[:, 1:3] = "X";'), &
+				RC_ARRAY_SIZE_MISMATCH), &
+			! Exact-length substring RHS stays legal
+			diag_count_code(get_diags('let s = "hello"; s[1:3] = "XY";'), &
+				RC_ARRAY_SIZE_MISMATCH) == 0, &
+			diag_count_code(get_diags( &
+				'let v = ["hello","world"]; v[:, 1:3] = "XY";'), &
+				RC_ARRAY_SIZE_MISMATCH) == 0, &
 
 			! R23-R27: step-is-0 family (for loop, range/array literal, slice
 			! subscript), each for both an integer and float variant where
@@ -8909,7 +9058,11 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E110-bad-case-range-type.syntran'), &
 				EC_BAD_CASE_RANGE_TYPE, P//'E110-bad-case-range-type.syntran', 8, 9, 3), &
 			diag_count_code(get_diags_file(P//'E110-bad-case-range-type.syntran'), &
-				EC_BAD_CASE_RANGE_TYPE) == 1 &
+				EC_BAD_CASE_RANGE_TYPE) == 1, &
+			diag_loc_ok(get_diags_file(P//'E111-compound-substr.syntran'), &
+				EC_COMPOUND_SUBSTR, P//'E111-compound-substr.syntran', 8, 9, 1), &
+			diag_count_code(get_diags_file(P//'E111-compound-substr.syntran'), &
+				EC_COMPOUND_SUBSTR) == 1 &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
