@@ -31,6 +31,10 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - direct enum to i64 casting. currently can only cast to i32 directly, or
+	!    to i64 awkwardly as i64(i32(Enum.variant))
+	!  - E87 "cannot take a function pointer" is confusing for the common case
+	!    of trying to call a fn without using parens
 	!  - split or streamline ci/cd:
 	!    * "build on ubuntu-24" stage is now the slowest. i believe this just
 	!      changed after ast removal. previously, windows and intel-compiler
