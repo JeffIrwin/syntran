@@ -1,0 +1,14 @@
+// E112: fn-missing-parens
+// A user-defined fn was named as a statement without a call, e.g. `greet;`
+
+fn greet()
+{
+	println("hello");
+}
+
+fn main()
+{
+	greet;
+}
+
+main();

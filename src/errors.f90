@@ -127,6 +127,7 @@ module syntran__errors_m
 		EC_DUP_DEFAULT = "E109", &
 		EC_BAD_CASE_RANGE_TYPE = "E110", &
 		EC_COMPOUND_SUBSTR = "E111", &
+		EC_FN_MISSING_PARENS = "E112", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -653,6 +654,13 @@ module syntran__errors_m
 			character(len = :), allocatable :: err
 			character(len = *), intent(in) :: fn, reason
 		end function err_fn_ptr_unsupported
+
+		module function err_fn_missing_parens(context, span, fn) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+			character(len = *), intent(in) :: fn
+		end function err_fn_missing_parens
 
 		module function err_not_callable(context, span, var, type) result(err)
 			type(text_context_t) :: context

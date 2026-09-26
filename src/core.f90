@@ -31,10 +31,16 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - stack trace for runtime errors
+	!    * as more minor breaking runtime guards are added for safety, e.g.
+	!      slice reassignment size checks, this is more pressing. if users have
+	!      an old script that used to work and now raises an error, it's
+	!      difficult to just see a runtime error message with no indication of
+	!      what line or file it's in
+	!    * even just one stack frame would be better than nothing if there are
+	!      perf costs
 	!  - direct enum to i64 casting. currently can only cast to i32 directly, or
 	!    to i64 awkwardly as i64(i32(Enum.variant))
-	!  - E87 "cannot take a function pointer" is confusing for the common case
-	!    of trying to call a fn without using parens
 	!  - split or streamline ci/cd:
 	!    * "build on ubuntu-24" stage is now the slowest. i believe this just
 	!      changed after ast removal. previously, windows and intel-compiler
@@ -46,7 +52,6 @@ module syntran__core_m
 	!    * took a big chunk out already
 	!    * continue one file at a time
 	!    * '''grep -c  'TODO' src/* | sort -t: -k2 -n'''
-	!  - stack trace for runtime errors
 	!  - declare variable types without initializing them, and/or
 	!    conditional initialization.  Rust discourages mutability, instead
 	!    preferring patterns like this:

@@ -178,6 +178,7 @@ module procedure get_all_error_codes
 	call codes%push(EC_DUP_DEFAULT)
 	call codes%push(EC_BAD_CASE_RANGE_TYPE)
 	call codes%push(EC_COMPOUND_SUBSTR)
+	call codes%push(EC_FN_MISSING_PARENS)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -950,11 +951,30 @@ end procedure err_module_return
 
 module procedure err_fn_ptr_unsupported
 
+	! Usually this is really a call that is missing its parens, e.g. `len s`
+	! or `println;`, so lead with that and demote the fn-pointer explanation
+	! to a note
 	err = err_pre(EC_FN_PTR_UNSUPPORTED) &
-		//'cannot take a function pointer to `'//fn//'`: '//reason &
-		//underline(context, span)//" not fn-pointer-able"//color_reset
+		//'missing parentheses after function `'//fn//'`' &
+		//underline(context, span)//" add `(...)` to call it"//color_reset &
+		//line_feed//fg_bright_green//"help"//color_reset &
+		//": to call it, write `"//fg_bright_green//fn//"(...)"//color_reset//"`" &
+		//line_feed//fg_bright_green//"note"//color_reset &
+		//": `"//fn//"` cannot be used as a function pointer: "//reason
 
 end procedure err_fn_ptr_unsupported
+
+!===============================================================================
+
+module procedure err_fn_missing_parens
+
+	err = err_pre(EC_FN_MISSING_PARENS) &
+		//'missing parentheses after function `'//fn//'`' &
+		//underline(context, span)//" add `(...)` to call it"//color_reset &
+		//line_feed//fg_bright_green//"help"//color_reset &
+		//": to call it, write `"//fg_bright_green//fn//"(...)"//color_reset//"`"
+
+end procedure err_fn_missing_parens
 
 
 !===============================================================================

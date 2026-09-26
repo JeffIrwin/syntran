@@ -130,6 +130,7 @@ module syntran__parse_m
 				parse_switch_statement, &
 				parse_subscripts, &
 				parse_dot, &
+				skip_juxtaposed_arg, &
 				parse_type, &
 				parse_unit, &
 				parse_while_statement, &
@@ -395,6 +396,11 @@ module syntran__parse_m
 			class(parser_t), target :: parser
 			type(syntax_node_t), intent(inout) :: expr
 		end subroutine parse_dot
+
+		recursive module subroutine skip_juxtaposed_arg(parser, skipped)
+			class(parser_t) :: parser
+			logical, intent(out), optional :: skipped
+		end subroutine skip_juxtaposed_arg
 
 	end interface
 

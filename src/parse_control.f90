@@ -1378,6 +1378,16 @@ recursive module subroutine parse_statement(parser, statement)
 		pos_end   = parser%peek_pos(0)
 		call parser%match(semicolon_token, semi)
 
+		! A statement that is just a fn name, e.g. `hi;`, is a call that is
+		! missing its parens.  Unlike other expression statements this is an
+		! error in the REPL too, where it would otherwise silently do nothing
+		if (parser%ipass > 0 .and. statement%kind == fn_ref_expr) then
+			span = new_span(statement%identifier%pos, len(statement%identifier%text))
+			call parser%diagnostics%push( &
+				err_fn_missing_parens(parser%context(), &
+				span, statement%identifier%text))
+		end if
+
 		if (.not. parser%repl .and. parser%ipass > 0) then
 			!print *, "statement kind = ", kind_name(statement%kind)
 
@@ -1400,6 +1410,9 @@ recursive module subroutine parse_statement(parser, statement)
 				select case (statement%kind)
 				case (let_expr, assignment_expr)
 					! Do nothing.  These kinds of expressions are allowed
+
+				case (fn_ref_expr)
+					! Already reported above as a missing-parens error
 
 				case (fn_call_expr, fn_call_intr_expr, method_call_expr, fn_call_ptr_expr)
 					! Only allow void fn call statements.  Don't allow

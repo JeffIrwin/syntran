@@ -838,7 +838,7 @@ recursive module subroutine parse_name_expr(parser, expr)
 
 	integer :: io, id_index, field_id, field_io, slot, i
 
-	logical :: is_loc
+	logical :: is_loc, skipped
 
 	type(syntax_token_t) :: identifier
 	type(text_span_t) :: span
@@ -911,6 +911,8 @@ recursive module subroutine parse_name_expr(parser, expr)
 						err_fn_ptr_unsupported(parser%context(), &
 						span, identifier%text, &
 						"intrinsic functions are not fn-pointer-able"))
+					expr%val%type = unknown_type
+					call parser%skip_juxtaposed_arg()
 				else if (fn%is_method) then
 					! Believed unreachable: parser%fns%find(identifier%text)
 					! above looks up the *unmangled* name, but every method
@@ -926,12 +928,29 @@ recursive module subroutine parse_name_expr(parser, expr)
 						err_fn_ptr_unsupported(parser%context(), &
 						span, identifier%text, &
 						"struct methods are not fn-pointer-able"))
+					expr%val%type = unknown_type
+					call parser%skip_juxtaposed_arg()
 				else if (allocated(fn%node%is_ref) .and. any(fn%node%is_ref)) then
 					call parser%diagnostics%push( &
 						err_fn_ptr_unsupported(parser%context(), &
 						span, identifier%text, &
 						"functions with &ref parameters are not fn-pointer-able"))
+					expr%val%type = unknown_type
+					call parser%skip_juxtaposed_arg()
 				else
+					! A pointer-able fn followed directly by an operand, e.g.
+					! `dbl 3`, is a call that is missing its parens.  A bare
+					! fn ref that ends the expression is legal, so this is
+					! only an error when something follows
+					call parser%skip_juxtaposed_arg(skipped)
+					if (skipped) then
+						call parser%diagnostics%push( &
+							err_fn_missing_parens(parser%context(), &
+							span, identifier%text))
+						expr%val%type = unknown_type
+						return
+					end if
+
 					expr%kind = fn_ref_expr
 					expr%identifier = identifier
 					expr%id_index = parser%fns%id_at(slot)
@@ -972,6 +991,7 @@ recursive module subroutine parse_name_expr(parser, expr)
 						span, identifier%text, &
 						"struct methods are not fn-pointer-able"))
 					expr%val%type = unknown_type
+					call parser%skip_juxtaposed_arg()
 					return
 				end if
 			end if
@@ -1004,6 +1024,42 @@ recursive module subroutine parse_name_expr(parser, expr)
 	call parser%parse_dot(expr)
 
 end subroutine parse_name_expr
+
+!===============================================================================
+
+recursive module subroutine skip_juxtaposed_arg(parser, skipped)
+
+	! Error recovery after a fn name that is missing its parens, e.g. `len s`
+	! or `dbl 3`.  If the next token can start an operand, parse and discard it
+	! so that the caller doesn't cascade into an "expected `;`" error.  Any
+	! diagnostics from the discarded operand are still reported.
+	!
+	! Parens and unary `-`/`!` are deliberately not treated as operands: `(` is
+	! a real call, and `-`/`!` are ambiguous with binary operators
+
+	class(parser_t) :: parser
+	logical, intent(out), optional :: skipped
+
+	!********
+
+	logical :: is_operand
+
+	type(syntax_node_t) :: dummy
+
+	select case (parser%current_kind())
+	case (identifier_token, i32_token, i64_token, f32_token, f64_token, &
+			str_token, true_keyword, false_keyword, lbracket_token)
+		is_operand = .true.
+	case default
+		is_operand = .false.
+	end select
+
+	if (present(skipped)) skipped = is_operand
+	if (.not. is_operand) return
+
+	call parser%parse_primary_expr(dummy)
+
+end subroutine skip_juxtaposed_arg
 
 !===============================================================================
 
@@ -1319,6 +1375,7 @@ recursive module subroutine parse_dot(parser, expr)
 				span, identifier%text, &
 				"struct methods are not fn-pointer-able"))
 			expr%val%type = unknown_type
+			call parser%skip_juxtaposed_arg()
 			return
 		end if
 

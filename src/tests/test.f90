@@ -8244,6 +8244,57 @@ subroutine unit_test_error_codes(npass, nfail)
 					'let v = ["ab","cd"]; v[0:2] += "!";'), &
 					EC_COMPOUND_SUBSTR) == 0, &
 
+				! E87/E112: a fn name used without a call, e.g. `len s`, is almost
+				! always a call that is missing its parens.  It must be reported once
+				! (no E20 "expected `;`" or E9 cascade from the operand that follows),
+				! and the help text must suggest the call form
+				diag_count_code(get_diags( &
+					'let s = "abc"; let n = len s;'), &
+					EC_FN_PTR_UNSUPPORTED) == 1, &
+				.not. diag_has_code(get_diags( &
+					'let s = "abc"; let n = len s;'), &
+					EC_UNEXPECTED_TOKEN), &
+				.not. diag_has_code(get_diags( &
+					'let s = "abc"; let n = len s;'), &
+					EC_BAD_EXPR), &
+				diag_has_text(get_diags( &
+					'let s = "abc"; let n = len s;'), &
+					'write `'), &
+				diag_count_code(get_diags('let n = size [1, 2];'), &
+					EC_FN_PTR_UNSUPPORTED) == 1, &
+				.not. diag_has_code(get_diags('let n = size [1, 2];'), &
+					EC_UNEXPECTED_TOKEN), &
+				! User fns: bare statement (also an error in the REPL, where it used
+				! to silently do nothing) and juxtaposed operand
+				diag_count_code(get_diags( &
+					'fn hi() { println("hi"); } hi;'), &
+					EC_FN_MISSING_PARENS) == 1, &
+				diag_count_code(get_diags( &
+					'fn dbl(n: i32): i32 { return 2 * n; } let n = dbl 3;'), &
+					EC_FN_MISSING_PARENS) == 1, &
+				.not. diag_has_code(get_diags( &
+					'fn dbl(n: i32): i32 { return 2 * n; } let n = dbl 3;'), &
+					EC_UNEXPECTED_TOKEN), &
+				diag_has_code(get_diags_file( &
+					'src/tests/test-src/errors/E112-fn-missing-parens.syntran'), &
+					EC_FN_MISSING_PARENS), &
+				diag_count_code(get_diags_file( &
+					'src/tests/test-src/errors/E112-fn-missing-parens.syntran'), &
+					EC_FN_MISSING_PARENS) == 1, &
+				! ... and not the misleading "only allowed in the REPL" E9
+				.not. diag_has_code(get_diags_file( &
+					'src/tests/test-src/errors/E112-fn-missing-parens.syntran'), &
+					EC_BAD_EXPR), &
+				! Must stay legal: a bare fn ref as a value is a fn pointer
+				.not. diag_has_code(get_diags( &
+					'fn dbl(n: i32): i32 { return 2 * n; } let f = dbl; let y = f(1);'), &
+					EC_FN_MISSING_PARENS), &
+				.not. diag_has_code(get_diags( &
+					'fn dbl(n: i32): i32 { return 2 * n; } ' // &
+					'fn apply(f: fn(i32): i32, x: i32): i32 { return f(x); } ' // &
+					'let y = apply(dbl, 3);'), &
+					EC_FN_MISSING_PARENS), &
+
 				! Int/float assignment is rejected at parse time (E48).  This
 				! used to be marked by a "TODO: test int/float casting" note
 				! in runtime_control.f90's eval_assignment_expr, with no
@@ -9181,7 +9232,11 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E111-compound-substr.syntran'), &
 				EC_COMPOUND_SUBSTR, P//'E111-compound-substr.syntran', 8, 9, 1), &
 			diag_count_code(get_diags_file(P//'E111-compound-substr.syntran'), &
-				EC_COMPOUND_SUBSTR) == 1 &
+				EC_COMPOUND_SUBSTR) == 1, &
+			diag_loc_ok(get_diags_file(P//'E112-fn-missing-parens.syntran'), &
+				EC_FN_MISSING_PARENS, P//'E112-fn-missing-parens.syntran', 11, 2, 5), &
+			diag_count_code(get_diags_file(P//'E112-fn-missing-parens.syntran'), &
+				EC_FN_MISSING_PARENS) == 1 &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

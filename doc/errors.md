@@ -535,7 +535,7 @@ A struct method has the same name as one of the struct's members. Names must be 
 
 ### E87 -- fn-ptr-unsupported
 
-A function pointer (`fn(...)`-typed value) cannot be taken to an intrinsic function, a struct method, or a user-defined function with any `&`-reference parameter. A fn-pointer signature has no way to express reference-ness, so allowing this would silently drop reference semantics on an indirect call.
+An intrinsic function, a struct method, or a user-defined function with any `&`-reference parameter was named without a call, e.g. `println;` or `len s`. Most often the parentheses of a call were forgotten, so the message suggests the call form. The function can't be used as a function pointer either: a function pointer (`fn(...)`-typed value) cannot be taken to any of these. A fn-pointer signature has no way to express reference-ness, so allowing this would silently drop reference semantics on an indirect call.
 
 [Example](../src/tests/test-src/errors/E87-fn-ptr-unsupported.syntran)
 
@@ -680,6 +680,12 @@ A `case lo:hi` range bound's type can't be ordered (with `<`) against its `switc
 A compound operator (`s[1:3] += "xy"`, or the same on a string array's character subscript) was used on a character subscript or substring assignment. Only plain `=` is allowed there, since a fixed-width character slice can't grow or shrink the way a compound op like `+=` would require.
 
 [Example](../src/tests/test-src/errors/E111-compound-substr.syntran)
+
+### E112 -- fn-missing-parens
+
+A user-defined function was named without a call, either as a statement by itself (`greet;`) or directly followed by an operand (`dbl 3`). This is almost always a call that is missing its parentheses, so the message suggests the call form. Using a function name as a value elsewhere (`let f = dbl;`) is a legal function pointer and is not an error.
+
+[Example](../src/tests/test-src/errors/E112-fn-missing-parens.syntran)
 
 ## Internal errors
 
