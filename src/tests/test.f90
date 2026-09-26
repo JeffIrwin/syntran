@@ -7560,6 +7560,13 @@ subroutine unit_test_error_codes(npass, nfail)
 				'let a=[1,2]; let b = size(a, 0, 1);'), EC_TOO_MANY_ARGS), &
 			diag_has_code(get_diags('let a=[1,2,3]; let b = a[1,2];'), EC_BAD_SUB_COUNT), &
 			diag_count_code(get_diags('let a=[1,2,3]; let b = a[1,2];'), EC_BAD_SUB_COUNT) == 1, &
+			! Too few subscripts used to read past the end of lsubscripts in
+			! parse_subscripts(), crashing instead of reporting E36
+			diag_has_code(get_diags('let m=[0;2,3]; let b = m[0];'), EC_BAD_SUB_COUNT), &
+			diag_count_code(get_diags('let m=[0;2,3]; let b = m[0];'), EC_BAD_SUB_COUNT) == 1, &
+			diag_has_code(get_diags('let m=[0;2,3]; let b = abs(m)[0];'), EC_BAD_SUB_COUNT), &
+			diag_count_code(get_diags('let m=[0;2,3]; let b = abs(m)[0];'), EC_BAD_SUB_COUNT) == 1, &
+			diag_has_code(get_diags('let m=[0;2,3]; let b = m[:];'), EC_BAD_SUB_COUNT), &
 			! Regression: a fwd-referenced fn's rank-2 array result, fed
 			! through matmul and sliced, used to get a bogus rank in parse
 			! pass 0 (matmul_out_rank() on an unresolved-type operand), which

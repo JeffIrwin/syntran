@@ -579,7 +579,7 @@ recursive module subroutine parse_subscripts(parser, expr)
 	!********
 
 	integer :: pos0, span0, span1, expect_rank, rank_, ls_beg, ls_end, &
-		us_beg, us_end, nelem_subs
+		us_beg, us_end, nelem_subs, nsub
 
 	logical :: has_char_sub
 
@@ -843,7 +843,11 @@ recursive module subroutine parse_subscripts(parser, expr)
 		has_char_sub = (expr%val%array%type == str_type) .and. &
 			(size(expr%lsubscripts) == nelem_subs + 1)
 
-		if (all(expr%lsubscripts(1:nelem_subs)%sub_kind == scalar_sub)) then
+		! With too few subscripts, E36 is pushed below.  Clamp so the slices
+		! here don't run off the end of lsubscripts
+		nsub = min(size(expr%lsubscripts), nelem_subs)
+
+		if (all(expr%lsubscripts(1:nsub)%sub_kind == scalar_sub)) then
 			! this is not necessarily true for strings
 			expr%val%type = expr%val%array%type
 		else if (expr%val%array%type == struct_type) then
@@ -866,7 +870,7 @@ recursive module subroutine parse_subscripts(parser, expr)
 		! A slice operation can change the result rank.  The char sub (if any)
 		! is NOT counted — it never adds array rank.
 		!print *, 'rank in  = ', expr%val%array%rank
-		expr%val%array%rank = count(expr%lsubscripts(1:nelem_subs)%sub_kind /= scalar_sub)
+		expr%val%array%rank = count(expr%lsubscripts(1:nsub)%sub_kind /= scalar_sub)
 		!print *, 'rank out = ', expr%val%array%rank
 
 	else if (expr%val%type == str_type) then
