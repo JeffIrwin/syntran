@@ -31,6 +31,13 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - port something like aoc 2019/17 or 15 here as a long test
+	!    * good non-trivial coverage of enums in a module plus other recent
+	!      features (switch/case)
+	!    * 17 has switch case with array of enum subjects
+	!    * 15 has an intcode program struct getting passed down a recursive DFS
+	!    * maybe port both, they're fast
+	!    * consider 19, 21, 23, ... after i implement them
 	!  - stack trace for runtime errors
 	!    * as more minor breaking runtime guards are added for safety, e.g.
 	!      slice reassignment size checks, this is more pressing. if users have
@@ -41,6 +48,9 @@ module syntran__core_m
 	!      perf costs
 	!  - direct enum to i64 casting. currently can only cast to i32 directly, or
 	!    to i64 awkwardly as i64(i32(Enum.variant))
+	!    * in the other direction, casting i64 to enum could fail for big nums,
+	!      maybe should be avoided
+	!    * similarly, casting char to i64?
 	!  - split or streamline ci/cd:
 	!    * "build on ubuntu-24" stage is now the slowest. i believe this just
 	!      changed after ast removal. previously, windows and intel-compiler
