@@ -15,6 +15,9 @@ submodule (syntran__vm_m) syntran__vm_intr
 
 	implicit none
 
+	! Which numeric reduction reduce_dim_numeric() should do
+	integer, parameter :: RED_SUM = 1, RED_MIN = 2, RED_MAX = 3, RED_PRODUCT = 4
+
 !===============================================================================
 
 contains
@@ -32,9 +35,10 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 
 	integer :: i, io
 	integer :: env_len, env_stat
+	integer :: red_inner, red_n, red_outer, red_op
 	integer(kind = 8) :: ir, ic
 
-	logical :: exists_
+	logical :: exists_, red_ok
 
 	character(len = :), allocatable :: env_val
 
@@ -637,29 +641,35 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 
 	!==== Reductions ============================================================
 
-	case (INTR_MINVAL_I32)
-		res%type = i32_type; res%sca%i32 = minval(args(1)%array%i32)
+	case (INTR_MINVAL_I32, INTR_MINVAL_I64, INTR_MINVAL_F32, INTR_MINVAL_F64, &
+			INTR_MAXVAL_I32, INTR_MAXVAL_I64, INTR_MAXVAL_F32, INTR_MAXVAL_F64)
 
-	case (INTR_MINVAL_I64)
-		res%type = i64_type; res%sca%i64 = minval(args(1)%array%i64)
+		! There is no sensible min/max of nothing, and Fortran's huge() would
+		! look like real data
+		if (args(1)%array%len_ == 0) then
+			call rt_throw(state, err_rt(RC_MINMAX_EMPTY, &
+				"minval/maxval of an empty array"))
+			return
+		end if
 
-	case (INTR_MINVAL_F32)
-		res%type = f32_type; res%sca%f32 = minval(args(1)%array%f32)
-
-	case (INTR_MINVAL_F64)
-		res%type = f64_type; res%sca%f64 = minval(args(1)%array%f64)
-
-	case (INTR_MAXVAL_I32)
-		res%type = i32_type; res%sca%i32 = maxval(args(1)%array%i32)
-
-	case (INTR_MAXVAL_I64)
-		res%type = i64_type; res%sca%i64 = maxval(args(1)%array%i64)
-
-	case (INTR_MAXVAL_F32)
-		res%type = f32_type; res%sca%f32 = maxval(args(1)%array%f32)
-
-	case (INTR_MAXVAL_F64)
-		res%type = f64_type; res%sca%f64 = maxval(args(1)%array%f64)
+		select case (intr_id)
+		case (INTR_MINVAL_I32)
+			res%type = i32_type; res%sca%i32 = minval(args(1)%array%i32)
+		case (INTR_MINVAL_I64)
+			res%type = i64_type; res%sca%i64 = minval(args(1)%array%i64)
+		case (INTR_MINVAL_F32)
+			res%type = f32_type; res%sca%f32 = minval(args(1)%array%f32)
+		case (INTR_MINVAL_F64)
+			res%type = f64_type; res%sca%f64 = minval(args(1)%array%f64)
+		case (INTR_MAXVAL_I32)
+			res%type = i32_type; res%sca%i32 = maxval(args(1)%array%i32)
+		case (INTR_MAXVAL_I64)
+			res%type = i64_type; res%sca%i64 = maxval(args(1)%array%i64)
+		case (INTR_MAXVAL_F32)
+			res%type = f32_type; res%sca%f32 = maxval(args(1)%array%f32)
+		case (INTR_MAXVAL_F64)
+			res%type = f64_type; res%sca%f64 = maxval(args(1)%array%f64)
+		end select
 
 	case (INTR_SUM_I32)
 		res%type = i32_type; res%sca%i32 = sum(args(1)%array%i32)
@@ -712,6 +722,86 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 
 	case (INTR_ANY)
 		res%type = bool_type; res%sca%bool = any(args(1)%array%bool)
+
+	!==== Reductions with a dim and/or mask arg ==================================
+
+	case (INTR_COUNT_DIM, INTR_ALL_DIM, INTR_ANY_DIM)
+		! count/all/any(mask, dim)
+		call reduce_dim_setup(state, args(1)%array, args(2)%sca%i32, &
+			merge(i64_type, bool_type, intr_id == INTR_COUNT_DIM), &
+			red_inner, red_n, red_outer, res, red_ok)
+		if (.not. red_ok) return
+
+		select case (intr_id)
+		case (INTR_COUNT_DIM)
+			res%array%i64 = reshape(count(reshape( &
+				args(1)%array%bool(1: args(1)%array%len_), &
+				[red_inner, red_n, red_outer]), dim = 2, kind = 8), &
+				[red_inner * red_outer])
+		case (INTR_ALL_DIM)
+			res%array%bool = reshape(all(reshape( &
+				args(1)%array%bool(1: args(1)%array%len_), &
+				[red_inner, red_n, red_outer]), dim = 2), &
+				[red_inner * red_outer])
+		case (INTR_ANY_DIM)
+			res%array%bool = reshape(any(reshape( &
+				args(1)%array%bool(1: args(1)%array%len_), &
+				[red_inner, red_n, red_outer]), dim = 2), &
+				[red_inner * red_outer])
+		end select
+		call reduce_dim_finish(res)
+
+	case (INTR_SUM_EXT, INTR_MINVAL_EXT, INTR_MAXVAL_EXT, INTR_PRODUCT_EXT)
+		! sum/minval/maxval/product(array, dim), (array, mask), or
+		! (array, dim, mask)
+
+		select case (intr_id)
+		case (INTR_SUM_EXT)
+			red_op = RED_SUM
+		case (INTR_MINVAL_EXT)
+			red_op = RED_MIN
+		case (INTR_MAXVAL_EXT)
+			red_op = RED_MAX
+		case default
+			red_op = RED_PRODUCT
+		end select
+
+		if (nargs == 2 .and. args(2)%type == array_type) then
+			! f(array, mask): scalar reduction of the elements where mask is true
+			if (.not. same_shape(args(1)%array, args(2)%array)) then
+				call rt_throw(state, err_rt(RC_MASK_SHAPE_MISMATCH, &
+					"mask shape does not match array shape in "// &
+					reduce_name(red_op)//"() call"))
+				return
+			end if
+
+			call reduce_mask_scalar(state, red_op, args(1)%array, &
+				args(2)%array, res, red_ok)
+			if (.not. red_ok) return
+
+		else
+			call reduce_dim_setup(state, args(1)%array, args(2)%sca%i32, &
+				args(1)%array%type, red_inner, red_n, red_outer, res, red_ok)
+			if (.not. red_ok) return
+
+			if (nargs == 3) then
+				! f(array, dim, mask)
+				if (.not. same_shape(args(1)%array, args(3)%array)) then
+					call rt_throw(state, err_rt(RC_MASK_SHAPE_MISMATCH, &
+						"mask shape does not match array shape in "// &
+						reduce_name(red_op)//"() call"))
+					return
+				end if
+				call reduce_dim_numeric(state, red_op, args(1)%array, &
+					[red_inner, red_n, red_outer], res, red_ok, args(3)%array)
+			else
+				call reduce_dim_numeric(state, red_op, args(1)%array, &
+					[red_inner, red_n, red_outer], res, red_ok)
+			end if
+			if (.not. red_ok) return
+
+			call reduce_dim_finish(res)
+		end if
 
 	case (INTR_ARGS)
 		res%type = array_type
@@ -874,6 +964,400 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 	end select
 
 end subroutine vm_call_intr
+
+!===============================================================================
+
+logical function same_shape(a, b)
+
+	! Whether two arrays have the same rank and extents.  Used to check that a
+	! reduction's `mask` matches its array
+
+	type(array_t), intent(in) :: a, b
+
+	same_shape = .false.
+	if (a%rank /= b%rank) return
+	same_shape = all(a%size(1: a%rank) == b%size(1: b%rank))
+
+end function same_shape
+
+!===============================================================================
+
+subroutine reduce_dim_setup(state, src, dim_, elem_type, inner, n, outer, res, ok)
+
+	! Common setup for reductions along a dimension.  Checks `dim_` (0-based, like
+	! size()) against the rank of `src`, and views the column-major buffer of
+	! `src` as a rank-3 array of shape [inner, n, outer] where `n` is the extent
+	! being reduced.  Then allocates the metadata of the result in `res`.  The
+	! caller fills the buffer `res%array%<type>`, then calls reduce_dim_finish()
+
+	type(state_t), intent(inout) :: state
+	type(array_t), intent(in) :: src
+	integer, intent(in) :: dim_, elem_type
+	integer, intent(out) :: inner, n, outer
+	type(value_t), intent(inout) :: res
+	logical, intent(out) :: ok
+
+	!********
+
+	inner = 0
+	n     = 0
+	outer = 0
+
+	ok = .false.
+	if (dim_ < 0 .or. dim_ >= src%rank) then
+		call rt_throw(state, err_rt(RC_REDUCE_DIM_RANGE, &
+			"dim "//str(dim_)//" is out of range for a rank-"//str(src%rank)// &
+			" array in reduction call"))
+		return
+	end if
+
+	inner = int(product(src%size(1: dim_)))
+	n     = int(src%size(dim_ + 1))
+	outer = int(product(src%size(dim_ + 2: src%rank)))
+
+	res%type = array_type
+	allocate(res%array)
+	res%array%type = elem_type
+	res%array%rank = src%rank - 1
+	res%array%len_ = int(inner, 8) * outer
+	res%array%cap  = res%array%len_
+	res%array%size = [src%size(1: dim_), src%size(dim_ + 2: src%rank)]
+
+	ok = .true.
+
+end subroutine reduce_dim_setup
+
+!===============================================================================
+
+subroutine reduce_dim_finish(res)
+
+	! Reducing a rank-1 array along its only dimension gives a rank-0 result,
+	! i.e. a scalar, so unwrap the 1-element array that reduce_dim_setup()
+	! allocated
+
+	type(value_t), intent(inout) :: res
+
+	if (res%array%rank /= 0) return
+
+	res%type = res%array%type
+	select case (res%type)
+	case (i32_type)
+		res%sca%i32 = res%array%i32(1)
+	case (i64_type)
+		res%sca%i64 = res%array%i64(1)
+	case (f32_type)
+		res%sca%f32 = res%array%f32(1)
+	case (f64_type)
+		res%sca%f64 = res%array%f64(1)
+	case (bool_type)
+		res%sca%bool = res%array%bool(1)
+	end select
+	deallocate(res%array)
+
+end subroutine reduce_dim_finish
+
+!===============================================================================
+
+function reduce_name(op) result(name)
+
+	! Name of a numeric reduction, for error messages
+
+	integer, intent(in) :: op
+	character(len = :), allocatable :: name
+
+	select case (op)
+	case (RED_SUM)
+		name = "sum"
+	case (RED_MIN)
+		name = "minval"
+	case (RED_MAX)
+		name = "maxval"
+	case default
+		name = "product"
+	end select
+
+end function reduce_name
+
+!===============================================================================
+
+subroutine throw_minmax_empty(state, op)
+
+	type(state_t), intent(inout) :: state
+	integer, intent(in) :: op
+
+	call rt_throw(state, err_rt(RC_MINMAX_EMPTY, &
+		reduce_name(op)//"() of an empty array or mask selection"))
+
+end subroutine throw_minmax_empty
+
+!===============================================================================
+
+subroutine reduce_dim_numeric(state, op, src, shp, res, ok, msk)
+
+	! Fill the numeric result buffer of a reduction along a dimension.  `shp` is
+	! the [inner, n, outer] view from reduce_dim_setup().  `msk` is only given
+	! for a masked reduction
+	!
+	! There is no sensible minval/maxval of nothing, so those throw if any lane
+	! is empty, i.e. if n == 0 or if the mask selects nothing in a lane.  The
+	! result of sum/product of nothing is the identity, 0/1, like Fortran
+
+	type(state_t), intent(inout) :: state
+	integer, intent(in) :: op, shp(3)
+	type(array_t), intent(in) :: src
+	type(value_t), intent(inout) :: res
+	logical, intent(out) :: ok
+	type(array_t), intent(in), optional :: msk
+
+	!********
+
+	integer :: n_out
+	logical :: empty
+	logical(kind = 1), allocatable :: m3(:,:,:)
+
+	ok = .true.
+	n_out = shp(1) * shp(3)
+
+	if (present(msk)) m3 = reshape(msk%bool(1: msk%len_), shp)
+
+	if ((op == RED_MIN .or. op == RED_MAX) .and. n_out > 0) then
+		if (present(msk)) then
+			empty = any(count(m3, dim = 2) == 0)
+		else
+			empty = shp(2) == 0
+		end if
+		if (empty) then
+			call throw_minmax_empty(state, op)
+			ok = .false.
+			return
+		end if
+	end if
+
+	select case (src%type)
+	case (i32_type)
+		select case (op)
+		case (RED_SUM)
+			if (present(msk)) then
+				res%array%i32 = reshape(sum(reshape(src%i32(1: src%len_), shp), &
+					dim = 2, mask = m3), [n_out])
+			else
+				res%array%i32 = reshape(sum(reshape(src%i32(1: src%len_), shp), &
+					dim = 2), [n_out])
+			end if
+		case (RED_MIN)
+			if (present(msk)) then
+				res%array%i32 = reshape(minval(reshape(src%i32(1: src%len_), shp), &
+					dim = 2, mask = m3), [n_out])
+			else
+				res%array%i32 = reshape(minval(reshape(src%i32(1: src%len_), shp), &
+					dim = 2), [n_out])
+			end if
+		case (RED_MAX)
+			if (present(msk)) then
+				res%array%i32 = reshape(maxval(reshape(src%i32(1: src%len_), shp), &
+					dim = 2, mask = m3), [n_out])
+			else
+				res%array%i32 = reshape(maxval(reshape(src%i32(1: src%len_), shp), &
+					dim = 2), [n_out])
+			end if
+		case (RED_PRODUCT)
+			if (present(msk)) then
+				res%array%i32 = reshape(product(reshape(src%i32(1: src%len_), shp), &
+					dim = 2, mask = m3), [n_out])
+			else
+				res%array%i32 = reshape(product(reshape(src%i32(1: src%len_), shp), &
+					dim = 2), [n_out])
+			end if
+		end select
+
+	case (i64_type)
+		select case (op)
+		case (RED_SUM)
+			if (present(msk)) then
+				res%array%i64 = reshape(sum(reshape(src%i64(1: src%len_), shp), &
+					dim = 2, mask = m3), [n_out])
+			else
+				res%array%i64 = reshape(sum(reshape(src%i64(1: src%len_), shp), &
+					dim = 2), [n_out])
+			end if
+		case (RED_MIN)
+			if (present(msk)) then
+				res%array%i64 = reshape(minval(reshape(src%i64(1: src%len_), shp), &
+					dim = 2, mask = m3), [n_out])
+			else
+				res%array%i64 = reshape(minval(reshape(src%i64(1: src%len_), shp), &
+					dim = 2), [n_out])
+			end if
+		case (RED_MAX)
+			if (present(msk)) then
+				res%array%i64 = reshape(maxval(reshape(src%i64(1: src%len_), shp), &
+					dim = 2, mask = m3), [n_out])
+			else
+				res%array%i64 = reshape(maxval(reshape(src%i64(1: src%len_), shp), &
+					dim = 2), [n_out])
+			end if
+		case (RED_PRODUCT)
+			if (present(msk)) then
+				res%array%i64 = reshape(product(reshape(src%i64(1: src%len_), shp), &
+					dim = 2, mask = m3), [n_out])
+			else
+				res%array%i64 = reshape(product(reshape(src%i64(1: src%len_), shp), &
+					dim = 2), [n_out])
+			end if
+		end select
+
+	case (f32_type)
+		select case (op)
+		case (RED_SUM)
+			if (present(msk)) then
+				res%array%f32 = reshape(sum(reshape(src%f32(1: src%len_), shp), &
+					dim = 2, mask = m3), [n_out])
+			else
+				res%array%f32 = reshape(sum(reshape(src%f32(1: src%len_), shp), &
+					dim = 2), [n_out])
+			end if
+		case (RED_MIN)
+			if (present(msk)) then
+				res%array%f32 = reshape(minval(reshape(src%f32(1: src%len_), shp), &
+					dim = 2, mask = m3), [n_out])
+			else
+				res%array%f32 = reshape(minval(reshape(src%f32(1: src%len_), shp), &
+					dim = 2), [n_out])
+			end if
+		case (RED_MAX)
+			if (present(msk)) then
+				res%array%f32 = reshape(maxval(reshape(src%f32(1: src%len_), shp), &
+					dim = 2, mask = m3), [n_out])
+			else
+				res%array%f32 = reshape(maxval(reshape(src%f32(1: src%len_), shp), &
+					dim = 2), [n_out])
+			end if
+		case (RED_PRODUCT)
+			if (present(msk)) then
+				res%array%f32 = reshape(product(reshape(src%f32(1: src%len_), shp), &
+					dim = 2, mask = m3), [n_out])
+			else
+				res%array%f32 = reshape(product(reshape(src%f32(1: src%len_), shp), &
+					dim = 2), [n_out])
+			end if
+		end select
+
+	case (f64_type)
+		select case (op)
+		case (RED_SUM)
+			if (present(msk)) then
+				res%array%f64 = reshape(sum(reshape(src%f64(1: src%len_), shp), &
+					dim = 2, mask = m3), [n_out])
+			else
+				res%array%f64 = reshape(sum(reshape(src%f64(1: src%len_), shp), &
+					dim = 2), [n_out])
+			end if
+		case (RED_MIN)
+			if (present(msk)) then
+				res%array%f64 = reshape(minval(reshape(src%f64(1: src%len_), shp), &
+					dim = 2, mask = m3), [n_out])
+			else
+				res%array%f64 = reshape(minval(reshape(src%f64(1: src%len_), shp), &
+					dim = 2), [n_out])
+			end if
+		case (RED_MAX)
+			if (present(msk)) then
+				res%array%f64 = reshape(maxval(reshape(src%f64(1: src%len_), shp), &
+					dim = 2, mask = m3), [n_out])
+			else
+				res%array%f64 = reshape(maxval(reshape(src%f64(1: src%len_), shp), &
+					dim = 2), [n_out])
+			end if
+		case (RED_PRODUCT)
+			if (present(msk)) then
+				res%array%f64 = reshape(product(reshape(src%f64(1: src%len_), shp), &
+					dim = 2, mask = m3), [n_out])
+			else
+				res%array%f64 = reshape(product(reshape(src%f64(1: src%len_), shp), &
+					dim = 2), [n_out])
+			end if
+		end select
+
+	end select
+
+end subroutine reduce_dim_numeric
+
+!===============================================================================
+
+subroutine reduce_mask_scalar(state, op, a, m, res, ok)
+
+	! Scalar reduction of the elements of `a` where `m` is true.  The caller has
+	! already checked that the shapes match.  minval/maxval throw if the mask
+	! selects nothing (see reduce_dim_numeric())
+
+	type(state_t), intent(inout) :: state
+	integer, intent(in) :: op
+	type(array_t), intent(in) :: a, m
+	type(value_t), intent(inout) :: res
+	logical, intent(out) :: ok
+
+	ok = .true.
+	if (op == RED_MIN .or. op == RED_MAX) then
+		if (.not. any(m%bool(1: m%len_))) then
+			call throw_minmax_empty(state, op)
+			ok = .false.
+			return
+		end if
+	end if
+
+	res%type = a%type
+	select case (a%type)
+	case (i32_type)
+		select case (op)
+		case (RED_SUM)
+			res%sca%i32 = sum(a%i32(1: a%len_), mask = m%bool(1: m%len_))
+		case (RED_MIN)
+			res%sca%i32 = minval(a%i32(1: a%len_), mask = m%bool(1: m%len_))
+		case (RED_MAX)
+			res%sca%i32 = maxval(a%i32(1: a%len_), mask = m%bool(1: m%len_))
+		case (RED_PRODUCT)
+			res%sca%i32 = product(a%i32(1: a%len_), mask = m%bool(1: m%len_))
+		end select
+
+	case (i64_type)
+		select case (op)
+		case (RED_SUM)
+			res%sca%i64 = sum(a%i64(1: a%len_), mask = m%bool(1: m%len_))
+		case (RED_MIN)
+			res%sca%i64 = minval(a%i64(1: a%len_), mask = m%bool(1: m%len_))
+		case (RED_MAX)
+			res%sca%i64 = maxval(a%i64(1: a%len_), mask = m%bool(1: m%len_))
+		case (RED_PRODUCT)
+			res%sca%i64 = product(a%i64(1: a%len_), mask = m%bool(1: m%len_))
+		end select
+
+	case (f32_type)
+		select case (op)
+		case (RED_SUM)
+			res%sca%f32 = sum(a%f32(1: a%len_), mask = m%bool(1: m%len_))
+		case (RED_MIN)
+			res%sca%f32 = minval(a%f32(1: a%len_), mask = m%bool(1: m%len_))
+		case (RED_MAX)
+			res%sca%f32 = maxval(a%f32(1: a%len_), mask = m%bool(1: m%len_))
+		case (RED_PRODUCT)
+			res%sca%f32 = product(a%f32(1: a%len_), mask = m%bool(1: m%len_))
+		end select
+
+	case (f64_type)
+		select case (op)
+		case (RED_SUM)
+			res%sca%f64 = sum(a%f64(1: a%len_), mask = m%bool(1: m%len_))
+		case (RED_MIN)
+			res%sca%f64 = minval(a%f64(1: a%len_), mask = m%bool(1: m%len_))
+		case (RED_MAX)
+			res%sca%f64 = maxval(a%f64(1: a%len_), mask = m%bool(1: m%len_))
+		case (RED_PRODUCT)
+			res%sca%f64 = product(a%f64(1: a%len_), mask = m%bool(1: m%len_))
+		end select
+
+	end select
+
+end subroutine reduce_mask_scalar
 
 !===============================================================================
 

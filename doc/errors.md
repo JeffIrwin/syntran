@@ -1055,6 +1055,24 @@ An array subscript, slice bound, or string character index is out of bounds. Onl
 
 [Example](../src/tests/test-src/errors/R33-subscript-oob.syntran)
 
+### R34 -- reduce-dim-range
+
+The `dim` argument of a reduction, e.g. `sum(array, dim)`, `count(mask, dim)`, `minval(array, dim)`, etc., is outside of the array's valid rank range `0 <= dim < rank`.  This is the reduction counterpart of [R17](#r17----size-rank-mismatch), which is only raised by `size()`.
+
+[Example](../src/tests/test-src/errors/R34-reduce-dim-range.syntran)
+
+### R35 -- mask-shape-mismatch
+
+The `mask` argument of `sum(array, mask)` or `sum(array, dim, mask)` doesn't have the same rank and extents as `array`.
+
+[Example](../src/tests/test-src/errors/R35-mask-shape-mismatch.syntran)
+
+### R36 -- minmax-empty
+
+`minval()` or `maxval()` has nothing to reduce, so there is no sensible result.  This happens with an empty array, a `dim` reduction whose extent along `dim` is 0, or a mask (`minval(array, mask)` or `minval(array, dim, mask)`) that selects no elements in one of the reduced lanes.  Other reductions are fine on nothing: `sum` gives `0` and `product` gives `1`.
+
+[Example](../src/tests/test-src/errors/R36-minmax-empty.syntran)
+
 ## Warnings
 
 ### W1 -- missing-return

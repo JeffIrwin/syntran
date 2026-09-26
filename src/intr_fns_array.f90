@@ -13,6 +13,71 @@ contains
 
 !===============================================================================
 
+function new_reduce_fn(array_name, elem_type, ret_type, has_dim, has_mask) result(fn)
+
+	! Build the signature of one reduction overload that takes extra `dim`
+	! and/or `mask` args:
+	!
+	!     f(array)                 -- not built here, see the plain declarations
+	!     f(array, dim)            -- has_dim
+	!     f(array, mask)           -- has_mask
+	!     f(array, dim, mask)      -- has_dim and has_mask
+	!
+	! With `dim` the result is an array of `ret_type` whose rank is resolved
+	! per-call in resolve_overload(), otherwise it is a scalar `ret_type`
+
+	character(len = *), intent(in) :: array_name
+	integer, intent(in) :: elem_type, ret_type
+	logical, intent(in) :: has_dim, has_mask
+
+	type(fn_t) :: fn
+
+	!********
+
+	integer :: np, ip
+
+	if (has_dim) then
+		fn%type%type = array_type
+		allocate(fn%type%array)
+		fn%type%array%type = ret_type
+		fn%type%array%rank = -1  ! resolved per-call in resolve_overload
+	else
+		fn%type%type = ret_type
+	end if
+
+	np = 1
+	if (has_dim ) np = np + 1
+	if (has_mask) np = np + 1
+
+	allocate(fn%params(np))
+	allocate(fn%param_names%v(np))
+
+	fn%params(1)%type = array_type
+	allocate(fn%params(1)%array)
+	fn%params(1)%array%type = elem_type
+	fn%params(1)%array%rank = -1  ! negative means any rank
+	fn%param_names%v(1)%s = array_name
+
+	ip = 1
+	if (has_dim) then
+		ip = ip + 1
+		fn%params(ip)%type = i32_type
+		fn%param_names%v(ip)%s = "dim"
+	end if
+
+	if (has_mask) then
+		ip = ip + 1
+		fn%params(ip)%type = array_type
+		allocate(fn%params(ip)%array)
+		fn%params(ip)%array%type = bool_type
+		fn%params(ip)%array%rank = -1
+		fn%param_names%v(ip)%s = "mask"
+	end if
+
+end function new_reduce_fn
+
+!===============================================================================
+
 subroutine declare_array_fns(fns, id_index, fn_array)
 
 	! Declare array intrinsic functions (size, count, sum, product, etc.)
@@ -31,6 +96,19 @@ subroutine declare_array_fns(fns, id_index, fn_array)
 		norm2_f32_fn, norm2_f64_fn, &
 		dot_f32_fn, dot_f64_fn, dot_i32_fn, dot_i64_fn, &
 		reshape_fn, transpose_fn, shape_fn
+
+	! Overloads of the reductions that take `dim` and/or `mask` args.  These are
+	! resolved from the plain names (e.g. sum) by resolve_overload().  They all
+	! share one INTR id per reduction (see intr_id_from_name), which dispatches
+	! on the arg types and count at runtime
+	integer, parameter :: NUM_EXT = 3 + 4 * 4 * 3
+	integer, parameter :: elem_types(4) = [i32_type, i64_type, f32_type, f64_type]
+	character(len = 3), parameter :: type_names(4) = ["i32", "i64", "f32", "f64"]
+	character(len = 7), parameter :: ops(4) = &
+		["sum    ", "minval ", "maxval ", "product"]
+
+	integer :: iop, it, n_ext
+	type(fn_t) :: ext_fns(NUM_EXT)
 
 	!********
 
@@ -67,9 +145,8 @@ subroutine declare_array_fns(fns, id_index, fn_array)
 
 	count_fn%param_names%v(1)%s = "mask"
 
-	!! TODO: add dim arg to count() like Fortran
-	!count_fn%params(2)%type = i32_type
-	!count_fn%param_names%v(2)%s = "dim"
+	! The `dim` overload is declared separately below as "0count_dim" and picked
+	! by resolve_overload() when count() is called with 2 args
 
 	call fns%insert("count", count_fn, id_index)
 
@@ -215,11 +292,9 @@ subroutine declare_array_fns(fns, id_index, fn_array)
 
 	sum_i32_fn%param_names%v(1)%s =  "array"
 
-	!! TODO: add mask and dim args to sum() like Fortran.  Maybe overload
-	!! several distinct internal fn's like 0min_i32 vs 0min_i64?  The return
-	!! value is still the same so maybe there's an easier way
-	!sum_i32_fn%params(2)%type = i32_type
-	!sum_i32_fn%param_names%v(2)%s = "dim"
+	! The `dim` and `mask` overloads are declared separately below, e.g.
+	! "0sum_i32_dim", "0sum_i32_mask", and "0sum_i32_dim_mask".  Likewise for
+	! minval, maxval, and product
 
 	call fns%insert("0sum_i32", sum_i32_fn, id_index)
 
@@ -469,9 +544,7 @@ subroutine declare_array_fns(fns, id_index, fn_array)
 
 	all_fn%param_names%v(1)%s = "mask"
 
-	!! TODO: add dim arg to all() like Fortran
-	!all_fn%params(2)%type = i32_type
-	!all_fn%param_names%v(2)%s = "dim"
+	! The `dim` overload is declared separately below as "0all_dim"
 
 	call fns%insert("all", all_fn, id_index)
 
@@ -489,9 +562,7 @@ subroutine declare_array_fns(fns, id_index, fn_array)
 
 	any_fn%param_names%v(1)%s = "mask"
 
-	!! TODO: add dim arg to any() like Fortran
-	!any_fn%params(2)%type = i32_type
-	!any_fn%param_names%v(2)%s = "dim"
+	! The `dim` overload is declared separately below as "0any_dim"
 
 	call fns%insert("any", any_fn, id_index)
 
@@ -582,6 +653,53 @@ subroutine declare_array_fns(fns, id_index, fn_array)
 
 	!********
 
+	! dim-overloads of count/all/any.  These take a bool array and return a
+	! reduced array of i64/bool/bool, or a scalar for rank-1 input
+
+	n_ext = 0
+
+	n_ext = n_ext + 1
+	ext_fns(n_ext) = new_reduce_fn("mask", bool_type, i64_type, .true., .false.)
+	call fns%insert("0count_dim", ext_fns(n_ext), id_index)
+
+	n_ext = n_ext + 1
+	ext_fns(n_ext) = new_reduce_fn("mask", bool_type, bool_type, .true., .false.)
+	call fns%insert("0all_dim", ext_fns(n_ext), id_index)
+
+	n_ext = n_ext + 1
+	ext_fns(n_ext) = new_reduce_fn("mask", bool_type, bool_type, .true., .false.)
+	call fns%insert("0any_dim", ext_fns(n_ext), id_index)
+
+	!********
+
+	! sum/minval/maxval/product with a dim and/or mask arg
+
+	do iop = 1, size(ops)
+	do it = 1, size(elem_types)
+
+		n_ext = n_ext + 1
+		ext_fns(n_ext) = new_reduce_fn("array", elem_types(it), elem_types(it), &
+			.true., .false.)
+		call fns%insert("0"//trim(ops(iop))//"_"//type_names(it)//"_dim", &
+			ext_fns(n_ext), id_index)
+
+		n_ext = n_ext + 1
+		ext_fns(n_ext) = new_reduce_fn("array", elem_types(it), elem_types(it), &
+			.false., .true.)
+		call fns%insert("0"//trim(ops(iop))//"_"//type_names(it)//"_mask", &
+			ext_fns(n_ext), id_index)
+
+		n_ext = n_ext + 1
+		ext_fns(n_ext) = new_reduce_fn("array", elem_types(it), elem_types(it), &
+			.true., .true.)
+		call fns%insert("0"//trim(ops(iop))//"_"//type_names(it)//"_dim_mask", &
+			ext_fns(n_ext), id_index)
+
+	end do
+	end do
+
+	!********
+
 	! Return array of all functions declared in this module
 	fn_array = &
 		[ &
@@ -595,7 +713,8 @@ subroutine declare_array_fns(fns, id_index, fn_array)
 			all_fn, any_fn, &
 			reshape_fn, &
 			transpose_fn, &
-			shape_fn &
+			shape_fn, &
+			ext_fns &
 		]
 
 end subroutine declare_array_fns

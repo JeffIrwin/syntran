@@ -254,6 +254,9 @@ module procedure get_all_error_codes
 	call codes%push(RC_CLOSE_FAIL)
 	call codes%push(RC_ENUM_CAST_RANGE)
 	call codes%push(RC_SUBSCRIPT_OOB)
+	call codes%push(RC_REDUCE_DIM_RANGE)
+	call codes%push(RC_MASK_SHAPE_MISMATCH)
+	call codes%push(RC_MINMAX_EMPTY)
 	call codes%push(WC_MISSING_RETURN)
 end procedure get_all_error_codes
 

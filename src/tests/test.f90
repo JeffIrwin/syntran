@@ -1090,6 +1090,7 @@ subroutine unit_test_intr_fns(npass, nfail)
 
 	integer :: i
 
+	logical, parameter :: quiet = .true.
 	logical, allocatable :: tests(:), tests1(:), tests2(:)
 
 	double precision, parameter :: pi = 4.d0 * atan(1.d0)
@@ -1462,6 +1463,55 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('count([0: 10] <  4);') == "4", &
 			eval('count([0: 10] <  7);') == "7", &
 			eval('count([0: 10] < 15);') == "10", &
+
+			! Reductions along a dim.  This is 0-based like size(), the result has
+			! one less rank, and a rank-1 array reduces to a scalar
+			eval('let m = [1, 2, 3, 4, 5, 6; 2, 3]; sum(m, 0);', quiet) == "[3, 7, 11]", &
+			eval('let m = [1, 2, 3, 4, 5, 6; 2, 3]; sum(m, 1);', quiet) == "[9, 12]", &
+			eval('let m = [1, 2, 3, 4, 5, 6; 2, 3]; minval(m, 1);', quiet) == "[1, 2]", &
+			eval('let m = [1, 2, 3, 4, 5, 6; 2, 3]; maxval(m, 0);', quiet) == "[2, 4, 6]", &
+			eval('let m = [1, 2, 3, 4, 5, 6; 2, 3]; product(m, 1);', quiet) == "[15, 48]", &
+			eval('let m = [1, 2, 3, 4, 5, 6; 2, 3]; count(m > 2, 0);', quiet) == "[0, 2, 2]", &
+			eval('let m = [1, 2, 3, 4, 5, 6; 2, 3]; all(m > 1, 0);', quiet) == "[false, true, true]", &
+			eval('let m = [1, 2, 3, 4, 5, 6; 2, 3]; any(m > 5, 1);', quiet) == "[false, true]", &
+			eval('sum([1, 2, 3], 0);') == "6", &
+			eval('minval([4, 2, 3], 0);') == "2", &
+			eval('maxval([4, 2, 3], 0);') == "4", &
+			eval('product([4, 2, 3], 0);') == "24", &
+			eval('count([true, false, true], 0);') == "2", &
+			eval('all([true, true], 0);') == "true", &
+			eval('any([false, false], 0);') == "false", &
+			eval('sum(i64([1, 2, 3]), 0);') == "6", &
+			eval('let m = [1, 2, 3, 4; 2, 2]; sum(i64(m), 1);', quiet) == "[4, 6]", &
+			eval('let m = [1.5, 2.5, 3.5, 4.5; 2, 2]; sum(m, 1);', quiet) == &
+				"[5.000000000000000E+00, 7.000000000000000E+00]", &
+			eval('let m = [1.5f, 2.5f, 3.5f, 4.5f; 2, 2]; minval(m, 0);', quiet) == &
+				"[1.500000E+00, 3.500000E+00]", &
+
+			! product/minval/maxval with a mask
+			eval('product([1, 2, 3, 4], [true, false, true, true]);') == "12", &
+			eval('minval([5, 2, 3, 4], [true, false, true, true]);') == "3", &
+			eval('maxval([5, 2, 3, 4], [false, true, true, true]);') == "4", &
+			eval('let m = [1, 2, 3, 4, 5, 6; 2, 3]; product(m, 0, m > 2);', quiet) == "[1, 12, 30]", &
+			eval('let m = [1, 2, 3, 4, 5, 6; 2, 3]; minval(m, 1, m > 2);', quiet) == "[3, 4]", &
+			eval('let m = [1, 2, 3, 4, 5, 6; 2, 3]; maxval(m, 1, m > 2);', quiet) == "[5, 6]", &
+			eval('product([1, 2, 3], [false, false, false]);') == "1", &
+
+			! sum() with a mask, and with both a dim and a mask
+			eval('sum([1, 2, 3, 4], [true, false, true, false]);') == "4", &
+			eval('sum([1, 2, 3, 4], 0, [true, false, true, false]);') == "4", &
+			eval('let m = [1, 2, 3, 4, 5, 6; 2, 3]; sum(m, m > 2);', quiet) == "18", &
+			eval('let m = [1, 2, 3, 4, 5, 6; 2, 3]; sum(m, 0, m > 2);', quiet) == "[0, 7, 11]", &
+			eval('let m = [1, 2, 3, 4, 5, 6; 2, 3]; sum(m, 1, m > 2);', quiet) == "[8, 10]", &
+			abs(eval_f64('sum([1.5, 2.5, 3.5], [true, false, true]);') - 5.d0) < tol, &
+
+			! Rank of the result is known at parse time: a dim reduction can be
+			! subscripted, chained, and passed on to other fns
+			eval('let m = [1, 2, 3, 4; 2, 2]; sum(m, 0)[1];', quiet) == "7", &
+			eval('let m = [1, 2, 3, 4; 2, 2]; sum(sum(m, 0), 0);', quiet) == "10", &
+			eval('let m = [1, 2, 3, 4; 2, 2]; sum(sum(m, 0) * 2, 0);', quiet) == "20", &
+			eval('fn f(a: [i32; :, :]): [i32; :] { return sum(a, 0); } f([1, 2, 3, 4; 2, 2]);', quiet) == "[3, 7]", &
+			eval('fn f(a: [i32; :]): i32 { return sum(a, 0); } f([1, 2, 3]);', quiet) == "6", &
 			eval('sum([1: 4]);') == "6", &
 			eval('sum([2: 4]);') == "5", &
 			eval('sum([1: 5]);') == "10", &
@@ -3744,6 +3794,10 @@ subroutine unit_test_nd_i32(npass, nfail)
 			! i32() applied to a 2-D array-slice assignment, which the
 			! smaller test-0*.syntran files above don't cover
 			interpret_file(path//'logo-lowres.syntran', quiet) == 'true', &
+
+			! Reductions along a dim, and sum() with a mask
+			interpret_file(path//'reduce-dim.syntran', quiet) == 'true', &
+			interpret_file(path//'reduce-mask.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -7482,6 +7536,25 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_has_code(get_diags( &
 				'fn f(b:bool): i32 { if b {return 1;} }'), EC_MISSING_RETURN), &
 			diag_has_code(get_diags('let a = abs(1, 2);'), EC_BAD_ARG_COUNT), &
+			! count/all/any take a dim but no mask, while sum/product/minval/maxval
+			! take a dim and/or a mask
+			diag_has_code(get_diags('let a = count([true], 0, 1);'), EC_BAD_ARG_COUNT), &
+			diag_has_code(get_diags('let a = all([true], 0, 1);'), EC_BAD_ARG_COUNT), &
+			diag_has_code(get_diags('let a = count([true], [true]);'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags('let a = minval([1, 2], 0, [true, true], 1);'), EC_BAD_ARG_COUNT), &
+			diag_has_code(get_diags('let a = maxval([1, 2], 0, [true, true], 1);'), EC_BAD_ARG_COUNT), &
+			diag_has_code(get_diags('let a = product([1, 2], 0, [true, true], 1);'), EC_BAD_ARG_COUNT), &
+			diag_has_code(get_diags('let a = sum([1, 2], 0, 1, 2);'), EC_BAD_ARG_COUNT), &
+			diag_has_code(get_diags('let a = minval([1, 2], 0, 1);'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags('let a = product([1, 2], 0, 1);'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags('let a = minval([1, 2], [1, 2]);'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags('let a = sum([1, 2], 1.0);'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags('let a = count([true], true);'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags('let a = sum([1, 2], 0, 1);'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags('let a = sum(1, 0);'), EC_BAD_ARG_TYPE), &
+			! A dim reduction of a rank-2 array is rank-1, not a scalar
+			diag_has_code(get_diags( &
+				'fn f(a: [i32; :, :]): i32 { return sum(a, 0); }'), EC_BAD_RET_TYPE), &
 			diag_has_code(get_diags('let a = min(1);'), EC_TOO_FEW_ARGS), &
 			diag_has_code(get_diags( &
 				'let a=[1,2]; let b = size(a, 0, 1);'), EC_TOO_MANY_ARGS), &
@@ -8348,6 +8421,45 @@ subroutine unit_test_runtime_errors(npass, nfail)
 
 			! R19: std::reshape() new shape doesn't match element count
 			rt_code_both_file(P//'R19-reshape-mismatch.syntran', RC_RESHAPE_MISMATCH), &
+
+			! R34: dim argument of a reduction (sum, count, etc.) out of range
+			rt_code_both_file(P//'R34-reduce-dim-range.syntran', RC_REDUCE_DIM_RANGE), &
+			diag_has_code(get_diags('sum([1, 2, 3], 1);'), RC_REDUCE_DIM_RANGE), &
+			diag_has_code(get_diags('sum([1, 2, 3], -1);'), RC_REDUCE_DIM_RANGE), &
+			diag_has_code(get_diags('count([true], 1);'), RC_REDUCE_DIM_RANGE), &
+			diag_has_code(get_diags('all([true], 1);'), RC_REDUCE_DIM_RANGE), &
+			diag_has_code(get_diags('any([true], 1);'), RC_REDUCE_DIM_RANGE), &
+			diag_has_code(get_diags('minval([1, 2], 1);'), RC_REDUCE_DIM_RANGE), &
+			diag_has_code(get_diags('maxval([1, 2], 1);'), RC_REDUCE_DIM_RANGE), &
+			diag_has_code(get_diags('product([1, 2], 1);'), RC_REDUCE_DIM_RANGE), &
+
+			! R35: mask of sum() doesn't have the same shape as the array
+			rt_code_both_file(P//'R35-mask-shape-mismatch.syntran', RC_MASK_SHAPE_MISMATCH), &
+			diag_has_code(get_diags('sum([1, 2, 3], [true, false]);'), RC_MASK_SHAPE_MISMATCH), &
+			diag_has_code(get_diags('sum([1, 2, 3], 0, [true, false]);'), RC_MASK_SHAPE_MISMATCH), &
+			diag_has_code(get_diags('product([1, 2, 3], [true, false]);'), RC_MASK_SHAPE_MISMATCH), &
+			diag_has_code(get_diags('minval([1, 2, 3], [true, false]);'), RC_MASK_SHAPE_MISMATCH), &
+			diag_has_code(get_diags('maxval([1, 2, 3], 0, [true, false]);'), RC_MASK_SHAPE_MISMATCH), &
+			diag_has_code(get_diags( &
+				'let a = [1, 2, 3, 4; 2, 2]; minval(a, [true, false, true, false]);'), &
+				RC_MASK_SHAPE_MISMATCH), &
+
+			! R36: minval/maxval of nothing.  sum and product of nothing are fine
+			rt_code_both_file(P//'R36-minmax-empty.syntran', RC_MINMAX_EMPTY), &
+			diag_has_code(get_diags('minval([0: 0]);'), RC_MINMAX_EMPTY), &
+			diag_has_code(get_diags('maxval([0: 0]);'), RC_MINMAX_EMPTY), &
+			diag_has_code(get_diags('minval(i64([0: 0]));'), RC_MINMAX_EMPTY), &
+			diag_has_code(get_diags('maxval([0: 0] * 1.0);'), RC_MINMAX_EMPTY), &
+			diag_has_code(get_diags('minval([1, 2], [false, false]);'), RC_MINMAX_EMPTY), &
+			diag_has_code(get_diags('maxval([1, 2], 0, [false, false]);'), RC_MINMAX_EMPTY), &
+			diag_has_code(get_diags( &
+				'let a = [1, 2, 3, 4; 2, 2]; minval(a, 0, a > 2);'), RC_MINMAX_EMPTY), &
+			diag_has_code(get_diags( &
+				'let a = [1, 2, 3, 4; 2, 2]; maxval(a[0:0, 0:2], 0);'), RC_MINMAX_EMPTY), &
+			.not. diag_has_code(get_diags('sum([0: 0]);'), RC_MINMAX_EMPTY), &
+			.not. diag_has_code(get_diags('product([0: 0]);'), RC_MINMAX_EMPTY), &
+			.not. diag_has_code(get_diags('sum([1, 2], [false, false]);'), RC_MINMAX_EMPTY), &
+			.not. diag_has_code(get_diags('minval([1, 2], [true, false]);'), RC_MINMAX_EMPTY), &
 
 			! R21: rank-2+ array literal's element count doesn't match a
 			! runtime-valued declared size

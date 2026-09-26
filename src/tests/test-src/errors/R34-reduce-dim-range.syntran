@@ -1,0 +1,6 @@
+// R34: reduce-dim-range
+// A reduction like sum(array, dim) was given a dim outside the array's valid
+// rank range
+
+let a = [1, 2, 3, 4; 2, 2];
+let s = sum(a, 2);

@@ -203,6 +203,9 @@ module syntran__errors_m
 		RC_CLOSE_FAIL   = "R31", &
 		RC_ENUM_CAST_RANGE = "R32", &
 		RC_SUBSCRIPT_OOB = "R33", &
+		RC_REDUCE_DIM_RANGE = "R34", &
+		RC_MASK_SHAPE_MISMATCH = "R35", &
+		RC_MINMAX_EMPTY = "R36", &
 		WC_MISSING_RETURN = "W1"
 
 	! A text span indicates which characters to underline in a faulty line of

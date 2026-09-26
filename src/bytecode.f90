@@ -450,6 +450,17 @@ module syntran__bytecode_m
 		INTR_GETENV       = 134, INTR_HASENV       = 135, &
 		INTR_EXISTS       = 136, INTR_TRY_OPEN     = 137
 
+	! Reductions with a `dim` and/or `mask` arg.  Each of these covers all of its
+	! type and arg overloads (e.g. "0sum_i32_dim", "0sum_f64_mask",
+	! "0minval_i64_dim_mask", ...) and dispatches on the arg count and types at
+	! runtime
+	integer, parameter :: &
+		INTR_COUNT_DIM    = 138, INTR_ALL_DIM      = 139, &
+		INTR_ANY_DIM      = 140, &
+		INTR_SUM_EXT      = 141, &
+		INTR_MINVAL_EXT   = 142, INTR_MAXVAL_EXT   = 143, &
+		INTR_PRODUCT_EXT  = 144
+
 	!********
 
 	! A single bytecode instruction.  Kept as a plain POD record (no allocatable
@@ -886,6 +897,21 @@ pure integer function intr_id_from_name(name) result(id)
 	case ("hasenv");         id = INTR_HASENV
 	case ("exists");         id = INTR_EXISTS
 	case ("try_open");       id = INTR_TRY_OPEN
+	case ("0count_dim");     id = INTR_COUNT_DIM
+	case ("0all_dim");       id = INTR_ALL_DIM
+	case ("0any_dim");       id = INTR_ANY_DIM
+	case ("0sum_i32_dim", "0sum_i64_dim", "0sum_f32_dim", "0sum_f64_dim", &
+			"0sum_i32_mask", "0sum_i64_mask", "0sum_f32_mask", "0sum_f64_mask", &
+			"0sum_i32_dim_mask", "0sum_i64_dim_mask", "0sum_f32_dim_mask", "0sum_f64_dim_mask"); id = INTR_SUM_EXT
+	case ("0minval_i32_dim", "0minval_i64_dim", "0minval_f32_dim", "0minval_f64_dim", &
+			"0minval_i32_mask", "0minval_i64_mask", "0minval_f32_mask", "0minval_f64_mask", &
+			"0minval_i32_dim_mask", "0minval_i64_dim_mask", "0minval_f32_dim_mask", "0minval_f64_dim_mask"); id = INTR_MINVAL_EXT
+	case ("0maxval_i32_dim", "0maxval_i64_dim", "0maxval_f32_dim", "0maxval_f64_dim", &
+			"0maxval_i32_mask", "0maxval_i64_mask", "0maxval_f32_mask", "0maxval_f64_mask", &
+			"0maxval_i32_dim_mask", "0maxval_i64_dim_mask", "0maxval_f32_dim_mask", "0maxval_f64_dim_mask"); id = INTR_MAXVAL_EXT
+	case ("0product_i32_dim", "0product_i64_dim", "0product_f32_dim", "0product_f64_dim", &
+			"0product_i32_mask", "0product_i64_mask", "0product_f32_mask", "0product_f64_mask", &
+			"0product_i32_dim_mask", "0product_i64_dim_mask", "0product_f32_dim_mask", "0product_f64_dim_mask"); id = INTR_PRODUCT_EXT
 	case default;            id = 0
 	end select
 

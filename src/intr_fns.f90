@@ -865,6 +865,18 @@ recursive subroutine resolve_overload(args, fn_call, has_rank, has_arr_type, arr
 			fn_call%identifier%text = "0sum_i32"
 		end select
 
+		! Overloads with a `dim` and/or `mask` arg
+		call resolve_reduce_ext(args, fn_call, has_rank)
+
+	case ("count", "all", "any")
+
+		! Only the 2-arg `dim` overload needs a mangled name.  The 1-arg forms
+		! are the plain table keys
+		if (args%len_ == 2) then
+			fn_call%identifier%text = "0"//fn_call%identifier%text//"_dim"
+			call resolve_reduce_rank(args, fn_call, has_rank)
+		end if
+
 	case ("minval")
 
 		type_ = i32_type
@@ -882,6 +894,9 @@ recursive subroutine resolve_overload(args, fn_call, has_rank, has_arr_type, arr
 		case default
 			fn_call%identifier%text = "0minval_i32"
 		end select
+
+		! Overloads with a `dim` and/or `mask` arg
+		call resolve_reduce_ext(args, fn_call, has_rank)
 
 	case ("maxval")
 
@@ -901,6 +916,9 @@ recursive subroutine resolve_overload(args, fn_call, has_rank, has_arr_type, arr
 			fn_call%identifier%text = "0maxval_i32"
 		end select
 
+		! Overloads with a `dim` and/or `mask` arg
+		call resolve_reduce_ext(args, fn_call, has_rank)
+
 	case ("product")
 
 		type_ = i32_type
@@ -918,6 +936,9 @@ recursive subroutine resolve_overload(args, fn_call, has_rank, has_arr_type, arr
 		case default
 			fn_call%identifier%text = "0product_i32"
 		end select
+
+		! Overloads with a `dim` and/or `mask` arg
+		call resolve_reduce_ext(args, fn_call, has_rank)
 
 	case ("norm2")
 		! I might change the name norm2 to norm later but I'm not ready to lock
@@ -1011,6 +1032,82 @@ recursive subroutine resolve_overload(args, fn_call, has_rank, has_arr_type, arr
 	end select
 
 end subroutine resolve_overload
+
+!===============================================================================
+
+subroutine resolve_reduce_rank(args, fn_call, has_rank)
+
+	! Set the parse-time result rank of a reduction called with a `dim` arg:
+	! one less than the rank of the array arg, or 0 for a rank-1 array.  Rank 0
+	! is a marker for parse_fn_call() to turn the result into a scalar.  It is
+	! -1 (unknown) if the array arg isn't actually an array, in which case the
+	! arg type check that follows reports the error
+
+	type(syntax_node_vector_t), intent(in) :: args
+	type(syntax_node_t), intent(inout) :: fn_call
+	logical, intent(out) :: has_rank
+
+	!********
+
+	integer :: src_rank
+
+	has_rank = .true.
+	if (.not. allocated(fn_call%val%array)) allocate(fn_call%val%array)
+
+	src_rank = -1
+	if (args%len_ >= 1) then
+		if (args%v(1)%val%type == array_type) then
+			src_rank = args%v(1)%val%array%rank
+		end if
+	end if
+
+	if (src_rank > 0) then
+		fn_call%val%array%rank = src_rank - 1
+	else
+		fn_call%val%array%rank = -1
+	end if
+
+end subroutine resolve_reduce_rank
+
+!===============================================================================
+
+subroutine resolve_reduce_ext(args, fn_call, has_rank)
+
+	! Rename a type-resolved reduction like "0sum_i32" to its overload taking a
+	! `dim` and/or `mask` arg, based on the number and types of the args:
+	!
+	!     f(a, dim)       -> "_dim"       (2nd arg is not an array)
+	!     f(a, mask)      -> "_mask"      (2nd arg is an array)
+	!     f(a, dim, mask) -> "_dim_mask"
+	!
+	! Arg counts and types that match none of these are left alone, so the
+	! usual arg count/type checks in parse_fn_call() report them against the
+	! plain fn
+
+	type(syntax_node_vector_t), intent(in) :: args
+	type(syntax_node_t), intent(inout) :: fn_call
+	logical, intent(out) :: has_rank
+
+	!********
+
+	has_rank = .false.
+
+	select case (args%len_)
+	case (2)
+		if (args%v(2)%val%type == array_type) then
+			fn_call%identifier%text = fn_call%identifier%text//"_mask"
+		else
+			fn_call%identifier%text = fn_call%identifier%text//"_dim"
+			call resolve_reduce_rank(args, fn_call, has_rank)
+		end if
+
+	case (3)
+		fn_call%identifier%text = fn_call%identifier%text//"_dim_mask"
+		call resolve_reduce_rank(args, fn_call, has_rank)
+
+	end select
+
+end subroutine resolve_reduce_ext
 
 !===============================================================================
 

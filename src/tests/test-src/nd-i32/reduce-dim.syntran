@@ -1,0 +1,68 @@
+
+// Reductions with a `dim` arg, and `sum` with a `mask` arg
+
+// c(i,j,k) = 1 + i + 2*j + 6*k, so `dim` = 1 has both inner > 1 and outer > 1
+let c = std::reshape([1: 25], [2, 3, 4]);
+
+let ok = true;
+
+// Each `dim` of a rank-3 array reduces to rank-2
+ok = ok and all(sum(c, 0) == [ 3,  7, 11, 15, 19, 23, 27, 31, 35, 39, 43, 47; 3, 4]);
+ok = ok and all(sum(c, 1) == [ 9, 12, 27, 30, 45, 48, 63, 66; 2, 4]);
+ok = ok and all(sum(c, 2) == [40, 44, 48, 52, 56, 60; 2, 3]);
+
+ok = ok and all(minval(c, 2) == [ 1,  2,  3,  4,  5,  6; 2, 3]);
+ok = ok and all(maxval(c, 2) == [19, 20, 21, 22, 23, 24; 2, 3]);
+
+let p = product(c, 0);
+ok = ok and size(p) == 12 and p[0, 0] == 2 and p[2, 3] == 552;
+
+// sum(array, mask) is a scalar, and sum(array, dim, mask) is a reduced array
+ok = ok and sum(c, c > 20) == 90;
+ok = ok and all(sum(c, 1, c > 12) == [0, 0, 0, 0, 45, 48, 63, 66; 2, 4]);
+
+// count/all/any with dim
+ok = ok and all(count(c > 12, 2) == [2, 2, 2, 2, 2, 2; 2, 3]);
+ok = ok and all(all(c > 0, 0));
+ok = ok and all(any(c > 23, 1) == [false, false, false, false, false, false, false, true; 2, 4]);
+
+// Reducing a rank-1 array gives a scalar, not a 1-element array
+ok = ok and sum([1, 2, 3], 0) == 6;
+ok = ok and minval([4, 2, 3], 0) == 2;
+ok = ok and maxval([4, 2, 3], 0) == 4;
+ok = ok and product([4, 2, 3], 0) == 24;
+ok = ok and count([true, false, true], 0) == 2;
+ok = ok and any([false, false, true], 0);
+ok = ok and not all([false, false, true], 0);
+ok = ok and sum([1, 2, 3, 4], [true, false, true, false]) == 4;
+ok = ok and sum([1, 2, 3, 4], 0, [true, false, true, false]) == 4;
+
+// Non-i32 element types
+let f = [1.5, 2.5, 3.5, 4.5; 2, 2];
+ok = ok and all(sum(f, 1) == [5.0, 7.0]);
+ok = ok and all(maxval(f, 0) == [2.5, 4.5]);
+let g = [1.5f, 2.5f, 3.5f, 4.5f; 2, 2];
+ok = ok and all(minval(g, 1) == [1.5f, 2.5f]);
+let l = i64(c);
+ok = ok and all(sum(l, 0) == i64([3, 7, 11, 15, 19, 23, 27, 31, 35, 39, 43, 47; 3, 4]));
+ok = ok and sum(l, l > 20'i64) == 90'i64;
+
+// The result rank is known at parse time, so results chain into other calls
+ok = ok and sum(sum(c, 0), 0)[0] == 3 + 7 + 11;
+ok = ok and sum(sum(sum(c, 0), 0), 0) == 300;
+
+fn col_sums(a: [i32; :, :]): [i32; :]
+{
+	return sum(a, 0);
+}
+
+fn total(a: [i32; :]): i32
+{
+	return sum(a, 0);
+}
+
+ok = ok and all(col_sums([1, 2, 3, 4; 2, 2]) == [3, 7]);
+ok = ok and total([1, 2, 3]) == 6;
+
+return ok;
+

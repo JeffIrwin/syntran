@@ -384,6 +384,13 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		if (.not. allocated(fn_call%val%array)) allocate(fn_call%val%array)
 		fn_call%val%array%rank = rank
 
+		! A reduction with a `dim` arg (e.g. sum(v, 0)) over a rank-1 array
+		! resolves to rank 0, i.e. a scalar of the array's element type
+		if (rank == 0) then
+			fn_call%val%type = fn_call%val%array%type
+			deallocate(fn_call%val%array)
+		end if
+
 		! For functions like std::reshape whose element type depends on their
 		! arguments, restore the element type that resolve_overload determined.
 		! fn_call%val = fn%type above would otherwise overwrite it with any_type.

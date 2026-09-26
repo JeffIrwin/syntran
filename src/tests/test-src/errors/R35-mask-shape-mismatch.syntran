@@ -1,0 +1,6 @@
+// R35: mask-shape-mismatch
+// sum(array, mask) was given a mask whose shape doesn't match the array
+
+let a = [1, 2, 3, 4; 2, 2];
+let m = [true, false, true];
+let s = sum(a, m);
