@@ -183,6 +183,16 @@ module syntran__types_m
 		! re-evaluate the root as a function call and then apply the member chain.
 		integer :: root_kind = 0
 
+		! Source location of this statement, set by parse_statement() (and,
+		! for fn headers, parse_fn_declaration()) for runtime-error stack
+		! traces (c.f. append_rt_trace() in vm_exec.f90).  src_id indexes
+		! the errors module's src_registry (register_src() in errors.f90);
+		! src_pos is a character offset into that entry's %text, same
+		! coordinate space as text_span_t%start.  0 means "not a
+		! traceable statement" (most node kinds never go through
+		! parse_statement, e.g. sub-expressions)
+		integer :: src_id = 0, src_pos = 0
+
 		integer, allocatable :: params(:)
 		logical, allocatable :: is_ref(:)       ! is param passed by reference?
 		logical, allocatable :: is_const_ref(:) ! is ref param declared &const?

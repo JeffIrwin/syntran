@@ -579,6 +579,93 @@ end subroutine do_unop
 
 !===============================================================================
 
+subroutine append_rt_trace(prog, state, ip, frames, nframes)
+
+	! Build a stack trace for the runtime error that just halted execution
+	! and append it to the diagnostic rt_throw() already pushed, so
+	! log_rt_diags()/diag_has_code() etc. don't need to change -- the trace
+	! is just more text on the same string_vector_t entry.
+	!
+	! Called exactly once, right after vm_run()'s main dispatch loop exits
+	! on state%rt_halt -- nothing here runs on the hot path.  `ip` is the
+	! faulting instruction: every rt_throw() call site `exit`s the loop
+	! before the trailing `ip = next_ip`, so it's still valid.
+	! frames(1:nframes) are the active call frames at that point, exactly
+	! as left by OP_CALL/OP_CALL_PTR -- frames(nframes) is innermost
+	! (currently executing), frames(1) outermost (called directly from
+	! <main>).  Per frame_t's docstring, frames(k)%node_idx is the call-site
+	! node for the call that pushed frame k, so its %identifier%text is the
+	! name of the function frame k is running, and frames(k)%return_ip - 1
+	! is the OP_CALL/OP_CALL_PTR instruction in frame (k-1)'s code (or
+	! <main>'s, for k == 1) that made the call.
+
+	type(program_t), intent(in) :: prog
+	type(state_t), intent(inout) :: state
+	integer, intent(in) :: ip
+	type(frame_t), intent(in) :: frames(:)
+	integer, intent(in) :: nframes
+
+	!*******
+
+	! Cap how many "at fn (...)" lines a pathologically deep call chain
+	! (e.g. unbounded recursion right up to a runtime error) can print:
+	! the MAX_EACH_END innermost and MAX_EACH_END outermost frames, with
+	! an "... N frames omitted ..." line in between
+	integer, parameter :: MAX_EACH_END = 10
+
+	character(len = :), allocatable :: trace, fname, loc
+	integer :: k, call_ip
+
+	if (ip < 1 .or. ip > prog%len_) return
+	if (state%rt_diags%len_ < 1) return
+
+	trace = rt_trace_snippet(prog%loc_id(ip), prog%loc_pos(ip))
+
+	do k = nframes, 1, -1
+
+		if (nframes > 2 * MAX_EACH_END .and. k == nframes - MAX_EACH_END) &
+			trace = trace//line_feed//"  ... " &
+				//str(nframes - 2 * MAX_EACH_END)//" frames omitted ..."
+
+		if (nframes > 2 * MAX_EACH_END .and. &
+		    k <= nframes - MAX_EACH_END .and. k > MAX_EACH_END) cycle
+
+		if (k == nframes) then
+			call_ip = ip
+		else
+			call_ip = frames(k+1)%return_ip - 1
+		end if
+
+		fname = prog%nodes(frames(k)%node_idx)%identifier%text
+		loc = ''
+		if (call_ip >= 1 .and. call_ip <= prog%len_) &
+			loc = src_loc_str(prog%loc_id(call_ip), prog%loc_pos(call_ip))
+
+		trace = trace//line_feed//"  at "//fname
+		if (len(loc) > 0) trace = trace//" ("//loc//")"
+
+	end do
+
+	if (nframes == 0) then
+		call_ip = ip
+	else
+		call_ip = frames(1)%return_ip - 1
+	end if
+
+	loc = ''
+	if (call_ip >= 1 .and. call_ip <= prog%len_) &
+		loc = src_loc_str(prog%loc_id(call_ip), prog%loc_pos(call_ip))
+
+	trace = trace//line_feed//"  at <main>"
+	if (len(loc) > 0) trace = trace//" ("//loc//")"
+
+	state%rt_diags%v(state%rt_diags%len_)%s = &
+		state%rt_diags%v(state%rt_diags%len_)%s//trace
+
+end subroutine append_rt_trace
+
+!===============================================================================
+
 module subroutine vm_run(prog, state, res)
 
 	type(program_t), intent(in) :: prog
@@ -3469,6 +3556,14 @@ module subroutine vm_run(prog, state, res)
 		ip = next_ip
 
 	end do
+
+	! Runtime error: append a stack trace to the diagnostic rt_throw() just
+	! pushed.  `ip` is still the faulting instruction -- every rt_throw()
+	! call site `exit`s the loop above before reaching `ip = next_ip` -- and
+	! frames(1:nframes) are still the call frames active at that point.
+	! Nothing here runs unless execution just halted, so this costs nothing
+	! on any run that doesn't hit a runtime error.
+	if (state%rt_halt) call append_rt_trace(prog, state, ip, frames, nframes)
 
 	! The final result is whatever is left on top of the stack.
 	! Move rather than copy — the stack is local and discarded immediately.

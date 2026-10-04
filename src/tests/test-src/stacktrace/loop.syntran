@@ -1,0 +1,17 @@
+// Stack-trace regression test (see nested.syntran's docstring): the throw
+// happens directly in <main>'s code, inside a `for` loop body, after other
+// statements in that body -- checking that compile_node()'s cur_id/cur_pos
+// save/restore (compile_ctrl.f90) maps the throw to the body statement's
+// own line, not the enclosing `for` header's line, and that code after the
+// loop (not reached here, but exercised by R23-for-step-zero's own repro
+// file) still maps correctly once restored.
+
+let n = 0;
+for i in [0: 3]
+{
+	n = n + 1;
+	let s = 0;
+	for j in [0: s: 2]
+	{
+	}
+}

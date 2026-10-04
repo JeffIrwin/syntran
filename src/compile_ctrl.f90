@@ -570,6 +570,52 @@ end subroutine compile_switch_statement
 
 recursive subroutine compile_node(prog, cs, node)
 
+	! Thin wrapper around compile_node_impl() below: stamps prog%cur_id/
+	! cur_pos from this node's location before lowering it (restoring the
+	! caller's cur_id/cur_pos afterward), so every instruction emit() emits
+	! while inside the call -- including everything lowered by recursive
+	! calls back into compile_node() for this node's sub-expressions, which
+	! have no location of their own (node%src_id == 0) -- lands in
+	! prog%loc_id/loc_pos tagged with the enclosing statement's location.
+	! The restore on exit means code after a loop body (e.g. the back-edge
+	! jump emitted once a while/for body finishes) maps to the loop header
+	! again, not to the body's last statement.
+	!
+	! Only statement-level nodes carry a nonzero src_id (parse_statement()/
+	! parse_fn_declaration(), parse_control.f90/parse_fn.f90), so a node
+	! with src_id == 0 (the overwhelmingly common case: sub-expressions)
+	! leaves cur_id/cur_pos untouched
+
+	type(program_t),        intent(inout) :: prog
+	type(compiler_state_t), intent(inout) :: cs
+	type(syntax_node_t),    intent(in)    :: node
+
+	!*******
+
+	integer :: saved_id, saved_pos
+
+	if (node%src_id == 0) then
+		call compile_node_impl(prog, cs, node)
+		return
+	end if
+
+	saved_id  = prog%cur_id
+	saved_pos = prog%cur_pos
+
+	prog%cur_id  = node%src_id
+	prog%cur_pos = node%src_pos
+
+	call compile_node_impl(prog, cs, node)
+
+	prog%cur_id  = saved_id
+	prog%cur_pos = saved_pos
+
+end subroutine compile_node
+
+!===============================================================================
+
+recursive subroutine compile_node_impl(prog, cs, node)
+
 	! Lower one AST node to opcodes.  The contract is that this subroutine
 	! always leaves exactly one value on the operand stack after the emitted
 	! opcodes execute.
@@ -1674,7 +1720,7 @@ recursive subroutine compile_node(prog, cs, node)
 
 	end select
 
-end subroutine compile_node
+end subroutine compile_node_impl
 
 !===============================================================================
 

@@ -683,6 +683,13 @@ module subroutine parse_fn_declaration(parser, decl, no_fn_kw)
 
 	integer :: i, io, pos0, rank, fn_beg, fn_name_end
 
+	! Captured alongside fn_beg below, before the body is parsed, so an
+	! implicit-return instruction (which has no statement node of its own
+	! to inherit a location from) maps back to the fn header instead of
+	! whatever unit parsing happened to end in -- see compile_module_fns()/
+	! the fn_declaration case in compile_ctrl.f90
+	integer :: fn_src_id
+
 	logical :: overwrite, const_param, in_fn_body0, no_fn_kw0
 
 	type(fn_t) :: fn
@@ -712,6 +719,7 @@ module subroutine parse_fn_declaration(parser, decl, no_fn_kw)
 
 	parser%returned = .false.
 	fn_beg = parser%peek_pos(0)
+	fn_src_id = parser%contexts%v(parser%current_unit())%src_id
 	if (.not. no_fn_kw0) then
 		call parser%match(fn_keyword, fn_kw)
 	end if
@@ -912,6 +920,8 @@ module subroutine parse_fn_declaration(parser, decl, no_fn_kw)
 	decl%kind       = fn_declaration
 	decl%identifier = identifier
 	decl%num_locs   = parser%num_locs
+	decl%src_id     = fn_src_id
+	decl%src_pos    = fn_beg
 	call syntax_node_move(body, decl%body)
 	!print *, "decl num_locs = ", decl%num_locs
 
@@ -1787,6 +1797,9 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 
 	integer :: i, io, pos0, rank, fn_beg, fn_name_end, mem_id
 
+	! See the identical fn_src_id note in parse_fn_declaration() above
+	integer :: fn_src_id
+
 	logical :: overwrite, const_param, in_fn_body0, no_fn_kw0
 
 	type(fn_t) :: fn
@@ -1814,6 +1827,7 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 
 	parser%returned = .false.
 	fn_beg = parser%peek_pos(0)
+	fn_src_id = parser%contexts%v(parser%current_unit())%src_id
 	if (.not. no_fn_kw0) then
 		call parser%match(fn_keyword, fn_kw)
 	end if
@@ -1987,6 +2001,8 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 	decl%kind       = fn_declaration
 	decl%identifier = identifier
 	decl%num_locs   = parser%num_locs
+	decl%src_id     = fn_src_id
+	decl%src_pos    = fn_beg
 	call syntax_node_move(body, decl%body)
 
 	call parser%vars%pop_scope()

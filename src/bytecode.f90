@@ -496,6 +496,19 @@ module syntran__bytecode_m
 		type(instr_t), allocatable :: code(:)
 		integer :: len_ = 0, cap = 0
 
+		! Per-instruction source location, parallel to code(:) (grown/indexed
+		! together in emit() below) rather than packed into instr_t itself --
+		! instr_t stays a small POD record copied on every stack/jump op in
+		! the VM's hot dispatch loop (vm_exec.f90), while loc_id/loc_pos are
+		! only ever read once, after a runtime error has already halted
+		! execution (append_rt_trace(), vm_exec.f90).  loc_id indexes the
+		! errors module's src_registry (register_src(), errors.f90); loc_pos
+		! is a character offset into that entry's %text.  cur_id/cur_pos are
+		! the "current statement" compile_node() (compile_ctrl.f90) stamps
+		! every instruction with as it emits them
+		integer, allocatable :: loc_id(:), loc_pos(:)
+		integer :: cur_id = 0, cur_pos = 0
+
 		type(value_t), allocatable :: consts(:)
 		integer :: nconsts = 0
 
@@ -649,8 +662,12 @@ function new_program() result(prog)
 	prog%nconsts = 0
 	prog%nnodes  = 0
 	prog%entry_main = 1
+	prog%cur_id  = 0
+	prog%cur_pos = 0
 
 	allocate(prog%code(INIT_CAP))
+	allocate(prog%loc_id (INIT_CAP))
+	allocate(prog%loc_pos(INIT_CAP))
 
 end function new_program
 
@@ -670,6 +687,7 @@ subroutine emit(prog, op, a, b, c)
 	!*******
 
 	type(instr_t), allocatable :: tmp(:)
+	integer, allocatable :: tmp_loc(:)
 
 	prog%len_ = prog%len_ + 1
 
@@ -678,6 +696,15 @@ subroutine emit(prog, op, a, b, c)
 		allocate(tmp(prog%cap))
 		tmp(1 : prog%len_ - 1) = prog%code(1 : prog%len_ - 1)
 		call move_alloc(tmp, prog%code)
+
+		! loc_id/loc_pos grow in lockstep with code(:), same cap
+		allocate(tmp_loc(prog%cap))
+		tmp_loc(1 : prog%len_ - 1) = prog%loc_id(1 : prog%len_ - 1)
+		call move_alloc(tmp_loc, prog%loc_id)
+
+		allocate(tmp_loc(prog%cap))
+		tmp_loc(1 : prog%len_ - 1) = prog%loc_pos(1 : prog%len_ - 1)
+		call move_alloc(tmp_loc, prog%loc_pos)
 	end if
 
 	prog%code(prog%len_)%op = op
@@ -687,6 +714,9 @@ subroutine emit(prog, op, a, b, c)
 	if (present(a)) prog%code(prog%len_)%a = a
 	if (present(b)) prog%code(prog%len_)%b = b
 	if (present(c)) prog%code(prog%len_)%c = c
+
+	prog%loc_id (prog%len_) = prog%cur_id
+	prog%loc_pos(prog%len_) = prog%cur_pos
 
 end subroutine emit
 

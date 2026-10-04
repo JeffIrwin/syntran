@@ -229,6 +229,13 @@ module syntran__errors_m
 		character(len = :), allocatable :: text, src_file
 		integer, allocatable :: lines(:)
 
+		! Index into src_registry (below), set by register_src() and copied
+		! onto each parser's local %contexts entries (new_parser(),
+		! parse_misc.f90) so parse_statement() (parse_control.f90) can stamp
+		! it onto every statement node for runtime-error stack traces.  0
+		! until registered
+		integer :: src_id = 0
+
 	end type text_context_t
 
 	!********
@@ -241,6 +248,26 @@ module syntran__errors_m
 		contains
 			procedure :: push => push_context
 	end type text_context_vector_t
+
+	! Append-only, process-global registry of every distinct parsed source
+	! (main file, each #include, each `use`d module) so that runtime-error
+	! stack traces (append_rt_trace(), vm_exec.f90) can look up a statement's
+	! file/line/source-text long after the parser's own per-compilation
+	! text_context_vector_t (parser%contexts / mod_contexts) has gone out of
+	! scope -- `use` modules in particular get their own throwaway
+	! mod_contexts (parse_control.f90), so a child module's lines wouldn't
+	! otherwise survive past parsing.  Mirrors the struct_reg_map/
+	! struct_reg_names pattern in value.f90, the other process-global
+	! registry in this codebase, for the same reason: the alternative is
+	! threading a text_context_vector_t all the way down through
+	! compile_tree()/program_t/vm_run(), which never otherwise needs parser
+	! state.  register_src() dedupes by (src_file, text) so re-parsing the
+	! same file (the parser's two passes, a module imported from two call
+	! sites) doesn't grow this without bound; each REPL line still gets its
+	! own entry since its text differs even though src_file ("<stdin>")
+	! repeats
+	type(text_context_vector_t), save :: src_registry
+	type(map_i32_t), save :: src_registry_map
 
 !===============================================================================
 
@@ -279,6 +306,33 @@ module syntran__errors_m
 			character(len = *), intent(in) :: code, msg
 			character(len = :), allocatable :: err
 		end function err_rt
+
+		! Register `context` in src_registry (deduping by src_file + text)
+		! and return its id, for later lookup by rt_trace_snippet()/
+		! src_loc_str() once parsing has finished and only node%src_id/
+		! src_pos survive.  Called once per new_parser() (parse_misc.f90),
+		! i.e. once per file/include/module, not per statement
+		module function register_src(context) result(id)
+			type(text_context_t), intent(in) :: context
+			integer :: id
+		end function register_src
+
+		! "file:line" for one stack-trace frame (append_rt_trace(),
+		! vm_exec.f90).  Returns '' if src_id is 0 or stale (defensive only;
+		! src_registry is append-only and never shrinks)
+		module function src_loc_str(src_id, pos) result(str_)
+			integer, intent(in) :: src_id, pos
+			character(len = :), allocatable :: str_
+		end function src_loc_str
+
+		! Rust-style "--> file:line:col" + source-line snippet (no carets --
+		! unlike underline(), there's no token span, just one position) for
+		! the innermost frame of a runtime-error stack trace. Returns '' if
+		! src_id is 0 or stale
+		module function rt_trace_snippet(src_id, pos) result(str_)
+			integer, intent(in) :: src_id, pos
+			character(len = :), allocatable :: str_
+		end function rt_trace_snippet
 
 		module function get_all_error_codes() result(codes)
 			type(string_vector_t) :: codes

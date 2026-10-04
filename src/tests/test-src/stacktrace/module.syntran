@@ -1,0 +1,8 @@
+// Stack-trace regression test (see nested.syntran's docstring): the throw
+// happens inside a `use`d module's fn, so the innermost frame's file should
+// be stacktrace_mod.syntran, not this file, while <main> should still be
+// this file.
+
+use stacktrace_mod::*;
+
+let z = modfn();

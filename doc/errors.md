@@ -894,6 +894,21 @@ A file handle member read or write reached the struct-array code path.  Unreacha
 
 ## Runtime errors
 
+Every runtime error also prints a stack trace: a Rust-style `--> file:line:col`
+snippet of the innermost statement that threw, followed by `at <fn> (file:line)`
+for each enclosing call frame down to `at <main>`. For example:
+
+```
+Runtime error[R33]: subscript 5 is out of bounds for size 5
+  --> src/foo.syntran:12:5
+   |
+12 |     let b = a[i];
+   |
+  at inner  (src/foo.syntran:12)
+  at outer  (src/foo.syntran:20)
+  at <main> (src/foo.syntran:31)
+```
+
 ### R1 -- matmul-dim
 
 The `@` matrix-multiplication operator's operands have incompatible inner dimensions.
