@@ -7638,6 +7638,35 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_has_code(get_diags('let b=[1,2,3]; let a = [b; 5];'), EC_NON_SCA_VAL), &
 			diag_has_code(get_diags('let a = [1.0: 5.0];'), EC_NON_INT_RANGE), &
 			diag_has_code(get_diags('let a = [1, "a"];'), EC_HET_ARRAY), &
+			! Regression: cat'ing arrays of mismatched element types used to
+			! skip this check entirely (only top-level `array_type` was
+			! compared, never the element type inside), crashing at runtime
+			! instead of erroring here
+			diag_has_code(get_diags( &
+				'let a = ["a","b"]; let b = [1,2]; let c = [a, a, b];'), &
+				EC_HET_ARRAY), &
+			diag_count_code(get_diags( &
+				'let a = ["a","b"]; let b = [1,2]; let c = [a, a, b];'), &
+				EC_HET_ARRAY) == 1, &
+			diag_has_code(get_diags( &
+				"let a = [1'i64, 2'i64]; " // &
+				'let c = [a[0:1], a[1:2], [0; 3]];'), &
+				EC_HET_ARRAY), &
+			diag_has_code(get_diags('let c = [[1.0, 2.0], [1, 2]];'), &
+				EC_HET_ARRAY), &
+			diag_has_code(get_diags( &
+				'struct A{x:i32} struct B{x:i32} ' // &
+				'let c = [A{x=1}, B{x=1}];'), &
+				EC_HET_ARRAY), &
+			! Rank mismatch (E40) is a separate diagnostic -- it must not
+			! also be double-reported as a heterogeneous-element mismatch
+			.not. diag_has_code(get_diags( &
+				'let a = [0; 2,2]; let b = [1,2]; let c = [b, a];'), &
+				EC_HET_ARRAY), &
+			! Valid same-type array concatenation must not raise E59
+			.not. diag_has_code(get_diags( &
+				'let a = [1,2]; let c = [a, a[0:1], [0; 3]];'), &
+				EC_HET_ARRAY), &
 			diag_has_code(get_diags( &
 				'struct S{x:i32, y:i32} let s = S{x=1, x=2};'), EC_UNSET_MEMBER), &
 			diag_has_code(get_diags( &

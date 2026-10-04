@@ -27,9 +27,9 @@ recursive module subroutine parse_array_expr(parser, expr)
 
 	!********
 
-	integer :: span_beg, span_end, pos0, lb_beg, lb_end, ub_beg, ub_end, rank_, i
+	integer :: span_beg, span_end, pos0, lb_beg, lb_end, ub_beg, ub_end, rank_, i, io
 
-	logical :: enum_mismatch, range_non_num
+	logical :: range_non_num
 
 	type(syntax_node_t)  :: lbound_, step, ubound_, len_, elem
 	type(syntax_node_vector_t) :: elems, size_
@@ -424,25 +424,17 @@ recursive module subroutine parse_array_expr(parser, expr)
 
 		!print *, 'elem ', elem%val%to_str()
 
-		if (elem%val%type /= lbound_%val%type) then
+		! types_match() covers top-level type (str vs i32 etc.), array
+		! element type (e.g. cat'ing an array of str with an array of i32),
+		! struct kind (different structs), and enum kind (different enums,
+		! e.g. Suit vs Card) all in one call.  Rank mismatches of cat'd
+		! arrays are reported separately as E40 below, so ignore those here
+		! to avoid double diagnostics on the same element
+		io = types_match(lbound_%val, elem%val)
+		if (io /= TYPE_MATCH .and. io /= TYPE_RANK_MISMATCH) then
 			span = new_span(span_beg, span_end - span_beg + 1)
 			call parser%diagnostics%push(err_het_array( &
 				parser%context(), span, parser%text(span_beg, span_end)))
-		else if (elem%val%type == enum_type) then
-			! Matching `type == enum_type` isn't enough -- two different
-			! enums (e.g. Suit vs Card) must not be mixed in one array
-			! literal.  Mirrors the cross-enum operand check for binary ops
-			if (allocated(elem%val%enum_cookie) .and. &
-				allocated(lbound_%val%enum_cookie)) then
-				enum_mismatch = elem%val%enum_cookie /= lbound_%val%enum_cookie
-			else
-				enum_mismatch = elem%val%enum_name /= lbound_%val%enum_name
-			end if
-			if (enum_mismatch) then
-				span = new_span(span_beg, span_end - span_beg + 1)
-				call parser%diagnostics%push(err_het_array( &
-					parser%context(), span, parser%text(span_beg, span_end)))
-			end if
 		end if
 
 		if (elem%val%type == array_type) then
