@@ -909,6 +909,10 @@ Runtime error[R33]: subscript 5 is out of bounds for size 5
   at <main> (src/foo.syntran:31)
 ```
 
+To get the same call-chain info on demand, without throwing an error, call
+[`std::print_trace()`](README.md#print_trace) (prints to stdout) or
+[`std::stack_trace()`](README.md#stack_trace) (returns it as a `str`).
+
 ### R1 -- matmul-dim
 
 The `@` matrix-multiplication operator's operands have incompatible inner dimensions.

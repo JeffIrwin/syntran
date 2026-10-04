@@ -456,6 +456,19 @@ Any invalid numbers will cause a runtime error.
 
 Related functions: [`parse_i32`](`parse_i32`), [`str`](#str)
 
+## `print_trace`
+```rust
+fn print_trace()
+```
+
+Print a stack trace of the current call chain to standard output, without
+halting execution.  Each line is `at <fn> (file:line)`, innermost call first,
+down to `at <main>` -- the same frames a runtime (`R*`) error prints
+automatically, minus its source-line snippet.  Must be called with the
+`std::` prefix, e.g. `std::print_trace()`.
+
+Related functions: [`stack_trace`](#stack_trace)
+
 ## `println`
 ```rust
 fn println(s0: any, s1: any, s2: any, ...)
@@ -502,6 +515,18 @@ fn size(array: [any; any_rank], dim: i32): i32
 
 Determine the extent of `array` along a specified dimension `dim`
 <!-- , or the total number of elements in ARRAY if DIM is absent. -->
+
+## `stack_trace`
+```rust
+fn stack_trace(): str
+```
+
+Return a stack trace of the current call chain as a `str`, in the same
+format [`print_trace`](#print_trace) prints to standard output -- useful for
+logging to a file or [`std::ERR`](#writeln) instead.  Must be called with the
+`std::` prefix, e.g. `std::stack_trace()`.
+
+Related functions: [`print_trace`](#print_trace)
 
 ## `str`
 ```rust

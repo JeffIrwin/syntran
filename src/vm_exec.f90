@@ -579,31 +579,31 @@ end subroutine do_unop
 
 !===============================================================================
 
-subroutine append_rt_trace(prog, state, ip, frames, nframes)
+function rt_frames_str(prog, ip, frames, nframes) result(trace)
 
-	! Build a stack trace for the runtime error that just halted execution
-	! and append it to the diagnostic rt_throw() already pushed, so
-	! log_rt_diags()/diag_has_code() etc. don't need to change -- the trace
-	! is just more text on the same string_vector_t entry.
+	! Build the "at <fn> (file:line)" call-chain lines of a stack trace, down
+	! to a final "at <main>" line -- the part shared by the runtime-error
+	! trace appended in append_rt_trace() below and the on-demand trace from
+	! std::print_trace()/std::stack_trace() (OP_CALL_INTR, INTR_PRINT_TRACE/
+	! INTR_STACK_TRACE below).  Returned string starts with a line_feed (no
+	! leading newline is stripped by callers -- they just concatenate it
+	! after their own first line).
 	!
-	! Called exactly once, right after vm_run()'s main dispatch loop exits
-	! on state%rt_halt -- nothing here runs on the hot path.  `ip` is the
-	! faulting instruction: every rt_throw() call site `exit`s the loop
-	! before the trailing `ip = next_ip`, so it's still valid.
-	! frames(1:nframes) are the active call frames at that point, exactly
-	! as left by OP_CALL/OP_CALL_PTR -- frames(nframes) is innermost
-	! (currently executing), frames(1) outermost (called directly from
-	! <main>).  Per frame_t's docstring, frames(k)%node_idx is the call-site
-	! node for the call that pushed frame k, so its %identifier%text is the
-	! name of the function frame k is running, and frames(k)%return_ip - 1
-	! is the OP_CALL/OP_CALL_PTR instruction in frame (k-1)'s code (or
-	! <main>'s, for k == 1) that made the call.
+	! `ip` is the "faulting" (or, for the on-demand case, the calling)
+	! instruction.  frames(1:nframes) are the active call frames at that
+	! point, exactly as left by OP_CALL/OP_CALL_PTR -- frames(nframes) is
+	! innermost (currently executing), frames(1) outermost (called directly
+	! from <main>).  Per frame_t's docstring, frames(k)%node_idx is the
+	! call-site node for the call that pushed frame k, so its
+	! %identifier%text is the name of the function frame k is running, and
+	! frames(k)%return_ip - 1 is the OP_CALL/OP_CALL_PTR instruction in frame
+	! (k-1)'s code (or <main>'s, for k == 1) that made the call.
 
 	type(program_t), intent(in) :: prog
-	type(state_t), intent(inout) :: state
 	integer, intent(in) :: ip
 	type(frame_t), intent(in) :: frames(:)
 	integer, intent(in) :: nframes
+	character(len = :), allocatable :: trace
 
 	!*******
 
@@ -613,13 +613,10 @@ subroutine append_rt_trace(prog, state, ip, frames, nframes)
 	! an "... N frames omitted ..." line in between
 	integer, parameter :: MAX_EACH_END = 10
 
-	character(len = :), allocatable :: trace, fname, loc
+	character(len = :), allocatable :: fname, loc
 	integer :: k, call_ip
 
-	if (ip < 1 .or. ip > prog%len_) return
-	if (state%rt_diags%len_ < 1) return
-
-	trace = rt_trace_snippet(prog%loc_id(ip), prog%loc_pos(ip))
+	trace = ''
 
 	do k = nframes, 1, -1
 
@@ -658,6 +655,40 @@ subroutine append_rt_trace(prog, state, ip, frames, nframes)
 
 	trace = trace//line_feed//"  at <main>"
 	if (len(loc) > 0) trace = trace//" ("//loc//")"
+
+end function rt_frames_str
+
+!===============================================================================
+
+subroutine append_rt_trace(prog, state, ip, frames, nframes)
+
+	! Build a stack trace for the runtime error that just halted execution
+	! and append it to the diagnostic rt_throw() already pushed, so
+	! log_rt_diags()/diag_has_code() etc. don't need to change -- the trace
+	! is just more text on the same string_vector_t entry.
+	!
+	! Called exactly once, right after vm_run()'s main dispatch loop exits
+	! on state%rt_halt -- nothing here runs on the hot path.  `ip` is the
+	! faulting instruction: every rt_throw() call site `exit`s the loop
+	! before the trailing `ip = next_ip`, so it's still valid.
+	! frames(1:nframes) are the active call frames at that point; see
+	! rt_frames_str() above for their shape.
+
+	type(program_t), intent(in) :: prog
+	type(state_t), intent(inout) :: state
+	integer, intent(in) :: ip
+	type(frame_t), intent(in) :: frames(:)
+	integer, intent(in) :: nframes
+
+	!*******
+
+	character(len = :), allocatable :: trace
+
+	if (ip < 1 .or. ip > prog%len_) return
+	if (state%rt_diags%len_ < 1) return
+
+	trace = rt_trace_snippet(prog%loc_id(ip), prog%loc_pos(ip)) &
+		//rt_frames_str(prog, ip, frames, nframes)
 
 	state%rt_diags%v(state%rt_diags%len_)%s = &
 		state%rt_diags%v(state%rt_diags%len_)%s//trace
@@ -1508,6 +1539,27 @@ module subroutine vm_run(prog, state, res)
 					exit
 				end if
 				val%type = unknown_type
+				end block
+
+			else if (instr%a == INTR_PRINT_TRACE .or. instr%a == INTR_STACK_TRACE) then
+				! std::print_trace()/std::stack_trace(): build the same
+				! "at <fn> (file:line)" chain a runtime error would append
+				! (append_rt_trace() above), minus the source-line snippet
+				! (there's no faulting token here, just the call site
+				! itself).  `ip` is this OP_CALL_INTR instruction, so
+				! rt_frames_str() maps its innermost "at" line to the
+				! std::print_trace()/std::stack_trace() call site.
+				block
+				character(len = :), allocatable :: trace_
+				trace_ = "Stack trace:"//rt_frames_str(prog, ip, frames, nframes)
+				if (instr%a == INTR_PRINT_TRACE) then
+					write(output_unit, '(a)') trace_
+					val%type = void_type
+				else
+					val%type = str_type
+					if (.not. allocated(val%str)) allocate(val%str)
+					val%str%s = trace_
+				end if
 				end block
 
 			else

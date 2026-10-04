@@ -1613,6 +1613,15 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('std::ERR.is_open;') == 'true', &
 			eval('std::IN.name[0];')  == 's', &
 
+			! std::print_trace / std::stack_trace: see unit_test_runtime_traces()
+			! for the full call-chain coverage (interpret_file() on
+			! stacktrace/on-demand.syntran); just the basics here
+			eval('std::print_trace(); 0;') == '0', &
+			index(eval('std::stack_trace();'), 'Stack trace:') == 1, &
+			index(eval('std::stack_trace();'), 'at <main>') > 0, &
+			diag_has_code(get_diags('print_trace();'), EC_STD_ONLY_FN), &
+			diag_has_code(get_diags('stack_trace();'), EC_STD_ONLY_FN), &
+
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -8889,6 +8898,27 @@ subroutine unit_test_runtime_traces(npass, nfail)
 		diag_has_text(diag_, '  at <main> ('//P//'loop.syntran:14)'), &
 		.not. diag_has_text(diag_, P//'loop.syntran:11)') &
 		], label, npass, nfail)
+
+	! on-demand.syntran: std::print_trace()/std::stack_trace() (not a runtime
+	! error -- these must NOT halt execution).  inner() calls
+	! std::print_trace() on line 14 (smoke test only, its own stdout isn't
+	! captured here) then `return`s std::stack_trace() on line 15; that str
+	! flows back up through outer() (called from <main> on line 25) to
+	! become the script's own result
+	block
+	character(len = :), allocatable :: res_
+	res_ = interpret_file(P//'on-demand.syntran', quiet = .true., diags = diag_)
+	call unit_test_coda( [ &
+		diag_%len_ == 0, &
+		index(res_, 'Stack trace:') == 1, &
+		index(res_, '  at inner ('//P//'on-demand.syntran:15)') > 0, &
+		index(res_, '  at outer ('//P//'on-demand.syntran:21)') > 0, &
+		index(res_, '  at <main> ('//P//'on-demand.syntran:25)') > 0, &
+		! Innermost frame first
+		index(res_, 'at inner') < index(res_, 'at outer'), &
+		index(res_, 'at outer') < index(res_, 'at <main>') &
+		], label, npass, nfail)
+	end block
 
 end subroutine unit_test_runtime_traces
 

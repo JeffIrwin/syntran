@@ -27,7 +27,8 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 		parse_i32_fn, parse_i64_fn, parse_f32_fn, parse_f64_fn, &
 		char_fn, i32_sca_fn, i32_arr_fn, i64_sca_fn, i64_arr_fn, &
 		open_fn, readln_fn, writeln_fn, eof_fn, close_fn, exit_fn, &
-		getenv_fn, hasenv_fn, exists_fn, try_open_fn
+		getenv_fn, hasenv_fn, exists_fn, try_open_fn, &
+		print_trace_fn, stack_trace_fn
 
 	!********
 
@@ -349,6 +350,33 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 
 	!********
 
+	! std::print_trace() prints a stack trace of the current call chain to
+	! stdout on demand, without halting execution -- e.g. for logging deep
+	! inside a call chain you don't want to actually crash.  Same frame
+	! format as the trace runtime (R*) errors append automatically
+	! (append_rt_trace(), vm_exec.f90), minus the source-line snippet, since
+	! there's no faulting token to point at here.  This is an std-only
+	! function.  Handled inline in OP_CALL_INTR (vm_exec.f90), not
+	! vm_call_intr() (vm_intr.f90), since it needs the VM's call-frame stack
+	print_trace_fn%type%type = void_type
+	allocate(print_trace_fn%params(0))
+	allocate(print_trace_fn%param_names%v(0))
+
+	call fns%insert("std::print_trace", print_trace_fn, id_index)
+
+	!********
+
+	! std::stack_trace() returns the same text std::print_trace() prints, as
+	! a str, so it can be logged to a file/std::ERR or otherwise inspected
+	! instead of going straight to stdout.  This is an std-only function
+	stack_trace_fn%type%type = str_type
+	allocate(stack_trace_fn%params(0))
+	allocate(stack_trace_fn%param_names%v(0))
+
+	call fns%insert("std::stack_trace", stack_trace_fn, id_index)
+
+	!********
+
 	! Return array of all functions declared in this module
 	fn_array = &
 		[ &
@@ -356,7 +384,8 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 			parse_i32_fn, parse_i64_fn, parse_f32_fn, parse_f64_fn, &
 			char_fn, i32_sca_fn, i32_arr_fn, i64_sca_fn, i64_arr_fn, &
 			open_fn, readln_fn, writeln_fn, eof_fn, close_fn, exit_fn, &
-			getenv_fn, hasenv_fn, exists_fn, try_open_fn &
+			getenv_fn, hasenv_fn, exists_fn, try_open_fn, &
+			print_trace_fn, stack_trace_fn &
 		]
 
 end subroutine declare_io_fns
