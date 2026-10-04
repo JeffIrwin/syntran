@@ -1613,14 +1613,27 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('std::ERR.is_open;') == 'true', &
 			eval('std::IN.name[0];')  == 's', &
 
-			! std::print_trace / std::stack_trace: see unit_test_runtime_traces()
-			! for the full call-chain coverage (interpret_file() on
-			! stacktrace/on-demand.syntran); just the basics here
+			! std::print_trace / std::stack_trace / std::caller: see
+			! unit_test_runtime_traces() for the full call-chain coverage
+			! (interpret_file() on stacktrace/on-demand.syntran and
+			! stacktrace/caller.syntran); just the basics here
 			eval('std::print_trace(); 0;') == '0', &
+			eval('std::print_trace("x"); 0;') == '0', &
 			index(eval('std::stack_trace();'), 'Stack trace:') == 1, &
 			index(eval('std::stack_trace();'), 'at <main>') > 0, &
+			! At top level there are 0 call frames (only <main>), so even
+			! skip=1 already exceeds everything -- header only, no <main>
+			! line either; see unit_test_runtime_traces()'s caller.syntran
+			! block for skip dropping just the innermost frame
+			eval('std::stack_trace(1);') == 'Stack trace:', &
+			eval('std::caller();') == '', &
+			index(eval('std::caller(0);'), '<main>') == 1, &
 			diag_has_code(get_diags('print_trace();'), EC_STD_ONLY_FN), &
 			diag_has_code(get_diags('stack_trace();'), EC_STD_ONLY_FN), &
+			diag_has_code(get_diags('caller();'), EC_STD_ONLY_FN), &
+			diag_has_code(get_diags('std::print_trace(1);'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags('let x = std::stack_trace("a");'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags('let x = std::stack_trace(1, 2);'), EC_TOO_MANY_ARGS), &
 
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
@@ -8917,6 +8930,29 @@ subroutine unit_test_runtime_traces(npass, nfail)
 		! Innermost frame first
 		index(res_, 'at inner') < index(res_, 'at outer'), &
 		index(res_, 'at outer') < index(res_, 'at <main>') &
+		], label, npass, nfail)
+	end block
+
+	! caller.syntran: std::caller(depth)/std::stack_trace(skip)'s optional
+	! args (rt_skip_frames(), vm_exec.f90).  <main> (line 26) -> outer()
+	! (line 23) -> inner() (lines 12-17); inner() joins six results with "|":
+	! caller() [default depth 1 -> outer], caller(0) [-> inner itself],
+	! caller(2) [-> <main>], caller(99) [out of range -> ""],
+	! stack_trace(1) [drops the innermost "at inner" line], and
+	! stack_trace(99) [drops every frame, even <main>]
+	block
+	character(len = :), allocatable :: res_
+	res_ = interpret_file(P//'caller.syntran', quiet = .true., diags = diag_)
+	call unit_test_coda( [ &
+		diag_%len_ == 0, &
+		res_ == 'outer ('//P//'caller.syntran:23)' &
+			//'|inner ('//P//'caller.syntran:13)' &
+			//'|<main> ('//P//'caller.syntran:26)' &
+			//'|' &
+			//'|Stack trace:' &
+			//line_feed//'  at outer ('//P//'caller.syntran:23)' &
+			//line_feed//'  at <main> ('//P//'caller.syntran:26)' &
+			//'|Stack trace:' &
 		], label, npass, nfail)
 	end block
 

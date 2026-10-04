@@ -461,12 +461,13 @@ module syntran__bytecode_m
 		INTR_MINVAL_EXT   = 142, INTR_MAXVAL_EXT   = 143, &
 		INTR_PRODUCT_EXT  = 144
 
-	! On-demand stack trace (std::print_trace()/std::stack_trace()), handled
-	! inline in OP_CALL_INTR (vm_exec.f90) like INTR_READLN/INTR_CLOSE
-	! because they need the VM's call-frame stack, which vm_call_intr()
-	! (vm_intr.f90) doesn't receive
+	! On-demand stack trace (std::print_trace()/std::stack_trace()/
+	! std::caller()), handled inline in OP_CALL_INTR (vm_exec.f90) like
+	! INTR_READLN/INTR_CLOSE because they need the VM's call-frame stack,
+	! which vm_call_intr() (vm_intr.f90) doesn't receive
 	integer, parameter :: &
-		INTR_PRINT_TRACE  = 145, INTR_STACK_TRACE  = 146
+		INTR_PRINT_TRACE  = 145, INTR_STACK_TRACE  = 146, &
+		INTR_CALLER       = 147
 
 	!********
 
@@ -936,6 +937,7 @@ pure integer function intr_id_from_name(name) result(id)
 	case ("try_open");       id = INTR_TRY_OPEN
 	case ("print_trace");    id = INTR_PRINT_TRACE
 	case ("stack_trace");    id = INTR_STACK_TRACE
+	case ("caller");         id = INTR_CALLER
 	case ("0count_dim");     id = INTR_COUNT_DIM
 	case ("0all_dim");       id = INTR_ALL_DIM
 	case ("0any_dim");       id = INTR_ANY_DIM

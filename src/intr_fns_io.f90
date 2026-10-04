@@ -28,7 +28,7 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 		char_fn, i32_sca_fn, i32_arr_fn, i64_sca_fn, i64_arr_fn, &
 		open_fn, readln_fn, writeln_fn, eof_fn, close_fn, exit_fn, &
 		getenv_fn, hasenv_fn, exists_fn, try_open_fn, &
-		print_trace_fn, stack_trace_fn
+		print_trace_fn, stack_trace_fn, caller_fn
 
 	!********
 
@@ -350,30 +350,66 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 
 	!********
 
-	! std::print_trace() prints a stack trace of the current call chain to
-	! stdout on demand, without halting execution -- e.g. for logging deep
-	! inside a call chain you don't want to actually crash.  Same frame
-	! format as the trace runtime (R*) errors append automatically
-	! (append_rt_trace(), vm_exec.f90), minus the source-line snippet, since
-	! there's no faulting token to point at here.  This is an std-only
-	! function.  Handled inline in OP_CALL_INTR (vm_exec.f90), not
+	! std::print_trace([label]) prints a stack trace of the current call
+	! chain to stdout on demand, without halting execution -- e.g. for
+	! logging deep inside a call chain you don't want to actually crash.
+	! Same frame format as the trace runtime (R*) errors append
+	! automatically (append_rt_trace(), vm_exec.f90), minus the source-line
+	! snippet, since there's no faulting token to point at here.  The
+	! optional str arg is a label appended to the "Stack trace:" header line
+	! (JS console.trace(label)-style debug checkpoint).  This is an
+	! std-only function.  Handled inline in OP_CALL_INTR (vm_exec.f90), not
 	! vm_call_intr() (vm_intr.f90), since it needs the VM's call-frame stack
 	print_trace_fn%type%type = void_type
 	allocate(print_trace_fn%params(0))
 	allocate(print_trace_fn%param_names%v(0))
 
+	print_trace_fn%variadic_min  = 0
+	print_trace_fn%variadic_max  = 1
+	print_trace_fn%variadic_type = str_type
+	print_trace_fn%variadic_name = "label"
+
 	call fns%insert("std::print_trace", print_trace_fn, id_index)
 
 	!********
 
-	! std::stack_trace() returns the same text std::print_trace() prints, as
-	! a str, so it can be logged to a file/std::ERR or otherwise inspected
-	! instead of going straight to stdout.  This is an std-only function
+	! std::stack_trace([skip]) returns the same text std::print_trace()
+	! prints, as a str, so it can be logged to a file/std::ERR or otherwise
+	! inspected instead of going straight to stdout.  The optional i32 arg
+	! drops the `skip` innermost frames (V8 Error.captureStackTrace-style),
+	! so a user logging helper that wraps this call can omit its own frame.
+	! This is an std-only function
 	stack_trace_fn%type%type = str_type
 	allocate(stack_trace_fn%params(0))
 	allocate(stack_trace_fn%param_names%v(0))
 
+	stack_trace_fn%variadic_min  = 0
+	stack_trace_fn%variadic_max  = 1
+	stack_trace_fn%variadic_type = i32_type
+	stack_trace_fn%variadic_name = "skip"
+
 	call fns%insert("std::stack_trace", stack_trace_fn, id_index)
+
+	!********
+
+	! std::caller([depth]) returns the single "<fn> (file:line)" label
+	! `depth` frames up the call chain, with no "  at " prefix (Ruby
+	! caller()/Go runtime.Caller(skip)-style) -- depth 0 is the current fn
+	! (where std::caller() itself was called from), and the default, 1, is
+	! the fn that called *that* fn.  Out of range (including a chain
+	! shorter than depth) returns "".  This is an std-only function.
+	! Handled inline in OP_CALL_INTR (vm_exec.f90), like std::print_trace()/
+	! std::stack_trace() above, for the same call-frame-stack reason
+	caller_fn%type%type = str_type
+	allocate(caller_fn%params(0))
+	allocate(caller_fn%param_names%v(0))
+
+	caller_fn%variadic_min  = 0
+	caller_fn%variadic_max  = 1
+	caller_fn%variadic_type = i32_type
+	caller_fn%variadic_name = "depth"
+
+	call fns%insert("std::caller", caller_fn, id_index)
 
 	!********
 
@@ -385,7 +421,7 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 			char_fn, i32_sca_fn, i32_arr_fn, i64_sca_fn, i64_arr_fn, &
 			open_fn, readln_fn, writeln_fn, eof_fn, close_fn, exit_fn, &
 			getenv_fn, hasenv_fn, exists_fn, try_open_fn, &
-			print_trace_fn, stack_trace_fn &
+			print_trace_fn, stack_trace_fn, caller_fn &
 		]
 
 end subroutine declare_io_fns

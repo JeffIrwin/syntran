@@ -579,6 +579,33 @@ end subroutine do_unop
 
 !===============================================================================
 
+function rt_frame_label(prog, fname, call_ip) result(s)
+
+	! Format one "<fn> (file:line)" label (no leading "  at " prefix, and no
+	! "(file:line)" suffix if call_ip doesn't map to a source location) --
+	! shared by rt_frames_str()'s per-frame lines and <main> line below, and
+	! by std::caller() (OP_CALL_INTR, INTR_CALLER below), which returns
+	! exactly this text for a single frame instead of the whole "  at
+	! "-prefixed chain.
+
+	type(program_t), intent(in) :: prog
+	character(len = *), intent(in) :: fname
+	integer, intent(in) :: call_ip
+	character(len = :), allocatable :: s
+
+	character(len = :), allocatable :: loc
+
+	loc = ''
+	if (call_ip >= 1 .and. call_ip <= prog%len_) &
+		loc = src_loc_str(prog%loc_id(call_ip), prog%loc_pos(call_ip))
+
+	s = fname
+	if (len(loc) > 0) s = s//" ("//loc//")"
+
+end function rt_frame_label
+
+!===============================================================================
+
 function rt_frames_str(prog, ip, frames, nframes) result(trace)
 
 	! Build the "at <fn> (file:line)" call-chain lines of a stack trace, down
@@ -598,6 +625,10 @@ function rt_frames_str(prog, ip, frames, nframes) result(trace)
 	! %identifier%text is the name of the function frame k is running, and
 	! frames(k)%return_ip - 1 is the OP_CALL/OP_CALL_PTR instruction in frame
 	! (k-1)'s code (or <main>'s, for k == 1) that made the call.
+	!
+	! A caller that has already skipped frames (rt_skip_frames() below) may
+	! pass nframes == 0 with frames(:) still the *original*, longer array --
+	! only frames(1:nframes) is ever read here, so that's fine.
 
 	type(program_t), intent(in) :: prog
 	integer, intent(in) :: ip
@@ -613,7 +644,7 @@ function rt_frames_str(prog, ip, frames, nframes) result(trace)
 	! an "... N frames omitted ..." line in between
 	integer, parameter :: MAX_EACH_END = 10
 
-	character(len = :), allocatable :: fname, loc
+	character(len = :), allocatable :: fname
 	integer :: k, call_ip
 
 	trace = ''
@@ -634,12 +665,7 @@ function rt_frames_str(prog, ip, frames, nframes) result(trace)
 		end if
 
 		fname = prog%nodes(frames(k)%node_idx)%identifier%text
-		loc = ''
-		if (call_ip >= 1 .and. call_ip <= prog%len_) &
-			loc = src_loc_str(prog%loc_id(call_ip), prog%loc_pos(call_ip))
-
-		trace = trace//line_feed//"  at "//fname
-		if (len(loc) > 0) trace = trace//" ("//loc//")"
+		trace = trace//line_feed//"  at "//rt_frame_label(prog, fname, call_ip)
 
 	end do
 
@@ -649,14 +675,51 @@ function rt_frames_str(prog, ip, frames, nframes) result(trace)
 		call_ip = frames(1)%return_ip - 1
 	end if
 
-	loc = ''
-	if (call_ip >= 1 .and. call_ip <= prog%len_) &
-		loc = src_loc_str(prog%loc_id(call_ip), prog%loc_pos(call_ip))
-
-	trace = trace//line_feed//"  at <main>"
-	if (len(loc) > 0) trace = trace//" ("//loc//")"
+	trace = trace//line_feed//"  at "//rt_frame_label(prog, "<main>", call_ip)
 
 end function rt_frames_str
+
+!===============================================================================
+
+subroutine rt_skip_frames(frames, nframes, ip, skip, nframes_eff, ip_eff)
+
+	! Compute the (nframes_eff, ip_eff) coordinates for a stack-trace/caller
+	! lookup that should skip the `skip` innermost frames -- as if the VM
+	! were paused at the call site `skip` frames up instead of at
+	! `ip`/frames(nframes) -- shared by std::stack_trace(skip) and
+	! std::caller(depth) (OP_CALL_INTR, INTR_STACK_TRACE/INTR_CALLER below).
+	!
+	! nframes_eff < 0 means skip went past even <main>: nothing is left (the
+	! caller returns just the "Stack trace:" header, or "" for std::caller).
+	! Otherwise rt_frames_str(prog, ip_eff, frames, nframes_eff) reproduces
+	! the trace as if frames(nframes_eff+1:nframes) didn't exist; std::
+	! caller() instead takes a single rt_frame_label() at nframes_eff (see
+	! INTR_CALLER below for both cases, nframes_eff == 0 included).
+	!
+	! A negative skip is treated as 0 (unchanged).
+
+	type(frame_t), intent(in) :: frames(:)
+	integer, intent(in) :: nframes, ip, skip
+	integer, intent(out) :: nframes_eff, ip_eff
+
+	integer :: skip_
+
+	skip_ = max(skip, 0)
+
+	if (skip_ > nframes) then
+		nframes_eff = -1
+		ip_eff = 0
+		return
+	end if
+
+	nframes_eff = nframes - skip_
+	if (nframes_eff == nframes) then
+		ip_eff = ip
+	else
+		ip_eff = frames(nframes_eff + 1)%return_ip - 1
+	end if
+
+end subroutine rt_skip_frames
 
 !===============================================================================
 
@@ -1541,25 +1604,75 @@ module subroutine vm_run(prog, state, res)
 				val%type = unknown_type
 				end block
 
-			else if (instr%a == INTR_PRINT_TRACE .or. instr%a == INTR_STACK_TRACE) then
-				! std::print_trace()/std::stack_trace(): build the same
-				! "at <fn> (file:line)" chain a runtime error would append
+			else if (instr%a == INTR_PRINT_TRACE) then
+				! std::print_trace([label]): build the same "at <fn>
+				! (file:line)" chain a runtime error would append
 				! (append_rt_trace() above), minus the source-line snippet
 				! (there's no faulting token here, just the call site
 				! itself).  `ip` is this OP_CALL_INTR instruction, so
 				! rt_frames_str() maps its innermost "at" line to the
-				! std::print_trace()/std::stack_trace() call site.
+				! std::print_trace() call site.  Optional str arg is a
+				! label, appended to the header line (JS console.trace(label)
+				! style), e.g. "Stack trace: checkpoint A"
 				block
+				character(len = :), allocatable :: header_
+				header_ = "Stack trace:"
+				if (nintr >= 1) header_ = header_//" "//iargs_pool(1)%str%s
+				write(output_unit, '(a)') header_//rt_frames_str(prog, ip, frames, nframes)
+				val%type = void_type
+				end block
+
+			else if (instr%a == INTR_STACK_TRACE) then
+				! std::stack_trace([skip]): same text std::print_trace()
+				! prints, returned as a str instead.  Optional i32 arg drops
+				! the `skip` innermost frames (V8 Error.captureStackTrace-
+				! style), e.g. so a user logging helper that wraps this call
+				! can omit its own frame
+				block
+				integer :: nframes_eff_, ip_eff_
 				character(len = :), allocatable :: trace_
-				trace_ = "Stack trace:"//rt_frames_str(prog, ip, frames, nframes)
-				if (instr%a == INTR_PRINT_TRACE) then
-					write(output_unit, '(a)') trace_
-					val%type = void_type
+				if (nintr >= 1) then
+					call rt_skip_frames(frames, nframes, ip, iargs_pool(1)%sca%i32, &
+						nframes_eff_, ip_eff_)
 				else
-					val%type = str_type
-					if (.not. allocated(val%str)) allocate(val%str)
-					val%str%s = trace_
+					nframes_eff_ = nframes
+					ip_eff_ = ip
 				end if
+				trace_ = "Stack trace:"
+				if (nframes_eff_ >= 0) &
+					trace_ = trace_//rt_frames_str(prog, ip_eff_, frames, nframes_eff_)
+				val%type = str_type
+				if (.not. allocated(val%str)) allocate(val%str)
+				val%str%s = trace_
+				end block
+
+			else if (instr%a == INTR_CALLER) then
+				! std::caller([depth]): the single "<fn> (file:line)" label
+				! `depth` frames up the call chain, no "  at " prefix (Ruby
+				! caller()/Go runtime.Caller(skip) style).  depth 0 is the
+				! current fn (where std::caller() itself was called from);
+				! the default, 1, is the fn that called *that* fn.  Out of
+				! range (including a chain shorter than depth, or depth < 0
+				! wrapping below 0) returns ""
+				block
+				integer :: depth_, nframes_eff_, ip_eff_
+				character(len = :), allocatable :: fname_, res_
+				depth_ = 1
+				if (nintr >= 1) depth_ = iargs_pool(1)%sca%i32
+				call rt_skip_frames(frames, nframes, ip, depth_, nframes_eff_, ip_eff_)
+				if (nframes_eff_ < 0) then
+					res_ = ''
+				else
+					if (nframes_eff_ == 0) then
+						fname_ = "<main>"
+					else
+						fname_ = prog%nodes(frames(nframes_eff_)%node_idx)%identifier%text
+					end if
+					res_ = rt_frame_label(prog, fname_, ip_eff_)
+				end if
+				val%type = str_type
+				if (.not. allocated(val%str)) allocate(val%str)
+				val%str%s = res_
 				end block
 
 			else
