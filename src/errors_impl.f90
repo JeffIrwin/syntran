@@ -179,6 +179,8 @@ module procedure get_all_error_codes
 	call codes%push(EC_BAD_CASE_RANGE_TYPE)
 	call codes%push(EC_COMPOUND_SUBSTR)
 	call codes%push(EC_FN_MISSING_PARENS)
+	call codes%push(EC_MISSING_LET_EQUALS)
+	call codes%push(EC_MISSING_LET_NAME)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -613,10 +615,12 @@ end procedure err_unexpected_char
 
 module procedure err_unexpected_token
 
+	! `got` and `expect` are already fully formatted by the caller (got_desc()/
+	! expect_desc() in parse_misc.f90), e.g. "`4`"/"an identifier"/
+	! "end of input", so they aren't quoted again here
 	err = err_pre(EC_UNEXPECTED_TOKEN) &
-		//'unexpected token `'//got//'` of kind `'//kind &
-		//'`, expected `'//expect//'`'//underline(context, span) &
-		//" unexpected token"//color_reset
+		//'unexpected token '//got//', expected '//expect &
+		//underline(context, span)//" unexpected token"//color_reset
 
 end procedure err_unexpected_token
 
@@ -975,6 +979,52 @@ module procedure err_fn_missing_parens
 		//": to call it, write `"//fg_bright_green//fn//"(...)"//color_reset//"`"
 
 end procedure err_fn_missing_parens
+
+
+!===============================================================================
+
+module procedure err_missing_let_equals
+
+	! `is_blank`: nothing at all follows the name, e.g. `let x;`.
+	! `has_type_annotation`: a `: type` follows the name, e.g. `let x: i32 = 4;`
+	! -- types are inferred in syntran, so that annotation is never valid
+
+	if (is_blank) then
+		err = err_pre(EC_MISSING_LET_EQUALS) &
+			//'variable `'//name//'` must be initialized' &
+			//underline(context, span)//" missing initializer"//color_reset
+	else
+		err = err_pre(EC_MISSING_LET_EQUALS) &
+			//'expected `=` in declaration of variable `'//name//'`' &
+			//underline(context, span)//" expected `=` before this"//color_reset
+	end if
+
+	err = err &
+		//line_feed//fg_bright_green//"help"//color_reset &
+		//": declare variables like `"//fg_bright_green//keyword//" "//name &
+		//" = <value>;"//color_reset//"`"
+
+	if (has_type_annotation) then
+		err = err &
+			//line_feed//fg_bright_green//"note"//color_reset &
+			//": types are inferred in syntran -- remove the `: type` annotation"
+	end if
+
+end procedure err_missing_let_equals
+
+
+!===============================================================================
+
+module procedure err_missing_let_name
+
+	err = err_pre(EC_MISSING_LET_NAME) &
+		//'expected a variable name after `'//keyword//'`' &
+		//underline(context, span)//" expected an identifier here"//color_reset &
+		//line_feed//fg_bright_green//"help"//color_reset &
+		//": declare a variable like `"//fg_bright_green//keyword &
+		//" x = <value>;"//color_reset//"`"
+
+end procedure err_missing_let_name
 
 
 !===============================================================================

@@ -24,6 +24,12 @@ module syntran__parse_m
 		logical :: expecting = .false., first_expecting = .false.
 		character(len = :), allocatable :: first_expected
 
+		! Position of the last match() (or match_pre()) failure, used to
+		! de-dupe a second E20 at the exact same token (e.g. a missing `)`
+		! immediately followed by a missing `;` on that same bad token).
+		! Reset at the start of each parse_unit() pass
+		integer :: last_e20_pos = 0
+
 		type(string_vector_t) :: diagnostics
 
 		! Context for all src files (including include files).  Could convert to
@@ -458,10 +464,11 @@ module syntran__parse_m
 			character(len = *), intent(in) :: type_kind
 		end subroutine check_var_clash
 
-		module subroutine match(parser, kind, token)
+		module subroutine match(parser, kind, token, what)
 			class(parser_t) :: parser
 			integer :: kind
 			type(syntax_token_t), intent(out) :: token
+			character(len = *), intent(in), optional :: what
 		end subroutine match
 
 		recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, unit_)

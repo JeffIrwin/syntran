@@ -194,7 +194,56 @@ end subroutine check_var_clash
 
 !===============================================================================
 
-module subroutine match(parser, kind, token)
+function expect_desc(kind) result(desc)
+
+	! Human-readable description of a token kind for the "expected ..." half
+	! of an E20 unexpected-token message.  A few common kinds get a plain
+	! description instead of their internal kind_token() spelling, since
+	! "expected `i32_token`" means nothing to a syntran user
+
+	integer, intent(in) :: kind
+	character(len = :), allocatable :: desc
+
+	select case (kind)
+		case (identifier_token)
+			desc = "an identifier"
+		case (str_token)
+			desc = "a string literal"
+		case (i32_token, i64_token)
+			desc = "an integer literal"
+		case (f32_token, f64_token)
+			desc = "a floating-point literal"
+		case (eof_token)
+			desc = "end of input"
+		case default
+			desc = "`"//kind_token(kind)//"`"
+	end select
+
+end function expect_desc
+
+!===============================================================================
+
+function got_desc(kind, text) result(desc)
+
+	! Human-readable description of the actual token found, for the
+	! "unexpected token ..." half of an E20 message.  eof's current%text is
+	! not a useful thing to quote, so name it explicitly instead
+
+	integer, intent(in) :: kind
+	character(len = *), intent(in) :: text
+	character(len = :), allocatable :: desc
+
+	if (kind == eof_token) then
+		desc = "end of input"
+	else
+		desc = "`"//trim(text)//"`"
+	end if
+
+end function got_desc
+
+!===============================================================================
+
+module subroutine match(parser, kind, token, what)
 
 	class(parser_t) :: parser
 
@@ -202,9 +251,13 @@ module subroutine match(parser, kind, token)
 
 	type(syntax_token_t), intent(out) :: token
 
+	character(len = *), intent(in), optional :: what
+
 	!********
 
 	integer :: len_text
+
+	character(len = :), allocatable :: expect
 
 	type(syntax_token_t) :: current
 	type(text_span_t) :: span
@@ -222,31 +275,33 @@ module subroutine match(parser, kind, token)
 	!! A continued expression can commonly have several unmatched tokens.  The
 	!! last one is usually a semicolon, or it could be a right brace.  The first
 	!! one is more helpful for the user to know
-	!print *, 'unmatched '//kind_name(kind)
-	!print *, 'unmatched '//kind_token(kind)
 
 	if (.not. parser%first_expecting) then
 		parser%first_expected  = kind_token(kind)
 		parser%first_expecting = .true.
 	end if
 
-	!print *, 'pushing match diag'
 	len_text = max(len(current%text), 1)
 
 	span = new_span(parser%current_pos(), len_text)
-	!span = new_span(current%pos, len_text)
 
-	!call parser%diagnostics%push( &
-	!	err_unexpected_token(parser%context(), span, current%text, &
-	!	kind_name(parser%current_kind()), kind_name(kind)))
+	if (present(what)) then
+		expect = what
+	else
+		expect = expect_desc(kind)
+	end if
 
-	!print *, 'current%unit_ = ', current%unit_
-	!print *, 'current%text  = ', quote(current%text)
+	! A match() failure at the same position as the last one (e.g. parse_expr_
+	! statement's match(semicolon_token) re-failing on the same bad token that
+	! parse_primary_expr's match() just failed on) is the same error twice
+	! from the user's perspective -- only report the first
+	if (parser%pos /= parser%last_e20_pos) then
+		parser%last_e20_pos = parser%pos
 
-	call parser%diagnostics%push( &
-		err_unexpected_token(parser%context(), span, current%text, &
-		!err_unexpected_token(parser%contexts%v(current%unit_), span, current%text, &
-		kind_name(parser%current_kind()), kind_name(kind)))
+		call parser%diagnostics%push( &
+			err_unexpected_token(parser%context(), span, &
+			got_desc(current%kind, current%text), expect))
+	end if
 
 	! An unmatched char in the middle of the input is an error and should log
 	! a diagnostic.  An unmatched char at the end means the interactive
@@ -256,11 +311,7 @@ module subroutine match(parser, kind, token)
 	end if
 
 	call new_token(token, kind, current%pos, null_char)
-	!token = new_token(bad_token, current%pos, null_char)
-	!token = new_token(kind, current%pos, "")
-
 	token%unit_ = current%unit_
-	!print *, 'setting token%unit_ = ', token%unit_
 
 end subroutine match
 
@@ -435,36 +486,29 @@ module subroutine match_pre(parser, kind, tokens, token_index, context, token)
 	end if
 	token_index = token_index - 1
 
-	!print *, 'ERROR: unmatched token'
-	!print *, ''
-
 	!! A continued expression can commonly have several unmatched tokens.  The
 	!! last one is usually a semicolon, or it could be a right brace.  The first
 	!! one is more helpful for the user to know
-	!print *, 'unmatched '//kind_name(kind)
-	!print *, 'unmatched '//kind_token(kind)
 
 	if (.not. parser%first_expecting) then
 		parser%first_expected  = kind_token(kind)
 		parser%first_expecting = .true.
 	end if
 
-	!print *, 'pushing match diag'
 	len_text = max(len(current%text), 1)
 
-	!span = new_span(parser%current_pos(), len_text)
 	span = new_span(current%pos, len_text)
 
-	!print *, 'current%unit_ = ', current%unit_
-	!print *, 'current%text  = ', quote(current%text)
+	! See the matching comment in match(): de-dupe a second failure at the
+	! same position (e.g. a missing `)` immediately followed by a missing
+	! `;` on that same bad token)
+	if (token_index /= parser%last_e20_pos) then
+		parser%last_e20_pos = token_index
 
-	!print *, 'pushing diag'
-	call parser%diagnostics%push( &
-		!err_unexpected_token(parser%context(), span, current%text, &
-		!err_unexpected_token(parser%contexts%v(1), span, current%text, &
-		err_unexpected_token(context, span, current%text, &
-		kind_name(current%kind), kind_name(kind)))
-	!print *, 'done'
+		call parser%diagnostics%push( &
+			err_unexpected_token(context, span, &
+			got_desc(current%kind, current%text), expect_desc(kind)))
+	end if
 
 	! An unmatched char in the middle of the input is an error and should log
 	! a diagnostic.  An unmatched char at the end means the interactive
@@ -576,6 +620,7 @@ recursive module subroutine parse_unit(parser, unit)
 
 	! First pass
 	parser%ipass = 0
+	parser%last_e20_pos = 0
 
 	! Diagnostics that exist before either pass: lexer errors and #include
 	! preprocessor errors, both pushed by new_parser().  Pass 0's own output
@@ -639,6 +684,7 @@ recursive module subroutine parse_unit(parser, unit)
 		! Second pass
 		parser%pos = 1
 		parser%ipass = 1
+		parser%last_e20_pos = 0
 
 		parser%num_vars = num_vars0
 		parser%num_fns = num_fns0

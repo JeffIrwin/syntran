@@ -14,7 +14,12 @@ contains
 recursive module subroutine parse_let_expr(parser, is_const, expr)
 
 	! Parse `let x = ...` or, if is_const, `const x = ...`.  The caller has
-	! already peeked the keyword, identifier, and equals tokens
+	! only peeked the keyword -- unlike most match()-based recovery, a
+	! malformed declaration here (missing name, missing `=`, ...) is common
+	! enough (e.g. coming from a language where `let x = 4;` is written
+	! `let x 4;` or `let x: i32 = 4;`) that it gets its own targeted
+	! diagnostic (E113/E114) instead of letting match() cascade into a wall
+	! of "unexpected token" errors
 
 	class(parser_t) :: parser
 	logical, intent(in) :: is_const
@@ -22,60 +27,155 @@ recursive module subroutine parse_let_expr(parser, is_const, expr)
 
 	!********
 
-	logical :: overwrite
+	logical :: overwrite, is_blank, has_type_annotation
 
 	integer :: io
 
+	character(len = :), allocatable :: keyword
+
 	type(syntax_node_t) :: right
-	type(syntax_token_t) :: let, identifier, op
+	type(syntax_token_t) :: let, identifier, op, dummy
 
 	type(text_span_t) :: span
 
-	! The caller already verified tokens, so we can use next() instead of
-	! match() here
-
 	call parser%next(let)
-	call parser%next(identifier)
-	call parser%check_type_clash(identifier%text, identifier%pos)
+	keyword = let%text
 
-	call parser%next(op)
+	if (parser%current_kind() == eof_token) then
+		! Incomplete interactive line.  Fall back to the ordinary match()
+		! path so the REPL still sets `expecting` and waits for the rest of
+		! the statement instead of reporting E114 on a line that just hasn't
+		! finished yet
+		call parser%match(identifier_token, identifier)
+		call parser%check_type_clash(identifier%text, identifier%pos)
+		call parser%match(equals_token, op)
+		call parser%parse_expr_statement(right)
+	else if (parser%current_kind() /= identifier_token) then
 
-	call parser%parse_expr_statement(right)
-	call parser%check_enum_name_value(right)
-
-	if (right%val%type ==  void_type) then
-		span = new_span(let%pos, parser%current_pos() - let%pos)
+		! No name at all, e.g. `let 5 = 3;` or `let = 3;`
+		span = new_span(parser%current_pos(), &
+			max(len(parser%current_text()), 1))
 		call parser%diagnostics%push( &
-			err_void_assign(parser%context(), &
-			span, identifier%text))
-	end if
+			err_missing_let_name(parser%context(), span, keyword))
 
-	call new_declaration_expr(identifier, op, right, expr)
+		if (.not. any(parser%current_kind() == [rbrace_token, eof_token])) then
+			call parser%next(dummy)  ! discard the bad "name" token
 
-	! Increment the variable array index and save it in the expr node
-	call parser%push_var(expr)
+			if (parser%current_kind() == equals_token) then
+				call parser%next(dummy)
+				call parser%parse_expr_statement(right)
+			else
+				! No `=` either; just resync to the next statement boundary
+				! without consuming it
+				do while (.not. any(parser%current_kind() == &
+						[semicolon_token, rbrace_token, eof_token]))
+					call parser%next(dummy)
+				end do
+			end if
+		end if
 
-	overwrite = .true.
-	if (parser%ipass == 0) overwrite = .false.
+		! No name was ever parsed, so there is nothing to declare.  expr's
+		! unknown_type (the value_t default) keeps parse_statement() from
+		! cascading an E9 on this statement
+		expr%kind = literal_expr
+		return
 
-	! Insert the identifier's type into the dict and check that it hasn't
-	! already been declared
-	if (parser%is_loc) then
-		call parser%locs%insert(identifier%text, expr%val, &
-			expr%id_index, io, overwrite = overwrite, is_const = is_const)
 	else
-		call parser%vars%insert(identifier%text, expr%val, &
-			expr%id_index, io, overwrite = overwrite, is_const = is_const)
 
-		! Track module-level variable names (like fn_names for functions)
-		if (parser%ipass == 0) call parser%var_names%push(identifier%text)
-	end if
+		call parser%next(identifier)
+		call parser%check_type_clash(identifier%text, identifier%pos)
 
-	if (io /= exit_success) then
-		span = new_span(identifier%pos, len(identifier%text))
-		call parser%diagnostics%push( &
-			err_redeclare_var(parser%context(), &
-			span, identifier%text))
+		if (parser%current_kind() == eof_token) then
+			! Incomplete interactive line; see the eof branch above
+			call parser%match(equals_token, op)
+			call parser%parse_expr_statement(right)
+		else if (parser%current_kind() == equals_token) then
+			call parser%next(op)
+			call parser%parse_expr_statement(right)
+		else
+
+			! A name was parsed, but it isn't followed by `=`, e.g.
+			! `let foobar 4;`, `let x;`, `let x: i32 = 4;`, or `let x == 4;`
+			is_blank = parser%current_kind() == semicolon_token
+			has_type_annotation = parser%current_kind() == colon_token
+
+			span = new_span(parser%current_pos(), &
+				max(len(parser%current_text()), 1))
+			call parser%diagnostics%push( &
+				err_missing_let_equals(parser%context(), span, keyword, &
+				identifier%text, is_blank, has_type_annotation))
+
+			if (has_type_annotation) then
+				! Skip the `: type` annotation up to the `=` it should have
+				! (types are inferred in syntran, so there's no real
+				! annotation syntax to parse here)
+				do while (.not. any(parser%current_kind() == &
+						[equals_token, semicolon_token, rbrace_token, eof_token]))
+					call parser%next(dummy)
+				end do
+			else if (is_assignment_op(parser%current_kind()) .or. &
+			         parser%current_kind() == eequals_token) then
+				! Typo'd operator, e.g. `let x == 4;` or `let x += 4;`
+				call parser%next(dummy)
+			end if
+
+			if (parser%current_kind() == equals_token) then
+				call parser%next(dummy)
+			end if
+
+			if (any(parser%current_kind() == &
+					[semicolon_token, rbrace_token, eof_token])) then
+				! No initializer left to parse, e.g. `let x;` or
+				! `let x: i32;`.  right's unknown_type (the value_t default)
+				! records `identifier` in the symbol table as unknown_type
+				! below, so a later use of it doesn't cascade an E28
+				right%kind = literal_expr
+			else
+				call parser%parse_expr_statement(right)
+			end if
+
+			! Synthesize the `=` that was never there, for new_declaration_expr
+			call new_token(op, equals_token, identifier%pos, "=")
+
+		end if
+
+		call parser%check_enum_name_value(right)
+
+		if (right%val%type == void_type) then
+			span = new_span(let%pos, parser%current_pos() - let%pos)
+			call parser%diagnostics%push( &
+				err_void_assign(parser%context(), &
+				span, identifier%text))
+		end if
+
+		call new_declaration_expr(identifier, op, right, expr)
+
+		! Increment the variable array index and save it in the expr node
+		call parser%push_var(expr)
+
+		overwrite = .true.
+		if (parser%ipass == 0) overwrite = .false.
+
+		! Insert the identifier's type into the dict and check that it hasn't
+		! already been declared
+		if (parser%is_loc) then
+			call parser%locs%insert(identifier%text, expr%val, &
+				expr%id_index, io, overwrite = overwrite, is_const = is_const)
+		else
+			call parser%vars%insert(identifier%text, expr%val, &
+				expr%id_index, io, overwrite = overwrite, is_const = is_const)
+
+			! Track module-level variable names (like fn_names for functions)
+			if (parser%ipass == 0) call parser%var_names%push(identifier%text)
+		end if
+
+		if (io /= exit_success) then
+			span = new_span(identifier%pos, len(identifier%text))
+			call parser%diagnostics%push( &
+				err_redeclare_var(parser%context(), &
+				span, identifier%text))
+		end if
+
 	end if
 
 end subroutine parse_let_expr
@@ -104,16 +204,16 @@ recursive module subroutine parse_expr_statement(parser, expr)
 
 	!print *, 'starting parse_expr_statement()'
 
-	if (parser%peek_kind(0) == const_keyword     .and. &
-	    parser%peek_kind(1) == identifier_token .and. &
-	    parser%peek_kind(2) == equals_token) then
+	! parse_let_expr() handles malformed declarations itself (missing `=`,
+	! missing name, etc. -- E113/E114) and still returns a single targeted
+	! diagnostic, so dispatch here just on the keyword instead of requiring
+	! the full `let|const IDENT =` lookahead
+	if (parser%peek_kind(0) == const_keyword) then
 		call parser%parse_let_expr(.true., expr)
 		return
 	end if
 
-	if (parser%peek_kind(0) == let_keyword      .and. &
-	    parser%peek_kind(1) == identifier_token .and. &
-	    parser%peek_kind(2) == equals_token) then
+	if (parser%peek_kind(0) == let_keyword) then
 		call parser%parse_let_expr(.false., expr)
 		return
 	end if
@@ -816,12 +916,20 @@ recursive module subroutine parse_primary_expr(parser, expr)
 			call parser%match(i64_token, token)
 			call new_i64(token%val%sca%i64, expr)
 
-		case default
+		case (i32_token)
 
 			call parser%match(i32_token, token)
 			call new_i32(token%val%sca%i32, expr)
 
 			if (debug > 1) print *, 'token = ', expr%val%to_str()
+
+		case default
+
+			! Every other token kind can't start an expression at all (vs.
+			! the cases above, which match a specific literal kind), so
+			! naming i32_token as what's "expected" here would be misleading
+			call parser%match(i32_token, token, what = "an expression")
+			call new_i32(token%val%sca%i32, expr)
 
 	end select
 

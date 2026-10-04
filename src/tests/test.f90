@@ -7433,6 +7433,15 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_count_code(get_diags("4.0'i32;"), EC_FLOAT_INT_SUFFIX) == 1, &
 			diag_has_code(get_diags('$;'), EC_UNEXPECTED_CHAR), &
 			diag_has_code(get_diags('let a = ;'), EC_UNEXPECTED_TOKEN), &
+			! E20's message names the expected thing in plain words instead of
+			! an internal kind name, and a second match() failure at the exact
+			! same token (e.g. the missing operand here, then the `;` match
+			! re-failing on that same token) is de-duped to a single E20
+			diag_has_text(get_diags('1 + ;'), 'expected an expression'), &
+			.not. diag_has_text(get_diags('1 + ;'), 'of kind'), &
+			diag_count_code(get_diags('1 + ;'), EC_UNEXPECTED_TOKEN) == 1, &
+			diag_count_code(get_diags('1 +'), EC_UNEXPECTED_TOKEN) == 1, &
+			diag_has_text(get_diags('1 +'), 'end of input'), &
 			diag_has_code(get_diags( &
 				'fn f() { let x = 1; } let a = f();'), EC_VOID_ASSIGN), &
 			! Void fns have nothing to return, so they must not also trigger
@@ -8323,6 +8332,37 @@ subroutine unit_test_error_codes(npass, nfail)
 					'fn apply(f: fn(i32): i32, x: i32): i32 { return f(x); } ' // &
 					'let y = apply(dbl, 3);'), &
 					EC_FN_MISSING_PARENS), &
+
+				! E113/E114: malformed `let`/`const` declarations get one
+				! targeted diagnostic instead of a cascade of E20/E28 from
+				! re-parsing the leftover tokens as new statements
+				diag_count_code(get_diags('let foobar 4;'), &
+					EC_MISSING_LET_EQUALS) == 1, &
+				diag_count_code(get_diags('let foobar 4;'), &
+					EC_UNEXPECTED_TOKEN) == 0, &
+				diag_count_code(get_diags('let foobar 4;'), &
+					EC_UNDECLARE_VAR) == 0, &
+				diag_count_code(get_diags('let x;'), &
+					EC_MISSING_LET_EQUALS) == 1, &
+				diag_count_code(get_diags('let 5 = 3;'), &
+					EC_MISSING_LET_NAME) == 1, &
+				diag_count_code(get_diags('let 5 = 3;'), &
+					EC_UNEXPECTED_TOKEN) == 0, &
+				diag_count_code(get_diags('let = 3;'), &
+					EC_MISSING_LET_NAME) == 1, &
+				diag_count_code(get_diags('const y 2;'), &
+					EC_MISSING_LET_EQUALS) == 1, &
+				diag_count_code(get_diags('let x == 3;'), &
+					EC_MISSING_LET_EQUALS) == 1, &
+				diag_count_code(get_diags('let x: i32 = 3;'), &
+					EC_MISSING_LET_EQUALS) == 1, &
+				diag_has_text(get_diags('let x: i32 = 3;'), &
+					'types are inferred'), &
+				! A declared-but-malformed variable doesn't cascade an E28
+				! when it's used afterward
+				.not. diag_has_code(get_diags( &
+					'let x 4; let y = x + 1;'), &
+					EC_UNDECLARE_VAR), &
 
 				! Int/float assignment is rejected at parse time (E48).  This
 				! used to be marked by a "TODO: test int/float casting" note
@@ -9265,7 +9305,15 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E112-fn-missing-parens.syntran'), &
 				EC_FN_MISSING_PARENS, P//'E112-fn-missing-parens.syntran', 11, 2, 5), &
 			diag_count_code(get_diags_file(P//'E112-fn-missing-parens.syntran'), &
-				EC_FN_MISSING_PARENS) == 1 &
+				EC_FN_MISSING_PARENS) == 1, &
+			diag_loc_ok(get_diags_file(P//'E113-missing-let-equals.syntran'), &
+				EC_MISSING_LET_EQUALS, P//'E113-missing-let-equals.syntran', 6, 13, 1), &
+			diag_count_code(get_diags_file(P//'E113-missing-let-equals.syntran'), &
+				EC_MISSING_LET_EQUALS) == 1, &
+			diag_loc_ok(get_diags_file(P//'E114-missing-let-name.syntran'), &
+				EC_MISSING_LET_NAME, P//'E114-missing-let-name.syntran', 7, 6, 1), &
+			diag_count_code(get_diags_file(P//'E114-missing-let-name.syntran'), &
+				EC_MISSING_LET_NAME) == 1 &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

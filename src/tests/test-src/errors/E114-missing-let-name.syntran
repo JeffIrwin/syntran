@@ -1,0 +1,10 @@
+// E114: missing-let-name
+// A `let`/`const` declaration has no identifier after the keyword, e.g.
+// `let 5 = 3;`
+
+fn main()
+{
+	let 5 = 3;
+}
+
+main();

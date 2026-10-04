@@ -128,6 +128,8 @@ module syntran__errors_m
 		EC_BAD_CASE_RANGE_TYPE = "E110", &
 		EC_COMPOUND_SUBSTR = "E111", &
 		EC_FN_MISSING_PARENS = "E112", &
+		EC_MISSING_LET_EQUALS = "E113", &
+		EC_MISSING_LET_NAME = "E114", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -469,11 +471,11 @@ module syntran__errors_m
 			character(len = *), intent(in) :: c
 		end function err_unexpected_char
 
-		module function err_unexpected_token(context, span, got, kind, expect) result(err)
+		module function err_unexpected_token(context, span, got, expect) result(err)
 			type(text_context_t) :: context
 			type(text_span_t), intent(in) :: span
 			character(len = :), allocatable :: err
-			character(len = *), intent(in) :: got, kind ,expect
+			character(len = *), intent(in) :: got, expect
 		end function err_unexpected_token
 
 		module function err_void_assign(context, span, var) result(err)
@@ -661,6 +663,22 @@ module syntran__errors_m
 			character(len = :), allocatable :: err
 			character(len = *), intent(in) :: fn
 		end function err_fn_missing_parens
+
+		module function err_missing_let_equals(context, span, keyword, name, &
+				is_blank, has_type_annotation) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+			character(len = *), intent(in) :: keyword, name
+			logical, intent(in) :: is_blank, has_type_annotation
+		end function err_missing_let_equals
+
+		module function err_missing_let_name(context, span, keyword) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+			character(len = *), intent(in) :: keyword
+		end function err_missing_let_name
 
 		module function err_not_callable(context, span, var, type) result(err)
 			type(text_context_t) :: context

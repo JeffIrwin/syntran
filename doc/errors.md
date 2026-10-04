@@ -687,6 +687,23 @@ A user-defined function was named without a call, either as a statement by itsel
 
 [Example](../src/tests/test-src/errors/E112-fn-missing-parens.syntran)
 
+### E113 -- missing-let-equals
+
+A `let`/`const` declaration has a name but isn't followed by `=`, e.g.
+`let foobar 4;` (missing the `=` entirely), `let x;` (missing an initializer
+altogether), or `let x: i32 = 4;` (a type annotation, which syntran doesn't
+have since types are inferred). The declaration still binds the name, so a
+later use of it doesn't also raise an undeclared-variable error.
+
+[Example](../src/tests/test-src/errors/E113-missing-let-equals.syntran)
+
+### E114 -- missing-let-name
+
+A `let`/`const` keyword isn't followed by a variable name, e.g. `let 5 = 3;`
+or `let = 3;`.
+
+[Example](../src/tests/test-src/errors/E114-missing-let-name.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type

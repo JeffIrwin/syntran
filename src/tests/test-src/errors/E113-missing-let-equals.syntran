@@ -1,0 +1,10 @@
+// E113: missing-let-equals
+// A `let`/`const` declaration has a name but no `=`, e.g. `let foobar 4;`
+
+fn main()
+{
+	let foobar 4;
+	println(foobar);
+}
+
+main();
