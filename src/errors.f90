@@ -249,9 +249,9 @@ module syntran__errors_m
 			procedure :: push => push_context
 	end type text_context_vector_t
 
-	! Append-only, process-global registry of every distinct parsed source
-	! (main file, each #include, each `use`d module) so that runtime-error
-	! stack traces (append_rt_trace(), vm_exec.f90) can look up a statement's
+	! Process-global registry of every distinct parsed source (main file,
+	! each #include, each `use`d module) so that runtime-error stack traces
+	! (append_rt_trace(), vm_exec.f90) can look up a statement's
 	! file/line/source-text long after the parser's own per-compilation
 	! text_context_vector_t (parser%contexts / mod_contexts) has gone out of
 	! scope -- `use` modules in particular get their own throwaway
@@ -265,13 +265,21 @@ module syntran__errors_m
 	! same file (the parser's two passes, a module imported from two call
 	! sites) doesn't grow this without bound; each REPL line still gets its
 	! own entry since its text differs even though src_file ("<stdin>")
-	! repeats.  That dedup is keyed on exact (src_file, text) though, so it
-	! doesn't bound the registry's lifetime growth in general: a process
-	! that calls syntran_eval()/the REPL repeatedly with many distinct
-	! source strings (an embedder evaluating one-off snippets, e.g.) grows
-	! src_registry by one entry per distinct text for as long as the
-	! process runs, since nothing ever removes an entry.  Fine for the CLI,
-	! where the process exits after one file/REPL session
+	! repeats.
+	!
+	! Bounded lifetime: append-only *within* one top-level
+	! syntran_interpret()/syntran_eval_value() call (and across the whole
+	! REPL loop inside one syntran_interpret() call, so an earlier-declared
+	! fn's src_id stays valid for as long as it's callable), but
+	! reset_src_registry() below clears both tables from state_destroy()
+	! (runtime.f90), which every one of those top-level calls runs on
+	! every exit path (including the REPL's `#clear` directive).  That
+	! keeps a long-running embedder that calls syntran_eval()/
+	! syntran_interpret_file() in a loop with many distinct one-off source
+	! strings from growing this without bound: by the time such a call
+	! returns, nothing reachable still points at a src_id it registered --
+	! state_t (and the program_t/AST built from it) are that call's own
+	! locals, already gone
 	type(text_context_vector_t), save :: src_registry
 	type(map_i32_t), save :: src_registry_map
 
@@ -323,9 +331,21 @@ module syntran__errors_m
 			integer :: id
 		end function register_src
 
+		! Clear src_registry/src_registry_map.  Called from state_destroy()
+		! (runtime.f90) on every exit of a top-level syntran_interpret()/
+		! syntran_eval_value() call -- see src_registry's own docstring
+		! above for why that's always safe.  Must clear src_registry_map
+		! alongside src_registry itself: register_src()'s dedup lookup
+		! would otherwise match a stale id left over from before the
+		! reset, which (if still in range of the now-shorter/reused
+		! src_registry) could silently alias two unrelated sources
+		module subroutine reset_src_registry()
+		end subroutine reset_src_registry
+
 		! "file:line" for one stack-trace frame (append_rt_trace(),
-		! vm_exec.f90).  Returns '' if src_id is 0 or stale (defensive only;
-		! src_registry is append-only and never shrinks)
+		! vm_exec.f90).  Returns '' if src_id is 0, stale, or reset out
+		! from under the caller (defensive only; shouldn't happen in
+		! practice -- see reset_src_registry() above)
 		module function src_loc_str(src_id, pos) result(str_)
 			integer, intent(in) :: src_id, pos
 			character(len = :), allocatable :: str_

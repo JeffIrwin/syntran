@@ -117,6 +117,23 @@ end procedure register_src
 
 !===============================================================================
 
+module procedure reset_src_registry
+
+	! Reassigning src_registry its own fresh new_context_vector() frees the
+	! old %v(:) (text_context_vector_t has no user-defined assignment, so
+	! this is a plain structure assignment -- the old allocatable component
+	! is deallocated before the new, empty one is assigned).  destroy()
+	! zeroes src_registry_map%capacity, which doubles as the "uninitialized"
+	! state register_src() already checks for, so the next register_src()
+	! call reinitializes it lazily, same as on first use ever
+	src_registry = new_context_vector()
+	call src_registry_map%destroy()
+
+end procedure reset_src_registry
+
+
+!===============================================================================
+
 module procedure src_loc_str
 
 	integer :: i
