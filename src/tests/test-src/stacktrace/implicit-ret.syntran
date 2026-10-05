@@ -1,0 +1,33 @@
+// Regression test for a runtime error at a fn's *implicit* return
+// (emit_fn_epilogue(), compile_ctrl.f90): bump()'s by-ref receiver
+// (implicit &self) is re-subscripted at OP_RET to write x back into a[1],
+// but shrink() -- called from inside bump() -- has shrunk `a` down to a
+// single element by then, so the writeback itself throws R33.  Needs
+// -DSYNTRAN_BOUNDS_CHECK (see CLAUDE.md); gated the same way in
+// unit_test_bounds_check() (test.f90).
+//
+// Before emit_fn_epilogue() stamped the implicit return with bump()'s own
+// location, this threw with no "-->" snippet and a bare "at bump" frame
+// (no "(file:line)"), since the trailing OP_POP/OP_LOAD_CONST/OP_RET were
+// compiled with prog%cur_id/cur_pos left at 0.
+
+struct S
+{
+	x: i32,
+	fn bump()
+	{
+		shrink();
+		x = 5;
+	}
+}
+
+let a = [S{x = 1}, S{x = 2}];
+
+fn shrink()
+{
+	a = [S{x = 1}];
+}
+
+println("start");
+a[1].bump();
+println("end");

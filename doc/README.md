@@ -152,8 +152,9 @@ up from the current call, with no leading `"  at "` (unlike
 trace).  `depth` 0 is the current function itself (where `std::caller()` was
 called from); the default, 1, is the function that called *that* function.
 A `depth` beyond the top of the call chain (including calling it directly
-from `<main>` with the default depth) returns `""`.  Must be called with the
-`std::` prefix, e.g. `std::caller()`.
+from `<main>` with the default depth) returns `""`.  A negative `depth` is
+treated as `0`.  Must be called with the `std::` prefix, e.g.
+`std::caller()`.
 
 Related functions: [`print_trace`](#print_trace), [`stack_trace`](#stack_trace)
 
@@ -550,8 +551,8 @@ logging to a file or [`std::ERR`](#writeln) instead.  If `skip` is given, the
 wraps `std::stack_trace()` and wants to omit its own frame, the way
 JavaScript's `Error.captureStackTrace(obj, fn)` does.  `skip` beyond the
 whole call chain (even past `<main>`) just returns the `Stack trace:` header
-with no frame lines.  Must be called with the `std::` prefix, e.g.
-`std::stack_trace()`.
+with no frame lines.  A negative `skip` is treated as `0`.  Must be called
+with the `std::` prefix, e.g. `std::stack_trace()`.
 
 Related functions: [`caller`](#caller), [`print_trace`](#print_trace)
 

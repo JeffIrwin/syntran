@@ -904,8 +904,8 @@ Runtime error[R33]: subscript 5 is out of bounds for size 5
    |
 12 |     let b = a[i];
    |
-  at inner  (src/foo.syntran:12)
-  at outer  (src/foo.syntran:20)
+  at inner (src/foo.syntran:12)
+  at outer (src/foo.syntran:20)
   at <main> (src/foo.syntran:31)
 ```
 

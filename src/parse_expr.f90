@@ -1359,6 +1359,16 @@ module subroutine build_fn_ptr_call_node(parser, node, callee_val, callee_name, 
 	node%kind = fn_call_ptr_expr
 	node%val  = callee_val%fn_ret
 
+	! Not the name of the fn this call will actually run at runtime (that's
+	! resolved from the callee value's fn_index, not known until OP_CALL_PTR
+	! executes) -- callee_name is the call-site expression's own name, e.g.
+	! the pointer variable `f` in `let f = boom; f(1);`, or the fn-typed
+	! member name in `s.f(x)`.  Stack traces prefer prog%fn_names(fn_id)
+	! (rt_frame_fname(), vm_exec.f90) and only fall back to this when that's
+	! unavailable; set here mainly so that fallback is never an unallocated
+	! string
+	node%identifier%text = callee_name
+
 	allocate(node%is_ref(call_args%len_))
 	node%is_ref = .false.
 

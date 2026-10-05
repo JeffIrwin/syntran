@@ -265,7 +265,13 @@ module syntran__errors_m
 	! same file (the parser's two passes, a module imported from two call
 	! sites) doesn't grow this without bound; each REPL line still gets its
 	! own entry since its text differs even though src_file ("<stdin>")
-	! repeats
+	! repeats.  That dedup is keyed on exact (src_file, text) though, so it
+	! doesn't bound the registry's lifetime growth in general: a process
+	! that calls syntran_eval()/the REPL repeatedly with many distinct
+	! source strings (an embedder evaluating one-off snippets, e.g.) grows
+	! src_registry by one entry per distinct text for as long as the
+	! process runs, since nothing ever removes an entry.  Fine for the CLI,
+	! where the process exits after one file/REPL session
 	type(text_context_vector_t), save :: src_registry
 	type(map_i32_t), save :: src_registry_map
 

@@ -22,6 +22,7 @@ submodule (syntran__vm_m) syntran__vm_exec
 	type :: frame_t
 		integer :: return_ip  = 0
 		integer :: node_idx   = 0   ! index into prog%nodes for the fn_call_expr node
+		integer :: fn_id      = 0   ! callee's fn id, for prog%fn_names(fn_id) (stack-trace frame label, rt_frame_fname() below) -- node_idx's call-site identifier names the *variable*/expression called, not necessarily the fn that ends up running (e.g. OP_CALL_PTR)
 		integer :: nfor_saved = 0   ! for-iter stack depth on function entry (restore at RET)
 		type(value_t), allocatable :: caller_locs(:)
 		! Locals pool buffer: retained across RET so the NEXT OP_CALL at this
@@ -66,6 +67,7 @@ subroutine grow_frames(frames)
 	do i = 1, n
 		tmp(i)%return_ip  = frames(i)%return_ip
 		tmp(i)%node_idx   = frames(i)%node_idx
+		tmp(i)%fn_id      = frames(i)%fn_id
 		tmp(i)%nfor_saved = frames(i)%nfor_saved
 		if (allocated(frames(i)%caller_locs)) &
 			call move_alloc(frames(i)%caller_locs, tmp(i)%caller_locs)
@@ -606,6 +608,52 @@ end function rt_frame_label
 
 !===============================================================================
 
+function rt_frame_fname(prog, fr) result(fname)
+
+	! The name of the fn that call frame `fr` is running, for one "at <fn>
+	! (file:line)" stack-trace line -- shared by rt_frames_str() below and
+	! std::caller() (OP_CALL_INTR, INTR_CALLER below).
+	!
+	! fr%node_idx is the call-site node for the call that pushed this frame;
+	! for a direct call (OP_CALL) its own %identifier%text already names
+	! the callee and is used unconditionally, matching this PR's original
+	! (pre-fn_names) behavior exactly.  For an indirect call through a fn
+	! pointer or fn-typed struct member (OP_CALL_PTR) that node instead
+	! names the *variable*/expression holding the pointer (e.g. `f` in
+	! `let f = boom; f(1);`), not the fn it resolves to at this particular
+	! call -- fr%fn_id (set at OP_CALL/OP_CALL_PTR, resolved from the
+	! pointer value's fn_index for the latter) is what's actually running,
+	! so prog%fn_names(fr%fn_id) is preferred whenever it's been recorded
+	! (every fn whose body has been compiled; see emit_fn_epilogue() in
+	! compile_ctrl.f90).  Falling back to the call-site identifier, then to
+	! a placeholder, is defensive only -- fn_names should always be set by
+	! the time the VM runs
+
+	type(program_t), intent(in) :: prog
+	type(frame_t), intent(in) :: fr
+	character(len = :), allocatable :: fname
+
+	if (allocated(prog%fn_names) .and. fr%fn_id >= 1 .and. &
+	    fr%fn_id <= size(prog%fn_names)) then
+		if (allocated(prog%fn_names(fr%fn_id)%s)) then
+			if (len(prog%fn_names(fr%fn_id)%s) > 0) then
+				fname = prog%fn_names(fr%fn_id)%s
+				return
+			end if
+		end if
+	end if
+
+	if (allocated(prog%nodes(fr%node_idx)%identifier%text)) then
+		fname = prog%nodes(fr%node_idx)%identifier%text
+		return
+	end if
+
+	fname = "<fn>"
+
+end function rt_frame_fname
+
+!===============================================================================
+
 function rt_frames_str(prog, ip, frames, nframes) result(trace)
 
 	! Build the "at <fn> (file:line)" call-chain lines of a stack trace, down
@@ -620,11 +668,11 @@ function rt_frames_str(prog, ip, frames, nframes) result(trace)
 	! instruction.  frames(1:nframes) are the active call frames at that
 	! point, exactly as left by OP_CALL/OP_CALL_PTR -- frames(nframes) is
 	! innermost (currently executing), frames(1) outermost (called directly
-	! from <main>).  Per frame_t's docstring, frames(k)%node_idx is the
-	! call-site node for the call that pushed frame k, so its
-	! %identifier%text is the name of the function frame k is running, and
-	! frames(k)%return_ip - 1 is the OP_CALL/OP_CALL_PTR instruction in frame
-	! (k-1)'s code (or <main>'s, for k == 1) that made the call.
+	! from <main>).  rt_frame_fname() names the fn frame k is running (see
+	! its own docstring for why that isn't always frames(k)%node_idx's
+	! call-site identifier), and frames(k)%return_ip - 1 is the
+	! OP_CALL/OP_CALL_PTR instruction in frame (k-1)'s code (or <main>'s,
+	! for k == 1) that made the call.
 	!
 	! A caller that has already skipped frames (rt_skip_frames() below) may
 	! pass nframes == 0 with frames(:) still the *original*, longer array --
@@ -664,7 +712,7 @@ function rt_frames_str(prog, ip, frames, nframes) result(trace)
 			call_ip = frames(k+1)%return_ip - 1
 		end if
 
-		fname = prog%nodes(frames(k)%node_idx)%identifier%text
+		fname = rt_frame_fname(prog, frames(k))
 		trace = trace//line_feed//"  at "//rt_frame_label(prog, fname, call_ip)
 
 	end do
@@ -957,6 +1005,7 @@ module subroutine vm_run(prog, state, res)
 			frames(nframes)%return_ip  = ip + 1
 			frames(nframes)%nfor_saved = nfor
 			frames(nframes)%node_idx  = node_idx_call
+			frames(nframes)%fn_id     = fn_id
 			! Never a bare deallocate() of a value_t array -- a reused frame
 			! slot's recv_slots may still own nested struct(:)/array_t
 			! allocatables from a prior call at this depth; value_array_destroy()
@@ -1033,6 +1082,7 @@ module subroutine vm_run(prog, state, res)
 			frames(nframes)%return_ip  = ip + 1
 			frames(nframes)%nfor_saved = nfor
 			frames(nframes)%node_idx  = node_idx_call
+			frames(nframes)%fn_id     = fn_id
 			! v1 fn pointers are by-value only (see the docstring above), so
 			! this frame slot never gets a recv_slots writeback window of its
 			! own -- but a *previous* call at this depth (e.g. a method call
@@ -1652,8 +1702,8 @@ module subroutine vm_run(prog, state, res)
 				! caller()/Go runtime.Caller(skip) style).  depth 0 is the
 				! current fn (where std::caller() itself was called from);
 				! the default, 1, is the fn that called *that* fn.  Out of
-				! range (including a chain shorter than depth, or depth < 0
-				! wrapping below 0) returns ""
+				! range (including a chain shorter than depth) returns "".
+				! A negative depth is treated as 0 (see rt_skip_frames())
 				block
 				integer :: depth_, nframes_eff_, ip_eff_
 				character(len = :), allocatable :: fname_, res_
@@ -1666,7 +1716,7 @@ module subroutine vm_run(prog, state, res)
 					if (nframes_eff_ == 0) then
 						fname_ = "<main>"
 					else
-						fname_ = prog%nodes(frames(nframes_eff_)%node_idx)%identifier%text
+						fname_ = rt_frame_fname(prog, frames(nframes_eff_))
 					end if
 					res_ = rt_frame_label(prog, fname_, ip_eff_)
 				end if

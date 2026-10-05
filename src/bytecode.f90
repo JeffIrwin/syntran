@@ -528,6 +528,18 @@ module syntran__bytecode_m
 		integer, allocatable :: fn_num_locs(:)
 		integer :: entry_main = 1
 
+		! Fn/method name, parallel to fn_entry(:)/fn_num_locs(:) (grown
+		! together in ensure_fn_entry(), compile_ctrl.f90), for stack-trace
+		! frame labels (rt_frame_fname(), vm_exec.f90).  Set once the fn's
+		! body is compiled (emit_fn_epilogue(), compile_ctrl.f90) -- unset
+		! (unallocated %s) for an id that is only forward-registered, which
+		! can't happen by the time the VM runs since every registered id is
+		! compiled before entry_main.  Needed because a call through a fn
+		! pointer (OP_CALL_PTR) has no call-site identifier naming the
+		! callee -- only the call node's AST, which names the *variable*
+		! holding the pointer, not the fn it resolves to at this call
+		type(string_t), allocatable :: fn_names(:)
+
 	end type program_t
 
 	!********

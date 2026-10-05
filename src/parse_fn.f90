@@ -686,8 +686,9 @@ module subroutine parse_fn_declaration(parser, decl, no_fn_kw)
 	! Captured alongside fn_beg below, before the body is parsed, so an
 	! implicit-return instruction (which has no statement node of its own
 	! to inherit a location from) maps back to the fn header instead of
-	! whatever unit parsing happened to end in -- see compile_module_fns()/
-	! the fn_declaration case in compile_ctrl.f90
+	! whatever unit parsing happened to end in -- see emit_fn_epilogue()
+	! in compile_ctrl.f90, which stamps prog%cur_id/cur_pos from
+	! decl%src_id/src_pos before emitting the implicit return
 	integer :: fn_src_id
 
 	logical :: overwrite, const_param, in_fn_body0, no_fn_kw0

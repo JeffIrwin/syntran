@@ -1628,6 +1628,15 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('std::stack_trace(1);') == 'Stack trace:', &
 			eval('std::caller();') == '', &
 			index(eval('std::caller(0);'), '<main>') == 1, &
+			! A negative depth/skip is treated as 0 (rt_skip_frames(),
+			! vm_exec.f90), not as out-of-range
+			eval('std::caller(-1);') == eval('std::caller(0);'), &
+			eval('std::stack_trace(-1);') == eval('std::stack_trace();'), &
+			! A call through a fn pointer (OP_CALL_PTR) must show the
+			! pointed-to fn's own name ("g"), not the pointer variable's
+			! ("f") -- see stacktrace/fnptr.syntran for the R*-error case
+			eval('fn g(): str { return std::caller(0); } let f = g; f();') &
+				== 'g (<stdin>:1)', &
 			diag_has_code(get_diags('print_trace();'), EC_STD_ONLY_FN), &
 			diag_has_code(get_diags('stack_trace();'), EC_STD_ONLY_FN), &
 			diag_has_code(get_diags('caller();'), EC_STD_ONLY_FN), &
@@ -8955,6 +8964,38 @@ subroutine unit_test_runtime_traces(npass, nfail)
 			//'|Stack trace:' &
 		], label, npass, nfail)
 	end block
+
+	! fnptr.syntran: a call through a fn pointer (OP_CALL_PTR).  Its
+	! call-site node names the *variable* holding the pointer ("f"), not
+	! the fn it resolves to at runtime ("boom") -- rt_frame_fname()
+	! (vm_exec.f90) must prefer prog%fn_names(fn_id) over that node's own
+	! identifier, or the frame prints "at  (" with no name at all
+	diag_ = get_diags_file(P//'fnptr.syntran')
+	call unit_test_coda( [ &
+		diag_has_code(diag_, RC_FOR_STEP_ZERO), &
+		diag_has_text(diag_, P//'fnptr.syntran:10:2'), &
+		diag_has_text(diag_, '  at boom ('//P//'fnptr.syntran:10)'), &
+		diag_has_text(diag_, '  at <main> ('//P//'fnptr.syntran:17)'), &
+		.not. diag_has_text(diag_, '  at  (') &
+		], label, npass, nfail)
+
+	! implicit-ret.syntran: a runtime error (R33, needs
+	! -DSYNTRAN_BOUNDS_CHECK) at a fn's *implicit* return -- bump()'s by-ref
+	! receiver writeback re-subscripts a shrunk array at OP_RET.
+	! emit_fn_epilogue() (compile_ctrl.f90) must stamp that implicit return
+	! with bump()'s own location, or this throws with no "-->" snippet and
+	! a location-less "at bump" frame.  Skipped (like unit_test_bounds_check())
+	! when the flag isn't set, since the OOB access is otherwise undefined
+	! behavior that faults straight through to a raw Fortran abort
+	if (bounds_check) then
+		diag_ = get_diags_file(P//'implicit-ret.syntran')
+		call unit_test_coda( [ &
+			diag_has_code(diag_, RC_SUBSCRIPT_OOB), &
+			diag_has_text(diag_, P//'implicit-ret.syntran:17:2'), &
+			diag_has_text(diag_, '  at bump ('//P//'implicit-ret.syntran:17)'), &
+			diag_has_text(diag_, '  at <main> ('//P//'implicit-ret.syntran:32)') &
+			], label, npass, nfail)
+	end if
 
 end subroutine unit_test_runtime_traces
 
