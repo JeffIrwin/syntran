@@ -1,0 +1,16 @@
+// E109: dup-default
+// A switch-statement has more than one `default` arm
+
+let x = 5;
+
+switch x
+{
+	default
+	{
+		println("a");
+	}
+	default
+	{
+		println("b");
+	}
+}

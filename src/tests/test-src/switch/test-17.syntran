@@ -1,0 +1,109 @@
+// guard-only arms: `case when cond` has no match values, so it matches any
+// subject for which the guard holds.  A false guard falls through to the NEXT
+// arm, not to `default`, and arms are still tried in source order
+
+fn sign(x: i32, allow_neg: bool): str
+{
+	switch x
+	{
+		case 0
+		{
+			return "zero";
+		}
+		case when x > 0
+		{
+			return "pos";
+		}
+		case when allow_neg
+		{
+			// guard doesn't mention the subject at all
+			return "neg";
+		}
+		default
+		{
+			return "rejected";
+		}
+	}
+	return "unreachable";
+}
+
+// A guard-only arm before a plain arm that would also match wins, by source order
+fn shadowed(x: i32): str
+{
+	switch x
+	{
+		case when x > 0
+		{
+			return "guard";
+		}
+		case 5
+		{
+			return "plain";
+		}
+		default
+		{
+			return "default";
+		}
+	}
+	return "unreachable";
+}
+
+// A false guard-only guard falls to a later arm, not to `default`
+fn falls_to_later(x: i32): str
+{
+	switch x
+	{
+		case when x > 100
+		{
+			return "huge";
+		}
+		case 1:10
+		{
+			return "small";
+		}
+		default
+		{
+			return "default";
+		}
+	}
+	return "unreachable";
+}
+
+// Works on non-numeric subjects too, and after a trailing-comma value list
+fn on_str(s: str): str
+{
+	switch s
+	{
+		case "a", when len(s) > 3
+		{
+			return "a-long";
+		}
+		case when len(s) > 3
+		{
+			return "long";
+		}
+		default
+		{
+			return "other";
+		}
+	}
+	return "unreachable";
+}
+
+let ok1 = sign(0, false)  == "zero";
+let ok2 = sign(7, false)  == "pos";
+let ok3 = sign(-7, true)  == "neg";
+let ok4 = sign(-7, false) == "rejected";
+
+let ok5 = shadowed(5) == "guard";
+let ok6 = shadowed(-5) == "default";
+
+let ok7 = falls_to_later(500) == "huge";
+let ok8 = falls_to_later(5)   == "small";
+let ok9 = falls_to_later(50)  == "default";
+
+let ok10 = on_str("hello") == "long";
+let ok11 = on_str("hi")    == "other";
+
+let oks = [ok1, ok2, ok3, ok4, ok5, ok6, ok7, ok8, ok9, ok10, ok11];
+return all(oks);

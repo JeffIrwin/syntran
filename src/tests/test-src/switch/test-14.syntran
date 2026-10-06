@@ -1,0 +1,111 @@
+// case guards: `case v when cond` (or a range/multi-value list with a guard)
+// is checked only after a value/range already matched, and a false guard
+// falls through to the NEXT arm, not to `default`
+
+fn classify(x: i32, y: i32): str
+{
+	switch x
+	{
+		case 1:10 when y > 0
+		{
+			return "small-positive";
+		}
+		case 1:10
+		{
+			// caught here when the guard above was false
+			return "small";
+		}
+		case 10, 20 when y > 0
+		{
+			return "big-positive";
+		}
+		default
+		{
+			return "other";
+		}
+	}
+	return "unreachable";
+}
+
+fn classify_no_fallback(x: i32, y: i32): str
+{
+	switch x
+	{
+		case 1:10 when y > 0
+		{
+			return "small-positive";
+		}
+		default
+		{
+			return "default";
+		}
+	}
+	return "unreachable";
+}
+
+fn read_outer(x: i32): str
+{
+	let threshold = 5;
+	switch x
+	{
+		case 1:100 when x > threshold
+		{
+			return "above-threshold";
+		}
+		default
+		{
+			return "at-or-below";
+		}
+	}
+	return "unreachable";
+}
+
+fn nested(x: i32, y: i32): str
+{
+	switch x
+	{
+		case 1:10 when y > 0
+		{
+			switch y
+			{
+				case 1:10 when x > 0
+				{
+					return "both-positive";
+				}
+				default
+				{
+					return "inner-default";
+				}
+			}
+		}
+		default
+		{
+			return "outer-default";
+		}
+	}
+	return "unreachable";
+}
+
+// guard false falls to the next arm, which matches
+let ok1 = classify(5, 1)  == "small-positive";
+let ok2 = classify(5, -1) == "small";
+
+// guard false with no later match falls to default (not the next `case 1:10`
+// arm here, since there isn't one)
+let ok3 = classify_no_fallback(5, 1)  == "small-positive";
+let ok4 = classify_no_fallback(5, -1) == "default";
+
+// guard over a multi-value list
+let ok5 = classify(10, 1)  == "big-positive";
+let ok6 = classify(10, -1) == "other";
+
+// guard reading an outer (non-subject) variable
+let ok7 = read_outer(9) == "above-threshold";
+let ok8 = read_outer(2) == "at-or-below";
+
+// nested switch, each with its own guard
+let ok9  = nested(5, 5)  == "both-positive";
+let ok10 = nested(5, -1) == "outer-default";
+
+let oks = [ok1, ok2, ok3, ok4, ok5, ok6, ok7, ok8, ok9, ok10];
+return all(oks);

@@ -1,0 +1,10 @@
+// E102: expl-array-size
+// An explicit rank-2+ array literal's element count doesn't match its
+// literal-constant declared size
+
+let mat = [
+	1, 2, 3,
+	4, 5
+	;
+	3, 2
+];

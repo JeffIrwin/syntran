@@ -1,0 +1,20 @@
+// Module fn using a switch statement, imported by test-11.syntran
+
+fn classify(x: i32): str
+{
+	switch x
+	{
+		case 1
+		{
+			return "one";
+		}
+		case 2, 3
+		{
+			return "two-or-three";
+		}
+		default
+		{
+			return "other";
+		}
+	}
+}

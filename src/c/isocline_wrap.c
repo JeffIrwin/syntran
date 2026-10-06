@@ -14,6 +14,7 @@
  *   - syntran_isatty():       are stdin AND stdout real terminals?
  *   - syntran_history_path(): where should REPL history persist?
  *   - syntran_is_dir():       does a path refer to a directory?
+ *   - syntran_getcwd():       what is the current working directory?
  * These differ by platform in ways that are simplest to resolve here, where
  * the C compiler predefines _WIN32 automatically (no build-system flag
  * needed on either FPM or CMake).
@@ -29,6 +30,7 @@
 
 #ifdef _WIN32
 #include <io.h>
+#include <direct.h>
 #else
 #include <unistd.h>
 #endif
@@ -225,4 +227,19 @@ int syntran_is_dir(const char *path)
 	if (stat(path, &st) != 0) return 0;
 #endif
 	return (st.st_mode & S_IFDIR) != 0;
+}
+
+/* Write the current working directory (null-terminated) into buf, sized n.
+ * Returns 0 on success, non-zero on failure (e.g. buf too small).
+ *
+ * Used by get_cwd() (src/utils.f90), which the test suite uses to build a
+ * genuine absolute path for exercising #include() with an absolute filename.
+ */
+int syntran_getcwd(char *buf, int n)
+{
+#ifdef _WIN32
+	return _getcwd(buf, n) == NULL;
+#else
+	return getcwd(buf, n) == NULL;
+#endif
 }

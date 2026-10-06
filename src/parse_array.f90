@@ -5,10 +5,6 @@ submodule (syntran__parse_m) syntran__parse_array
 
 	implicit none
 
-	! FIXME: remember to prepend routines like `module function` or `module
-	! subroutine` when pasting them into a submodule.  gfortran doesn't care but
-	! intel fortran will refuse to compile otherwise
-
 !===============================================================================
 
 contains
@@ -31,9 +27,9 @@ recursive module subroutine parse_array_expr(parser, expr)
 
 	!********
 
-	integer :: span_beg, span_end, pos0, lb_beg, lb_end, ub_beg, ub_end, rank_, i
+	integer :: span_beg, span_end, pos0, lb_beg, lb_end, ub_beg, ub_end, rank_, i, io
 
-	logical :: enum_mismatch
+	logical :: range_non_num
 
 	type(syntax_node_t)  :: lbound_, step, ubound_, len_, elem
 	type(syntax_node_vector_t) :: elems, size_
@@ -86,25 +82,7 @@ recursive module subroutine parse_array_expr(parser, expr)
 
 	!print *, 'lbound_ = ', parser%text(span_beg, span_end)
 
-	! TODO: should type checking be done by caller, or should we pass an
-	! expected type arg for the RHS of this check?
-
-	! TODO: check if lbound_%val is allocated, e.g. for assigning one array to
-	! a cat of another?  How would this work for rank-2+?
-	!
-	!     let a = [0: 3];
-	!     let b = [a, 5, 6];
-	!              ^ segfault
-
-	!! TODO: there should still be *some* type checking.  At least, implicit
-	!! ranges cannot use bool
-	!if (lbound_%val%type /= i32_type) then
-	!	span = new_span(span_beg, span_end - span_beg + 1)
-	!	call parser%diagnostics%push(err_non_int_range( &
-	!		parser%context, span, parser%text(span_beg, span_end)))
-	!end if
-
-	! Arrays of fn pointers are not supported (v1): eval_array.f90's per-type
+	! Arrays of fn pointers are not supported (v1): runtime_array.f90's per-type
 	! storage/copy paths have no fn_type case, so letting this through would
 	! either hit the IC_ALLOC_ARRAY_TYPE internal error (uniform-value form) or
 	! segfault outright (explicit-list form, since a het-array check alone
@@ -147,12 +125,16 @@ recursive module subroutine parse_array_expr(parser, expr)
 		if (lbound_%val%type == array_type) then
 			! Only push in the final pass: in pass 0, a forward-referenced fn
 			! call's type may still be unresolved, which would falsely trip
-			! this check and (by making pass 0 non-empty) skip the pass that
-			! would resolve it correctly
+			! this check.  This diagnostic (EC_NON_SCA_VAL) is not in
+			! is_pass0_only_diag()'s allowlist, so parse_unit()
+			! (parse_misc.f90) never merges a pass-0-only copy of it back in
+			! -- gating here just avoids wasted work, it's not load-bearing
+			! for correctness the way it used to be
 			if (parser%ipass /= 0) then
 				span = new_span(lb_beg, lb_end - lb_beg + 1)
 				call parser%diagnostics%push(err_non_sca_val( &
-					parser%context(), span, parser%text(lb_beg, lb_end)))
+					parser%context(), span, parser%text(lb_beg, lb_end), &
+					"uniform"))
 			end if
 		end if
 
@@ -161,10 +143,10 @@ recursive module subroutine parse_array_expr(parser, expr)
 		expr%val%array%rank = size_%len_
 
 		! Move children (avoids deep copies)
-		call syntax_node_move(lbound_, expr%lbound)
-		allocate(expr%size(size_%len_))
+		call syntax_node_move(lbound_, expr%lbound_)
+		allocate(expr%size_(size_%len_))
 		do i = 1, size_%len_
-			call syntax_node_move_into(size_%v(i), expr%size(i))
+			call syntax_node_move_into(size_%v(i), expr%size_(i))
 		end do
 
 		return
@@ -185,9 +167,8 @@ recursive module subroutine parse_array_expr(parser, expr)
 		!print *, 'lbound_ type = ', kind_name(lbound_%val%type)
 		!print *, 'ubound_ type = ', kind_name(ubound_%val%type)
 
-		if (.not. all([ &
-			is_num_type(lbound_%val%type), &
-			is_num_type(ubound_%val%type)])) then
+		range_non_num = .not. all(is_num_type([lbound_%val%type, ubound_%val%type]))
+		if (range_non_num) then
 
 			! Only push in the final pass: a forward-referenced fn call's type
 			! may still be unresolved in pass 0 (see err_non_sca_val above)
@@ -211,8 +192,10 @@ recursive module subroutine parse_array_expr(parser, expr)
 			span_beg = parser%peek_pos(0)
 			call parser%parse_expr(expr=ubound_)
 			span_end = parser%peek_pos(0) - 1
+			ub_end   = span_end
 
 			if (.not. is_num_type(ubound_%val%type)) then
+				range_non_num = .true.
 				! Only push in the final pass (see err_non_sca_val above)
 				if (parser%ipass /= 0) then
 					span = new_span(span_beg, span_end - span_beg + 1)
@@ -241,37 +224,37 @@ recursive module subroutine parse_array_expr(parser, expr)
 
 				expr%val%array%type = lbound_%val%type
 
-			! TODO: make is_int_type() elemental, then we can sugar up this syntax
-			else if (all([ &
-				is_int_type(lbound_%val%type), &
-				is_int_type(step  %val%type), &
-				is_int_type(ubound_%val%type)])) then
+			else if (all(is_int_type( &
+				[lbound_%val%type, step%val%type, ubound_%val%type]))) then
 
 				expr%val%array%type = i64_type
 
 			else
-				! TODO: different message
-				! Only push in the final pass (see err_non_sca_val above).
-				! Explicitly set unknown_type (instead of leaving the
-				! just-allocated array%type uninitialized) so downstream
-				! consumers (e.g. is_binary_op_allowed()) hit their existing
-				! unknown_type cascade-suppression instead of comparing
-				! against garbage
+				! Not a uniform i32/f32/f64 triple (caught above) and not all
+				! int types (caught above) -- the only way to land here with
+				! numeric operands is a type mismatch between lbound/step/ubound,
+				! e.g. [1: 2.0: 5] or [1: 2: 5.0].  Explicitly set unknown_type
+				! (instead of leaving the just-allocated array%type
+				! uninitialized) so downstream consumers (e.g.
+				! is_binary_op_allowed()) hit their existing unknown_type
+				! cascade-suppression instead of comparing against garbage
 				expr%val%array%type = unknown_type
-				if (parser%ipass /= 0) then
-					span = new_span(span_beg, span_end - span_beg + 1)
-					call parser%diagnostics%push(err_non_int_range( &
-						parser%context(), span, &
-						parser%text(span_beg, span_end)))
+				! Only push in the final pass (see err_non_sca_val above), and
+				! only if a non-numeric operand hasn't already been reported
+				! above (avoid a redundant cascade)
+				if (parser%ipass /= 0 .and. .not. range_non_num) then
+					span = new_span(lb_beg, ub_end - lb_beg + 1)
+					call parser%diagnostics%push(err_bound_type_mismatch( &
+						parser%context(), span))
 				end if
 			end if
 
 			expr%val%array%kind = step_array
 			expr%val%array%rank = 1
 
-			call syntax_node_move(lbound_, expr%lbound)
+			call syntax_node_move(lbound_, expr%lbound_)
 			call syntax_node_move(step,    expr%step)
-			call syntax_node_move(ubound_, expr%ubound)
+			call syntax_node_move(ubound_, expr%ubound_)
 
 			return
 
@@ -294,7 +277,6 @@ recursive module subroutine parse_array_expr(parser, expr)
 				! Only push in the final pass (see err_non_sca_val above)
 				if (parser%ipass /= 0) then
 					span = new_span(span_beg, span_end - span_beg + 1)
-					! TODO: different diag for each (or at least some) case
 					call parser%diagnostics%push(err_non_int_len( &
 						parser%context(), span, &
 						parser%text(span_beg, span_end)))
@@ -332,8 +314,8 @@ recursive module subroutine parse_array_expr(parser, expr)
 			expr%val%array%kind = len_array
 			expr%val%array%rank = 1
 
-			call syntax_node_move(lbound_, expr%lbound)
-			call syntax_node_move(ubound_, expr%ubound)
+			call syntax_node_move(lbound_, expr%lbound_)
+			call syntax_node_move(ubound_, expr%ubound_)
 			call syntax_node_move(len_,    expr%len_)
 
 			return
@@ -344,8 +326,8 @@ recursive module subroutine parse_array_expr(parser, expr)
 
 		call parser%match(rbracket_token, rbracket)
 
-		!print *, 'lbound_ = ', lbound_%str()
-		!print *, 'ubound_ = ', ubound_%str()
+		!print *, 'lbound_ = ', lbound_%to_str()
+		!print *, 'ubound_ = ', ubound_%to_str()
 
 		allocate(expr%val%array)
 
@@ -354,37 +336,45 @@ recursive module subroutine parse_array_expr(parser, expr)
 		expr%val%array%kind = bound_array
 		expr%val%array%rank = 1
 
-		call syntax_node_move(lbound_, expr%lbound)
-		call syntax_node_move(ubound_, expr%ubound)
+		call syntax_node_move(lbound_, expr%lbound_)
+		call syntax_node_move(ubound_, expr%ubound_)
 
 		! Read type info from moved children (not from consumed locals)
 		if (all(i32_type == &
-			[expr%lbound%val%type, expr%ubound%val%type]) &! .or. &
-			) then
+			[expr%lbound_%val%type, expr%ubound_%val%type])) then
 
-			expr%val%array%type = expr%lbound%val%type
+			expr%val%array%type = expr%lbound_%val%type
 
-		! TODO: make is_int_type() elemental, then we can sugar up this syntax
-		else if (all([ &
-			is_int_type(expr%lbound%val%type), &
-			is_int_type(expr%ubound%val%type)])) then
+		else if (all(is_int_type( &
+			[expr%lbound_%val%type, expr%ubound_%val%type]))) then
 
 			expr%val%array%type = i64_type
 
 		else
-			! TODO: different message
-			! Only push in the final pass (see err_non_sca_val above).
 			! Explicitly set unknown_type (instead of leaving the
 			! just-allocated array%type uninitialized) so downstream
 			! consumers (e.g. is_binary_op_allowed()) hit their existing
 			! unknown_type cascade-suppression instead of comparing against
 			! garbage
 			expr%val%array%type = unknown_type
-			if (parser%ipass /= 0) then
-				span = new_span(span_beg, span_end - span_beg + 1)
-				call parser%diagnostics%push(err_non_int_range( &
-					parser%context(), span, &
-					parser%text(span_beg, span_end)))
+			! Only push in the final pass (see err_non_sca_val above), and
+			! only if a non-numeric operand hasn't already been reported
+			! above (avoid a redundant cascade)
+			if (parser%ipass /= 0 .and. .not. range_non_num) then
+				if (expr%lbound_%val%type == expr%ubound_%val%type) then
+					! Same (numeric) type on both sides, e.g. [1.0: 5.0] --
+					! an implicit unit-step range specifically needs integer
+					! bounds
+					span = new_span(span_beg, span_end - span_beg + 1)
+					call parser%diagnostics%push(err_non_int_range( &
+						parser%context(), span, &
+						parser%text(span_beg, span_end)))
+				else
+					! Numeric but mismatched types, e.g. [1: 2.0]
+					span = new_span(lb_beg, ub_end - lb_beg + 1)
+					call parser%diagnostics%push(err_bound_type_mismatch( &
+						parser%context(), span))
+				end if
 			end if
 		end if
 
@@ -395,7 +385,7 @@ recursive module subroutine parse_array_expr(parser, expr)
 	! Explicit array form [elem_0, elem_1, elem_2, ... ].  elem_0 has already been
 	! parsed as lbound above
 
-	!print *, 'elem ', lbound_%val%str()
+	!print *, 'elem ', lbound_%val%to_str()
 	if (lbound_%val%type == array_type) then
 
 		! Fortran actually allows concatenating multi-rank arrays.  It just
@@ -404,11 +394,10 @@ recursive module subroutine parse_array_expr(parser, expr)
 		rank_ = lbound_%val%array%rank
 		!print *, "rank = ", lbound_%val%array%rank
 		if (rank_ /= 1) then
-			! TODO: pass the array's text to err_bad_cat_rank like other better
-			! diags
 			span = new_span(lb_beg, lb_end - lb_beg + 1)
 			call parser%diagnostics%push( &
-				err_bad_cat_rank(parser%context(), span, rank_) &
+				err_bad_cat_rank(parser%context(), span, rank_, &
+				parser%text(lb_beg, lb_end)) &
 			)
 		end if
 
@@ -433,27 +422,19 @@ recursive module subroutine parse_array_expr(parser, expr)
 		call parser%check_enum_name_value(elem)
 		span_end = parser%peek_pos(0) - 1
 
-		!print *, 'elem ', elem%val%str()
+		!print *, 'elem ', elem%val%to_str()
 
-		if (elem%val%type /= lbound_%val%type) then
+		! types_match() covers top-level type (str vs i32 etc.), array
+		! element type (e.g. cat'ing an array of str with an array of i32),
+		! struct kind (different structs), and enum kind (different enums,
+		! e.g. Suit vs Card) all in one call.  Rank mismatches of cat'd
+		! arrays are reported separately as E40 below, so ignore those here
+		! to avoid double diagnostics on the same element
+		io = types_match(lbound_%val, elem%val)
+		if (io /= TYPE_MATCH .and. io /= TYPE_RANK_MISMATCH) then
 			span = new_span(span_beg, span_end - span_beg + 1)
 			call parser%diagnostics%push(err_het_array( &
 				parser%context(), span, parser%text(span_beg, span_end)))
-		else if (elem%val%type == enum_type) then
-			! Matching `type == enum_type` isn't enough -- two different
-			! enums (e.g. Suit vs Card) must not be mixed in one array
-			! literal.  Mirrors the cross-enum operand check for binary ops
-			if (allocated(elem%val%enum_cookie) .and. &
-				allocated(lbound_%val%enum_cookie)) then
-				enum_mismatch = elem%val%enum_cookie /= lbound_%val%enum_cookie
-			else
-				enum_mismatch = elem%val%enum_name /= lbound_%val%enum_name
-			end if
-			if (enum_mismatch) then
-				span = new_span(span_beg, span_end - span_beg + 1)
-				call parser%diagnostics%push(err_het_array( &
-					parser%context(), span, parser%text(span_beg, span_end)))
-			end if
 		end if
 
 		if (elem%val%type == array_type) then
@@ -463,7 +444,8 @@ recursive module subroutine parse_array_expr(parser, expr)
 			if (rank_ /= 1) then
 				span = new_span(span_beg, span_end - span_beg + 1)
 				call parser%diagnostics%push( &
-					err_bad_cat_rank(parser%context(), span, rank_) &
+					err_bad_cat_rank(parser%context(), span, rank_, &
+					parser%text(span_beg, span_end)) &
 				)
 			end if
 		end if
@@ -481,15 +463,49 @@ recursive module subroutine parse_array_expr(parser, expr)
 		call parser%match(semicolon_token, semicolon)
 
 		if (lbound_%val%type == array_type) then
-			! TODO: this error msg shouldn't say "uniform" array here
 			span = new_span(lb_beg, lb_end - lb_beg + 1)
 			call parser%diagnostics%push(err_non_sca_val( &
-				parser%context(), span, parser%text(lb_beg, lb_end)))
+				parser%context(), span, parser%text(lb_beg, lb_end), &
+				"sized"))
 		end if
 
+		span_beg = parser%peek_pos(0)
 		call parser%parse_size(size_)
+		span_end = parser%peek_pos(0) - 1
 
 		call parser%match(rbracket_token, rbracket)
+
+		! If every declared size is a literal constant, the element count can
+		! be validated right now (E102) instead of waiting for the runtime
+		! check (R21) in eval_array_expr()/vm_exec.f90.  A non-literal size
+		! (e.g. from a variable) still falls through to R21
+		if (parser%ipass /= 0) then
+			block
+				logical :: all_lit
+				integer(kind = 8) :: total
+				character(len = :), allocatable :: dims
+
+				all_lit = .true.
+				total   = 1
+				dims    = ''
+				do i = 1, size_%len_
+					if (size_%v(i)%kind /= literal_expr .or. &
+						.not. is_int_type(size_%v(i)%val%type)) then
+						all_lit = .false.
+						exit
+					end if
+					total = total * size_%v(i)%val%to_i64()
+					if (i > 1) dims = dims//' x '
+					dims = dims//str(size_%v(i)%val%to_i64())
+				end do
+
+				if (all_lit .and. int(elems%len_, 8) /= total) then
+					span = new_span(span_beg, span_end - span_beg + 1)
+					call parser%diagnostics%push(err_expl_array_size( &
+						parser%context(), span, elems%len_, dims, total))
+				end if
+			end block
+		end if
 
 		allocate(expr%val%array)
 
@@ -499,9 +515,9 @@ recursive module subroutine parse_array_expr(parser, expr)
 		expr%val%array%kind = size_array
 		expr%val%array%rank = size_%len_
 
-		allocate(expr%size(size_%len_))
+		allocate(expr%size_(size_%len_))
 		do i = 1, size_%len_
-			call syntax_node_move_into(size_%v(i), expr%size(i))
+			call syntax_node_move_into(size_%v(i), expr%size_(i))
 		end do
 		allocate(expr%elems(elems%len_))
 		do i = 1, elems%len_
@@ -555,7 +571,7 @@ recursive module subroutine parse_subscripts(parser, expr)
 	!********
 
 	integer :: pos0, span0, span1, expect_rank, rank_, ls_beg, ls_end, &
-		us_beg, us_end, nelem_subs
+		us_beg, us_end, nelem_subs, nsub
 
 	logical :: has_char_sub
 
@@ -667,7 +683,7 @@ recursive module subroutine parse_subscripts(parser, expr)
 			call parser%parse_expr(expr=lsubscript)
 			ls_end = parser%current_pos()
 
-			!print *, 'lsubscript = ', lsubscript%str()
+			!print *, 'lsubscript = ', lsubscript%to_str()
 			!print *, 'lsubscript = ', parser%text(span0, parser%current_pos()-1)
 			!print *, "sub type = ", kind_name(lsubscript%val%type)
 
@@ -819,7 +835,11 @@ recursive module subroutine parse_subscripts(parser, expr)
 		has_char_sub = (expr%val%array%type == str_type) .and. &
 			(size(expr%lsubscripts) == nelem_subs + 1)
 
-		if (all(expr%lsubscripts(1:nelem_subs)%sub_kind == scalar_sub)) then
+		! With too few subscripts, E36 is pushed below.  Clamp so the slices
+		! here don't run off the end of lsubscripts
+		nsub = min(size(expr%lsubscripts), nelem_subs)
+
+		if (all(expr%lsubscripts(1:nsub)%sub_kind == scalar_sub)) then
 			! this is not necessarily true for strings
 			expr%val%type = expr%val%array%type
 		else if (expr%val%array%type == struct_type) then
@@ -842,7 +862,7 @@ recursive module subroutine parse_subscripts(parser, expr)
 		! A slice operation can change the result rank.  The char sub (if any)
 		! is NOT counted — it never adds array rank.
 		!print *, 'rank in  = ', expr%val%array%rank
-		expr%val%array%rank = count(expr%lsubscripts(1:nelem_subs)%sub_kind /= scalar_sub)
+		expr%val%array%rank = count(expr%lsubscripts(1:nsub)%sub_kind /= scalar_sub)
 		!print *, 'rank out = ', expr%val%array%rank
 
 	else if (expr%val%type == str_type) then
@@ -898,8 +918,7 @@ module subroutine parse_size(parser, size)
 
 		if (.not. any(len%val%type == [i32_type, i64_type])) then
 			span = new_span(span_beg, span_end - span_beg + 1)
-			! TODO: different diag for each (or at least some) case
-			call parser%diagnostics%push(err_non_int_len( &
+			call parser%diagnostics%push(err_non_int_size( &
 				parser%context(), span, &
 				parser%text(span_beg, span_end)))
 		end if

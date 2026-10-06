@@ -81,7 +81,7 @@ For example, it is *not* possible to concatenate strings together into the inclu
 //  3 | #include("header." + "syntran");
 //    |          ^^^^^^^^^ file not found
 //
-// Error: unexpected token `+` of kind `plus_token`, expected `rparen_token`
+// Error: unexpected token `+`, expected `)`
 //   --> main.syntran:3:20
 //    |
 //  3 | #include("header." + "syntran");

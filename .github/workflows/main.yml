@@ -19,7 +19,7 @@
 		},
 		"steps": [
 			{
-				"uses": "actions/checkout@v4",
+				"uses": "actions/checkout@v7",
 				"with": {
 					"submodules": true
 				}
@@ -37,6 +37,11 @@
 			},
 			{
 			  "run": "bash utils/gen-header.sh"
+			},
+			{
+				"if": "matrix.os == 'ubuntu-24.04'",
+				"name": "Check syntax_node_t copy/destroy/move sync",
+				"run": "bash utils/check-node-sync.sh"
 			},
 			{
 				"if": "matrix.os == 'ubuntu-24.04'",
@@ -111,8 +116,10 @@
 					# Short tests only.  Long tests are only done in release \n
 					fpm test test --profile debug --link-flag \"$lflags\" \n
 
-					# Also test the legacy AST backend so both paths are exercised \n
-					SYNTRAN_BACKEND=ast fpm test test --profile debug --link-flag \"$lflags\" -- --no-warn-ast \n
+					# Same short tests again, with runtime subscript/string-index \n
+					# bounds checking (RC_SUBSCRIPT_OOB, R33) turned on -- exercises \n
+					# unit_test_bounds_check, which is a no-op without this flag \n
+					fpm test test --profile debug --link-flag \"$lflags\" --flag \"-DSYNTRAN_BOUNDS_CHECK\" \n
 				"
 			},
 			{
@@ -350,18 +357,6 @@
 					docker build ./docker/ --file ./docker/Dockerfile.branch-ubuntu \n
 				"
 			},
-			#{
-			#	# TODO: just remove conditional from other test stage.  This
-			#	# never used to work on Windows bc gfortran-compiled bins
-			#	# just wouldn't run on the github win runners. Maybe go back
-			#	# to debug.  Release has intermittent issues
-			#	"if": "matrix.os == 'windows-latest'",
-			#	"name": "Test Windows",
-			#	"run":
-			#	"
-			#		bash ./test.sh \n
-			#	"
-			#},
 		]
 	},
 	"build-rocky": {
@@ -370,7 +365,7 @@
 		"runs-on": "ubuntu-latest",
 		"steps": [
 			{
-				"uses": "actions/checkout@v4",
+				"uses": "actions/checkout@v7",
 				"with": {
 					"submodules": true
 				}
@@ -440,7 +435,7 @@
 		},
 		"steps": [
 			{
-				"uses": "actions/checkout@v4",
+				"uses": "actions/checkout@v7",
 				"with": {
 					"submodules": true
 				}
@@ -498,7 +493,7 @@
 		},
 		"steps": [
 			{
-				"uses": "actions/checkout@v4",
+				"uses": "actions/checkout@v7",
 				"with": {
 					"submodules": true
 				}
@@ -531,10 +526,12 @@
 
 					ulimit -s unlimited \n
 
-					# TODO: re-disable debug on ifort classic once the 2021.10 debug segfault is root-caused \n
-					if [[ \"${{ matrix.toolchain.version }}\" != \"2023.1\" ]] ; then \n
-						fpm test test --profile debug   --verbose --flag \"-DSYNTRAN_INTEL -fpp\" \n
-					fi \n
+					fpm test test --profile debug   --verbose --flag \"-DSYNTRAN_INTEL -fpp\" \n
+
+					# Same short tests again, with runtime subscript/string-index \n
+					# bounds checking (RC_SUBSCRIPT_OOB, R33) turned on -- exercises \n
+					# unit_test_bounds_check, which is a no-op without this flag \n
+					fpm test test --profile debug   --verbose --flag \"-DSYNTRAN_INTEL -DSYNTRAN_BOUNDS_CHECK -fpp\" \n
 
 					# The optimized -Ofast build goes through cmake instead of \n
 					# fpm (see CMakeLists.txt), which also builds the core lib \n
@@ -570,7 +567,7 @@
 		"runs-on": "ubuntu-latest",
 		"steps": [
 			{
-				"uses": "actions/checkout@v4",
+				"uses": "actions/checkout@v7",
 				"with": {
 					"submodules": true
 				}
@@ -617,7 +614,7 @@
 		"name": "Test linux release bin",
 		"runs-on": "ubuntu-latest",
 		"steps": [
-			{"uses": "actions/checkout@v1"},
+			{"uses": "actions/checkout@v7"},
 			{
 				"name": "Test linux release bin",
 				"run":

@@ -44,32 +44,29 @@ recursive module function syntax_node_str(node, indent) result(str_)
 
 	type  = indentl//'    type  = '//kind_name(node%val%type)//line_feed
 
-	! FIXME: add str conversions for more recent kinds: condition, if_clause,
-	! etc.
-
 	if      (node%kind == binary_expr) then
 
-		left  = indentl//'    left  = '//node%left %str(indentl//'    ') &
+		left  = indentl//'    left  = '//node%left %to_str(indentl//'    ') &
 				//line_feed
 
 		op    = indentl//'    op    = '//node%op%text//line_feed
 
-		right = indentl//'    right = '//node%right%str(indentl//'    ') &
+		right = indentl//'    right = '//node%right%to_str(indentl//'    ') &
 				//line_feed
 
 	else if (node%kind == fn_declaration) then
-		val = indentl//'    body = '//node%body%str(indentl//'    ')//line_feed
+		val = indentl//'    body = '//node%body%to_str(indentl//'    ')//line_feed
 
 	else if (node%kind == fn_call_expr) then
 		val = indentl//'    id_index = '//str(node%id_index)//line_feed
 
 	else if (node%kind == return_statement) then
-		val = indentl//'    expr = '//node%right%str(indentl//'    ')//line_feed
+		val = indentl//'    expr = '//node%right%to_str(indentl//'    ')//line_feed
 
 	else if (node%kind == block_statement) then
 
 		do i = 1, size(node%members)
-			block = block // node%members(i)%str(indentl//'    ')
+			block = block // node%members(i)%to_str(indentl//'    ')
 		end do
 		block = block // line_feed
 
@@ -77,7 +74,7 @@ recursive module function syntax_node_str(node, indent) result(str_)
 
 		type = ''
 		do i = 1, size(node%members)
-			block = block // node%members(i)%str(indentl//'    ')
+			block = block // node%members(i)%to_str(indentl//'    ')
 		end do
 		block = block // line_feed
 
@@ -88,17 +85,58 @@ recursive module function syntax_node_str(node, indent) result(str_)
 
 		op    = indentl//'    op    = '//node%op%text//line_feed
 
-		right = indentl//'    right = '//node%right%str(indentl//'    ') &
+		right = indentl//'    right = '//node%right%to_str(indentl//'    ') &
 				//line_feed
 
 	else if (node%kind == unary_expr) then
 
 		op    = indentl//'    op    = '//node%op%text//line_feed
-		right = indentl//'    right = '//node%right%str(indentl//'    ') &
+		right = indentl//'    right = '//node%right%to_str(indentl//'    ') &
 				//line_feed
 
 	else if (node%kind == literal_expr) then
 		val   = indentl//'    val   = '//node%val%to_str()//line_feed
+
+	else
+		! Generic fallback for kinds without a dedicated branch above: print
+		! whichever child nodes happen to be allocated, so this never goes
+		! stale as new node kinds/members are added
+		if (allocated(node%condition)) val = val// &
+			indentl//'    condition = '//node%condition%to_str(indentl//'    ')//line_feed
+		if (allocated(node%if_clause)) val = val// &
+			indentl//'    if_clause = '//node%if_clause%to_str(indentl//'    ')//line_feed
+		if (allocated(node%else_clause)) val = val// &
+			indentl//'    else_clause = '//node%else_clause%to_str(indentl//'    ')//line_feed
+		if (allocated(node%body)) val = val// &
+			indentl//'    body = '//node%body%to_str(indentl//'    ')//line_feed
+		if (allocated(node%array)) val = val// &
+			indentl//'    array = '//node%array%to_str(indentl//'    ')//line_feed
+		if (allocated(node%lbound_)) val = val// &
+			indentl//'    lbound_ = '//node%lbound_%to_str(indentl//'    ')//line_feed
+		if (allocated(node%ubound_)) val = val// &
+			indentl//'    ubound_ = '//node%ubound_%to_str(indentl//'    ')//line_feed
+		if (allocated(node%step)) val = val// &
+			indentl//'    step = '//node%step%to_str(indentl//'    ')//line_feed
+		if (allocated(node%len_)) val = val// &
+			indentl//'    len_ = '//node%len_%to_str(indentl//'    ')//line_feed
+		if (allocated(node%rank)) val = val// &
+			indentl//'    rank = '//node%rank%to_str(indentl//'    ')//line_feed
+
+		if (allocated(node%members)) then
+			do i = 1, size(node%members)
+				block = block//node%members(i)%to_str(indentl//'    ')
+			end do
+		end if
+		if (allocated(node%elems)) then
+			do i = 1, size(node%elems)
+				block = block//node%elems(i)%to_str(indentl//'    ')
+			end do
+		end if
+		if (allocated(node%args)) then
+			do i = 1, size(node%args)
+				block = block//node%args(i)%to_str(indentl//'    ')
+			end do
+		end if
 	end if
 
 	str_ = line_feed// &
@@ -302,6 +340,18 @@ module integer function get_keyword_kind(text) result(kind)
 		case ("const")
 			kind = const_keyword
 
+		case ("switch")
+			kind = switch_keyword
+
+		case ("case")
+			kind = case_keyword
+
+		case ("default")
+			kind = default_keyword
+
+		case ("when")
+			kind = when_keyword
+
 		case default
 			kind = identifier_token
 
@@ -340,7 +390,8 @@ module logical function is_identifier_or_keyword(kind)
 		true_keyword, false_keyword, not_keyword, and_keyword, or_keyword, &
 		let_keyword, if_keyword, else_keyword, for_keyword, in_keyword, &
 		while_keyword, fn_keyword, struct_keyword, enum_keyword, include_keyword, &
-		return_keyword, break_keyword, continue_keyword, use_keyword &
+		return_keyword, break_keyword, continue_keyword, use_keyword, &
+		switch_keyword, case_keyword, default_keyword, when_keyword &
 	])
 
 end function is_identifier_or_keyword
@@ -397,18 +448,19 @@ module logical function is_binary_op_allowed(left, op, right, left_arr, right_ar
 				! Would recursion help for arrays here?  It seems like it
 				! wouldn't reduce very many LOC
 
-				! TODO: should vec str + scalar str be allowed?
-
 				allowed = &
-					(is_num_type(left_arr) .and. is_num_type(right_arr))
+					(is_num_type(left_arr) .and. is_num_type(right_arr)) .or. &
+					(left_arr == str_type  .and. right_arr == str_type)
 
 			else if (left == array_type) then
 				allowed = &
-					(is_num_type(left_arr) .and. is_num_type(right))
+					(is_num_type(left_arr) .and. is_num_type(right)) .or. &
+					(left_arr == str_type  .and. right == str_type)
 
 			else if (right == array_type) then
 				allowed = &
-					(is_num_type(left) .and. is_num_type(right_arr))
+					(is_num_type(left) .and. is_num_type(right_arr)) .or. &
+					(left == str_type  .and. right_arr == str_type)
 
 			else
 				allowed = &
@@ -586,6 +638,65 @@ end function is_binary_op_allowed
 
 !===============================================================================
 
+module logical function is_binary_op_allowed_val(left, op, right) &
+		result(allowed)
+
+	! Like is_binary_op_allowed(), but takes whole values instead of a bunch of
+	! type ints, so it can also check that struct, enum, and fn operands are
+	! the *same* struct/enum/fn type, not just the same kind
+
+	type(value_t), intent(in) :: left, right
+	integer, intent(in) :: op
+
+	!********
+
+	integer :: larrtype, rarrtype
+
+	larrtype = unknown_type
+	rarrtype = unknown_type
+	if (left %type == array_type .and. allocated(left %array)) larrtype = left %array%type
+	if (right%type == array_type .and. allocated(right%array)) rarrtype = right%array%type
+
+	allowed = is_binary_op_allowed(left%type, op, right%type, larrtype, rarrtype)
+	if (.not. allowed) return
+
+	if (left%type == struct_type) then
+		! Prefer the alias-independent struct_cookie (set at struct
+		! declaration time) so the same struct reached via two different
+		! module aliases/import paths is still recognized as the same type.
+		! Fall back to struct_name if either side lacks a cookie
+		if (allocated(left%struct_cookie) .and. allocated(right%struct_cookie)) then
+			if (left%struct_cookie /= right%struct_cookie) allowed = .false.
+		else if (left%struct_name /= right%struct_name) then
+			allowed = .false.
+		end if
+
+	else if (left%type == enum_type .or. larrtype == enum_type) then
+		! Same idea as struct_cookie above.  Also covers arrays of enum values
+		! (e.g. `[C.A] == [D.X]`): enum_name/enum_cookie are set at the array
+		! level too (c.f. parse_array_expr), so the same check works unchanged
+		! for either scalar or array operands
+		if (allocated(left%enum_cookie) .and. allocated(right%enum_cookie)) then
+			if (left%enum_cookie /= right%enum_cookie) allowed = .false.
+		else if (left%enum_name /= right%enum_name) then
+			allowed = .false.
+		end if
+
+	else if (left%type == fn_type) then
+		! Fn-pointer assignment must match the full signature, not just fn_type
+		! == fn_type: the call site's arity is frozen at parse time from the
+		! LHS signature (parse_fn.f90's fn_call_ptr_expr), so a mismatched RHS
+		! would desync OP_CALL_PTR's arg pops.  Likewise, fn-pointer (in)equality
+		! is only implemented for same-signature operands, c.f. the fn_type arm
+		! of is_eq_value_t (bool.f90), which compares dispatch keys
+		if (types_match(left, right) /= TYPE_MATCH) allowed = .false.
+
+	end if
+
+end function is_binary_op_allowed_val
+
+!===============================================================================
+
 module logical function is_unary_op_allowed(op, right, right_arr)
 
 	! Is a unary operation allowed with kinds operator op and right operand?
@@ -641,6 +752,10 @@ module integer function get_unary_op_prec(kind) result(prec)
 
 		case (plus_token, minus_token, not_keyword, bang_token)
 			! arithmetic +, arithmetic -, logical not, bitwise not
+			!
+			! NOTE: this must stay above the max binary precedence
+			! (get_binary_op_prec below, currently 11 for `**`), or unary
+			! `-x**2` would parse as `-(x**2)` instead of `(-x)**2`
 			prec = 12
 
 		case default
@@ -688,8 +803,8 @@ module integer function get_binary_op_prec(kind) result(prec)
 
 		!********
 
-		! FIXME: increment the unary operator precedence in the fn above after
-		! increasing the max binary precedence
+		! NOTE: `**` is the highest-precedence binary op; see the matching
+		! note on get_unary_op_prec above -- unary must stay above this
 		case (sstar_token)
 			prec = 11
 
@@ -734,7 +849,7 @@ end function get_binary_op_prec
 
 !===============================================================================
 
-module logical function is_num_type(type)
+elemental module logical function is_num_type(type)
 
 	integer, intent(in) :: type
 
@@ -744,7 +859,7 @@ end function is_num_type
 
 !===============================================================================
 
-module logical function is_int_type(type)
+elemental module logical function is_int_type(type)
 
 	integer, intent(in) :: type
 
@@ -754,7 +869,7 @@ end function is_int_type
 
 !===============================================================================
 
-module logical function is_float_type(type)
+elemental module logical function is_float_type(type)
 
 	integer, intent(in) :: type
 
@@ -830,9 +945,7 @@ recursive module integer function get_binary_op_kind( &
 
 		! Other operations return the same type as their operands if they match,
 		! or cast "up" to the type of the operand with the greatest range or
-		! precision
-		!
-		! FIXME: i64, f64, etc.
+		! precision (see the f64/f32/i64 promotion rules below)
 
 		kind_ = unknown_type
 
@@ -905,7 +1018,8 @@ module function scalar_to_array_type(scalar_type_) result(array_type_)
 	case (str_type)
 		array_type_ = str_array_type
 
-	! TODO: file_type?
+	! No file_array_type: there is no way to construct an array of open file
+	! handles, so file_type has no array counterpart here
 
 	case default
 		array_type_ = unknown_type
@@ -942,7 +1056,7 @@ module function array_to_scalar_type(array_type_) result(scalar_type_)
 	case (str_array_type)
 		scalar_type_ = str_type
 
-	! TODO: file_type?
+	! No file_array_type: c.f. the note in scalar_to_array_type() above
 
 	case default
 		scalar_type_ = unknown_type

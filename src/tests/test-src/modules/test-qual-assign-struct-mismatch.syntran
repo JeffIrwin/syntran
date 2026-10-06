@@ -1,0 +1,10 @@
+
+// Qualified assignment must reject a struct of a different type, same as the
+// unqualified `a = b` path does
+
+use qual_assign_mod;
+
+let pear = qual_assign_mod::Pear{weight = 2};
+
+qual_assign_mod::apple = pear;
+

@@ -1,0 +1,6 @@
+// R36: minmax-empty
+// minval() or maxval() has nothing to reduce: an empty array, or a mask that
+// selects no elements
+
+let a = [1, 2, 3, 4];
+let m = minval(a, a > 10);

@@ -281,6 +281,7 @@ subroutine div_value_t(left, right, res, op_text)
 			res%array = mold(right%array, i64_type)
 			res%array%i64 = left%array%i64 / right%array%i32
 
+
 		case default
 			write(*,*) err_eval_binary_types(op_text)
 			call internal_error()

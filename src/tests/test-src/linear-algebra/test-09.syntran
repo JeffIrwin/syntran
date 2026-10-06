@@ -1,0 +1,373 @@
+
+// Numerical analysis module
+//
+// This is a partial port from Fortran to syntran of my repo:
+//
+//     https://github.com/JeffIrwin/numerical-analysis/
+
+struct newton_raphson_nd
+{
+	// Newton-Raphson solver class for general N-dimensional systems
+	//
+	// I guess I'm following the convention of MATLAB's fzero() which puts the
+	// exitflag in the struct and returns the solution `x` as the
+	// newton_raphson_nd() fn return value. *Unlike* MATLAB, exitflag of 0 is
+	// success
+	//
+	// May later add neval, niter, etc. stats
+
+	f : fn([f64; :]): [f64; :],    // input: function to zero
+	df: fn([f64; :]): [f64; :,:],  // input: derivative of f
+	x0: [f64; :],                  // input: initial guess
+	tol: f64,                      // input: allowable residual tolerance
+	maxiters: i32,                 // input: max number of allowed iterations
+
+	exitflag: i32,                 // output: 0 on success
+
+	//****************************
+	fn solve(): [f64; :]
+	{
+		exitflag = 0;
+		const maxiters = maxiters;
+		const tol = tol;
+
+		let x = x0;
+		if size(x) <= 0
+		{
+			// Maybe x0 should be required in the constructor
+			//println("Warning: initial guess `x0` is empty in newton_raphson_nd.solve()");
+			exitflag = 1;
+			return x;
+		}
+
+		let has_converged = false;
+		for iter in [0: maxiters]
+		{
+			let fx = f(x);
+
+			//println("iter = ", iter, "    eps = ", norm2(fx));
+			if norm2(fx) < tol
+			{
+				has_converged = true;
+				break;
+			}
+
+			let dfx = df(x);
+			//println("dfx = ", dfx);
+			const io = lu_invmul_vec_f64(&dfx, &fx);
+			if io != 0
+			{
+				exitflag = 2;
+				return x;
+			}
+			x -= fx;
+		}
+		if not has_converged
+		{
+			// One last fn eval, otherwise missed at top of loop
+			let fx = f(x);
+			has_converged = norm2(fx) < tol;
+		}
+		if not has_converged
+		{
+			//println(WARN_STR + "newton_raphson_nd() did not converge");
+			exitflag = 3;
+		}
+		return x;
+	}
+}
+fn new_newton_raphson_nd(
+	f : fn([f64; :]): [f64; :],
+	df: fn([f64; :]): [f64; :,:],
+): newton_raphson_nd
+{
+	// Constructor
+	return newton_raphson_nd
+	{
+		f  = f,
+		df = df,
+		x0 = [0.0; 0],
+		tol = 1.e-10,
+		maxiters = 15,
+		exitflag = 0,
+	};
+}
+
+//==============================================================================
+
+fn lu_factor_f64(a: &[f64; :,:], pivot: &[i32; :]): i32
+{
+	const n = i32(size(a,0));
+	if size(a,1) != n
+		// Matrix is not square. Note that in a QR factorization a non-square
+		// matrix can actually be useful, e.g. for least-squares problems
+		return 1;
+
+	if size(pivot) != n
+		return 2;  // pivot is bad size
+
+	for i in [0: n]
+	{
+		// Find max value in column i
+		let max_index = i;
+		let ip = pivot[i];
+		let amax = abs(a[ip, i]);
+		for j in [i+1: n]
+		{
+			const jp = pivot[j];
+			if abs(a[jp, i]) > amax
+			{
+				max_index = j;
+				amax = abs(a[jp, i]);
+			}
+		}
+
+		// Swap rows
+		pivot[[i, max_index]] = pivot[[max_index, i]];
+		ip = pivot[i];
+		if a[ip, i] == 0.0
+			// Singular. It can be useful to suppress this early return, e.g. in
+			// order to get the kernel (null-space) of a matrix
+			return 3;
+
+		for j in [i+1: n]
+		{
+			const jp = pivot[j];
+			a[jp, i] /= a[ip, i];
+			a[jp, i+1:] -= a[jp, i] * a[ip, i+1:];
+		}
+	}
+	//println("a (factored) = ", a);
+	return 0;
+}
+
+fn lu_solve_vec_f64(a: &[f64; :,:], bx: &[f64; :], pivot: &[i32; :])
+{
+	const n = i32(size(a,0));
+
+	// Forward substitution
+	for i in [0: n]
+	{
+		const ip = pivot[i];
+		bx[ip] -= dot(a[ip, :i], bx[pivot[:i]]);
+	}
+
+	backsub_f64(&a, &bx, &pivot);
+
+	// Unpivot
+	bx = bx[pivot];
+}
+
+fn backsub_f64(a: &[f64; :,:], bx: &[f64; :], pivot: &[i32; :])
+{
+	// Back-substitution is a standalone fn because it is useful for
+	// already-triangular matrices
+	const n = i32(min(size(a,0), size(a,1)));
+	for i in [n-1: -1: -1]
+	{
+		const ip = pivot[i];
+		bx[ip] -= dot(a[ip, i+1:], bx[pivot[i+1:]]);
+		bx[ip] /= a[ip, i];
+	}
+}
+
+fn lu_invmul_vec_f64(a: &[f64; :,:], bx: &[f64; :]): i32
+{
+	// Solve the linear algebra problem for `x`:
+	//
+	//     a @ x == b
+	//
+	// Where `bx` is b on input and x on output. Matrix `a` is modified by LU
+	// factorization in the process of solving
+
+	const n = i32(size(a,0));
+	let pivot = [0: n]; // initialize pivot to identity
+
+	const io = lu_factor_f64(&a, &pivot);
+	//println("pivot = ", pivot);
+	if io != 0
+	{
+		//msg = "lu_factor_f64() failed in lu_invmul_vec_f64()"
+		return 1;
+	}
+
+	lu_solve_vec_f64(&a, &bx, &pivot);
+	return 0;
+}
+
+//==============================================================================
+
+fn f_nr_ex3(x: [f64; :]): [f64; :]
+{
+	// Multi-dimensional example for Newton-Raphson
+	//
+	// Source:  https://pages.hmc.edu/ruye/MachineLearning/lectures/ch2/node7.html
+	//
+	return [
+		3.d0 * x[0] - cos(x[1] * x[2]) - 1.5d0,
+		4.d0 * x[0]**2 - 625.d0 * x[1]**2 + 2*x[2] - 1.d0,
+		20.d0 * x[2] + exp(-x[0] * x[1]) + 9.d0,
+	];
+}
+fn df_nr_ex3(x: [f64; :]): [f64; :,:]
+{
+	// Derivative of f_nr_ex3()
+	return std::transpose([
+		3.d0, x[2] * sin(x[1]*x[2]), x[1] * sin(x[1]*x[2]),
+		8.d0 * x[0], -1250.d0 * x[1], 2.d0,
+		-x[1] * exp(-x[0]*x[1]), -x[0] * exp(-x[0]*x[1]), 20.d0,
+		;
+		3, 3
+	]);
+}
+
+fn f_nr_ex4(x: [f64; :]): [f64; :]
+{
+	// Multi-dimensional example for Newton-Raphson
+	//
+	// Source:  https://pages.hmc.edu/ruye/MachineLearning/lectures/ch2/node7.html
+	//
+	return [
+		x[0]**2 - 2*x[0] + x[1]**2 - x[2] + 1.d0,
+		x[0] * x[1]**2 - x[0] - 3*x[1] + x[1]*x[2] + 2,
+		x[0] * x[2]**2 - 3*x[2] + x[1] * x[2]**2 + x[0] * x[1],
+	];
+}
+fn df_nr_ex4(x: [f64; :]): [f64; :,:]
+{
+	// Derivative of f_nr_ex4()
+	return std::transpose([
+		2*x[0] - 2.d0, 2 * x[1], -1.d0,
+		x[1]**2 - 1.d0, 2*x[0]*x[1] - 3.d0 + x[2], x[1],
+		x[2]**2 + x[1], x[2]**2 + x[0], 2*x[0]*x[2] - 3.d0 + 2*x[1]*x[2],
+		;
+		3, 3
+	]);
+}
+
+fn assert_lt_f64(val: f64, tol: f64, msg: str): i32
+{
+	if (val < tol) return 0;
+	//println("Error: assert_lt_f64 failed: " + msg);
+	//println("Value ", val, " exceeds tolerance ", tol);
+	return 1;
+}
+
+fn test_numa(): i32
+{
+	//println(MAGENTA + "Starting numa unit tests" + RESET);
+	let nfail = 0;
+
+	// **********************
+	// LU factor/solve tests
+	//println("Testing LU factorization and solving ...");
+	{
+	let a = [
+		-4.130000d+00, 6.000000d+00, 1.100000d+01, 1.600000d+01, 2.100000d+01,
+		 2.000000d+00, 7.960000d+00, 1.200000d+01, 1.700000d+01, 2.200000d+01,
+		 3.000000d+00, 8.000000d+00, 1.280000d+00, 1.800000d+01, 2.300000d+01,
+		 4.000000d+00, 9.000000d+00, 1.400000d+01, 3.400000d+00, 2.400000d+01,
+		 5.000000d+00, 1.000000d+01, 1.500000d+01, 2.000000d+01, 5.600000d+00,
+		;
+		5, 5
+	];
+	const x = [+4.0000d+00, +2.0000d+00, -1.0000d+00, +7.0000d+00, +1.8000d+01];
+	let bx = [102.48d0, 274.92d0, 434.72d0, 463.8d0, 373.8d0];
+
+	//println("a = ", a);
+	//println("x = ", x);
+	//println("a@x = ", a @ x);
+	//println("bx1 = ", bx);
+
+	const io = lu_invmul_vec_f64(&a, &bx);
+	//println("bx2 = ", bx);
+	nfail += assert_lt_f64(norm2(bx - x), 1.e-6, "lu_invmul_vec_f64 1");
+
+	}{
+	let a = [
+		0.,   0.,   0.,   1.,     1.,     0.,
+		0.,   0.,   0.,   1.,     0.25,   0.,
+		1.,   0.,   0.,   1.,    -1.,     0.,
+		0.,   1.,   0.,  -0.25,  -1.,     0.,
+		0.,   0.,   0.,   1.,     1.,    -1.,
+		0.,   0.,   1.,  -1.,     1.,     0.,
+		;
+		6, 6
+	];
+	const x = [69.d0, 420.d0, 1337.d0, 690.d0, 4200.d0, 13370.d0];
+	let bx = a @ x;
+	const io = lu_invmul_vec_f64(&a, &bx);
+
+	nfail += assert_lt_f64(norm2(bx - x), 1.e-6, "lu_invmul_vec_f64 2");
+
+	}{
+	let a = [
+		0.0000d+00,   2.0000d+00,   5.0000d+00,
+		0.0000d+00,   3.0000d+00,   2.5000d+00,
+		1.0000d+00,   8.0000d+00,   1.0000d+01
+		;
+		3, 3
+	];
+	const a0 = a;
+	let pivot = [0: 3];
+
+	const aexp = std::transpose([
+		0.0000d+00,    0.0000d+00,    1.0000d+00,
+		4.0000d-01,    2.0000d+00,    4.0000d+00,
+		5.0000d+00,    2.5000d+00,    1.0000d+01
+		;
+		3, 3
+	]);
+
+	let io = lu_factor_f64(&a, &pivot);
+	//println("a = ", a);
+	//println("diff = ", norm2(a - aexp));
+	nfail += assert_lt_f64(norm2(a - aexp), 1.d-11, "lu_factor_f64 3");
+	nfail += assert_lt_f64(norm2(pivot - 1.d0*[2, 1, 0]), 1.d-11, "lu_factor_f64 4");
+
+	a = a0;
+	const x = [69.d0, 420.d0, 1337.d0];
+	let bx = a @ x;
+	io = lu_invmul_vec_f64(&a, &bx);
+	nfail += assert_lt_f64(norm2(bx - x), 1.d-14, "lu_factor_f64 5");
+	}
+
+	// **********************
+	// Test Newton-Raphson
+	//println("Testing Newton-Raphson root finder ...");
+	{
+	const xe = [0.8332816, 3.533462e-002, -0.4985493];  // expected root
+
+	let newton = new_newton_raphson_nd(f_nr_ex3, df_nr_ex3);
+	newton.x0 = [1., 1., 1.];
+	const xn = newton.solve();
+	//println("xn = ", xn);
+	nfail += assert_lt_f64(norm2(xn-xe), 1.d-7, "newton_raphson_nd 1");
+
+	}{
+
+	const xe = [1.0989425808889501d0, 0.36761667884567795d0, 0.14493165687848802d0];
+	let newton = new_newton_raphson_nd(f_nr_ex4, df_nr_ex4);
+	newton.x0 = [0.; 3];
+	const xn = newton.solve();
+	//println("xn = ", xn);
+	nfail += assert_lt_f64(norm2(xn-xe), 1.d-7, "newton_raphson_nd 2");
+
+	}{
+
+	// Same as above but with different initial guess, and thus a different root
+	// solution
+	const xe = [1.; 3];
+	let newton = new_newton_raphson_nd(f_nr_ex4, df_nr_ex4);
+	newton.x0 = [1., 2., 3.];
+	const xn = newton.solve();
+	//println("xn = ", xn);
+	nfail += assert_lt_f64(norm2(xn-xe), 1.d-7, "newton_raphson_nd 3");
+
+	}
+
+
+	return nfail;
+}
+
+return test_numa();

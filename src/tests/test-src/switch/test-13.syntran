@@ -1,0 +1,125 @@
+// case ranges: `case lo:hi` is half-open, matching lo <= x < hi
+
+fn classify_i32(x: i32): str
+{
+	switch x
+	{
+		case 1:10        { return "one-digit"; }
+		case 10:100      { return "two-digit"; }
+		default          { return "other"; }
+	}
+	return "unreachable";
+}
+
+fn classify_i64(x: i64): str
+{
+	switch x
+	{
+		case 1'i64:10'i64  { return "in"; }
+		default            { return "out"; }
+	}
+	return "unreachable";
+}
+
+fn classify_f32(x: f32): str
+{
+	switch x
+	{
+		case 0.0'f32:1.0'f32  { return "in"; }
+		default               { return "out"; }
+	}
+	return "unreachable";
+}
+
+fn classify_f64(x: f64): str
+{
+	switch x
+	{
+		case 0.0'f64:1.0'f64  { return "in"; }
+		default               { return "out"; }
+	}
+	return "unreachable";
+}
+
+fn classify_str(x: str): str
+{
+	switch x
+	{
+		case "a":"m"     { return "early"; }
+		default          { return "late"; }
+	}
+	return "unreachable";
+}
+
+fn lo(): i32 { return 5; }
+fn hi(): i32 { return 15; }
+
+fn classify_fn_bounds(x: i32): str
+{
+	switch x
+	{
+		case lo(): hi()  { return "in"; }
+		default          { return "out"; }
+	}
+	return "unreachable";
+}
+
+fn classify_mixed(x: i32): str
+{
+	switch x
+	{
+		case 0, 20:30, 99  { return "mixed"; }
+		default            { return "other"; }
+	}
+	return "unreachable";
+}
+
+let ok1  = classify_i32(0)   == "other";       // below lo of first range
+let ok2  = classify_i32(1)   == "one-digit";   // lo is inclusive
+let ok3  = classify_i32(9)   == "one-digit";
+let ok4  = classify_i32(10)  == "two-digit";   // hi is exclusive: falls into the next range
+let ok5  = classify_i32(99)  == "two-digit";
+let ok6  = classify_i32(100) == "other";       // hi of last range is exclusive
+
+let ok7  = classify_i64(1'i64)  == "in";
+let ok8  = classify_i64(10'i64) == "out";
+
+let ok9  = classify_f32(0.0'f32) == "in";
+let ok10 = classify_f32(1.0'f32) == "out";
+
+let ok11 = classify_f64(0.0'f64) == "in";
+let ok12 = classify_f64(1.0'f64) == "out";
+
+let ok13 = classify_str("a") == "early";
+let ok14 = classify_str("m") == "late";
+let ok15 = classify_str("z") == "late";
+
+let ok16 = classify_fn_bounds(5)  == "in";
+let ok17 = classify_fn_bounds(14) == "in";
+let ok18 = classify_fn_bounds(15) == "out";
+let ok19 = classify_fn_bounds(4)  == "out";
+
+let ok20 = classify_mixed(0)  == "mixed";
+let ok21 = classify_mixed(25) == "mixed";
+let ok22 = classify_mixed(99) == "mixed";
+let ok23 = classify_mixed(10) == "other";
+
+// An inverted range (lo > hi) can never match: lo <= x < hi is never true
+fn classify_inverted(x: i32): str
+{
+	switch x
+	{
+		case 10:1  { return "in"; }
+		default    { return "out"; }
+	}
+	return "unreachable";
+}
+let ok24 = classify_inverted(5)  == "out";
+let ok25 = classify_inverted(10) == "out";
+let ok26 = classify_inverted(1)  == "out";
+
+let oks = [
+	ok1, ok2, ok3, ok4, ok5, ok6, ok7, ok8, ok9, ok10,
+	ok11, ok12, ok13, ok14, ok15, ok16, ok17, ok18, ok19, ok20,
+	ok21, ok22, ok23, ok24, ok25, ok26];
+return all(oks);

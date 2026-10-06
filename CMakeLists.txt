@@ -79,6 +79,11 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
 		"$<$<COMPILE_LANGUAGE:Fortran>:-fbounds-check>"
 		"$<$<COMPILE_LANGUAGE:Fortran>:-fbacktrace>"
 	)
+	# Turn subscript/string-index bound checks (RC_SUBSCRIPT_OOB, R33) into a
+	# syntran-level runtime error instead of a raw Fortran bounds-check abort.
+	# See compiler.F90's `bounds_check` docstring; fpm builds need
+	# `--flag -DSYNTRAN_BOUNDS_CHECK` for the same effect.
+	add_compile_definitions(SYNTRAN_BOUNDS_CHECK)
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
 	message("Release")
 	if(DEFINED ENV{SYNTRAN_INTEL})
@@ -174,13 +179,10 @@ set(LIB_SRC
 	${SRC_DIR}/compile.f90
 	${SRC_DIR}/compile_ctrl.f90
 	${SRC_DIR}/consts.f90
+	${SRC_DIR}/consts_impl.f90
 	${SRC_DIR}/core.f90
 	${SRC_DIR}/errors.f90
-	${SRC_DIR}/eval.f90
-	${SRC_DIR}/eval_array.f90
-	${SRC_DIR}/eval_control.f90
-	${SRC_DIR}/eval_expr.f90
-	${SRC_DIR}/eval_fn.f90
+	${SRC_DIR}/errors_impl.f90
 	${SRC_DIR}/vm.f90
 	${SRC_DIR}/vm_exec.f90
 	${SRC_DIR}/vm_intr.f90
@@ -212,6 +214,11 @@ set(LIB_SRC
 	${SRC_DIR}/parse_expr.f90
 	${SRC_DIR}/parse_fn.f90
 	${SRC_DIR}/parse_misc.f90
+	${SRC_DIR}/repl.f90
+	${SRC_DIR}/runtime.f90
+	${SRC_DIR}/runtime_array.f90
+	${SRC_DIR}/runtime_control.f90
+	${SRC_DIR}/runtime_expr.f90
 	${SRC_DIR}/syntran.f90
 	${SRC_DIR}/types.f90
 	${SRC_DIR}/types_copy.f90
@@ -219,7 +226,9 @@ set(LIB_SRC
 	${SRC_DIR}/types_node.f90
 	${SRC_DIR}/types_ops.f90
 	${SRC_DIR}/utils.f90
+	${SRC_DIR}/utils_impl.f90
 	${SRC_DIR}/value.f90
+	${SRC_DIR}/value_impl.f90
 )
 
 if(NOT DEFINED ENV{SYNTRAN_INTEL})

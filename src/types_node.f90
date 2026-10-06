@@ -91,9 +91,8 @@ end function new_literal_value
 
 module subroutine new_declaration_expr(identifier, op, right, expr)
 
-	! TODO: IMO this fn is overly abstracted.  It's only used once, so
-	! just paste it their and delete the fn.  That will make it easier to
-	! refactor and consolidate declaration_expr and assignment_expr parsing
+	! Shared by parse_expr_statement()'s (parse_expr.f90) two call sites:
+	! `const x = ...` and `let x = ...` declarations
 
 	type(syntax_token_t), intent(in) :: identifier, op
 	type(syntax_node_t) , intent(in) :: right
@@ -131,6 +130,23 @@ end subroutine new_name_expr
 
 !===============================================================================
 
+subroutine mold_val(val, elem_type, rank)
+
+	! Set val to an array_type value_t of the given element type and rank.
+	! Shared by new_binary_expr()'s matmul and elementwise-op branches below
+
+	type(value_t), intent(inout) :: val
+	integer, intent(in) :: elem_type, rank
+
+	allocate(val%array)
+	val%array%type = elem_type
+	val%array%rank = rank
+	val%type = array_type
+
+end subroutine mold_val
+
+!===============================================================================
+
 module subroutine new_binary_expr(left, op, right, expr)
 
 	type(syntax_node_t) , intent(inout) :: left, right  ! consumed by move
@@ -142,9 +158,9 @@ module subroutine new_binary_expr(left, op, right, expr)
 	integer :: larrtype, rarrtype, type_, ltype, rtype, lrank, rrank, out_rank, elem_type
 
 	if (debug > 1) print *, 'new_binary_expr'
-	if (debug > 1) print *, 'left  = ', left %str()
+	if (debug > 1) print *, 'left  = ', left %to_str()
 	if (debug > 1) print *, 'op    = ', op%text
-	if (debug > 1) print *, 'right = ', right%str()
+	if (debug > 1) print *, 'right = ', right%to_str()
 
 	! Read type info before moves (left/right val%array may be moved)
 	larrtype = unknown_type
@@ -181,13 +197,10 @@ module subroutine new_binary_expr(left, op, right, expr)
 			! vector @ vector -> scalar
 			expr%val%type = elem_type
 		else
-			allocate(expr%val%array)
-			expr%val%array%type = elem_type
-			expr%val%array%rank = out_rank
-			expr%val%type = array_type
+			call mold_val(expr%val, elem_type, out_rank)
 		end if
 
-		if (debug > 1) print *, 'new_binary_expr = ', expr%str()
+		if (debug > 1) print *, 'new_binary_expr = ', expr%to_str()
 		if (debug > 1) print *, 'done new_binary_expr'
 		return
 
@@ -201,29 +214,25 @@ module subroutine new_binary_expr(left, op, right, expr)
 	if (any(type_ == [bool_array_type, f32_array_type, f64_array_type, &
 		i32_array_type, i64_array_type, str_array_type])) then
 
-		allocate(expr%val%array)
-
-		expr%val%array%type = array_to_scalar_type(type_)
 		if (ltype == array_type) then
-			expr%val%array%rank = expr%left%val%array%rank
+			out_rank = expr%left%val%array%rank
 		else
-			expr%val%array%rank = expr%right%val%array%rank
+			out_rank = expr%right%val%array%rank
 		end if
-
-		expr%val%type = array_type
-
-	! TODO: other array sub types.  Maybe make a mold_val() helper fn similar to
-	! mold() (for arrays)
+		call mold_val(expr%val, array_to_scalar_type(type_), out_rank)
 
 	else
 		expr%val%type = type_
 
 	end if
 
-	! TODO: array subtype if subscripted?  I think parse_primary_expr should
-	! already set the subtype when subscripts are present
+	! Note: no separate handling is needed here for a subscripted array
+	! operand -- parse_subscripts() (parse_array.f90) already collapses
+	! expr%val%type down to the element type once every subscript on an
+	! array_type operand is a scalar_sub, so ltype/rtype above already see
+	! the element type in that case
 
-	if (debug > 1) print *, 'new_binary_expr = ', expr%str()
+	if (debug > 1) print *, 'new_binary_expr = ', expr%to_str()
 	if (debug > 1) print *, 'done new_binary_expr'
 
 end subroutine new_binary_expr
@@ -251,7 +260,7 @@ module subroutine new_unary_expr(op, right, expr)
 
 	expr%val = expr%right%val
 
-	if (debug > 1) print *, 'new_unary_expr = ', expr%str()
+	if (debug > 1) print *, 'new_unary_expr = ', expr%to_str()
 	if (debug > 1) print *, 'done new_unary_expr'
 
 end subroutine new_unary_expr

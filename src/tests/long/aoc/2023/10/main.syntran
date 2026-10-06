@@ -89,7 +89,12 @@ fn part1(): i32
 
 			//println("x[0], x[1] = ", x[0], ", ", x[1]);
 
-			if (idir == EAST or idir == WEST)
+			// A neighbor off the grid edge can never connect (a valid pipe
+			// loop never touches the boundary); skip the grid[] read
+			// entirely rather than indexing out of bounds
+			let in_bounds = x[0] >= 0 and x[0] < n[0] and x[1] >= 0 and x[1] < n[1];
+
+			if (in_bounds and (idir == EAST or idir == WEST))
 			{
 				// east-west pair.  see refactoring in part 2
 				let ce = grid[x0[0], x0[1]];
@@ -112,7 +117,7 @@ fn part1(): i32
 						"S7", "S-", "SJ", "SS"
 					]);
 			}
-			else
+			else if (in_bounds)
 			{
 				// north-south pair
 				let cn = grid[x0[0], x0[1]];
@@ -230,7 +235,12 @@ fn part2(): i32
 
 			//println("x[0], x[1] = ", x[0], ", ", x[1]);
 
-			if (idir == EAST or idir == WEST)
+			// A neighbor off the grid edge can never connect (a valid pipe
+			// loop never touches the boundary); skip the grid[] read
+			// entirely rather than indexing out of bounds
+			let in_bounds = x[0] >= 0 and x[0] < n[0] and x[1] >= 0 and x[1] < n[1];
+
+			if (in_bounds and (idir == EAST or idir == WEST))
 			{
 				// east-west pair
 				let cwe = grid[x0[0], x0[1]] + grid[x[0], x[1]];
@@ -247,7 +257,7 @@ fn part2(): i32
 						"S7", "S-", "SJ", "SS"
 					]);
 			}
-			else
+			else if (in_bounds)
 			{
 				// north-south pair
 				let cns = grid[x0[0], x0[1]] + grid[x[0] , x[1]];

@@ -1,0 +1,102 @@
+
+// Every reduction (sum, product, minval, maxval) with a dim and/or mask arg,
+// for every numeric element type.  The matrix `a` has columns [1, 2], [3, 4],
+// and [5, 6], and the mask `a > 2` selects 3, 4, 5, and 6
+
+let m = [1, 2, 3, 4, 5, 6; 2, 3];
+
+let ok = true;
+
+// i32
+{
+	let a = m;
+	let mask = m > 2;
+	ok = ok and all(sum(a, 0) == [3, 7, 11]);
+	ok = ok and sum(a, mask) == 18;
+	ok = ok and all(sum(a, 1, mask) == [8, 10]);
+	ok = ok and all(product(a, 0) == [2, 12, 30]);
+	ok = ok and product(a, mask) == 360;
+	ok = ok and all(product(a, 1, mask) == [15, 24]);
+	ok = ok and all(minval(a, 0) == [1, 3, 5]);
+	ok = ok and minval(a, mask) == 3;
+	ok = ok and all(minval(a, 1, mask) == [3, 4]);
+	ok = ok and all(maxval(a, 0) == [2, 4, 6]);
+	ok = ok and maxval(a, mask) == 6;
+	ok = ok and all(maxval(a, 1, mask) == [5, 6]);
+}
+
+// i64
+{
+	let a = i64(m);
+	let mask = m > 2;
+	ok = ok and all(sum(a, 0) == i64([3, 7, 11]));
+	ok = ok and sum(a, mask) == 18'i64;
+	ok = ok and all(sum(a, 1, mask) == i64([8, 10]));
+	ok = ok and all(product(a, 0) == i64([2, 12, 30]));
+	ok = ok and product(a, mask) == 360'i64;
+	ok = ok and all(product(a, 1, mask) == i64([15, 24]));
+	ok = ok and all(minval(a, 0) == i64([1, 3, 5]));
+	ok = ok and minval(a, mask) == 3'i64;
+	ok = ok and all(minval(a, 1, mask) == i64([3, 4]));
+	ok = ok and all(maxval(a, 0) == i64([2, 4, 6]));
+	ok = ok and maxval(a, mask) == 6'i64;
+	ok = ok and all(maxval(a, 1, mask) == i64([5, 6]));
+}
+
+// f32
+{
+	let a = m * 1.0f;
+	let mask = m > 2;
+	ok = ok and all(sum(a, 0) == [3.0f, 7.0f, 11.0f]);
+	ok = ok and sum(a, mask) == 18.0f;
+	ok = ok and all(sum(a, 1, mask) == [8.0f, 10.0f]);
+	ok = ok and all(product(a, 0) == [2.0f, 12.0f, 30.0f]);
+	ok = ok and product(a, mask) == 360.0f;
+	ok = ok and all(product(a, 1, mask) == [15.0f, 24.0f]);
+	ok = ok and all(minval(a, 0) == [1.0f, 3.0f, 5.0f]);
+	ok = ok and minval(a, mask) == 3.0f;
+	ok = ok and all(minval(a, 1, mask) == [3.0f, 4.0f]);
+	ok = ok and all(maxval(a, 0) == [2.0f, 4.0f, 6.0f]);
+	ok = ok and maxval(a, mask) == 6.0f;
+	ok = ok and all(maxval(a, 1, mask) == [5.0f, 6.0f]);
+}
+
+// f64
+{
+	let a = m * 1.0;
+	let mask = m > 2;
+	ok = ok and all(sum(a, 0) == [3.0, 7.0, 11.0]);
+	ok = ok and sum(a, mask) == 18.0;
+	ok = ok and all(sum(a, 1, mask) == [8.0, 10.0]);
+	ok = ok and all(product(a, 0) == [2.0, 12.0, 30.0]);
+	ok = ok and product(a, mask) == 360.0;
+	ok = ok and all(product(a, 1, mask) == [15.0, 24.0]);
+	ok = ok and all(minval(a, 0) == [1.0, 3.0, 5.0]);
+	ok = ok and minval(a, mask) == 3.0;
+	ok = ok and all(minval(a, 1, mask) == [3.0, 4.0]);
+	ok = ok and all(maxval(a, 0) == [2.0, 4.0, 6.0]);
+	ok = ok and maxval(a, mask) == 6.0;
+	ok = ok and all(maxval(a, 1, mask) == [5.0, 6.0]);
+}
+
+// A lane selecting nothing gives the identity for sum and product
+ok = ok and sum(m, m > 100) == 0;
+ok = ok and product(m, m > 100) == 1;
+ok = ok and all(sum(m, 0, m > 100) == [0, 0, 0]);
+ok = ok and all(product(m, 1, m > 100) == [1, 1]);
+
+// A mask can select nothing in only some of the lanes (for minval and maxval
+// that is an error, see errors/R36-minmax-empty.syntran)
+ok = ok and all(sum(m, 0, m > 4) == [0, 0, 11]);
+ok = ok and all(product(m, 0, m > 4) == [1, 1, 30]);
+
+// Masks with a rank-1 array reduce to a scalar, also with a dim
+ok = ok and product([1, 2, 3, 4], [true, false, true, true]) == 12;
+ok = ok and minval([5, 2, 3, 4], [true, false, true, true]) == 3;
+ok = ok and maxval([5, 2, 3, 4], [false, true, true, true]) == 4;
+ok = ok and product([1, 2, 3, 4], 0, [true, false, true, true]) == 12;
+ok = ok and minval([5, 2, 3, 4], 0, [true, false, true, true]) == 3;
+ok = ok and maxval([5, 2, 3, 4], 0, [false, true, true, true]) == 4;
+
+return ok;
+

@@ -1,0 +1,165 @@
+// Calling a fn-typed struct member directly, e.g. `args.f(x)`, without first
+// binding it to a local (test-42's workaround).  This is the numa.syntran
+// use case core.f90's TODO named as the remaining gap after the E90 lift:
+// `args.f(x)` used to be a syntax error (parse_dot() had no fn-typed-member
+// call branch), forcing `let g = args.f; g(x);` instead.
+
+let nfail = 0;
+
+fn check(cond: bool, msg: str)
+{
+	if not cond
+	{
+		println("FAIL: ", msg);
+		nfail += 1;
+	}
+}
+
+fn dbl(x: i32): i32
+{
+	return 2 * x;
+}
+fn trp(x: i32): i32
+{
+	return 3 * x;
+}
+fn is_big(x: i32): bool
+{
+	return x > 10;
+}
+struct S
+{
+	f: fn(i32): i32,
+}
+struct J
+{
+	f: fn(i32): i32,
+}
+struct I
+{
+	j: J,
+}
+struct O
+{
+	i: I,
+}
+struct P
+{
+	v: i32,
+}
+
+fn mk(x: i32): P
+{
+	return P{v = x};
+}
+fn pair(x: i32): [i32; :]
+{
+	return [x, x + 1];
+}
+
+struct M
+{
+	mk: fn(i32): P,
+	pair_: fn(i32): [i32; :],
+}
+
+// Direct call on a local struct
+let s = S{f = dbl};
+check(s.f(21) == 42, "direct call");
+
+// Reassigned member, then called
+s.f = trp;
+check(s.f(21) == 63, "call after member reassignment");
+
+// Nested chain: o.i.j.f(x)
+let o = O{i = I{j = J{f = dbl}}};
+check(o.i.j.f(5) == 10, "nested chain call");
+
+// Subscripted receiver: arr[i].f(x)
+let arr = [S{f = dbl}, S{f = trp}];
+check(arr[0].f(4) == 8, "subscripted receiver call (elem 0)");
+check(arr[1].f(4) == 12, "subscripted receiver call (elem 1)");
+
+// Result used in a larger expression
+check(s.f(21) + 1 == 64, "call result in arithmetic expression");
+
+// Chained onto the call's own result: struct field and subscript
+let m = M{mk = mk, pair_ = pair};
+check(m.mk(9).v == 9, "call result dot-chained to a field");
+check(m.pair_(9)[1] == 10, "call result subscripted");
+
+// Call as an argument to another call
+fn add_one(y: i32): i32
+{
+	return y + 1;
+}
+check(add_one(s.f(21)) == 64, "call result passed as an argument");
+
+// Inside if/for conditions
+struct B
+{
+	f: fn(i32): bool,
+}
+let b = B{f = is_big};
+if b.f(20)
+{
+	check(true, "call inside if condition (true branch)");
+}
+else
+{
+	check(false, "call inside if condition (true branch)");
+}
+if b.f(2)
+{
+	check(false, "call inside if condition (false branch)");
+}
+
+let iters = 0;
+for i in [0: 5]
+{
+	if b.f(i)
+	{
+		iters += 1;
+	}
+}
+check(iters == 0, "call inside for-loop condition");
+
+// Void member called as a bare statement (not the last statement)
+fn logv(x: i32)
+{
+	println("logged: ", x);
+}
+struct L
+{
+	log: fn(i32),
+}
+let l = L{log = logv};
+l.log(99);
+check(true, "void member call as a bare statement didn't crash the parser");
+
+// The numa.syntran shape: an array-valued fn member called through a
+// by-ref struct param, inside a loop, mutating the loop variable in place
+struct Args
+{
+	f: fn([f64; :]): [f64; :],
+	x0: [f64; :],
+}
+fn halve(v: [f64; :]): [f64; :]
+{
+	return v / 2.0;
+}
+fn iterate(args: &Args): [f64; :]
+{
+	let x = args.x0;
+	for i in [0: 3]
+	{
+		x = args.f(x);
+	}
+	return x;
+}
+let a = Args{f = halve, x0 = [8.0, 16.0]};
+let xn = iterate(&a);
+check(abs(xn[0] - 1.0) < 1.0e-12, "numa-shape array fn-member call, elem 0");
+check(abs(xn[1] - 2.0) < 1.0e-12, "numa-shape array fn-member call, elem 1");
+
+return nfail == 0;

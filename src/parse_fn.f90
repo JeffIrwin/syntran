@@ -7,10 +7,6 @@ submodule (syntran__parse_m) syntran__parse_fn
 
 	implicit none
 
-	! FIXME: remember to prepend routines like `module function` or `module
-	! subroutine` when pasting them into a submodule.  gfortran doesn't care but
-	! intel fortran will refuse to compile otherwise
-
 !===============================================================================
 
 contains
@@ -31,6 +27,7 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 
 	integer :: i, io, io_std, id_index, id_index_tmp, pos0, rank, arr_type_result, arr_type_src, slot
 	integer :: var_io, var_id_index, method_slot, method_fn_id
+	integer :: field_id, field_io
 
 	logical :: has_rank, has_arr_type, param_is_ref, param_is_const_ref, &
 		arg_is_ref, is_ok, is_const_var, var_is_loc
@@ -42,13 +39,13 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 	type(integer_vector_t) :: pos_args
 	type(logical_vector_t) :: is_ref
 
-	type(syntax_node_t) :: arg, self_receiver
+	type(syntax_node_t) :: arg, self_receiver, member_receiver
 	type(syntax_node_vector_t) :: args
 	type(syntax_token_t) :: identifier_, comma, lparen, rparen, dummy, amp, self_token
 
 	type(text_span_t) :: span
 
-	type(value_t) :: param_val, var_val, self_val
+	type(value_t) :: param_val, var_val, self_val, field_val
 
 	!print *, ''
 	!print *, 'parse_fn_call'
@@ -219,15 +216,8 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		! `let f = dbl; f(21);`.  Restricted to plain (unqualified) names in v1
 		if (.not. present(module_prefix)) then
 
-			var_io = exit_failure
-			if (parser%is_loc) then
-				call parser%locs%search(identifier_%text, var_id_index, var_io, var_val)
-				var_is_loc = var_io == exit_success
-			end if
-			if (var_io /= exit_success) then
-				call parser%vars%search(identifier_%text, var_id_index, var_io, var_val)
-				var_is_loc = .false.
-			end if
+			call parser%search(identifier_%text, var_id_index, var_io, var_val, &
+				var_is_loc)
 
 			if (var_io == exit_success) then
 
@@ -244,40 +234,61 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 				! callee variable value (fn_index), not from a parse-time id_index
 				! into a specific fn.  id_index/is_loc here identify the callee
 				! *variable* slot instead -- eval/compile distinguish this via
-				! node%kind == fn_call_ptr_expr
-				fn_call%kind = fn_call_ptr_expr
+				! node%kind == fn_call_ptr_expr.  build_fn_ptr_call_node
+				! (parse_expr.f90, shared with parse_dot's `s.f(x)` fn-typed-
+				! struct-member branch) validates args and builds everything
+				! else on fn_call
+				call build_fn_ptr_call_node(parser, fn_call, var_val, &
+					identifier_%text, args, is_ref, pos_args, &
+					lparen%pos, rparen%pos)
 				fn_call%id_index = var_id_index
 				fn_call%is_loc = var_is_loc
 
-				allocate(fn_call%is_ref(args%len_))
-				fn_call%is_ref = .false.   ! by-value only in v1
+				return
 
-				if (size(var_val%fn_params) /= args%len_) then
-					span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
-					call parser%diagnostics%push(err_bad_arg_count( &
-						parser%context(), span, identifier_%text, &
-						size(var_val%fn_params), args%len_))
-				else
-					do i = 1, args%len_
-						span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)
-						call check_call_arg(parser, args%v(i), is_ref%v(i), span, &
-							identifier_%text, i - 1, var_val%fn_params(i), "", &
-							.false., .false., eff_is_ref)
+			end if
 
-						! Indirect calls through a fn-pointer variable are
-						! never intrinsics, so a bare enum name argument is
-						! never allowed here
-						call parser%check_enum_name_value(args%v(i))
-					end do
+		end if
+
+		! Bare-name fn-typed-member call: inside a method body, `f(args)` where
+		! `f` is a member of the struct being parsed (and not a free fn or
+		! fn-pointer variable, both checked above) is an indirect call through
+		! that member on the implicit self, i.e. `self.f(args)`.  Mirrors
+		! parse_dot's `s.f(x)` branch (parse_expr.f90), and compiles through
+		! the same fn_call_ptr_expr + node%left member-chain path
+		if (.not. present(module_prefix) .and. parser%in_method) then
+
+			call parser%method_struct%vars%search(identifier_%text, &
+				field_id, field_io, field_val)
+
+			if (field_io == exit_success) then
+
+				if (field_val%type /= fn_type) then
+					span = new_span(identifier_%pos, len(identifier_%text))
+					call parser%diagnostics%push( &
+						err_not_callable(parser%context(), &
+						span, identifier_%text, type_name(field_val)))
+					fn_call%val%type = unknown_type
+					return
 				end if
 
-				fn_call%val = var_val%fn_ret
+				! Receiver: the member read `0self.<field>`, same shape as the
+				! implicit-self read in parse_name_expr (parse_expr.f90)
+				member_receiver%kind       = dot_expr
+				member_receiver%id_index   = parser%self_loc_id
+				member_receiver%is_loc     = .true.
+				member_receiver%identifier = identifier_
+				allocate(member_receiver%member)
+				member_receiver%member%id_index   = field_id
+				member_receiver%member%identifier = identifier_
+				call value_copy(member_receiver%member%val, field_val)
+				call value_copy(member_receiver%val, member_receiver%member%val)
 
-				! Move args from vector (avoids deep copy)
-				allocate(fn_call%args(args%len_))
-				do i = 1, args%len_
-					call syntax_node_move_into(args%v(i), fn_call%args(i))
-				end do
+				call build_fn_ptr_call_node(parser, fn_call, field_val, &
+					identifier_%text, args, is_ref, pos_args, &
+					lparen%pos, rparen%pos)
+				if (fn_call%val%type == unknown_type) return
+				call syntax_node_move(member_receiver, fn_call%left)
 
 				return
 
@@ -367,10 +378,18 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 	fn_call%val = fn%type
 	if (has_rank) then
 		! The line above overwrites the rank for overloaded intrinsics like
-		! i32() and i64().  TODO: cover a low-res version of logo.syntran in a
-		! unit test
+		! i32() and i64().  Covered by nd-i32/logo-lowres.syntran (a low-res
+		! port of samples/logo.syntran), which assigns a 2-D array slice from
+		! i32() applied to an f32/f64 array expression
 		if (.not. allocated(fn_call%val%array)) allocate(fn_call%val%array)
 		fn_call%val%array%rank = rank
+
+		! A reduction with a `dim` arg (e.g. sum(v, 0)) over a rank-1 array
+		! resolves to rank 0, i.e. a scalar of the array's element type
+		if (rank == 0) then
+			fn_call%val%type = fn_call%val%array%type
+			deallocate(fn_call%val%array)
+		end if
 
 		! For functions like std::reshape whose element type depends on their
 		! arguments, restore the element type that resolve_overload determined.
@@ -398,17 +417,11 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 
 		!print *, 'assigning fn node'
 
-		! If I understand my own code, this is inlining:  every fn
-		! call gets its own copy of the fn body.  This expansion
-		! happens at parse time, not eval time, so fn calls in
-		! a loop will all share one body
-
-		! TODO: could we do this with a pointer instead? I think
-		! copying is a waste of memory.  Also try to encapsulate
-		! both body and params into a wrapped type (fn_t?)
-
-		allocate(fn_call%body)
-		fn_call%body = fn%node%body
+		! fn_call%body is *not* set here.  The body is not copied per call
+		! site: fn_call carries id_index, and compile_node() looks the body
+		! up via cs%fns%fns(id_index)%node%body instead.  Params and
+		! num_locs are still needed directly on fn_call, since compile_node()
+		! reads them before it has a state to index into
 		fn_call%params = fn%node%params
 
 		fn_call%num_locs = fn%node%num_locs
@@ -417,11 +430,6 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		!print *, 'fn call params size = ', size(fn_call%params)
 
 	end if
-
-	! TODO: does fn need to be a syntax node member?  I think we can
-	! just look it up later by identifier/id_index like we do for
-	! variable value
-	!fn_call%fn = fn
 
 	!print *, 'fn params size = ', size(fn%params)
 	!print *, 'fn param names size = ', size(fn%param_names%v)
@@ -463,13 +471,11 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 	allocate(param_val%array)
 	do i = 1, args%len_
 
-		! For variadic fns, check the argument type against the type
-		! of the last required parameter.  This may need to change,
-		! e.g. writeln(file) should write a blank line to a file,
-		! but writeln(file, string1, string2), where string* is not
-		! the same type as file?
-
-		! TODO: re-test min/max arg count/type checking
+		! For variadic fns, check each variadic argument's type against
+		! variadic_type.  writeln(file) writes a blank line, and
+		! writeln(file, string1, 1, 2.0, ...) is fine too since writeln's
+		! variadic_type is any_type; min/max instead set variadic_type to
+		! their own numeric type, so e.g. min(1, 2, "a") is rejected
 
 		! Construct a param val just for type checking.  I think this is the
 		! only way to do it for intrinsic fns, which don't actually have a val
@@ -665,10 +671,11 @@ end subroutine parse_qualified_expr
 
 !===============================================================================
 
-module subroutine parse_fn_declaration(parser, decl)
+module subroutine parse_fn_declaration(parser, decl, no_fn_kw)
 
 	class(parser_t) :: parser
 	type(syntax_node_t), intent(out) :: decl
+	logical, intent(in), optional :: no_fn_kw
 
 	!********
 
@@ -676,7 +683,7 @@ module subroutine parse_fn_declaration(parser, decl)
 
 	integer :: i, io, pos0, rank, fn_beg, fn_name_end
 
-	logical :: overwrite, const_param, in_fn_body0
+	logical :: overwrite, const_param, in_fn_body0, no_fn_kw0
 
 	type(fn_t) :: fn
 
@@ -693,6 +700,9 @@ module subroutine parse_fn_declaration(parser, decl)
 	type(value_t) :: type
 	type(value_vector_t) :: types
 
+	no_fn_kw0 = .false.
+	if (present(no_fn_kw)) no_fn_kw0 = no_fn_kw
+
 	! Like a for statement, a fn declaration has its own scope (for its
 	! parameters).  Its block body will have yet another scope
 	call parser%vars%push_scope()
@@ -702,7 +712,14 @@ module subroutine parse_fn_declaration(parser, decl)
 
 	parser%returned = .false.
 	fn_beg = parser%peek_pos(0)
-	call parser%match(fn_keyword, fn_kw)
+	if (.not. no_fn_kw0) then
+		call parser%match(fn_keyword, fn_kw)
+	end if
+	! When no_fn_kw0, the caller (parse_unit_pass() in parse_misc.f90) has
+	! already pushed E106 for the missing `fn` and confirmed via
+	! looks_like_fn_decl() that the token stream is unambiguously a fn
+	! declaration -- so just carry on parsing from the name, without
+	! consuming a `fn` token that isn't there
 
 	call parser%match(identifier_token, identifier)
 	fn_name_end = parser%peek_pos(0) - 1
@@ -710,9 +727,10 @@ module subroutine parse_fn_declaration(parser, decl)
 
 	!print *, "parsing fn ", identifier%text
 
-	! TODO: be careful with parser%pos (token index) vs parser%current_pos()
-	! (character index) when constructing a span.  I probably have similar bugs
-	! throughout to the one that I just fixed here
+	! c.f. the parser%pos (token index) vs current_pos()/peek_pos() (char
+	! index) convention documented at their definitions in parse.f90 --
+	! audited the new_span() call sites throughout src and none of them
+	! build a span from parser%pos
 
 	!print *, 'matching lparen'
 
@@ -845,7 +863,7 @@ module subroutine parse_fn_declaration(parser, decl)
 		call parser%match(colon_token, colon)
 		call parser%parse_type(type_text, type)
 
-		! TODO: ban &references as return types
+		! `&` as a return type is rejected inside parse_type() (E105)
 
 		fn%type = type
 	end if
@@ -942,6 +960,37 @@ end subroutine parse_fn_declaration
 
 !===============================================================================
 
+function at_method_start(parser) result(at_start)
+
+	! True when the parser is sitting at the start of a struct method decl:
+	! `fn name(...)`, `const fn name(...)`, or (E106) a method missing its
+	! `fn` keyword -- `name(...)` / `const name(...)`.  Not type-bound (same
+	! rationale as looks_like_fn_decl() in parse_misc.f90): a private
+	! implementation detail used only from parse_struct_declaration() below.
+	!
+	! Unlike looks_like_fn_decl(), no token-stream scan is needed here: inside
+	! a struct body a member is always `name: type`, so `name(` can only be a
+	! method
+
+	class(parser_t) :: parser
+
+	logical :: at_start
+
+	!********
+
+	integer :: offset
+
+	offset = 0
+	if (parser%current_kind() == const_keyword) offset = 1
+
+	at_start = parser%peek_kind(offset) == fn_keyword .or. &
+		(parser%peek_kind(offset)     == identifier_token .and. &
+		 parser%peek_kind(offset + 1) == lparen_token)
+
+end function at_method_start
+
+!===============================================================================
+
 module subroutine parse_struct_declaration(parser, decl)
 
 	class(parser_t) :: parser
@@ -951,7 +1000,7 @@ module subroutine parse_struct_declaration(parser, decl)
 
 	character(len = :), allocatable :: type_text
 
-	integer :: itype, i, io, pos0, pos_type_beg, pos_type_end
+	integer :: itype, i, io, pos0
 
 	logical :: overwrite
 
@@ -961,7 +1010,7 @@ module subroutine parse_struct_declaration(parser, decl)
 
 	type(syntax_node_vector_t) :: method_decls
 
-	logical :: is_const_meth
+	logical :: is_const_meth, no_fn_kw
 
 	integer :: j
 
@@ -1025,9 +1074,7 @@ module subroutine parse_struct_declaration(parser, decl)
 	do while ( &
 			parser%current_kind() /= rbrace_token .and. &
 			parser%current_kind() /= eof_token .and. &
-			parser%current_kind() /= fn_keyword .and. &
-			.not. (parser%current_kind() == const_keyword .and. &
-			       parser%peek_kind(1) == fn_keyword))
+			.not. at_method_start(parser))
 		i = i + 1
 
 		pos0 = parser%current_pos()
@@ -1036,41 +1083,26 @@ module subroutine parse_struct_declaration(parser, decl)
 		call pos_mems%push( name%pos )
 		call parser%match(colon_token, colon)
 
-		pos_type_beg = parser%current_pos()
 		call parser%parse_type(type_text, type)
-		pos_type_end = parser%current_pos() - 1
 		!print *, "type = ", type_text
 
-		! Fn-pointer-typed struct members are not supported: a fn-pointer
-		! value's fn_params(:)/fn_ret is a real, self-referential nested
-		! value_t (unlike other member types' plain type-metadata), and
-		! deep-copying/destroying that through the struct member-dict's
-		! overwrite path (2nd parser pass redeclares every struct) segfaults
-		! on some platforms/compilers (e.g. musl/gfortran).  c.f. E89, the
-		! analogous restriction for fn pointers in array literals.
-		!
-		! Pushing the diagnostic alone is NOT enough to avoid the crash:
-		! parsing continues regardless (to collect further diagnostics), so
-		! `type` -- if left as a real fn_type value -- would still flow into
-		! types%push()/struct%vars%insert() below and hit the same crashing
-		! redeclare path when this struct is (as always) reprocessed on the
-		! parser's 2nd pass.  Sanitize it to a harmless placeholder instead;
-		! evaluation is halted regardless once any diagnostic exists
-		if (type%type == fn_type) then
-			span = new_span(pos_type_beg, pos_type_end - pos_type_beg + 1)
-			call parser%diagnostics%push(err_fn_ptr_struct_member( &
-				parser%context(), span, name%text))
-			call value_destroy(type)
-			type%type = unknown_type
-		end if
+		! Fn-pointer-typed struct members: value_copy()/value_destroy()
+		! already handle fn_type's nested fn_params(:)/fn_ret correctly
+		! (c.f. fn_copy() in types_copy.f90, which fixed the identical
+		! element-wise-copy requirement for fn param types), and
+		! var_dict_destroy() (types_copy.f90) now explicitly tears down
+		! each slot's %val via value_destroy() before the struct
+		! member-dict's overwrite path (2nd parser pass redeclares every
+		! struct) can reach it -- so nothing here needs to special-case
+		! fn_type any more. This used to be rejected as E90 (fn-ptr-struct-
+		! member, now retired) because of a musl/gfortran segfault in that
+		! exact deep-copy/destroy path; c.f. errors.f90's retirement note.
 
 		call types%push(type)
 		call names%push( name%text )
 
 		if (parser%current_kind() /= rbrace_token .and. &
-		    parser%current_kind() /= fn_keyword .and. &
-		    .not. (parser%current_kind() == const_keyword .and. &
-		           parser%peek_kind(1) == fn_keyword)) then
+		    .not. at_method_start(parser)) then
 			! Delimiting commas are required; trailing comma is optional
 			call parser%match(comma_token, comma)
 		end if
@@ -1132,6 +1164,13 @@ module subroutine parse_struct_declaration(parser, decl)
 		if (allocated(member%array)) deallocate(member%array)
 	end do
 
+	! Register member names under this struct's cookie, so value_to_str()
+	! can print them with `name = value` labels.  The returned slot index is
+	! stashed on struct%reg_idx and copied onto every value_t built from
+	! this struct, so printing indexes the registry directly instead of
+	! hashing struct_cookie on every call (c.f. struct_reg_set() in value.f90)
+	struct%reg_idx = struct_reg_set(struct%cookie, struct%member_names%v( 1: names%len_ ))
+
 	! Parse method declarations (fn / const fn inside the struct body)
 	method_decls = new_syntax_node_vector()
 
@@ -1144,8 +1183,19 @@ module subroutine parse_struct_declaration(parser, decl)
 		is_const_meth = (parser%current_kind() == const_keyword)
 		if (is_const_meth) call parser%next(dummy)   ! consume 'const'
 
+		! E106: a method missing its `fn` keyword.  at_method_start() (used by
+		! the member loop above) already confirmed `identifier (` is
+		! unambiguously a method start in this position, not a member
+		no_fn_kw = parser%current_kind() == identifier_token .and. &
+			parser%peek_kind(1) == lparen_token
+		if (no_fn_kw) then
+			span = new_span(parser%current_pos(), len(parser%current_text()))
+			call parser%diagnostics%push(err_missing_fn_kw( &
+				parser%context(), span, parser%current_text()))
+		end if
+
 		call parser%parse_method_declaration(method_decl, struct, is_const_meth, &
-			identifier%text)
+			identifier%text, no_fn_kw)
 
 		! Save method decl node for the bytecode compiler pre-pass
 		call method_decls%push(method_decl)
@@ -1599,8 +1649,9 @@ module subroutine parse_enum_name_expr(parser, expr, enum_name)
 	! Following Python's model, a bare enum name is an array of all its
 	! variants in declaration order (aliases included).  This is synthesized
 	! here as an ordinary explicit array literal (expl_array), so it rides
-	! the existing array machinery in both backends -- AST eval via
-	! eval_array_expr, bytecode via OP_NEW_ARRAY -- and iterating it with
+	! the existing array machinery -- native OP_NEW_ARRAY when the elements
+	! qualify, eval_array_expr's slot-consuming fallback otherwise -- and
+	! iterating it with
 	! `for` takes the same expl_array path already exercised by a literal
 	! enum array (c.f. parse_array_expr).  No new node kind, no runtime enum
 	! registry
@@ -1716,7 +1767,7 @@ end function enum_closest_variant
 
 !===============================================================================
 
-module subroutine parse_method_declaration(parser, decl, struct, is_const, struct_name)
+module subroutine parse_method_declaration(parser, decl, struct, is_const, struct_name, no_fn_kw)
 
 	! Parse a method declared inside a struct body.
 	! The implicit first parameter "0self" is the struct passed by reference.
@@ -1728,6 +1779,7 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 	type(struct_t), intent(in) :: struct
 	logical, intent(in) :: is_const
 	character(len = *), intent(in) :: struct_name
+	logical, intent(in), optional :: no_fn_kw
 
 	!********
 
@@ -1735,7 +1787,7 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 
 	integer :: i, io, pos0, rank, fn_beg, fn_name_end, mem_id
 
-	logical :: overwrite, const_param, in_fn_body0
+	logical :: overwrite, const_param, in_fn_body0, no_fn_kw0
 
 	type(fn_t) :: fn
 
@@ -1752,6 +1804,9 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 	type(value_t) :: type, self_val, mem_val
 	type(value_vector_t) :: types
 
+	no_fn_kw0 = .false.
+	if (present(no_fn_kw)) no_fn_kw0 = no_fn_kw
+
 	call parser%vars%push_scope()
 	call parser%locs%push_scope()
 	parser%is_loc = .true.
@@ -1759,7 +1814,12 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 
 	parser%returned = .false.
 	fn_beg = parser%peek_pos(0)
-	call parser%match(fn_keyword, fn_kw)
+	if (.not. no_fn_kw0) then
+		call parser%match(fn_keyword, fn_kw)
+	end if
+	! When no_fn_kw0, the caller (the method loop in parse_struct_declaration()
+	! above) has already pushed E106 for the missing `fn`, so just carry on
+	! parsing from the name
 
 	call parser%match(identifier_token, identifier)
 	fn_name_end = parser%peek_pos(0) - 1
@@ -1780,6 +1840,7 @@ module subroutine parse_method_declaration(parser, decl, struct, is_const, struc
 	self_val%type = struct_type
 	self_val%struct_name = struct_name
 	if (allocated(struct%cookie)) self_val%struct_cookie = struct%cookie
+	self_val%struct_reg_idx = struct%reg_idx
 	parser%num_locs = parser%num_locs + 1
 	const_param = is_const
 	call parser%locs%insert("0self", self_val, parser%num_locs, io, &
@@ -2017,6 +2078,7 @@ recursive module subroutine parse_struct_instance(parser, inst, struct_name)
 	inst%struct_name = lookup_name
 	inst%val%struct_name = lookup_name
 	inst%val%struct_cookie = struct%cookie
+	inst%val%struct_reg_idx = struct%reg_idx
 
 	!print *, "struct name = ", inst%struct_name
 
@@ -2026,10 +2088,9 @@ recursive module subroutine parse_struct_instance(parser, inst, struct_name)
 
 		pos0 = parser%pos
 
-		! TODO: allow "anonymous" members where the name (and type) is implied
-		! by the order?  This is the way that structs are printed, so unless I
-		! change print str conversion is might be nice to allow print output to
-		! be pasted back into syntran source code.  Could be dangerous tho
+		! Members must be named (`x = expr`).  Positional init was considered
+		! and rejected: it silently breaks when a struct's member order
+		! changes
 
 		call parser%match(identifier_token, name)
 		call parser%match(equals_token, equals)
@@ -2160,7 +2221,7 @@ recursive module subroutine parse_type(parser, type_text, type)
 	character(len = :), allocatable :: cookie, suggest, param_type_text, ret_type_text
 
 	type(syntax_token_t) :: colon, ident, comma, lbracket, rbracket, semi, dummy, &
-		double_colon, fn_kw, lparen, rparen
+		double_colon, fn_kw, lparen, rparen, amp
 
 	type(text_span_t) :: span
 
@@ -2168,6 +2229,25 @@ recursive module subroutine parse_type(parser, type_text, type)
 	type(value_vector_t) :: param_types
 
 	pos1 = parser%current_pos()
+
+	if (parser%current_kind() == amp_token) then
+
+		! References are only valid on fn parameters, which consume their
+		! own leading `&` before calling parse_type() (c.f. parse_fn_call
+		! and parse_method_declaration above).  Any `&` reaching here is in
+		! a position that doesn't support references: return types, struct
+		! member types, fn-pointer param/return types
+		call parser%match(amp_token, amp)
+		if (parser%current_kind() == const_keyword) call parser%next(dummy)
+
+		span = new_span(amp%pos, parser%current_pos() - amp%pos)
+		call parser%diagnostics%push(err_ref_type(parser%context(), span))
+
+		! Fall through and parse the type normally so this doesn't cascade
+		! into further bogus diagnostics
+		pos1 = parser%current_pos()
+
+	end if
 
 	if (parser%current_kind() == fn_keyword) then
 
@@ -2313,6 +2393,9 @@ recursive function all_paths_return(node) result(returns)
 	!   if_statement      -> returns iff else_clause is present AND both
 	!                        if_clause and else_clause return on all paths.
 	!                        else-if chains recurse through else_clause.
+	!   switch_statement  -> returns iff else_clause (the `default` arm) is
+	!                        present AND it returns AND every case_clause
+	!                        member's body returns on all paths.
 	!   while/for         -> never guaranteed (loop may execute zero times).
 	!   everything else   -> does not return.
 
@@ -2347,6 +2430,23 @@ recursive function all_paths_return(node) result(returns)
 		if (allocated(node%else_clause) .and. allocated(node%if_clause)) then
 			returns = all_paths_return(node%if_clause) .and. &
 			          all_paths_return(node%else_clause)
+		end if
+
+	case (switch_statement)
+		! Requires a `default` arm (else_clause) that returns, AND every
+		! case_clause arm's body (members(i)%body) to return on all paths.
+		! A switch with no default is never guaranteed to return, since no
+		! arm may match
+		if (allocated(node%else_clause)) then
+			returns = all_paths_return(node%else_clause)
+			if (returns .and. allocated(node%members)) then
+				do i = 1, size(node%members)
+					if (.not. all_paths_return(node%members(i)%body)) then
+						returns = .false.
+						exit
+					end if
+				end do
+			end if
 		end if
 
 	! while_statement / for_statement: body may run zero times -> no guarantee.
@@ -2392,10 +2492,12 @@ module subroutine check_call_arg(parser, arg, call_is_ref_i, arg_span, &
 
 	! Effective ref-ness of this argument.  Normally this is just whatever the
 	! caller wrote (`&arg` or not).  But a `&const` param is a read-only
-	! borrow: the callee never writes back through it (see eval_fn_call), so a
-	! bare-name argument can transparently auto-borrow (no copy) even without
-	! an explicit `&` at the call site.  Non-name args (literals, temporaries,
-	! subscripts, etc.) stay by-value -- there is no caller slot to borrow.
+	! borrow: assigning to it inside the fn body is itself a parse error
+	! (const_param, checked where params are declared), so the callee can
+	! never write back through it, which lets a bare-name argument
+	! transparently auto-borrow (no copy) even without an explicit `&` at
+	! the call site.  Non-name args (literals, temporaries, subscripts,
+	! etc.) stay by-value -- there is no caller slot to borrow.
 	eff_is_ref = call_is_ref_i
 	if (param_is_ref .and. param_is_const_ref .and. .not. call_is_ref_i .and. &
 			arg%kind == name_expr .and. .not. allocated(arg%lsubscripts)) then

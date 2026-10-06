@@ -1,0 +1,29 @@
+// The subject expression is evaluated exactly once, even though it's tested
+// against several case values
+
+let n = 0;
+
+fn bump(): str
+{
+	n += 1;
+	return "bar";
+}
+
+let result = "";
+switch bump()
+{
+	case "foo"
+	{
+		result = "foo";
+	}
+	case "bar", "baz"
+	{
+		result = "bar-ish";
+	}
+	default
+	{
+		result = "other";
+	}
+}
+
+return result == "bar-ish" and n == 1;

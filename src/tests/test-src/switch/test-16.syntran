@@ -1,0 +1,79 @@
+// array subjects: element types and ranks
+
+enum Suit { Hearts, Spades }
+
+let hit = "";
+
+// i64, and mixed i32/i64 element widths in either direction
+switch [1'i64, 2'i64] { case [1'i64, 2'i64] { hit = "i64"; } default { hit = "BAD"; } }
+let ok1 = hit == "i64";
+
+switch [1, 2] { case [1'i64, 2'i64] { hit = "i32-i64"; } default { hit = "BAD"; } }
+let ok2 = hit == "i32-i64";
+
+switch [1'i64, 2'i64] { case [1, 2] { hit = "i64-i32"; } default { hit = "BAD"; } }
+let ok3 = hit == "i64-i32";
+
+// floats
+switch [1.5'f32, 2.5'f32] { case [1.5'f32, 2.5'f32] { hit = "f32"; } default { hit = "BAD"; } }
+let ok4 = hit == "f32";
+
+switch [1.5, 2.5] { case [1.5, 2.5] { hit = "f64"; } default { hit = "BAD"; } }
+let ok5 = hit == "f64";
+
+switch [1.5, 2.5] { case [1.5, 2.75] { hit = "BAD"; } default { hit = "f64-miss"; } }
+let ok6 = hit == "f64-miss";
+
+// bool
+switch [true, false] { case [true, false] { hit = "bool"; } default { hit = "BAD"; } }
+let ok7 = hit == "bool";
+
+switch [true, false] { case [false, true] { hit = "BAD"; } default { hit = "bool-miss"; } }
+let ok8 = hit == "bool-miss";
+
+// str -- lengths matter: "a" and "a " are different strings
+switch ["a", "bb"] { case ["a", "bb"] { hit = "str"; } default { hit = "BAD"; } }
+let ok9 = hit == "str";
+
+switch ["a", "b"] { case ["a", "bb"] { hit = "BAD"; } default { hit = "str-miss"; } }
+let ok10 = hit == "str-miss";
+
+switch ["a", "b"] { case ["a", "b "] { hit = "BAD"; } default { hit = "str-pad-miss"; } }
+let ok11 = hit == "str-pad-miss";
+
+// enum
+switch [Suit.Hearts, Suit.Spades] { case [Suit.Hearts, Suit.Spades] { hit = "enum"; } default { hit = "BAD"; } }
+let ok12 = hit == "enum";
+
+switch [Suit.Hearts, Suit.Spades] { case [Suit.Spades, Suit.Hearts] { hit = "BAD"; } default { hit = "enum-miss"; } }
+let ok13 = hit == "enum-miss";
+
+// rank 2: extents are compared per dimension, so a 2x2 doesn't match a 4x1
+// with the same flat elements (stricter than `==`, which compares flat buffers)
+let m = [1, 2, 3, 4; 2, 2];
+switch m { case [1, 2, 3, 4; 2, 2] { hit = "r2"; } default { hit = "BAD"; } }
+let ok14 = hit == "r2";
+
+switch m { case [1, 2, 3, 4; 4, 1] { hit = "BAD"; } default { hit = "r2-extent-miss"; } }
+let ok15 = hit == "r2-extent-miss";
+
+// empty arrays
+switch [0; 0] { case [0; 0] { hit = "empty"; } default { hit = "BAD"; } }
+let ok16 = hit == "empty";
+
+// Local (fn-scoped) hidden subject slot, as opposed to the global slots above
+fn local_slot(a: [str; :]): i32
+{
+	switch a
+	{
+		case ["x"]      { return 1; }
+		case ["x", "y"] { return 2; }
+		default         { return 0; }
+	}
+	return -1;
+}
+let ok17 = local_slot(["x", "y"]) == 2;
+let ok18 = local_slot(["y"]) == 0;
+
+let oks = [ok1, ok2, ok3, ok4, ok5, ok6, ok7, ok8, ok9, ok10, ok11, ok12, ok13, ok14, ok15, ok16, ok17, ok18];
+return all(oks);

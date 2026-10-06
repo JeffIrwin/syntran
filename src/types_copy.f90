@@ -157,6 +157,7 @@ recursive module subroutine struct_copy(dst, src)
 	dst%member_names = src%member_names
 	dst%num_vars = src%num_vars
 	dst%vars = src%vars
+	dst%reg_idx = src%reg_idx
 
 	if (allocated(src%cookie)) then
 		dst%cookie = src%cookie
@@ -545,13 +546,15 @@ recursive module subroutine syntax_node_destroy(node)
 	! first, instead of trusting gfortran's implicit deep deallocation to walk
 	! a whole AST in one shot.  Same doctrine as value_destroy()
 	! (value.f90), applied to the other deeply-nested type in this codebase:
-	! syntax_node_t has 20 allocatable components of its own type (5 of them
+	! syntax_node_t has 20 allocatable components of its own type (7 of them
 	! arrays), plus a value_t and two syntax_token_t -- each of which wraps a
 	! value_t of its own.
 	!
-	! The component list here must stay in sync with syntax_node_copy() below,
-	! c.f. the FIXME on syntax_node_t itself (types.f90).  Every component
-	! syntax_node_copy() handles is handled here, in the same order.
+	! The component list here must stay in sync with syntax_node_copy(),
+	! syntax_node_move(), and syntax_node_move_into() below -- c.f. the NOTE
+	! on syntax_node_t itself (types.f90) and utils/check-node-sync.sh, which
+	! enforces this.  Every component syntax_node_copy() handles is handled
+	! here, in the same order.
 
 	type(syntax_node_t), intent(inout) :: node
 
@@ -581,8 +584,8 @@ recursive module subroutine syntax_node_destroy(node)
 	call syntax_node_free(node%condition)
 	call syntax_node_free(node%body)
 	call syntax_node_free(node%array)
-	call syntax_node_free(node%lbound)
-	call syntax_node_free(node%ubound)
+	call syntax_node_free(node%lbound_)
+	call syntax_node_free(node%ubound_)
 	call syntax_node_free(node%step)
 	call syntax_node_free(node%len_)
 	call syntax_node_free(node%rank)
@@ -595,7 +598,7 @@ recursive module subroutine syntax_node_destroy(node)
 	call syntax_nodes_free(node%usubscripts)
 	call syntax_nodes_free(node%ssubscripts)
 	call syntax_nodes_free(node%args)
-	call syntax_nodes_free(node%size)
+	call syntax_nodes_free(node%size_)
 	call syntax_nodes_free(node%members)
 
 end subroutine syntax_node_destroy
@@ -823,18 +826,18 @@ recursive module subroutine syntax_node_copy(dst, src)
 		deallocate(dst%array)
 	end if
 
-	if (allocated(src%lbound)) then
-		if (.not. allocated(dst%lbound)) allocate(dst%lbound)
-		dst%lbound = src%lbound
-	else if (allocated(dst%lbound)) then
-		deallocate(dst%lbound)
+	if (allocated(src%lbound_)) then
+		if (.not. allocated(dst%lbound_)) allocate(dst%lbound_)
+		dst%lbound_ = src%lbound_
+	else if (allocated(dst%lbound_)) then
+		deallocate(dst%lbound_)
 	end if
 
-	if (allocated(src%ubound)) then
-		if (.not. allocated(dst%ubound)) allocate(dst%ubound)
-		dst%ubound = src%ubound
-	else if (allocated(dst%ubound)) then
-		deallocate(dst%ubound)
+	if (allocated(src%ubound_)) then
+		if (.not. allocated(dst%ubound_)) allocate(dst%ubound_)
+		dst%ubound_ = src%ubound_
+	else if (allocated(dst%ubound_)) then
+		deallocate(dst%ubound_)
 	end if
 
 	if (allocated(src%step)) then
@@ -888,10 +891,10 @@ recursive module subroutine syntax_node_copy(dst, src)
 		deallocate(dst%args)
 	end if
 
-	if (allocated(src%size)) then
-		call syntax_nodes_copy(dst%size, src%size)
-	else if (allocated(dst%size)) then
-		deallocate(dst%size)
+	if (allocated(src%size_)) then
+		call syntax_nodes_copy(dst%size_, src%size_)
+	else if (allocated(dst%size_)) then
+		deallocate(dst%size_)
 	end if
 
 	if (allocated(src%if_clause)) then
@@ -988,9 +991,9 @@ recursive module subroutine syntax_node_move(src, dst)
 	call move_alloc(src%body,        dst%body)
 	call move_alloc(src%array,       dst%array)
 	call move_alloc(src%member,      dst%member)
-	call move_alloc(src%lbound,      dst%lbound)
+	call move_alloc(src%lbound_,      dst%lbound_)
 	call move_alloc(src%step,        dst%step)
-	call move_alloc(src%ubound,      dst%ubound)
+	call move_alloc(src%ubound_,      dst%ubound_)
 	call move_alloc(src%len_,        dst%len_)
 	call move_alloc(src%rank,        dst%rank)
 
@@ -1001,7 +1004,7 @@ recursive module subroutine syntax_node_move(src, dst)
 	call move_alloc(src%usubscripts, dst%usubscripts)
 	call move_alloc(src%ssubscripts, dst%ssubscripts)
 	call move_alloc(src%args,        dst%args)
-	call move_alloc(src%size,        dst%size)
+	call move_alloc(src%size_,        dst%size_)
 
 end subroutine syntax_node_move
 
@@ -1063,9 +1066,9 @@ recursive module subroutine syntax_node_move_into(src, dst)
 	call move_alloc(src%body,        dst%body)
 	call move_alloc(src%array,       dst%array)
 	call move_alloc(src%member,      dst%member)
-	call move_alloc(src%lbound,      dst%lbound)
+	call move_alloc(src%lbound_,      dst%lbound_)
 	call move_alloc(src%step,        dst%step)
-	call move_alloc(src%ubound,      dst%ubound)
+	call move_alloc(src%ubound_,      dst%ubound_)
 	call move_alloc(src%len_,        dst%len_)
 	call move_alloc(src%rank,        dst%rank)
 
@@ -1076,7 +1079,7 @@ recursive module subroutine syntax_node_move_into(src, dst)
 	call move_alloc(src%usubscripts, dst%usubscripts)
 	call move_alloc(src%ssubscripts, dst%ssubscripts)
 	call move_alloc(src%args,        dst%args)
-	call move_alloc(src%size,        dst%size)
+	call move_alloc(src%size_,        dst%size_)
 
 end subroutine syntax_node_move_into
 

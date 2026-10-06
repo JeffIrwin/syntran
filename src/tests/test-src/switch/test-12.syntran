@@ -1,0 +1,36 @@
+// A larger switch (more arms, several values per arm) to exercise the
+// compiler's test/arm bookkeeping beyond the trivial 1-2 arm cases above
+
+fn day_kind(day: i32): str
+{
+	switch day
+	{
+		case 1, 2, 3, 4, 5
+		{
+			return "weekday";
+		}
+		case 6, 7
+		{
+			return "weekend";
+		}
+		case 0
+		{
+			return "invalid";
+		}
+		default
+		{
+			return "out-of-range";
+		}
+	}
+}
+
+let ans = [
+	day_kind(1), day_kind(3), day_kind(5),
+	day_kind(6), day_kind(7),
+	day_kind(0), day_kind(8)];
+let exp = [
+	"weekday", "weekday", "weekday",
+	"weekend", "weekend",
+	"invalid", "out-of-range"];
+
+return all(ans == exp);

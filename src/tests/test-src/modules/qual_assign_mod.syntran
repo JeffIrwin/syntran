@@ -1,0 +1,12 @@
+
+// Helper module for test-qual-assign-*-mismatch.syntran.  Two distinct structs
+// and two distinct enums, plus one global of each kind to assign to
+
+struct Apple { weight: i32 }
+struct Pear  { weight: i32 }
+
+enum Fruit { Fig, Plum }
+enum Nut   { Pecan, Cashew }
+
+let apple = Apple{weight = 1};
+let fruit = Fruit.Fig;

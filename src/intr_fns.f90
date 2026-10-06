@@ -12,6 +12,22 @@ module syntran__intr_fns_m
 
 	implicit none
 
+	! Overloaded intrinsic fn base names, e.g. "dot" resolving to one of
+	! "0dot_i32", "0dot_f32", etc. per call-site arg types.  These base names
+	! are never themselves inserted as fns_t table keys (only their "0"-
+	! mangled variants are; c.f. resolve_overload() below and its call site
+	! at parse_fn.f90:932), so is_overloaded_intr() and intr_fn_names() below
+	! are the two places that need this list.  Kept as one parameter array so
+	! there is only one place to update when a new overload is added, instead
+	! of the select case this replaced needing to stay in sync by hand
+	character(len = 8), parameter :: OVERLOAD_NAMES(28) = &
+		[character(len = 8) :: &
+			"exp", "log", "log10", "log2", "sqrt", "abs", &
+			"cos", "sin", "tan", "cosd", "sind", "tand", &
+			"acos", "asin", "atan", "acosd", "asind", "atand", &
+			"min", "max", "i32", "i64", &
+			"sum", "minval", "maxval", "product", "norm2", "dot"]
+
 !===============================================================================
 
 contains
@@ -63,18 +79,63 @@ logical function is_overloaded_intr(fn_name)
 
 	character(len = *), intent(in) :: fn_name
 
-	select case (fn_name)
-	case ("exp", "log", "log10", "log2", "sqrt", "abs", &
-		"cos", "sin", "tan", "cosd", "sind", "tand", &
-		"acos", "asin", "atan", "acosd", "asind", "atand", &
-		"min", "max", "i32", "i64", &
-		"sum", "minval", "maxval", "product", "norm2", "dot")
-		is_overloaded_intr = .true.
-	case default
-		is_overloaded_intr = .false.
-	end select
+	is_overloaded_intr = any(OVERLOAD_NAMES == fn_name)
 
 end function is_overloaded_intr
+
+!===============================================================================
+
+function intr_fn_names(fns) result(names)
+
+	! Sorted, user-visible list of intrinsic fn names: the plain (unmangled)
+	! table keys plus the overloaded base names in OVERLOAD_NAMES above.  The
+	! overloaded base names are never table keys themselves (only their "0"-
+	! mangled per-type variants are), so they have to be added back in by
+	! hand instead of just filtering the table.  Used by the REPL's
+	! `#help fns` directive (src/repl.f90) so the list can't silently drift
+	! from the actual registry
+	!
+	! Mangled keys (e.g. "0abs_f32", "0abs_f32_arr", "0i32_sca") are dropped
+	! by the leading-"0" check.  Do not try to derive a user-facing name by
+	! stripping a type suffix off a mangled key instead -- the suffix shapes
+	! are inconsistent (trailing "_arr", "_sca", or nothing) and would have
+	! to duplicate OVERLOAD_NAMES's job anyway
+
+	type(fns_t), intent(in) :: fns
+	type(string_vector_t) :: names
+
+	!********
+
+	integer :: i, j
+	character(len = :), allocatable :: key, tmp
+
+	names = new_string_vector()
+
+	do i = 1, fns%capacity
+		if (.not. allocated(fns%table(i)%key)) cycle
+		key = fns%table(i)%key
+		if (key(1:1) == "0") cycle
+		call names%push(key)
+	end do
+
+	do i = 1, size(OVERLOAD_NAMES)
+		call names%push(trim(OVERLOAD_NAMES(i)))
+	end do
+
+	! Simple insertion sort.  names%len_ is at most ~55, so O(n^2) is fine
+	! and not worth pulling in a general-purpose sort for
+	do i = 2, names%len_
+		tmp = names%v(i)%s
+		j = i - 1
+		do while (j >= 1)
+			if (names%v(j)%s <= tmp) exit
+			names%v(j + 1)%s = names%v(j)%s
+			j = j - 1
+		end do
+		names%v(j + 1)%s = tmp
+	end do
+
+end function intr_fn_names
 
 !===============================================================================
 
@@ -804,6 +865,18 @@ recursive subroutine resolve_overload(args, fn_call, has_rank, has_arr_type, arr
 			fn_call%identifier%text = "0sum_i32"
 		end select
 
+		! Overloads with a `dim` and/or `mask` arg
+		call resolve_reduce_ext(args, fn_call, has_rank)
+
+	case ("count", "all", "any")
+
+		! Only the 2-arg `dim` overload needs a mangled name.  The 1-arg forms
+		! are the plain table keys
+		if (args%len_ == 2) then
+			fn_call%identifier%text = "0"//fn_call%identifier%text//"_dim"
+			call resolve_reduce_rank(args, fn_call, has_rank)
+		end if
+
 	case ("minval")
 
 		type_ = i32_type
@@ -821,6 +894,9 @@ recursive subroutine resolve_overload(args, fn_call, has_rank, has_arr_type, arr
 		case default
 			fn_call%identifier%text = "0minval_i32"
 		end select
+
+		! Overloads with a `dim` and/or `mask` arg
+		call resolve_reduce_ext(args, fn_call, has_rank)
 
 	case ("maxval")
 
@@ -840,6 +916,9 @@ recursive subroutine resolve_overload(args, fn_call, has_rank, has_arr_type, arr
 			fn_call%identifier%text = "0maxval_i32"
 		end select
 
+		! Overloads with a `dim` and/or `mask` arg
+		call resolve_reduce_ext(args, fn_call, has_rank)
+
 	case ("product")
 
 		type_ = i32_type
@@ -857,6 +936,9 @@ recursive subroutine resolve_overload(args, fn_call, has_rank, has_arr_type, arr
 		case default
 			fn_call%identifier%text = "0product_i32"
 		end select
+
+		! Overloads with a `dim` and/or `mask` arg
+		call resolve_reduce_ext(args, fn_call, has_rank)
 
 	case ("norm2")
 		! I might change the name norm2 to norm later but I'm not ready to lock
@@ -950,6 +1032,82 @@ recursive subroutine resolve_overload(args, fn_call, has_rank, has_arr_type, arr
 	end select
 
 end subroutine resolve_overload
+
+!===============================================================================
+
+subroutine resolve_reduce_rank(args, fn_call, has_rank)
+
+	! Set the parse-time result rank of a reduction called with a `dim` arg:
+	! one less than the rank of the array arg, or 0 for a rank-1 array.  Rank 0
+	! is a marker for parse_fn_call() to turn the result into a scalar.  It is
+	! -1 (unknown) if the array arg isn't actually an array, in which case the
+	! arg type check that follows reports the error
+
+	type(syntax_node_vector_t), intent(in) :: args
+	type(syntax_node_t), intent(inout) :: fn_call
+	logical, intent(out) :: has_rank
+
+	!********
+
+	integer :: src_rank
+
+	has_rank = .true.
+	if (.not. allocated(fn_call%val%array)) allocate(fn_call%val%array)
+
+	src_rank = -1
+	if (args%len_ >= 1) then
+		if (args%v(1)%val%type == array_type) then
+			src_rank = args%v(1)%val%array%rank
+		end if
+	end if
+
+	if (src_rank > 0) then
+		fn_call%val%array%rank = src_rank - 1
+	else
+		fn_call%val%array%rank = -1
+	end if
+
+end subroutine resolve_reduce_rank
+
+!===============================================================================
+
+subroutine resolve_reduce_ext(args, fn_call, has_rank)
+
+	! Rename a type-resolved reduction like "0sum_i32" to its overload taking a
+	! `dim` and/or `mask` arg, based on the number and types of the args:
+	!
+	!     f(a, dim)       -> "_dim"       (2nd arg is not an array)
+	!     f(a, mask)      -> "_mask"      (2nd arg is an array)
+	!     f(a, dim, mask) -> "_dim_mask"
+	!
+	! Arg counts and types that match none of these are left alone, so the
+	! usual arg count/type checks in parse_fn_call() report them against the
+	! plain fn
+
+	type(syntax_node_vector_t), intent(in) :: args
+	type(syntax_node_t), intent(inout) :: fn_call
+	logical, intent(out) :: has_rank
+
+	!********
+
+	has_rank = .false.
+
+	select case (args%len_)
+	case (2)
+		if (args%v(2)%val%type == array_type) then
+			fn_call%identifier%text = fn_call%identifier%text//"_mask"
+		else
+			fn_call%identifier%text = fn_call%identifier%text//"_dim"
+			call resolve_reduce_rank(args, fn_call, has_rank)
+		end if
+
+	case (3)
+		fn_call%identifier%text = fn_call%identifier%text//"_dim_mask"
+		call resolve_reduce_rank(args, fn_call, has_rank)
+
+	end select
+
+end subroutine resolve_reduce_ext
 
 !===============================================================================
 

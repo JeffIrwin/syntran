@@ -25,6 +25,43 @@ proc wait_hint {} {
 	}
 }
 
+# Resync on the next `syntran$ ` prompt after sending input AT the
+# `syntran$ ` prompt itself that produces no printed output to anchor on
+# first (e.g. a silent directive like `#clear` or `#hint`).  Unlike
+# wait_prompt, this anchors on a literal line feed, because a bare
+# `{syntran$ }` match is unsafe here: isocline redraws "syntran$ <buffer
+# so far>" on every keystroke (see wait_result's comment below for the
+# general redraw-noise issue), so it would match on the very first
+# character typed rather than the real fresh prompt that appears once the
+# directive actually finishes.  wait_result's own trailing `wait_prompt`
+# call doesn't need this because nothing is sent between its anchored
+# match and that call -- this proc is only for the "nothing to anchor on"
+# case, i.e. right after send at the `syntran$ ` prompt
+#
+# The prompt text is colored (bold green ANSI escapes), so it is never
+# truly adjacent to the line feed the way a plain result string is in
+# wait_result -- hence `-re` with a `[^\n]*` gap instead of a plain `--`
+# substring match, to skip over the escape bytes without also skipping
+# over an unrelated earlier line
+proc wait_prompt_resync {} {
+	expect {
+		-re {\n[^\n]*syntran\$ } {}
+		timeout { die "timeout waiting to resync on the next prompt" }
+		eof     { die "unexpected eof waiting to resync on the next prompt" }
+	}
+}
+
+# Wait for the plain (non-hint) continuation prompt "> ", anchored the same
+# way as wait_prompt_resync and for the same reason: this is only safe to
+# call once, right after send, with nothing else matched in between
+proc wait_cont_prompt {} {
+	expect {
+		-re {\n[^\n]*> } {}
+		timeout { die "timeout waiting for continuation prompt" }
+		eof     { die "unexpected eof waiting for continuation prompt" }
+	}
+}
+
 # Wait for a submitted line's printed result, then resync on the following
 # fresh prompt before returning.  Both parts matter:
 #

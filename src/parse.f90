@@ -24,6 +24,12 @@ module syntran__parse_m
 		logical :: expecting = .false., first_expecting = .false.
 		character(len = :), allocatable :: first_expected
 
+		! Position of the last match() (or match_pre()) failure, used to
+		! de-dupe a second E20 at the exact same token (e.g. a missing `)`
+		! immediately followed by a missing `;` on that same bad token).
+		! Reset at the start of each parse_unit() pass
+		integer :: last_e20_pos = 0
+
 		type(string_vector_t) :: diagnostics
 
 		! Context for all src files (including include files).  Could convert to
@@ -98,12 +104,15 @@ module syntran__parse_m
 				next => next_token, &
 				peek_index, &
 				check_type_clash, &
+				push_var, &
+				search, &
 				check_enum_name_value, &
 				check_var_clash, &
 				parse_array_expr, &
 				parse_block_statement, &
 				parse_expr, &
 				parse_expr_statement, &
+				parse_let_expr, &
 				parse_fn_declaration, &
 				parse_method_declaration, &
 				parse_fn_call, &
@@ -124,8 +133,10 @@ module syntran__parse_m
 				parse_primary_expr, &
 				parse_size, &
 				parse_statement, &
+				parse_switch_statement, &
 				parse_subscripts, &
 				parse_dot, &
+				skip_juxtaposed_arg, &
 				parse_type, &
 				parse_unit, &
 				parse_while_statement, &
@@ -146,9 +157,10 @@ module syntran__parse_m
 	interface
 		! Implemented in parse_fn.f90
 
-		module subroutine parse_fn_declaration(parser, decl)
+		module subroutine parse_fn_declaration(parser, decl, no_fn_kw)
 			class(parser_t) :: parser
 			type(syntax_node_t), intent(out) :: decl
+			logical, intent(in), optional :: no_fn_kw
 		end subroutine parse_fn_declaration
 
 		recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_call)
@@ -176,12 +188,13 @@ module syntran__parse_m
 			type(syntax_node_t), intent(out) :: decl
 		end subroutine parse_struct_declaration
 
-		module subroutine parse_method_declaration(parser, decl, struct, is_const, struct_name)
+		module subroutine parse_method_declaration(parser, decl, struct, is_const, struct_name, no_fn_kw)
 			class(parser_t) :: parser
 			type(syntax_node_t), intent(out) :: decl
 			type(struct_t), intent(in) :: struct
 			logical, intent(in) :: is_const
 			character(len = *), intent(in) :: struct_name
+			logical, intent(in), optional :: no_fn_kw
 		end subroutine parse_method_declaration
 
 		recursive module subroutine parse_struct_instance(parser, inst, struct_name)
@@ -248,6 +261,26 @@ module syntran__parse_m
 			type(integer_vector_t), intent(in) :: pos_args
 			integer, intent(in) :: lparen_pos, rparen_pos
 		end subroutine build_method_call_node
+
+		! Shared by parse_fn_call's fn-pointer-variable branch (bare `f(x)`)
+		! and parse_dot's fn-typed-struct-member branch (`s.f(x)`): validates
+		! explicit args against callee_val's fn-pointer signature and builds
+		! the fn_call_ptr_expr node.  The caller identifies the callee
+		! itself afterwards (node%id_index/is_loc for a plain variable,
+		! node%left for a member-access chain).  Sets node%val%type =
+		! unknown_type on a validation error, same contract as
+		! build_method_call_node above
+		module subroutine build_fn_ptr_call_node(parser, node, callee_val, callee_name, &
+				call_args, call_is_ref, pos_args, lparen_pos, rparen_pos)
+			class(parser_t) :: parser
+			type(syntax_node_t), intent(out) :: node
+			type(value_t), intent(in) :: callee_val
+			character(len = *), intent(in) :: callee_name
+			type(syntax_node_vector_t), intent(in) :: call_args
+			type(logical_vector_t), intent(in) :: call_is_ref
+			type(integer_vector_t), intent(in) :: pos_args
+			integer, intent(in) :: lparen_pos, rparen_pos
+		end subroutine build_fn_ptr_call_node
 
 	end interface
 
@@ -316,6 +349,11 @@ module syntran__parse_m
 			type(syntax_node_t), intent(out) :: statement
 		end subroutine parse_while_statement
 
+		recursive module subroutine parse_switch_statement(parser, statement)
+			class(parser_t) :: parser
+			type(syntax_node_t), intent(out) :: statement
+		end subroutine parse_switch_statement
+
 		recursive module subroutine parse_block_statement(parser, block)
 			class(parser_t) :: parser
 			type(syntax_node_t), intent(out) :: block
@@ -332,6 +370,12 @@ module syntran__parse_m
 
 	interface
 		! Implemented in parse_expr.f90
+
+		recursive module subroutine parse_let_expr(parser, is_const, expr)
+			class(parser_t) :: parser
+			logical, intent(in) :: is_const
+			type(syntax_node_t), intent(out) :: expr
+		end subroutine parse_let_expr
 
 		recursive module subroutine parse_expr_statement(parser, expr)
 			class(parser_t) :: parser
@@ -359,6 +403,11 @@ module syntran__parse_m
 			type(syntax_node_t), intent(inout) :: expr
 		end subroutine parse_dot
 
+		recursive module subroutine skip_juxtaposed_arg(parser, skipped)
+			class(parser_t) :: parser
+			logical, intent(out), optional :: skipped
+		end subroutine skip_juxtaposed_arg
+
 	end interface
 
 	!********
@@ -370,6 +419,23 @@ module syntran__parse_m
 			class(parser_t) :: parser
 			character(len = :), allocatable :: str_
 		end function tokens_str
+
+		! Allocate the next local/global variable slot and save its index in
+		! `node`
+		module subroutine push_var(parser, node)
+			class(parser_t) :: parser
+			type(syntax_node_t), intent(inout) :: node
+		end subroutine push_var
+
+		! Search locals (if in a fn body) then globals for a variable name
+		module subroutine search(parser, key, id_index, iostat, val, is_loc, is_const)
+			class(parser_t) :: parser
+			character(len = *), intent(in) :: key
+			integer, intent(out) :: id_index, iostat
+			type(value_t), intent(out) :: val
+			logical, intent(out) :: is_loc
+			logical, intent(out), optional :: is_const
+		end subroutine search
 
 		! At a variable-binding site (let/const/for-iterator/fn-param), check
 		! whether `name` clashes with an already-declared enum or struct type
@@ -398,10 +464,11 @@ module syntran__parse_m
 			character(len = *), intent(in) :: type_kind
 		end subroutine check_var_clash
 
-		module subroutine match(parser, kind, token)
+		module subroutine match(parser, kind, token, what)
 			class(parser_t) :: parser
 			integer :: kind
 			type(syntax_token_t), intent(out) :: token
+			character(len = *), intent(in), optional :: what
 		end subroutine match
 
 		recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, unit_)
@@ -538,6 +605,10 @@ integer function current_pos(parser)
 
 	! Get the current character index.  If you want the token index, use
 	! parser%pos instead
+	!
+	! new_span() takes a character index, not a token index -- always build
+	! spans from current_pos()/peek_pos() or a token's %pos, never from
+	! parser%pos directly
 
 	class(parser_t) :: parser
 

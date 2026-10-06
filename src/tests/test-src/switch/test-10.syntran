@@ -1,0 +1,31 @@
+// Nested switch: a switch inside a case arm's body
+
+fn describe(x: i32, y: i32): str
+{
+	switch x
+	{
+		case 1
+		{
+			switch y
+			{
+				case 2
+				{
+					return "x1y2";
+				}
+				default
+				{
+					return "x1yX";
+				}
+			}
+		}
+		default
+		{
+			return "other";
+		}
+	}
+	return "unreachable";
+}
+
+let ans = [describe(1, 2), describe(1, 9), describe(9, 9)];
+let exp = ["x1y2", "x1yX", "other"];
+return all(ans == exp);

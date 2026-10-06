@@ -1,0 +1,19 @@
+// No default and nothing matches: the switch is a no-op, and following
+// statements still run
+
+let x = 99;
+let y = 0;
+switch x
+{
+	case 1
+	{
+		y = 1;
+	}
+	case 2
+	{
+		y = 2;
+	}
+}
+y += 1000;
+
+return y == 1000;

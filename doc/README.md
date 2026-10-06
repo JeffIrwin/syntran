@@ -102,22 +102,41 @@ elemental.
 
 ## `all`
 ```rust
-fn all(mask: [bool; any_rank])
+fn all(mask: [bool; any_rank]): bool
+fn all(mask: [bool; any_rank], dim: i32): [bool; any_rank - 1]
 ```
 
 Return `true` if every element of `mask` is `true`, including the case where
 `mask` is empty.  Otherwise, i.e. if at least 1 element of `mask` is `false`,
 return `false`.
 
+If `dim` is given, instead test each lane of `mask` along the dimension `dim`
+and return an array of bools.  For example, `all(m > 0, 0)` says whether each
+column of a matrix `m` is all positive.
+
+With a `dim`, the result has one less rank than the array.  If the array is rank
+1, the result is a scalar instead of a 1-element array.  Like `size`, `dim` is
+zero-indexed, and a `dim` outside of `0 <= dim < rank` is a runtime error
+([R34](errors.md#r34----reduce-dim-range)).
+
 Related functions: [`any`](#any)
 
 ## `any`
 ```rust
-fn any(mask: [bool; any_rank])
+fn any(mask: [bool; any_rank]): bool
+fn any(mask: [bool; any_rank], dim: i32): [bool; any_rank - 1]
 ```
 
 Return `true` if at least 1 element of `mask` is `true`.  Otherwise, i.e. if
 all elements of `mask` are `false` or `mask` is empty, return `false`.
+
+If `dim` is given, instead test each lane of `mask` along the dimension `dim`
+and return an array of bools.
+
+With a `dim`, the result has one less rank than the array.  If the array is rank
+1, the result is a scalar instead of a 1-element array.  Like `size`, `dim` is
+zero-indexed, and a `dim` outside of `0 <= dim < rank` is a runtime error
+([R34](errors.md#r34----reduce-dim-range)).
 
 Related functions: [`all`](#all)
 
@@ -144,10 +163,20 @@ Related functions: [`open`](#open), [`writeln`](#writeln)
 ## `count`
 ```rust
 fn count(mask: [bool; any_rank]): i64
+fn count(mask: [bool; any_rank], dim: i32): [i64; any_rank - 1]
 ```
 
 Return how many elements of `mask` are `true`.  If `mask` is empty, return `0`.
 Not to be confused with [`size`](#size).
+
+If `dim` is given, instead count the `true` elements of each lane of `mask`
+along the dimension `dim`.  For example, `count(m > 0, 1)` counts the positive
+elements in each row of a matrix `m`.
+
+With a `dim`, the result has one less rank than the array.  If the array is rank
+1, the result is a scalar instead of a 1-element array.  Like `size`, `dim` is
+zero-indexed, and a `dim` outside of `0 <= dim < rank` is a runtime error
+([R34](errors.md#r34----reduce-dim-range)).
 
 Related functions: [`any`](#any), [`all`](#all)
 
@@ -281,7 +310,31 @@ let max_int = max(1, 2);
 let max_flt = max(3.0, 2.0);
 ```
 
-Related functions: [`min`](#min)
+Related functions: [`min`](#min), [`maxval`](#maxval)
+
+## `maxval`
+```rust
+fn maxval(array: [any_num; any_rank]): any_num
+fn maxval(array: [any_num; any_rank], dim: i32): [any_num; any_rank - 1]
+fn maxval(array: [any_num; any_rank], mask: [bool; any_rank]): any_num
+fn maxval(array: [any_num; any_rank], dim: i32, mask: [bool; any_rank]): [any_num; any_rank - 1]
+```
+
+Return the largest element of `array`.  If `dim` is given, instead return the
+largest element of each lane of `array` along the dimension `dim`.  If `mask` is
+given, only the elements where `mask` is `true` are considered.
+
+With a `dim`, the result has one less rank than the array.  If the array is rank
+1, the result is a scalar instead of a 1-element array.  Like `size`, `dim` is
+zero-indexed, and a `dim` outside of `0 <= dim < rank` is a runtime error
+([R34](errors.md#r34----reduce-dim-range)).
+
+It is a runtime error ([R36](errors.md#r36----minmax-empty)) if there is nothing
+to take the largest of, i.e. `array` is empty or `mask` selects no elements.
+
+Not to be confused with [`max`](#max), which compares its scalar arguments.
+
+Related functions: [`minval`](#minval), [`max`](#max)
 
 ## `min`
 ```rust
@@ -291,7 +344,31 @@ fn min(a0: any_num, a1: any_num, a2: any_num, ...): any_num
 Return the argument with the smallest (most negative) value.  Like with `max`,
 the arguments of `min` must be homogeneous types.
 
-Related functions: [`max`](#max)
+Related functions: [`max`](#max), [`minval`](#minval)
+
+## `minval`
+```rust
+fn minval(array: [any_num; any_rank]): any_num
+fn minval(array: [any_num; any_rank], dim: i32): [any_num; any_rank - 1]
+fn minval(array: [any_num; any_rank], mask: [bool; any_rank]): any_num
+fn minval(array: [any_num; any_rank], dim: i32, mask: [bool; any_rank]): [any_num; any_rank - 1]
+```
+
+Return the smallest element of `array`.  If `dim` is given, instead return the
+smallest element of each lane of `array` along the dimension `dim`.  If `mask` is
+given, only the elements where `mask` is `true` are considered.
+
+With a `dim`, the result has one less rank than the array.  If the array is rank
+1, the result is a scalar instead of a 1-element array.  Like `size`, `dim` is
+zero-indexed, and a `dim` outside of `0 <= dim < rank` is a runtime error
+([R34](errors.md#r34----reduce-dim-range)).
+
+It is a runtime error ([R36](errors.md#r36----minmax-empty)) if there is nothing
+to take the smallest of, i.e. `array` is empty or `mask` selects no elements.
+
+Not to be confused with [`min`](#min), which compares its scalar arguments.
+
+Related functions: [`maxval`](#maxval), [`min`](#min)
 
 ## `open`
 ```rust
@@ -388,6 +465,26 @@ Print to the standard output, with a newline
 
 Related functions: [`str`](#str), [`writeln`](#writeln)
 
+## `product`
+```rust
+fn product(array: [any_num; any_rank]): any_num
+fn product(array: [any_num; any_rank], dim: i32): [any_num; any_rank - 1]
+fn product(array: [any_num; any_rank], mask: [bool; any_rank]): any_num
+fn product(array: [any_num; any_rank], dim: i32, mask: [bool; any_rank]): [any_num; any_rank - 1]
+```
+
+Return the product of all elements in an array.  If `dim` is given, instead
+return the product of each lane of `array` along the dimension `dim`.  If `mask`
+is given, only the elements where `mask` is `true` are multiplied.  The product
+of no elements is `1`.
+
+With a `dim`, the result has one less rank than the array.  If the array is rank
+1, the result is a scalar instead of a 1-element array.  Like `size`, `dim` is
+zero-indexed, and a `dim` outside of `0 <= dim < rank` is a runtime error
+([R34](errors.md#r34----reduce-dim-range)).
+
+Related functions: [`sum`](#sum)
+
 ## `readln`
 ```rust
 fn readln(): str
@@ -418,9 +515,38 @@ Related functions: [`println`](#println), [`writeln`](#writeln), [`parse_i32`](#
 ## `sum`
 ```rust
 fn sum(array: [any_num; any_rank]): any_num
+fn sum(array: [any_num; any_rank], dim: i32): [any_num; any_rank - 1]
+fn sum(array: [any_num; any_rank], mask: [bool; any_rank]): any_num
+fn sum(array: [any_num; any_rank], dim: i32, mask: [bool; any_rank]): [any_num; any_rank - 1]
 ```
 
 Return the sum of all elements in an array.
+
+If `dim` is given, instead return the sum of each lane of `array` along the
+dimension `dim`.  For example, for a matrix `m`, `sum(m, 0)` is the sum of each
+column and `sum(m, 1)` is the sum of each row.
+
+With a `dim`, the result has one less rank than the array.  If the array is rank
+1, the result is a scalar instead of a 1-element array.  Like `size`, `dim` is
+zero-indexed, and a `dim` outside of `0 <= dim < rank` is a runtime error
+([R34](errors.md#r34----reduce-dim-range)).
+
+If `mask` is given, only the elements of `array` where `mask` is `true` are
+summed.  `mask` must have the same shape as `array`, otherwise it is a runtime
+error ([R35](errors.md#r35----mask-shape-mismatch)).  The same goes for the
+`mask` of `product`, `minval`, and `maxval`.  Unlike Fortran, syntran has no
+keyword arguments, so `dim` always comes before `mask`, and the two overloads
+are told apart by whether the second argument is an integer or a `bool` array.
+
+```rust
+let a = [1, 2, 3, 4, 5, 6; 2, 3];
+let s0 = sum(a, 0);        // [3, 7, 11]
+let s1 = sum(a, 1);        // [9, 12]
+let sm = sum(a, a > 2);    // 18
+let sd = sum(a, 0, a > 2); // [0, 7, 11]
+```
+
+Related functions: [`product`](#product), [`count`](#count)
 
 ## `try_open`
 ```rust

@@ -300,19 +300,18 @@ function parse_args() result(args)
 				write(*,*) fg_bright_magenta//"build date = "//build_date//color_reset
 				write(*,*) fg_bright_magenta//"fortran compiler = "//fort_compiler//" "// &
 					str(fort_vers)//color_reset
+				write(*,*) fg_bright_magenta//"bounds check = "// &
+					merge("on ", "off", bounds_check)//color_reset
 			end if
 			write(*,*)
 		end if
 
 		if (interactive) then
 			write(*,*) 'Usage:'
-			write(*,*) tab//'#tree to toggle tree display'
+			write(*,*) tab//'`#help` for interactive help'
 			write(*,*) tab//'`exit(0);` or Ctrl+D to exit'
 			write(*,*)
 		end if
-
-		! TODO: add an interactive #help directive for more in depth info.  -h help
-		! cmd arg already exists
 	end if
 
 	if (error .or. args%help) then

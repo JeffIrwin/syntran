@@ -1,0 +1,38 @@
+// case values are variables and function calls, not just literals
+
+fn get_target(): i32
+{
+	return 7;
+}
+
+let target = get_target();
+let ok1 = false;
+let ok2 = false;
+
+let x = 7;
+switch x
+{
+	case target
+	{
+		ok1 = true;
+	}
+	default
+	{
+		ok1 = false;
+	}
+}
+
+let y = 8;
+switch y
+{
+	case get_target()
+	{
+		ok2 = false;
+	}
+	default
+	{
+		ok2 = true;
+	}
+}
+
+return ok1 and ok2;

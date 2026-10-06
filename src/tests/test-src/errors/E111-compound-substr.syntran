@@ -1,0 +1,8 @@
+// E111: compound-substr
+// A fixed-width character subscript/slice can't grow or shrink, so a
+// compound operator like `+=` can't be given it a sound meaning.  Only plain
+// `=` is allowed on a substring/char-subscript LHS
+
+let s = "hello";
+
+s[1:3] += "XY";

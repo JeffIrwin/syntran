@@ -1,0 +1,41 @@
+// Fn-pointer reassignment: a plain `let` var reassigned, a fn-pointer
+// *parameter* reassigned inside its own callee, and a global reassigned from
+// inside another fn.  Every one of these aborted fatally with
+// "Internal syntran error[I2]: binary operator `=` cannot be evaluated"
+// before assign_value_t() (math.f90) grew a fn_type case -- only
+// let-initialization went through a different (working) path
+
+fn a(n: i32): i32
+{
+	return n;
+}
+
+fn b(n: i32): i32
+{
+	return 2 * n;
+}
+
+// 1. plain let var reassigned
+let f = a;
+f = b;
+let r1 = f(5);          // 10
+
+// 2. fn-pointer parameter reassigned inside the callee
+fn reassign_param(g: fn(i32): i32, x: i32): i32
+{
+	g = b;
+	return g(x);
+}
+let r2 = reassign_param(a, 5);   // 10 (ignores a, always calls b)
+
+// 3. global reassigned from inside another fn
+let h = a;
+fn reassign_global(x: i32): i32
+{
+	h = b;
+	return h(x);
+}
+let r3 = reassign_global(5);    // 10
+let r4 = h(5);                   // 10 (h stays reassigned after the call)
+
+return r1 + r2 + r3 + r4;

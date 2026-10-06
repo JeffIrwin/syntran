@@ -1,0 +1,93 @@
+#!/usr/bin/env expect
+
+# `#help` and the other REPL-only directives added alongside it (#cancel,
+# #clear, #hint).  See src/repl.f90 for the directive text/dispatch and the
+# `chunk`-based read loop in syntran_interpret() (src/syntran.f90) that lets
+# a directive fire from the continuation prompt too, not just `syntran$`
+
+set timeout 10
+source [file join [file dirname [info script]] common.tcl]
+
+proc wait_text {text} {
+	expect {
+		-- $text {}
+		timeout { die "timeout waiting for: $text" }
+		eof     { die "unexpected eof waiting for: $text" }
+	}
+}
+
+set bin [lindex $argv 0]
+spawn $bin
+wait_prompt
+
+# Bare #help prints the directive index.  wait_prompt here is safe: nothing
+# is sent between wait_text's anchored match and it, same as wait_result
+send "#help\r"
+wait_text "Directives:"
+wait_prompt
+
+# Topics
+send "#help keys\r"
+wait_text "Ctrl+R"
+wait_prompt
+
+send "#help fns\r"
+wait_text "println"
+wait_prompt
+
+# #help vars sees a declared variable, #clear makes it undeclared again
+send "let x = 5;\r"
+wait_result "5"
+
+send "#help vars\r"
+wait_text "x: i32"
+wait_prompt
+
+# #clear prints nothing, so resync on the anchored fresh prompt -- see
+# wait_prompt_resync's comment in common.tcl for why bare wait_prompt would
+# match too early here
+send "#clear\r"
+wait_prompt_resync
+
+send "x;\r"
+wait_text "E28"
+wait_prompt
+
+# #cancel abandons a stuck multi-line statement instead of requiring Ctrl+D.
+# Sync on the real continuation prompt before sending #cancel, both to
+# confirm the statement really is unfinished and to avoid the raw/canonical
+# mode race wait_result warns about
+send "fn f(): i32 \{\r"
+wait_cont_prompt
+
+send "#cancel\r"
+wait_prompt
+
+send "7;\r"
+wait_result "7"
+
+# #hint toggles the "[Hint `;`]>" continuation prompt off ...
+send "#hint\r"
+wait_prompt_resync
+
+send "1+2\r"
+expect {
+	"Hint"             { die "hint prompt shown after #hint toggled it off" }
+	-re {\n[^\n]*> }   {}
+	timeout            { die "timeout waiting for plain continuation prompt" }
+	eof                { die "unexpected eof waiting for plain continuation prompt" }
+}
+send ";\r"
+wait_result "3"
+
+# ... and back on
+send "#hint\r"
+wait_prompt_resync
+
+send "1+2\r"
+wait_hint
+
+send ";\r"
+wait_result "3"
+
+finish

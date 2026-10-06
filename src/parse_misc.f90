@@ -5,13 +5,63 @@ submodule (syntran__parse_m) syntran__parse_misc
 
 	implicit none
 
-	! FIXME: remember to prepend routines like `module function` or `module
-	! subroutine` when pasting them into a submodule.  gfortran doesn't care but
-	! intel fortran will refuse to compile otherwise
-
 !===============================================================================
 
 contains
+
+!===============================================================================
+
+module subroutine push_var(parser, node)
+
+	! Allocate the next variable slot, local if we're inside a fn body or
+	! global otherwise, and save its index in the node.  Used for anything
+	! that binds a variable: let/const declarations, for-loop iterators, and
+	! the hidden switch subject
+
+	class(parser_t) :: parser
+	type(syntax_node_t), intent(inout) :: node
+
+	if (parser%is_loc) then
+		parser%num_locs = parser%num_locs + 1
+		node%id_index   = parser%num_locs
+		node%is_loc     = .true.
+	else
+		parser%num_vars = parser%num_vars + 1
+		node%id_index   = parser%num_vars
+		node%is_loc     = .false.
+	end if
+
+end subroutine push_var
+
+!===============================================================================
+
+module subroutine search(parser, key, id_index, iostat, val, is_loc, is_const)
+
+	! Look up a variable name, trying local scope first (if inside a fn body)
+	! and then falling back to globals.  On return, is_loc says which table the
+	! name was found in
+
+	class(parser_t) :: parser
+	character(len = *), intent(in) :: key
+	integer, intent(out) :: id_index, iostat
+	type(value_t), intent(out) :: val
+	logical, intent(out) :: is_loc
+	logical, intent(out), optional :: is_const
+
+	iostat = exit_failure
+	is_loc = .false.
+	if (present(is_const)) is_const = .false.
+
+	if (parser%is_loc) then
+		call parser%locs%search(key, id_index, iostat, val, is_const = is_const)
+		is_loc = iostat == exit_success
+	end if
+
+	if (.not. is_loc) then
+		call parser%vars%search(key, id_index, iostat, val, is_const = is_const)
+	end if
+
+end subroutine search
 
 !===============================================================================
 
@@ -47,6 +97,17 @@ module subroutine check_type_clash(parser, name, pos)
 	! whether `name` clashes with an already-declared enum or struct type
 	! name.  A name can't be both (E26/E27/E92 already forbid that), so enum
 	! vs struct here is just "which message to print", not an ambiguity
+	!
+	! Only push in pass 0.  parser%enums/%structs (unlike the *_names
+	! bookkeeping vectors) are never cleared between passes, so by pass 1 they
+	! already hold every type declared anywhere in the file -- including ones
+	! that, in this pass's own source-order traversal, appear later than
+	! `name`.  Pushing unconditionally would make this fire at both
+	! declaration sites regardless of which one is textually first, instead
+	! of just the second one.  parse_unit() (parse_misc.f90) merges this
+	! diagnostic (EC_VAR_TYPE_CLASH, via is_pass0_only_diag()) back in from
+	! pass 0's list, so gating here still reports the single correct
+	! diagnostic
 
 	class(parser_t) :: parser
 	character(len = *), intent(in) :: name
@@ -55,6 +116,8 @@ module subroutine check_type_clash(parser, name, pos)
 	!********
 
 	type(text_span_t) :: span
+
+	if (parser%ipass /= 0) return
 
 	if (parser%enums%exists(name)) then
 		span = new_span(pos, len(name))
@@ -103,6 +166,9 @@ module subroutine check_var_clash(parser, name, pos, type_kind)
 	! already-declared module-level variable.  Only `vars` is checked, not
 	! `locs`: struct/enum declarations are top-level, and `locs` may still
 	! hold stale entries from a previously parsed fn body
+	!
+	! Only push in pass 0 -- see the comment in check_type_clash() above;
+	! `parser%vars` has the same cross-pass leakage problem
 
 	class(parser_t) :: parser
 	character(len = *), intent(in) :: name
@@ -115,6 +181,8 @@ module subroutine check_var_clash(parser, name, pos, type_kind)
 	type(value_t) :: val
 	type(text_span_t) :: span
 
+	if (parser%ipass /= 0) return
+
 	call parser%vars%search(name, id_index, io, val)
 	if (io == 0) then
 		span = new_span(pos, len(name))
@@ -126,7 +194,56 @@ end subroutine check_var_clash
 
 !===============================================================================
 
-module subroutine match(parser, kind, token)
+function expect_desc(kind) result(desc)
+
+	! Human-readable description of a token kind for the "expected ..." half
+	! of an E20 unexpected-token message.  A few common kinds get a plain
+	! description instead of their internal kind_token() spelling, since
+	! "expected `i32_token`" means nothing to a syntran user
+
+	integer, intent(in) :: kind
+	character(len = :), allocatable :: desc
+
+	select case (kind)
+		case (identifier_token)
+			desc = "an identifier"
+		case (str_token)
+			desc = "a string literal"
+		case (i32_token, i64_token)
+			desc = "an integer literal"
+		case (f32_token, f64_token)
+			desc = "a floating-point literal"
+		case (eof_token)
+			desc = "end of input"
+		case default
+			desc = "`"//kind_token(kind)//"`"
+	end select
+
+end function expect_desc
+
+!===============================================================================
+
+function got_desc(kind, text) result(desc)
+
+	! Human-readable description of the actual token found, for the
+	! "unexpected token ..." half of an E20 message.  eof's current%text is
+	! not a useful thing to quote, so name it explicitly instead
+
+	integer, intent(in) :: kind
+	character(len = *), intent(in) :: text
+	character(len = :), allocatable :: desc
+
+	if (kind == eof_token) then
+		desc = "end of input"
+	else
+		desc = "`"//trim(text)//"`"
+	end if
+
+end function got_desc
+
+!===============================================================================
+
+module subroutine match(parser, kind, token, what)
 
 	class(parser_t) :: parser
 
@@ -134,9 +251,13 @@ module subroutine match(parser, kind, token)
 
 	type(syntax_token_t), intent(out) :: token
 
+	character(len = *), intent(in), optional :: what
+
 	!********
 
 	integer :: len_text
+
+	character(len = :), allocatable :: expect
 
 	type(syntax_token_t) :: current
 	type(text_span_t) :: span
@@ -154,31 +275,33 @@ module subroutine match(parser, kind, token)
 	!! A continued expression can commonly have several unmatched tokens.  The
 	!! last one is usually a semicolon, or it could be a right brace.  The first
 	!! one is more helpful for the user to know
-	!print *, 'unmatched '//kind_name(kind)
-	!print *, 'unmatched '//kind_token(kind)
 
 	if (.not. parser%first_expecting) then
 		parser%first_expected  = kind_token(kind)
 		parser%first_expecting = .true.
 	end if
 
-	!print *, 'pushing match diag'
 	len_text = max(len(current%text), 1)
 
 	span = new_span(parser%current_pos(), len_text)
-	!span = new_span(current%pos, len_text)
 
-	!call parser%diagnostics%push( &
-	!	err_unexpected_token(parser%context(), span, current%text, &
-	!	kind_name(parser%current_kind()), kind_name(kind)))
+	if (present(what)) then
+		expect = what
+	else
+		expect = expect_desc(kind)
+	end if
 
-	!print *, 'current%unit_ = ', current%unit_
-	!print *, 'current%text  = ', quote(current%text)
+	! A match() failure at the same position as the last one (e.g. parse_expr_
+	! statement's match(semicolon_token) re-failing on the same bad token that
+	! parse_primary_expr's match() just failed on) is the same error twice
+	! from the user's perspective -- only report the first
+	if (parser%pos /= parser%last_e20_pos) then
+		parser%last_e20_pos = parser%pos
 
-	call parser%diagnostics%push( &
-		err_unexpected_token(parser%context(), span, current%text, &
-		!err_unexpected_token(parser%contexts%v(current%unit_), span, current%text, &
-		kind_name(parser%current_kind()), kind_name(kind)))
+		call parser%diagnostics%push( &
+			err_unexpected_token(parser%context(), span, &
+			got_desc(current%kind, current%text), expect))
+	end if
 
 	! An unmatched char in the middle of the input is an error and should log
 	! a diagnostic.  An unmatched char at the end means the interactive
@@ -188,11 +311,7 @@ module subroutine match(parser, kind, token)
 	end if
 
 	call new_token(token, kind, current%pos, null_char)
-	!token = new_token(bad_token, current%pos, null_char)
-	!token = new_token(kind, current%pos, "")
-
 	token%unit_ = current%unit_
-	!print *, 'setting token%unit_ = ', token%unit_
 
 end subroutine match
 
@@ -230,7 +349,6 @@ recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, un
 	i = 0
 	do while (i < size(tokens_in))
 
-		! TODO: make a variation of parser%next() instead of manually increment i/pos?
 		i = i + 1
 		token = tokens_in(i)
 
@@ -259,19 +377,12 @@ recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, un
 			! not see them.
 			call parser%match_pre(lparen_token, tokens_in, i, contexts%v(unit_0), lparen)
 
-			! Prepend with path to src_file
-			!
-			! TODO: maybe later add `-I` arg for include dirs, or an env var, or
-			! a global installed syntran "std" lib dir?  See also the
-			! fullpath/realpath fns in utils.f90
-
-			! TODO: if filename is already absolute, do not prepend with path
+			! Prepend with path to src_file, unless already absolute
 
 			!print *, 'get_dir(src_file) = ', get_dir(src_file)
 
 			i = i + 1
-			filename = get_dir(src_file)//tokens_in(i)%val%str%s  ! relative to src file
-			!filename = tokens_in(i)%val%str%s                    ! relative to runtime pwd
+			filename = resolve_path(get_dir(src_file), tokens_in(i)%val%str%s)
 
 			!print *, 'include filename = ', quote(filename)
 
@@ -311,18 +422,10 @@ recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, un
 			end do
 
 			! Push included diagnostics (from lexing) into parent parser
-			!
-			! TODO: append errors with extra context, like "in file included
-			! here (show includer line number and context)
 			call parser%diagnostics%push_all( inc_parser%diagnostics )
 
 			call parser%match_pre(rparen_token   , tokens_in, i, contexts%v(unit_0), rparen)
 			call parser%match_pre(semicolon_token, tokens_in, i, contexts%v(unit_0), semicolon)
-
-		!case (tree_keyword)
-		!! TODO: maybe do #tree work at eval time
-
-		! TODO: #pragma once or at least #ifndef/#def-style include guards
 
 		case default
 
@@ -383,36 +486,29 @@ module subroutine match_pre(parser, kind, tokens, token_index, context, token)
 	end if
 	token_index = token_index - 1
 
-	!print *, 'ERROR: unmatched token'
-	!print *, ''
-
 	!! A continued expression can commonly have several unmatched tokens.  The
 	!! last one is usually a semicolon, or it could be a right brace.  The first
 	!! one is more helpful for the user to know
-	!print *, 'unmatched '//kind_name(kind)
-	!print *, 'unmatched '//kind_token(kind)
 
 	if (.not. parser%first_expecting) then
 		parser%first_expected  = kind_token(kind)
 		parser%first_expecting = .true.
 	end if
 
-	!print *, 'pushing match diag'
 	len_text = max(len(current%text), 1)
 
-	!span = new_span(parser%current_pos(), len_text)
 	span = new_span(current%pos, len_text)
 
-	!print *, 'current%unit_ = ', current%unit_
-	!print *, 'current%text  = ', quote(current%text)
+	! See the matching comment in match(): de-dupe a second failure at the
+	! same position (e.g. a missing `)` immediately followed by a missing
+	! `;` on that same bad token)
+	if (token_index /= parser%last_e20_pos) then
+		parser%last_e20_pos = token_index
 
-	!print *, 'pushing diag'
-	call parser%diagnostics%push( &
-		!err_unexpected_token(parser%context(), span, current%text, &
-		!err_unexpected_token(parser%contexts%v(1), span, current%text, &
-		err_unexpected_token(context, span, current%text, &
-		kind_name(current%kind), kind_name(kind)))
-	!print *, 'done'
+		call parser%diagnostics%push( &
+			err_unexpected_token(context, span, &
+			got_desc(current%kind, current%text), expect_desc(kind)))
+	end if
 
 	! An unmatched char in the middle of the input is an error and should log
 	! a diagnostic.  An unmatched char at the end means the interactive
@@ -430,6 +526,77 @@ end subroutine match_pre
 
 !===============================================================================
 
+function is_pass0_only_diag(diag) result(only0)
+
+	! True for the diagnostic families that only parse pass 0 can raise --
+	! see the comment at parse_unit()'s pass-0/pass-1 merge below for why
+	! each of these is structurally invisible to pass 1.  A new pass-0-only
+	! diagnostic must be added here or it will silently vanish whenever pass
+	! 1 comes back clean (or gets deduped away if pass 1 also raises
+	! something on the same line)
+
+	character(len = *), intent(in) :: diag
+	logical :: only0
+
+	only0 = &
+		index(diag, '['//EC_REDECLARE_VAR   //']') > 0 .or. &
+		index(diag, '['//EC_REDECLARE_FN    //']') > 0 .or. &
+		index(diag, '['//EC_REDECLARE_STRUCT//']') > 0 .or. &
+		index(diag, '['//EC_REDECLARE_ENUM  //']') > 0 .or. &
+		index(diag, '['//EC_UNDECLARE_VAR   //']') > 0 .or. &
+		index(diag, '['//EC_VAR_TYPE_CLASH  //']') > 0
+
+end function is_pass0_only_diag
+
+!===============================================================================
+
+function diag_key(diag) result(key)
+
+	! Reduce a rendered diagnostic to the part that is stable across passes,
+	! for use as a dedup key in parse_unit()'s pass-0/pass-1 merge below.
+	!
+	! Every err_*() constructor builds its message as
+	! err_pre(code) // description // underline(context, span) // caret_text
+	! // color_reset, with no embedded line_feed outside of underline() --
+	! and underline() itself always emits exactly 4 (the "--> file:line:col"
+	! line, the blank "|" line, the source line, and the caret line, with no
+	! trailing line_feed after the carets). So a message with no "help: ..."
+	! suffix has exactly 4 line_feed characters.
+	!
+	! Only err_undeclare_var()/err_undeclare_fn() append anything past that:
+	! an optional "help: did you mean ...?" line (a 5th line_feed) and,
+	! for err_undeclare_fn() with a module_prefix, a second help line (a
+	! 6th). That suggestion text is span/context-dependent lookup state that
+	! can differ between pass 0 and pass 1 even for the textually identical
+	! error (e.g. pass 1's `vars` dict already contains names pass 0 hadn't
+	! reached yet in source order), so it must be excluded from the key --
+	! otherwise two renderings of the same undeclared-name error look like
+	! different diagnostics and both survive the merge as duplicates.
+	!
+	! Truncating at the 5th line_feed (if any) strips every help line while
+	! keeping the code/location/description part, which is identical
+	! whenever two diagnostics are really the same underlying error
+
+	character(len = *), intent(in) :: diag
+	character(len = :), allocatable :: key
+
+	integer :: i, nlf
+
+	nlf = 0
+	do i = 1, len(diag)
+		if (diag(i:i) /= line_feed) cycle
+		nlf = nlf + 1
+		if (nlf == 5) then
+			key = diag(1: i-1)
+			return
+		end if
+	end do
+	key = diag
+
+end function diag_key
+
+!===============================================================================
+
 recursive module subroutine parse_unit(parser, unit)
 
 	class(parser_t) :: parser
@@ -439,10 +606,13 @@ recursive module subroutine parse_unit(parser, unit)
 	!********
 
 	type(syntax_node_vector_t) :: members
-	type(syntax_node_t)  :: stmt_tmp
-	type(syntax_token_t) :: dummy
 
-	integer :: i, pos0, num_vars0, num_fns0, num_structs0, num_enums0
+	integer :: i, j, num_vars0, num_fns0, num_structs0, num_enums0
+	integer :: ndiag_pre
+
+	! Pass-0 diagnostics, saved so the pass-0-only families among them can be
+	! merged back in after pass 1 (see the comment at the merge below)
+	type(string_vector_t) :: diags0
 
 	!print *, 'starting parse_unit()'
 
@@ -450,9 +620,12 @@ recursive module subroutine parse_unit(parser, unit)
 
 	! First pass
 	parser%ipass = 0
+	parser%last_e20_pos = 0
 
-	members = new_syntax_node_vector()
-	i = 0
+	! Diagnostics that exist before either pass: lexer errors and #include
+	! preprocessor errors, both pushed by new_parser().  Pass 0's own output
+	! is everything above this index, and gets discarded before pass 1
+	ndiag_pre = parser%diagnostics%len_
 
 	!! Pushing scope breaks interactive interpretation, but we may want it later
 	!! for interpetting multiple files.  Another alternative would be chaining
@@ -473,43 +646,34 @@ recursive module subroutine parse_unit(parser, unit)
 	parser%struct_names = new_string_vector()
 	parser%enum_names = new_string_vector()
 
-	do while (parser%current_kind() /= eof_token)
-
-		!print *, "    parser pos = ", parser%pos
-
-		pos0 = parser%pos
-		i = i + 1
-		!print *, '    statement ', i
-
-		select case (parser%current_kind())
-		case (fn_keyword)
-			call parser%parse_fn_declaration(stmt_tmp)
-			call members%push_move(stmt_tmp)
-		case (struct_keyword)
-			call parser%parse_struct_declaration(stmt_tmp)
-			call members%push_move(stmt_tmp)
-		case (enum_keyword)
-			call parser%parse_enum_declaration(stmt_tmp)
-			call members%push_move(stmt_tmp)
-		case default
-			call parser%parse_statement(stmt_tmp)
-			call members%push_move(stmt_tmp)
-		end select
-
-		! Break infinite loops
-		if (parser%pos == pos0) call parser%next(dummy)
-
-	end do
+	call parse_unit_pass(parser, members)
 	!print *, "parser pos end = ", parser%pos
 	!print *, "num fns = ", parser%num_fns
 
 	!****************
 
-	! If any errors, skip second pass.  Although be careful to still do stuff at
-	! end of routine.  Otherwise users will get the same error message twice
-	! from the second pass, at least for simple errors.  Things like undefined
-	! fns won't be an error until the 2nd pass
-	if (parser%diagnostics%len_ == 0) then
+	! Pass 0 exists only to collect signatures, so its diagnostics are
+	! throwaway: pass 1 re-parses the same tokens and re-pushes anything that
+	! is still wrong, this time with fully resolved types.  Keeping both
+	! copies would print every simple error twice, which is why this used to
+	! skip pass 1 outright whenever pass 0 was non-empty -- but that let an
+	! error late in the file pre-empt an earlier one that only pass 1 can
+	! detect (e.g. E102 was invisible in a file with two ungated E40s later
+	! on, because the E40s aborted the pass that finds the E102).
+	!
+	! So: always run pass 1, and report pass 1's diagnostics instead.  A few
+	! diagnostic families (redeclaration, use-before-declaration) can only
+	! ever be raised in pass 0 -- see is_pass0_only_diag() and the merge
+	! after the second loop below.
+	!
+	! Skip pass 1 only for an incomplete interactive line (a match() failure
+	! at eof).  syntax_parse() rolls that parse back and re-parses from
+	! scratch once the user types the rest, so a second pass buys nothing and
+	! pass 1 has never run on partial input before
+	diags0 = parser%diagnostics
+	parser%diagnostics%len_ = ndiag_pre
+
+	if (.not. parser%expecting) then
 
 		!print *, ""
 		!print *, ""
@@ -520,6 +684,7 @@ recursive module subroutine parse_unit(parser, unit)
 		! Second pass
 		parser%pos = 1
 		parser%ipass = 1
+		parser%last_e20_pos = 0
 
 		parser%num_vars = num_vars0
 		parser%num_fns = num_fns0
@@ -532,45 +697,19 @@ recursive module subroutine parse_unit(parser, unit)
 		! parse_enum_declaration() in parse_fn.f90), landing on the exact same
 		! id_index as pass 1 assigned it
 
-		members = new_syntax_node_vector()
-		i = 0
+		! Pass 2 re-parses every `use` statement, so the duplicate-import
+		! record has to start empty again or every import would look like a
+		! duplicate (c.f. parse_use_statement() in parse_control.f90)
+		call parser%imported_modules%destroy()
+		call parser%imported_modules%init(16)
 
 		!left  = parser%match(lbrace_token)
 
 		!call parser%vars%push_scope()
 		!call parser%locs%push_scope()
 
-		! TODO: dry?  Two passes are almost the same, but also there are only two of
-		! them
-
 		!print *, "parser pos beg = ", parser%pos
-		do while (parser%current_kind() /= eof_token)
-
-			!print *, "    parser pos = ", parser%pos
-
-			pos0 = parser%pos
-			i = i + 1
-			!print *, '    statement ', i
-
-			select case (parser%current_kind())
-			case (fn_keyword)
-				call parser%parse_fn_declaration(stmt_tmp)
-				call members%push_move(stmt_tmp)
-			case (struct_keyword)
-				call parser%parse_struct_declaration(stmt_tmp)
-				call members%push_move(stmt_tmp)
-			case (enum_keyword)
-				call parser%parse_enum_declaration(stmt_tmp)
-				call members%push_move(stmt_tmp)
-			case default
-				call parser%parse_statement(stmt_tmp)
-				call members%push_move(stmt_tmp)
-			end select
-
-			! Break infinite loops
-			if (parser%pos == pos0) call parser%next(dummy)
-
-		end do
+		call parse_unit_pass(parser, members)
 		!print *, "parser pos end = ", parser%pos
 
 		!call parser%vars%pop_scope()
@@ -578,7 +717,48 @@ recursive module subroutine parse_unit(parser, unit)
 
 		!right = parser%match(rbrace_token)
 
-	end if  ! no diagnostics from 1st pass
+	end if  ! not expecting more input
+
+	! A few diagnostics are structurally pass-0-only and pass 1 physically
+	! cannot re-emit them (see is_pass0_only_diag() above for the exact
+	! list):
+	!
+	!   - the redeclaration family (E22/E24/E26/E92).  It is raised from the
+	!     iostat of a dict insert, and `overwrite` is .false. only in pass 0
+	!     -- pass 1 must overwrite, since the tables (unlike the counters)
+	!     still hold everything pass 0 inserted
+	!   - use-before-declaration (E28), for the same reason: pass 0 already
+	!     put the later `let` in the vars dict, so pass 1 resolves it happily
+	!   - var/type-name clash (E98): check_type_clash()/check_var_clash()
+	!     above only push in pass 0, for the same table-leakage reason
+	!
+	! Everything else pass 0 pushes is a byproduct of incomplete type info
+	! (e.g. a forward-referenced fn's return type/rank still being unknown)
+	! and must NOT be resurrected once pass 1 -- which has full type info --
+	! disagrees. So merge, rather than wholesale-restore: append only the
+	! pass-0-only diagnostics, and only those pass 1 didn't already raise
+	! itself (dedup via diag_key(), which ignores any suggestion-text
+	! suffix; E28 is the one code both passes can emit, for a genuinely
+	! undeclared name in both passes' view). This merge (rather than
+	! restoring only when pass 1 came back clean) also
+	! means a real redeclaration is no longer masked by an unrelated pass-1
+	! error elsewhere in the file
+	!
+	! Skip all of this when pass 1 never ran (an incomplete interactive
+	! line): there is nothing to merge against, so keep pass 0's list as-is,
+	! same as before
+	if (parser%expecting) then
+		parser%diagnostics = diags0
+	else
+		outer: do i = ndiag_pre + 1, diags0%len_
+			if (.not. is_pass0_only_diag(diags0%v(i)%s)) cycle outer
+			do j = 1, parser%diagnostics%len_
+				if (diag_key(parser%diagnostics%v(j)%s) == diag_key(diags0%v(i)%s)) &
+					cycle outer
+			end do
+			call parser%diagnostics%push(diags0%v(i)%s)
+		end do outer
+	end if
 
 	!****************
 
@@ -594,6 +774,144 @@ recursive module subroutine parse_unit(parser, unit)
 	! lines with interactive interpretation
 
 end subroutine parse_unit
+
+!===============================================================================
+
+function looks_like_fn_decl(parser) result(looks)
+
+	! Detects a fn declaration whose leading `fn` keyword was omitted, e.g.
+	! `add(a: i32, b: i32): i32 { ... }`.  Not type-bound (same rationale as
+	! parse_unit_pass() below): a private implementation detail used only
+	! from its case-default branch
+	!
+	! The scan is unambiguous by construction: a bare `:` can never appear at
+	! the top level of a call's argument list (syntran has no named-argument
+	! syntax), and a call expression can never be followed by `:` -- both are
+	! exclusive to fn declarations (param types and the return type). The
+	! bracket_depth tracking exists so that a slice inside a call argument,
+	! e.g. `println(v[i: j]);`, is not mistaken for a param-type colon
+
+	class(parser_t) :: parser
+
+	logical :: looks
+
+	!********
+
+	integer :: k, kind_, prev_kind, paren_depth, bracket_depth
+
+	looks = .false.
+
+	if (parser%current_kind() /= identifier_token) return
+	if (parser%peek_kind(1)   /= lparen_token)     return
+
+	paren_depth   = 0
+	bracket_depth = 0
+	prev_kind     = eof_token
+
+	k = 1
+	do
+		kind_ = parser%peek_kind(k)
+
+		if (kind_ == eof_token) return
+
+		if (kind_ == lparen_token) then
+			paren_depth = paren_depth + 1
+
+		else if (kind_ == rparen_token) then
+			paren_depth = paren_depth - 1
+			if (paren_depth == 0) then
+				! End of the outer param list.  A `:` right after it is a return
+				! type, e.g. `main(): i32`
+				looks = parser%peek_kind(k + 1) == colon_token
+				return
+			end if
+
+		else if (kind_ == lbracket_token) then
+			bracket_depth = bracket_depth + 1
+
+		else if (kind_ == rbracket_token) then
+			bracket_depth = bracket_depth - 1
+
+		else if (kind_ == identifier_token .and. paren_depth == 1 .and. &
+				bracket_depth == 0 .and. &
+				(prev_kind == lparen_token .or. prev_kind == comma_token) .and. &
+				parser%peek_kind(k + 1) == colon_token) then
+			! A param name immediately followed by `:`, directly inside the
+			! outer parens (not inside a nested `[...]` slice), e.g. the `a:` in
+			! `add(a: i32, ...)`
+			looks = .true.
+			return
+
+		end if
+
+		prev_kind = kind_
+		k = k + 1
+	end do
+
+end function looks_like_fn_decl
+
+!===============================================================================
+
+recursive subroutine parse_unit_pass(parser, members)
+
+	! The statement-parsing loop shared by both passes of parse_unit().  Not
+	! type-bound (no `module` prefix, no parse.f90 interface), since it is a
+	! private implementation detail of parse_unit() alone
+
+	class(parser_t) :: parser
+
+	type(syntax_node_vector_t), intent(out) :: members
+
+	!********
+
+	type(syntax_node_t)  :: stmt_tmp
+	type(syntax_token_t) :: dummy
+
+	type(text_span_t) :: span
+
+	integer :: pos0
+
+	members = new_syntax_node_vector()
+
+	do while (parser%current_kind() /= eof_token)
+
+		!print *, "    parser pos = ", parser%pos
+
+		pos0 = parser%pos
+
+		select case (parser%current_kind())
+		case (fn_keyword)
+			call parser%parse_fn_declaration(stmt_tmp)
+			call members%push_move(stmt_tmp)
+		case (struct_keyword)
+			call parser%parse_struct_declaration(stmt_tmp)
+			call members%push_move(stmt_tmp)
+		case (enum_keyword)
+			call parser%parse_enum_declaration(stmt_tmp)
+			call members%push_move(stmt_tmp)
+		case default
+			if (looks_like_fn_decl(parser)) then
+				! Missing `fn` keyword: E106.  The lookahead above only fires on an
+				! unambiguous fn-declaration shape (a `:` inside the outer parens or
+				! right after them), so recover by synthesizing the keyword and
+				! parsing the rest as a normal fn declaration -- otherwise every call
+				! site below would cascade into its own E29
+				span = new_span(parser%current_pos(), len(parser%current_text()))
+				call parser%diagnostics%push(err_missing_fn_kw( &
+					parser%context(), span, parser%current_text()))
+				call parser%parse_fn_declaration(stmt_tmp, no_fn_kw = .true.)
+			else
+				call parser%parse_statement(stmt_tmp)
+			end if
+			call members%push_move(stmt_tmp)
+		end select
+
+		! Break infinite loops
+		if (parser%pos == pos0) call parser%next(dummy)
+
+	end do
+
+end subroutine parse_unit_pass
 
 !===============================================================================
 
@@ -622,6 +940,7 @@ recursive module subroutine new_parser(parser, str_, src_file, contexts, unit_)
 		!print *, 'token%unit_ = ', token%unit_
 
 		if (token%kind /= whitespace_token .and. &
+		    token%kind /= comment_token   .and. &
 		    token%kind /= bad_token) then
 			call tokens%push(token)
 		end if

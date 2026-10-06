@@ -1,0 +1,12 @@
+// E110: bad-case-range-type
+// A case range's bound type can't be ordered against the switch subject's type
+
+let x = 5;
+
+switch x
+{
+	case 1:"z"
+	{
+		println("nope");
+	}
+}

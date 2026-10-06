@@ -24,9 +24,12 @@ module syntran__types_m
 		! Return type.  "A type is a value!"
 		type(value_t) :: type
 
-		! TODO: add a way to represent polymorphic intrinsic fn params, e.g.
-		! i32 min(1, 2) vs f32 min(1.0, 2.0), but not bool min(true, false).
-		! Maybe add an matrix of types(:,:) for each allowable type of a param?
+		! Polymorphic intrinsic fns (e.g. i32 min(1, 2) vs f32 min(1.0, 2.0),
+		! but not bool min(true, false)) don't need a types(:,:) matrix here:
+		! resolve_overload() (intr_fns.f90) rewrites the call's identifier to
+		! a type-specific mangled name (e.g. "min" -> "0min_i32"/"0min_f64")
+		! from the first arg's type at parse time, before this fn_t's single
+		! `type`/`params` are ever consulted
 
 		! Arguments/parameters.  Technically, "arguments" in most languages are
 		! what Fortran calls "actual arguments" and "parameters" are Fortran
@@ -88,12 +91,11 @@ module syntran__types_m
 		type(fn_t), allocatable :: fns(:)
 		integer :: num_intr_fns
 
-		! This is the scope level.  Each nested block statement that is entered
-		! pushes 1 to scope.  Popping out of a block decrements the scope.
-		! Each scope level has its own fn dict in dicts(:)
-		integer :: scope = 1
-
-		! TODO: scoping for nested fns?
+		! Unlike vars_t/structs_t/enums_t, fns_t has no scope level: fn
+		! declarations are only ever dispatched at translation-unit level
+		! (see parse_misc.f90's `case (fn_keyword)`), and parse_fn.f90
+		! explicitly resets `is_loc` after a fn body to keep it that way, so
+		! there is exactly one (global) fn namespace to scope
 		contains
 			procedure :: &
 				insert    => fn_insert, &
@@ -103,7 +105,6 @@ module syntran__types_m
 				closest   => fn_closest, &
 				grow_flat => fns_grow_flat, &
 				rollback  => fns_rollback
-		!		push_scope, pop_scope
 
 	end type fns_t
 
@@ -130,8 +131,11 @@ module syntran__types_m
 
 	type syntax_node_t
 
-		! FIXME: when adding new members here, make sure to explicitly copy them
-		! in syntax_node_copy, or else assignment will yield bugs
+		! NOTE: when adding/removing a member here, four parallel component
+		! lists in types_copy.f90 must be kept in sync by hand: syntax_node_copy,
+		! syntax_node_destroy, syntax_node_move, and syntax_node_move_into.
+		! Skipping one silently corrupts assignment, leaks memory, or drops
+		! data on a move.  utils/check-node-sync.sh enforces this in CI
 
 		integer :: kind = 0
 
@@ -144,13 +148,13 @@ module syntran__types_m
 		type(syntax_node_t), allocatable :: left, right, members(:), &
 			condition, if_clause, else_clause, body, array, member
 
-		! Array expression syntax nodes.  TODO: rename lbound, ubound to avoid
-		! conflicts w/ Fortran keywords
-		type(syntax_node_t), allocatable :: lbound, step, ubound, len_, &
+		! Array expression syntax nodes.  Trailing underscore on lbound_,
+		! ubound_, size_ (like len_ below) to avoid conflicts w/ Fortran
+		! intrinsics of the same name
+		type(syntax_node_t), allocatable :: lbound_, step, ubound_, len_, &
 			elems(:), rank
 
-		! TODO: rename `size`
-		type(syntax_node_t), allocatable :: lsubscripts(:), size(:), args(:), &
+		type(syntax_node_t), allocatable :: lsubscripts(:), size_(:), args(:), &
 			usubscripts(:), ssubscripts(:)
 
 		! Either scalar_sub, range_sub (unit step [0:2]), all_sub ([:]), or
@@ -202,8 +206,7 @@ module syntran__types_m
 
 		contains
 
-			! TODO: rename to to_str() for consistency with value_t
-			procedure :: str => syntax_node_str, log_diagnostics
+			procedure :: to_str => syntax_node_str, log_diagnostics
 
 			! For gfortran, use a hand-written copy constructor.  For ifx, use
 			! the intrinsic copy constructor.  If you try anything else, both
@@ -290,6 +293,11 @@ module syntran__types_m
 		! Canonical, alias-independent identity: "<defining src file>::<local
 		! struct name>", set once at declaration time. c.f. value_t%struct_cookie
 		character(len = :), allocatable :: cookie
+
+		! struct_reg_set()'s returned registry slot for this struct's member
+		! names, stashed here so every instantiation site can copy it onto
+		! value_t%struct_reg_idx without a second registry lookup
+		integer :: reg_idx = 0
 
 		contains
 			! This is also required unfortunately
@@ -807,6 +815,12 @@ module syntran__types_m
 			integer, intent(in), optional :: left_arr, right_arr
 		end function is_binary_op_allowed
 
+		module logical function is_binary_op_allowed_val(left, op, right) &
+				result(allowed)
+			type(value_t), intent(in) :: left, right
+			integer, intent(in) :: op
+		end function is_binary_op_allowed_val
+
 		module logical function is_unary_op_allowed(op, right, right_arr)
 			integer, intent(in) :: op, right, right_arr
 		end function is_unary_op_allowed
@@ -819,15 +833,15 @@ module syntran__types_m
 			integer, intent(in) :: kind
 		end function get_binary_op_prec
 
-		module logical function is_num_type(type)
+		elemental module logical function is_num_type(type)
 			integer, intent(in) :: type
 		end function is_num_type
 
-		module logical function is_int_type(type)
+		elemental module logical function is_int_type(type)
 			integer, intent(in) :: type
 		end function is_int_type
 
-		module logical function is_float_type(type)
+		elemental module logical function is_float_type(type)
 			integer, intent(in) :: type
 		end function is_float_type
 

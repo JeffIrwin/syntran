@@ -345,7 +345,7 @@ An array length expression is not an integer.
 
 ### E55 -- bound-type-mismatch
 
-The lower and upper bounds of an array range have mismatched types.
+The bounds (and step, if given) of an array range have mismatched types, e.g. `[1: 2.0: 5]` or `[1: 2.0]`.
 
 [Example](../src/tests/test-src/errors/E55-bound-type-mismatch.syntran)
 
@@ -357,13 +357,13 @@ An array range bound is not a numeric type.
 
 ### E57 -- non-sca-val
 
-A value used to fill a uniform array (`[v; n]`) is not a scalar.
+A value used to fill a uniform (`[v; n]`) or explicitly-sized (`[e0, e1, ... ; n]`) array is not a scalar.
 
 [Example](../src/tests/test-src/errors/E57-non-sca-val.syntran)
 
 ### E58 -- non-int-range
 
-An array range bound is not an `i32` integer.
+An implicit unit-step range's bounds (`[lo: hi]`) are of a uniform but non-integer type.
 
 [Example](../src/tests/test-src/errors/E58-non-int-range.syntran)
 
@@ -535,7 +535,7 @@ A struct method has the same name as one of the struct's members. Names must be 
 
 ### E87 -- fn-ptr-unsupported
 
-A function pointer (`fn(...)`-typed value) cannot be taken to an intrinsic function, a struct method, or a user-defined function with any `&`-reference parameter. A fn-pointer signature has no way to express reference-ness, so allowing this would silently drop reference semantics on an indirect call.
+An intrinsic function, a struct method, or a user-defined function with any `&`-reference parameter was named without a call, e.g. `println;` or `len s`. Most often the parentheses of a call were forgotten, so the message suggests the call form. The function can't be used as a function pointer either: a function pointer (`fn(...)`-typed value) cannot be taken to any of these. A fn-pointer signature has no way to express reference-ness, so allowing this would silently drop reference semantics on an indirect call.
 
 [Example](../src/tests/test-src/errors/E87-fn-ptr-unsupported.syntran)
 
@@ -547,15 +547,13 @@ A variable that is not a fn-pointer value (`fn(...)` type) was called like a fun
 
 ### E89 -- fn-ptr-array
 
-Arrays of fn pointers (e.g. `[dbl, dbl]` where `dbl` is a fn pointer) are not supported. A fn pointer can still be stored in a struct member.
+Arrays of fn pointers (e.g. `[dbl, dbl]` where `dbl` is a fn pointer) are not supported: the array-element storage path has no case for `fn(...)`-typed values.
 
 [Example](../src/tests/test-src/errors/E89-fn-ptr-array.syntran)
 
-### E90 -- fn-ptr-struct-member
+### E90 -- fn-ptr-struct-member (retired)
 
-Fn pointers cannot be struct members.
-
-[Example](../src/tests/test-src/errors/E90-fn-ptr-struct-member.syntran)
+Formerly rejected fn-pointer-typed struct members due to a musl/gfortran segfault in the struct member-dict's deep-copy/destroy path. That path was fixed (see `var_dict_destroy()` in `src/types_copy.f90`), so fn pointers can now be stored in struct members, e.g. `struct S { f: fn(i32): i32 }`. The code is kept reserved per the permanence policy above; do not reuse it.
 
 ### E91 -- void-arg
 
@@ -623,6 +621,89 @@ A `file` handle's members are read-only; they can't be used as an assignment tar
 
 [Example](../src/tests/test-src/errors/E101-readonly-file-member.syntran)
 
+### E102 -- expl-array-size
+
+An explicitly-shaped array literal `[e0, e1, ... ; d0, d1, ...]` whose size list is all literal constants has an element count that doesn't match the declared size.  A non-literal (runtime-computed) size still falls through to R21 instead.
+
+[Example](../src/tests/test-src/errors/E102-expl-array-size.syntran)
+
+### E103 -- non-int-size
+
+A declared array-literal dimension size (`[v; d0, d1, ...]` or `[e0, e1, ... ; d0, d1, ...]`) is not an integer.
+
+[Example](../src/tests/test-src/errors/E103-non-int-size.syntran)
+
+### E104 -- float-int-suffix
+
+An `'i32` or `'i64` type suffix was used on a numeric literal that's already shaped like a float (it has a decimal point or exponent), e.g. `4.0'i32`.
+
+[Example](../src/tests/test-src/errors/E104-float-int-suffix.syntran)
+
+### E105 -- ref-type
+
+A `&` reference appeared in a type annotation where references are not allowed. References are only supported on fn parameters, not on fn return types, struct member types, or fn-pointer param/return types.
+
+[Example](../src/tests/test-src/errors/E105-ref-type.syntran)
+
+### E106 -- missing-fn-kw
+
+A function (or struct method) declaration omitted the leading `fn` keyword, e.g. `add(a: i32, b: i32): i32 { ... }` instead of `fn add(a: i32, b: i32): i32 { ... }`.
+
+[Example](../src/tests/test-src/errors/E106-missing-fn-kw.syntran)
+
+### E107 -- bad-switch-type
+
+The subject of a `switch`-statement has a type that can't be matched by equality, e.g. a struct or an array of structs.  Arrays of `bool`, `i32`, `i64`, `f32`, `f64`, `str`, and `enum` values are valid subjects, matched by whole-array equality.
+
+[Example](../src/tests/test-src/errors/E107-bad-switch-type.syntran)
+
+### E108 -- bad-case-type
+
+A `case` value's type can't be compared to its `switch`-statement's subject type.
+
+[Example](../src/tests/test-src/errors/E108-bad-case-type.syntran)
+
+### E109 -- dup-default
+
+A `switch`-statement has more than one `default` arm.
+
+[Example](../src/tests/test-src/errors/E109-dup-default.syntran)
+
+### E110 -- bad-case-range-type
+
+A `case lo:hi` range bound's type can't be ordered (with `<`) against its `switch`-statement's subject type.  This includes any range on an array subject, since `<` on arrays is elementwise.
+
+[Example](../src/tests/test-src/errors/E110-bad-case-range-type.syntran)
+
+### E111 -- compound-substr
+
+A compound operator (`s[1:3] += "xy"`, or the same on a string array's character subscript) was used on a character subscript or substring assignment. Only plain `=` is allowed there, since a fixed-width character slice can't grow or shrink the way a compound op like `+=` would require.
+
+[Example](../src/tests/test-src/errors/E111-compound-substr.syntran)
+
+### E112 -- fn-missing-parens
+
+A user-defined function was named without a call, either as a statement by itself (`greet;`) or directly followed by an operand (`dbl 3`). This is almost always a call that is missing its parentheses, so the message suggests the call form. Using a function name as a value elsewhere (`let f = dbl;`) is a legal function pointer and is not an error.
+
+[Example](../src/tests/test-src/errors/E112-fn-missing-parens.syntran)
+
+### E113 -- missing-let-equals
+
+A `let`/`const` declaration has a name but isn't followed by `=`, e.g.
+`let foobar 4;` (missing the `=` entirely), `let x;` (missing an initializer
+altogether), or `let x: i32 = 4;` (a type annotation, which syntran doesn't
+have since types are inferred). The declaration still binds the name, so a
+later use of it doesn't also raise an undeclared-variable error.
+
+[Example](../src/tests/test-src/errors/E113-missing-let-equals.syntran)
+
+### E114 -- missing-let-name
+
+A `let`/`const` keyword isn't followed by a variable name, e.g. `let 5 = 3;`
+or `let = 3;`.
+
+[Example](../src/tests/test-src/errors/E114-missing-let-name.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type
@@ -639,19 +720,22 @@ A binary operator could not be evaluated for its operands' runtime types (math/b
 
 ### I4 -- eval-unary-op
 
-An unexpected/unrecognized unary operator token reached the evaluator.
+An unexpected/unrecognized unary operator token reached `do_unop` (VM path).
 
-### I5 -- eval-node
+### I5 -- eval-node (retired)
 
-An unexpected AST node kind reached the evaluator.
+Used to fire when an unexpected AST node kind reached the AST walker's
+dispatcher (`eval.f90`). That dispatcher was deleted along with the rest of
+the AST walker, and the VM has no equivalent single dispatch point to guard.
+The code is kept reserved per the permanence policy above; do not reuse it.
 
 ### I6 -- eval-binary-op
 
-An unexpected/unrecognized binary operator token reached the evaluator.
+An unexpected/unrecognized binary operator token reached `do_binop` (VM path).
 
 ### I7 -- unit-step-array-type
 
-A `for` loop's unit-step (`a:b`) range has a runtime type other than `i32`/`i64` (AST and VM paths).
+A `for` loop's unit-step (`a:b`) range has a runtime type other than `i32`/`i64` (VM path).
 
 ### I8 -- for-step-zero (retired)
 
@@ -668,15 +752,15 @@ I8; kept reserved, do not reuse.
 
 ### I10 -- step-array-type
 
-A `for` loop's step-range has an unsupported runtime type (AST and VM paths).
+A `for` loop's step-range has an unsupported runtime type (VM path).
 
 ### I11 -- bound-len-array-type
 
-A `for` loop's length-based range has an unsupported runtime type (AST and VM paths).
+A `for` loop's length-based range has an unsupported runtime type (VM path).
 
 ### I12 -- for-array-kind
 
-A `for` loop's range array has an unrecognized/unimplemented array kind (AST and VM paths).
+A `for` loop's range array has an unrecognized/unimplemented array kind (VM path).
 
 ### I13 -- str-char-subscript
 
@@ -804,6 +888,10 @@ A struct lookup by name failed for a value already confirmed to be that struct t
 
 A file handle member read or write reached the struct-array code path.  Unreachable: file handle members are read-only (see E100/E101) and never allocate `%struct(:)`.
 
+### I43 -- missing-recv-slots
+
+`OP_RET`'s by-ref writeback found a subscripted/dot-expr receiver with a non-zero slot count but no receiver-chain slots on the call frame.  Unreachable in valid syntran code: `frame_t%recv_slots` is populated by `OP_CALL` from `call_recv_total_nslots(cn)` slots and preserved across call-frame-stack growth by `grow_frames()`; this guards against those staying in sync.
+
 ## Runtime errors
 
 ### R1 -- matmul-dim
@@ -924,7 +1012,7 @@ An unrecognized subscript kind was encountered while evaluating a name expressio
 
 ### R21 -- array-size-mismatch
 
-An explicitly-shaped array literal's element count doesn't match its declared size.
+An explicitly-shaped array literal's element count doesn't match its declared size. This also applies when a `for` loop iterates such a literal directly, without binding it to a variable first, and when an array or string RHS assigned into a subscripted LHS slice (`a[1:4] = rhs`, `s[1:3] = rhs`, a struct field slice, etc.) doesn't have exactly the slice's length.
 
 ### R22 -- struct-array-slice
 
@@ -983,6 +1071,30 @@ An array slice subscript's step (`a[::s]`) evaluated to 0.
 ### R32 -- enum-cast-range
 
 A reverse cast `EnumName(ordinal)` was given an ordinal (not a constant literal, so not caught at parse time as E96) that doesn't match any of the enum's variant values.
+
+### R33 -- subscript-oob
+
+An array subscript, slice bound, or string character index is out of bounds. Only raised in builds compiled with `-DSYNTRAN_BOUNDS_CHECK` (on by default in CMake's `Debug` build type; off by default with fpm, including `fpm build --profile debug` -- see `CLAUDE.md`'s "Runtime bounds checking" section); without it, an out-of-bounds subscript is undefined behavior instead of a diagnostic.
+
+[Example](../src/tests/test-src/errors/R33-subscript-oob.syntran)
+
+### R34 -- reduce-dim-range
+
+The `dim` argument of a reduction, e.g. `sum(array, dim)`, `count(mask, dim)`, `minval(array, dim)`, etc., is outside of the array's valid rank range `0 <= dim < rank`.  This is the reduction counterpart of [R17](#r17----size-rank-mismatch), which is only raised by `size()`.
+
+[Example](../src/tests/test-src/errors/R34-reduce-dim-range.syntran)
+
+### R35 -- mask-shape-mismatch
+
+The `mask` argument of `sum(array, mask)` or `sum(array, dim, mask)` doesn't have the same rank and extents as `array`.
+
+[Example](../src/tests/test-src/errors/R35-mask-shape-mismatch.syntran)
+
+### R36 -- minmax-empty
+
+`minval()` or `maxval()` has nothing to reduce, so there is no sensible result.  This happens with an empty array, a `dim` reduction whose extent along `dim` is 0, or a mask (`minval(array, mask)` or `minval(array, dim, mask)`) that selects no elements in one of the reduced lanes.  Other reductions are fine on nothing: `sum` gives `0` and `product` gives `1`.
+
+[Example](../src/tests/test-src/errors/R36-minmax-empty.syntran)
 
 ## Warnings
 

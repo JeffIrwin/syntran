@@ -1,0 +1,30 @@
+// enum subject, including cross-enum identity rejection (checked separately in
+// errors/E108-bad-case-type.syntran -- this file only exercises the accepted path)
+
+enum Suit
+{
+	Hearts,
+	Diamonds,
+	Clubs,
+	Spades,
+}
+
+fn color(s: Suit): str
+{
+	switch s
+	{
+		case Suit.Hearts, Suit.Diamonds
+		{
+			return "red";
+		}
+		case Suit.Clubs, Suit.Spades
+		{
+			return "black";
+		}
+	}
+	return "unreachable";
+}
+
+let ans = [color(Suit.Hearts), color(Suit.Diamonds), color(Suit.Clubs), color(Suit.Spades)];
+let exp = ["red", "red", "black", "black"];
+return all(ans == exp);

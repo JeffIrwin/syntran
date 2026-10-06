@@ -1,0 +1,115 @@
+// array subjects: matched by whole-array equality, not elementwise.  A case
+// whose array has a different length simply doesn't match -- it must never be
+// a shape-mismatch abort, which is what `all(subj == val)` would have been
+
+fn classify(a: [i32; :]): str
+{
+	switch a
+	{
+		case [1, 2, 3]
+		{
+			return "one-two-three";
+		}
+		case [4, 5], [6, 7, 8, 9],
+		{
+			// several array values on one case, plus a trailing comma
+			return "other-known";
+		}
+		default
+		{
+			return "unknown";
+		}
+	}
+	return "unreachable";
+}
+
+let ok1  = classify([1, 2, 3])    == "one-two-three";
+let ok2  = classify([4, 5])       == "other-known";
+let ok3  = classify([6, 7, 8, 9]) == "other-known";
+
+// Different length, prefix, and one wrong element all fall through
+let ok4  = classify([1, 2])       == "unknown";
+let ok5  = classify([1, 2, 3, 4]) == "unknown";
+let ok6  = classify([1, 2, 4])    == "unknown";
+
+// Empty subject
+let ok7  = classify([0; 0])       == "unknown";
+
+// Subject is evaluated exactly once, however many arms it's tested against
+let log = "";
+fn subj(): [i32; :]
+{
+	log = log + "s";
+	return [1, 2, 3];
+}
+let n = 0;
+switch subj()
+{
+	case [9]       { n = 1; }
+	case [1, 2]    { n = 2; }
+	case [1, 2, 3] { n = 3; }
+	default        { n = 4; }
+}
+let ok8  = log == "s";
+let ok9  = n == 3;
+
+// A guard on an array arm falls through to the next arm when false
+fn guarded(a: [i32; :], flag: bool): str
+{
+	switch a
+	{
+		case [1, 2, 3] when flag { return "guarded"; }
+		case [1, 2, 3]           { return "fallthrough"; }
+		default                  { return "default"; }
+	}
+	return "unreachable";
+}
+let ok10 = guarded([1, 2, 3], true)  == "guarded";
+let ok11 = guarded([1, 2, 3], false) == "fallthrough";
+let ok12 = guarded([1, 2],    true)  == "default";
+
+// No default and no match is a no-op
+let hit = false;
+switch [1, 2, 3]
+{
+	case [3, 2, 1] { hit = true; }
+}
+let ok13 = not hit;
+
+// Re-running the same switch with a subject of a different length each time
+let total = 0;
+for i in [1: 5]
+{
+	let v = [1; i];
+	switch v
+	{
+		case [1, 1]    { total += 10; }
+		case [1, 1, 1] { total += 100; }
+		default        { total += 1; }
+	}
+}
+// i = 1..4 -> lengths 1, 2, 3, 4
+let ok14 = total == 1 + 10 + 100 + 1;
+
+// The subject lives in its hidden slot and is read (not consumed) by every
+// case test, so many non-matching arms before the match must leave it intact
+fn many(a: [i32; :]): i32
+{
+	switch a
+	{
+		case [0]          { return 0; }
+		case [1]          { return 1; }
+		case [2, 2]       { return 2; }
+		case [3, 3, 3]    { return 3; }
+		case [4, 4, 4, 4] { return 4; }
+		case [1, 2, 3, 4] { return 5; }
+		default           { return -1; }
+	}
+	return -2;
+}
+let ok15 = many([1, 2, 3, 4]) == 5;
+let ok16 = many([1, 2, 3, 4]) == 5;
+let ok17 = many([9]) == -1;
+
+let oks = [ok1, ok2, ok3, ok4, ok5, ok6, ok7, ok8, ok9, ok10, ok11, ok12, ok13, ok14, ok15, ok16, ok17];
+return all(oks);

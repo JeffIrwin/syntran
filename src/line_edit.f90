@@ -249,6 +249,34 @@ end subroutine line_edit_add_history
 
 !===============================================================================
 
+function line_edit_history_path() result(path)
+
+	! Fortran-side accessor for the same path line_edit_init() already
+	! resolves and hands to isocline: syntran_history_path() in the C shim
+	! (src/c/isocline_wrap.c), which is $HOME/.syntran_history ($USERPROFILE
+	! on Windows), or NULL if no home dir is set (session-only history).
+	! Used by the REPL's `#help keys` directive (src/repl.f90) to tell the
+	! user where their history actually lives
+
+	character(len = :), allocatable :: path
+
+	!********
+
+	type(c_ptr) :: path_ptr
+
+	path_ptr = syntran_history_path_c()
+
+	if (.not. c_associated(path_ptr)) then
+		path = ""
+		return
+	end if
+
+	path = c_str_to_f_str(path_ptr)
+
+end function line_edit_history_path
+
+!===============================================================================
+
 function c_str_to_f_str(cptr) result(str_)
 
 	! Copy a null-terminated C string into an allocatable Fortran string

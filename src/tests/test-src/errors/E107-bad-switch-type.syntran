@@ -1,0 +1,27 @@
+// E107: bad-switch-type
+// The subject of a switch-statement has a type that can't be matched by
+// equality.  An array of scalars is fine (`case [1, 2, 3]` matches by
+// whole-array equality), but a struct is not
+
+struct Point
+{
+	x: i32,
+	y: i32,
+}
+
+struct Segment
+{
+	beg_: Point,
+	end_: Point,
+}
+
+let p = Point{x = 1, y = 2};
+let s = Segment{beg_ = p, end_ = p};
+
+switch s.beg_
+{
+	case 1
+	{
+		println("one");
+	}
+}

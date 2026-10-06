@@ -1,7 +1,16 @@
 
 !===============================================================================
 
-submodule (syntran__eval_m) syntran__eval_control
+submodule (syntran__runtime_m) syntran__runtime_control
+
+	! Slice-LHS/compound assignment and array-literal construction.
+	! Formerly part of the AST walker (eval_control.f90); eval_for_statement/
+	! eval_while_statement/eval_if_statement/eval_return_statement/
+	! eval_block_statement/eval_translation_unit/eval_use_statement/
+	! eval_enum_cast_expr were dropped here since the VM has its own native
+	! OP_JUMP/OP_FOR_*/OP_CALL/OP_RET control flow and a const-pool-based
+	! OP_ENUM_CAST (compile_ctrl.f90) -- runtime_m's module docstring has the
+	! full picture
 
 	implicit none
 
@@ -11,7 +20,13 @@ contains
 
 !===============================================================================
 
-recursive module subroutine eval_for_statement(node, state, res)
+recursive module subroutine eval_assignment_expr(node, state, res, rhs_in, slots)
+
+	! eval_assignment_expr's only caller is the VM's OP_STORE_SLICE handler
+	! (vm_exec.f90), which always compiles and pushes node%right and, when
+	! node%lsubscripts is allocated, node%lsubscripts(:)'s bound
+	! sub-expressions -- so rhs_in and slots are always supplied (slots may
+	! be a zero-length window when there's nothing to pop)
 
 	type(syntax_node_t), intent(in) :: node
 
@@ -19,261 +34,12 @@ recursive module subroutine eval_for_statement(node, state, res)
 
 	type(value_t), intent(out) :: res
 
-	!********
-
-	integer :: i, rank, for_kind
-	integer(kind = 8) :: i8, len8
-
-	type(array_t) :: array
-	type(value_t) :: lbound_, ubound_, itr, step, len_, tmp, str_
-	type(value_t), allocatable :: struct(:)
-
-	! Evaluate all of these ahead of loop, but only if they are allocated!
-	if (allocated(node%array%lbound)) call syntax_eval(node%array%lbound, state, lbound_)
-	if (allocated(node%array%step  )) call syntax_eval(node%array%step  , state, step   )
-	if (allocated(node%array%ubound)) call syntax_eval(node%array%ubound, state, ubound_)
-	if (allocated(node%array%len_  )) call syntax_eval(node%array%len_  , state, len_   )
-
-	!print *, 'lbound_ = ', lbound_%to_i64()
-	!print *, 'ubound_ = ', ubound_%to_i64()
-	!print *, 'lbound type = ', kind_name(lbound_%type)
-	!print *, 'ubound type = ', kind_name(ubound_%type)
-	!print *, 'node%array%type = ', kind_name(node%array%val%array%type)
-	!print *, 'node type = ', kind_name(node%array%val%type)
-
-	!print *, 'node array kind = ', kind_name(node%array%kind)
-	!print *, 'array kind      = ', kind_name(node%array%val%array%kind)
-
-	select case (node%array%kind)
-	case (array_expr)
-
-		! Primary array exprs are evaluated lazily without wasting memory
-		for_kind = node%array%val%array%kind
-
-		select case (node%array%val%array%kind)
-		case (bound_array)
-
-			! Do promotion once before loop
-			if (any(i64_type == [lbound_%type, ubound_%type])) then
-				!print *, 'promoting'
-				call promote_i32_i64(lbound_)
-				call promote_i32_i64(ubound_)
-				itr%type = i64_type
-			else
-				itr%type = i32_type
-			end if
-
-			if (.not. any(itr%type == [i32_type, i64_type])) then
-				write(*,*) err_int(IC_UNIT_STEP_TYPE, 'unit step array type eval not implemented')
-				call internal_error()
-			end if
-
-			len8 = ubound_%to_i64() - lbound_%to_i64()
-
-		case (step_array)
-
-			! If any bound or step is i64, cast the others up to match
-			if (any(i64_type == [lbound_%type, step%type, ubound_%type])) then
-				call promote_i32_i64(lbound_)
-				call promote_i32_i64(step)
-				call promote_i32_i64(ubound_)
-				itr%type = i64_type
-			else
-				itr%type = lbound_%type
-			end if
-
-			select case (itr%type)
-			case (i32_type)
-
-				if (step%sca%i32 == 0) then
-					call rt_throw(state, err_rt(RC_FOR_STEP_ZERO, 'for loop step is 0'))
-					return
-				end if
-				len8 = (ubound_%sca%i32 - lbound_%sca%i32 &
-					+ step%sca%i32 - sign(1,step%sca%i32)) / step%sca%i32
-
-			case (i64_type)
-
-				if (step%sca%i64 == 0) then
-					call rt_throw(state, err_rt(RC_FOR_STEP_ZERO, 'for loop step is 0'))
-					return
-				end if
-				len8 = (ubound_%sca%i64 - lbound_%sca%i64 &
-					+ step%sca%i64 - sign(int(1,8),step%sca%i64)) / step%sca%i64
-
-			case (f32_type)
-
-				if (step%sca%f32 == 0.0) then
-					call rt_throw(state, err_rt(RC_FOR_STEP_ZERO_F, 'for loop step is 0.0'))
-					return
-				end if
-				len8 = ceiling((ubound_%sca%f32 - lbound_%sca%f32) / step%sca%f32)
-
-			case (f64_type)
-
-				if (step%sca%f64 == 0.0) then
-					call rt_throw(state, err_rt(RC_FOR_STEP_ZERO_F, 'for loop step is 0.0'))
-					return
-				end if
-				len8 = ceiling((ubound_%sca%f64 - lbound_%sca%f64) / step%sca%f64)
-
-			case default
-				write(*,*) err_int(IC_STEP_ARRAY_TYPE, 'step array type eval not implemented')
-				call internal_error()
-			end select
-
-		case (len_array)
-
-			itr%type = node%array%val%array%type
-
-			select case (itr%type)
-			case (f32_type)
-				len8 = len_%to_i64()
-			case (f64_type)
-				len8 = len_%to_i64()
-			case default
-				write(*,*) err_int(IC_BOUND_LEN_TYPE, 'bound/len array type eval not implemented')
-				call internal_error()
-			end select
-
-		case (expl_array)
-			! TODO: array catting in for statements
-			len8 = node%array%val%array%len_
-
-		case (size_array)
-
-			rank = size( node%array%size )
-			len8 = 1
-			do i = 1, rank
-				call syntax_eval(node%array%size(i), state, len_)
-				if (state%rt_halt) return
-				len8 = len8 * len_%to_i64()
-			end do
-
-			if (size(node%array%elems) /= len8) then
-				call rt_throw(state, err_rt(RC_ARRAY_SIZE_MISMATCH, "size of explicit array "// &
-					"does not match number of elements"))
-				return
-			end if
-
-		case (unif_array)
-
-			rank = size(node%array%size)
-			!print *, 'rank = ', rank
-			len8 = 1
-			do i = 1, rank
-				call syntax_eval(node%array%size(i), state, len_)
-				if (state%rt_halt) return
-				len8 = len8 * len_%to_i64()
-			end do
-			!print *, 'len8 = ', len8
-
-		case default
-			write(*,*) err_int(IC_FOR_ARRAY_KIND, 'for loop not implemented for this array kind')
-			call internal_error()
-		end select
-
-	case default
-		!print *, 'non-primary array expression'
-
-		if (node%array%val%type == str_type) then
-
-			! Allow iterating on chars in a str
-
-			for_kind = str_type
-			call syntax_eval(node%array, state, tmp)
-			call value_move(tmp, str_)
-			len8 = len(str_%str%s, 8)
-			itr%type = str_type
-
-			!print *, "str_ = ", str_%str%s
-
-		else
-
-			! Any non-primitive array needs to be evaluated before iterating
-			! over it.  Parser guarantees that this is an array
-			!
-			! Unlike step_array, itr%type does not need to be set here because
-			! it is set in array_at() (via get_array_val())
-			for_kind = array_expr
-
-			call syntax_eval(node%array, state, tmp)
-			call array_move(tmp%array, array)
-
-			! Enum/struct elements live in %struct(:), not in array_t (which
-			! has no value_t component) -- array_move only moves array_t's
-			! own components, so thread %struct(:) through separately.
-			! array_at() falls back to get_array_val() when this isn't
-			! allocated (Fortran treats an unallocated allocatable actual
-			! argument as absent for a non-allocatable optional dummy)
-			if (allocated(tmp%struct)) call move_alloc(tmp%struct, struct)
-
-			len8 = array%len_
-			!print *, 'len8 = ', len8
-
-		end if
-
-	end select
-
-	!print *, 'itr%type = ', kind_name(itr%type)
-
-	! Push scope to make the loop iterator local
-	call state%vars%push_scope()
-	call state%locs%push_scope()
-
-	state%breaked = .false.
-	do i8 = 1, len8
-
-		! `breaked` is set once per loop instance, while `continued` is reset on
-		! every iteration
-		state%continued = .false.
-
-		call array_at(itr, for_kind, i8, lbound_, step, ubound_, &
-			len_, array, node%array%elems, str_, state, struct)
-
-		!print *, 'itr = ', itr%to_str()
-
-		! During evaluation, insert variables by array id_index instead of
-		! dict lookup.  This is much faster and can be done during
-		! evaluation now that we know all of the variable identifiers.
-		! Parsing still needs to rely on dictionary lookups because it does
-		! not know the entire list of variable identifiers ahead of time
-		if (node%is_loc) then
-			call value_move(itr, state%locs%vals(node%id_index))
-		else
-			call value_move(itr, state%vars%vals(node%id_index))
-		end if
-
-		call syntax_eval(node%body, state, res)
-
-		if (state%rt_halt ) exit
-		if (state%returned) exit
-		if (state%breaked ) exit
-
-	end do
-
-	! Reset for nested loops
-	state%breaked   = .false.
-	state%continued = .false.
-
-	call state%vars%pop_scope()
-	call state%locs%pop_scope()
-
-end subroutine eval_for_statement
-
-!===============================================================================
-
-recursive module subroutine eval_assignment_expr(node, state, res)
-
-	type(syntax_node_t), intent(in) :: node
-
-	type(state_t), intent(inout) :: state
-
-	type(value_t), intent(out) :: res
+	type(value_t), intent(in) :: rhs_in
+	type(value_t), intent(in) :: slots(:)
 
 	!********
 
-	integer :: rank_res, id, type_, nelem
+	integer :: rank_slice, id, type_, nelem
 	integer(kind = 8) :: i8, j8, index_, len8, size_i, il, iu, sstep
 	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:), &
 		size_tmp(:)
@@ -281,7 +47,7 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 	logical :: has_char_sub
 
 	type(i64_vector_t), allocatable :: asubs(:)
-	type(value_t) :: array_val, rhs, tmp, tmp_array
+	type(value_t) :: array_val, tmp, tmp_array
 
 	!print *, "eval assignment_expr"
 	!print *, "node identifier = ", node%identifier%text
@@ -293,31 +59,13 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 	!end if
 
 	if (allocated( node%member )) then
-		!print *, "assign LHS dot member"
-
-		! This is similar to what I do below with get_array_val() and
-		! set_array_val(), but I've renamed some of the variables
-
-		! Evaluate the RHS
-		call syntax_eval(node%right, state, rhs)
-
-		id = node%id_index
-		if (node%is_loc) then
-			call get_val(node, state%locs%vals(id), state, res)
-			call compound_assign(res, rhs, node%op)
-			call set_val(node, state%locs%vals(id), state, res)
-
-		else
-			! Get the initial value from the LHS, which could be nested like `a.b.c.d`
-			call get_val(node, state%vars%vals(id), state, res)
-
-			! Do the assignment or += or whatever and set res
-			call compound_assign(res, rhs, node%op)
-
-			! Save it back into the LHS var
-			call set_val(node, state%vars%vals(id), state, res)
-
-		end if
+		! Unreachable: dot-member assignment (`a.b = x`, `a.b += x`) compiles
+		! to OP_STORE_MEMBER (compile_ctrl.f90's assignment_expr case),
+		! which calls get_val/set_val directly and never reaches
+		! eval_assignment_expr at all
+		write(*,*) err_int(IC_UNEXPECTED_ARRAY_KIND, &
+			'unreachable: dot-member assignment reached eval_assignment_expr')
+		call internal_error()
 
 	else if (.not. allocated(node%lsubscripts)) then
 
@@ -333,23 +81,28 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 		!end if
 		!end if
 
-		!print *, 'scalar compound_assign'
+		!print *, 'scalar apply_assign_op'
 
 		! Eval the RHS
-		call syntax_eval(node%right, state, res)
+		res = rhs_in
 
-		! TODO: test int/float casting.  It should be an error during
-		! parsing
+		! Int/float casting here is intentionally asymmetric: plain `=` is
+		! already a parse-time error (types_ops.f90's is_binary_op_allowed
+		! equals_token arm requires int<->int or float<->float), while a
+		! compound op (`+=` etc.) shares the plain arithmetic arms there
+		! (is_num_type only) and truncates to the LHS type via the
+		! "! compound assignment" cases in math_bin_*.f90 -- see
+		! test.f90's `let i = 20; i += 5.1;` == '25' assertions
 
 		!print *, 'lhs type = ', kind_name( state%vars%vals(id)%type )
 
-		!print *, "compound_assign is_loc = ", node%is_loc
+		!print *, "apply_assign_op is_loc = ", node%is_loc
 		if (node%is_loc) then
 			!print *, "val type = ", kind_name( state%locs%vals(id)%type )
-			call compound_assign(state%locs%vals(id), res, node%op)
+			call apply_assign_op(state%locs%vals(id), res, node%op)
 			res = state%locs%vals(id)
 		else
-			call compound_assign(state%vars%vals(id), res, node%op)
+			call apply_assign_op(state%vars%vals(id), res, node%op)
 
 			! For compound assignment, ensure that the LHS is returned
 			!print *, 'setting res again'
@@ -397,26 +150,37 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 		! Eval the RHS.  I should probably rename `res` to `rhs` here like I did
 		! with get_val() for dot exprs above, because it's not really the result
 		! yet in cases of compound assignment
-		call syntax_eval(node%right, state, res)
+		res = rhs_in
 
 		!print *, 'RHS = ', res%to_str()
 
 		if (type_ == str_type) then
 			!print *, 'str_type'
 
-			! TODO: ban compound character substring assignment
+			! Compound substring assignment (s[1:3] += "x") is banned at
+			! parse time (E111, parse_expr.f90): a fixed-width character
+			! slice can't express a length-changing op like +=, so node%op
+			! reaching this branch is always equals_token
 
 			! str_slice_bounds() handles scalar_sub/range_sub/step_sub/all_sub
 			! uniformly, so stepped/reversed slice assignment (e.g.
 			! s[:-1:] = "olleh") works the same as it does for arrays.
 			if (node%is_loc) then
 				call str_slice_bounds(node, 1, int(len(state%locs%vals(id)%str%s), 8), &
-					state, il, iu, sstep)
+					state, il, iu, sstep, slots)
 			else
 				call str_slice_bounds(node, 1, int(len(state%vars%vals(id)%str%s), 8), &
-					state, il, iu, sstep)
+					state, il, iu, sstep, slots)
 			end if
 			if (state%rt_halt) return
+
+			! The RHS string must exactly fill the selected window: a
+			! fixed-width character slice can't grow or shrink the string
+			if (int(len(res%str%s), 8) /= slice_len(il, sstep, iu)) then
+				call rt_throw(state, err_rt(RC_ARRAY_SIZE_MISMATCH, &
+					"size of RHS does not match size of LHS slice"))
+				return
+			end if
 
 			i8 = il
 			j8 = 1
@@ -437,23 +201,22 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 			if (all(node%lsubscripts(1:nelem)%sub_kind == scalar_sub)) then
 
 				! All element subs scalar: single element
-				i8 = subscript_eval(node, state)   ! element flat index
-				call str_arr_char_assign(node, state, res, id, i8, nelem)
+				i8 = subscript_eval(node, state, slots)   ! element flat index
+				if (state%rt_halt) return
+				call str_arr_char_assign(node, state, res, id, i8, nelem, slots)
 				if (state%rt_halt) return
 
 			else
 
 				! Slice element selection: iterate over selected elements
-				call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res)
+				call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_slice, slots)
 				if (state%rt_halt) return
 				len8 = 1_8
 				do j8 = 1, nelem
 					if (allocated(asubs(j8)%v)) then
 						size_i = size(asubs(j8)%v)
 					else
-						size_i = divceil(usubs(j8) - lsubs(j8), ssubs(j8))
-						if (lsubs(j8) > usubs(j8) .and. ssubs(j8) > 0) size_i = 0
-						if (lsubs(j8) < usubs(j8) .and. ssubs(j8) < 0) size_i = 0
+						size_i = slice_len(lsubs(j8), ssubs(j8), usubs(j8))
 					end if
 					len8 = len8 * size_i
 				end do
@@ -465,7 +228,7 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 					else
 						index_ = subscript_i32_eval(subs, state%vars%vals(id)%array)
 					end if
-					call str_arr_char_assign(node, state, res, id, index_, nelem)
+					call str_arr_char_assign(node, state, res, id, index_, nelem, slots)
 					if (state%rt_halt) return
 					call get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
 				end do
@@ -474,30 +237,14 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 
 		else if (all(node%lsubscripts%sub_kind == scalar_sub)) then
 
-			!print *, 'non str_type scalar subscript'
-			!print *, 'LHS array type = ', &
-			!	state%vars%vals(id)%array%type  ! this debug will break for is_loc
-			!print *, 'LHS array = ', state%vars%vals(id)%array%i32
-
-			!print *, "get_array_val a"
-
-			! It is important to only eval the subscript once, in case it is an
-			! expression which changes the state!  For example, `array[(index +=
-			! 1)];`.  Maybe I should ban expression statements as indices, but
-			! src/tests/test-src/fns/test-19.syntran at least will need updated
-			i8 = subscript_eval(node, state)
-
-			if (node%is_loc) then
-				call get_val(node, state%locs%vals(id), state, array_val, index_ = i8)
-				call compound_assign(array_val, res, node%op)
-				call set_val(node, state%locs%vals(id), state, array_val, index_ = i8)
-			else
-				call get_val(node, state%vars%vals(id), state, array_val, index_ = i8)
-				call compound_assign(array_val, res, node%op)
-				call set_val(node, state%vars%vals(id), state, array_val, index_ = i8)
-			end if
-
-			res = array_val
+			! Unreachable: an all-scalar subscript assignment (`arr[i][j] = x`,
+			! `arr[i][j] += x`) is exactly compile_ctrl.f90's assignment_expr
+			! `first` condition, which routes to OP_STORE_IDX/OP_STORE_IDX_NAT/
+			! OP_COMPOUND_IDX_NAT -- never OP_STORE_SLICE -- so this never
+			! reaches eval_assignment_expr
+			write(*,*) err_int(IC_UNEXPECTED_ARRAY_KIND, &
+				'unreachable: all-scalar subscript assignment reached eval_assignment_expr')
+			call internal_error()
 
 		else
 
@@ -506,16 +253,16 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 			if (size(node%lsubscripts) == 1 .and. &
 			    node%lsubscripts(1)%sub_kind /= arr_sub) then
 				! Rank-1 slice fast path: avoids allocating lsubs/ssubs/usubs/asubs.
-				call eval_assign_slice_rank1(node, state, id, res)
+				call eval_assign_slice_rank1(node, state, id, res, slots)
 				if (state%rt_halt) return
 			else
 
-			call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_res)
+			call get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, rank_slice, slots)
 			if (state%rt_halt) return
-			allocate(size_tmp(rank_res))
+			allocate(size_tmp(rank_slice))
 
 			!print *, "rank     = ", state%vars%vals(id)%array%rank
-			!print *, "rank_res = ", rank_res
+			!print *, "rank_slice = ", rank_slice
 
 			len8 = 1
 			j8 = 1
@@ -523,16 +270,7 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 				if (allocated(asubs(i8)%v)) then
 					size_i = size(asubs(i8)%v)
 				else
-					size_i = divceil(usubs(i8) - lsubs(i8), ssubs(i8))
-
-					! Empty step slice?
-					!
-					! TODO: c.f. step_array cases (literals and for loops) for
-					! ways to do this without branching (or at least, without
-					! obvious branching)
-					if (lsubs(i8) > usubs(i8) .and. ssubs(i8) > 0) size_i = 0
-					if (lsubs(i8) < usubs(i8) .and. ssubs(i8) < 0) size_i = 0
-
+					size_i = slice_len(lsubs(i8), ssubs(i8), usubs(i8))
 				end if
 
 				len8 = len8 * size_i
@@ -544,8 +282,19 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 			end do
 			!print *, "len8 = ", len8
 
-			! TODO: some size/shape checking might be needed here between
-			! LHS and RHS
+			! An array RHS must have exactly the LHS slice's length (scalar
+			! RHS broadcasts to every selected element instead, so it's
+			! exempt).  Without this, get_array_val() below reads past the
+			! end of a too-short RHS -- raw Fortran UB (garbage in a release
+			! build, a bounds-check abort in a debug one) -- and a too-long
+			! RHS silently has its extra elements dropped
+			if (res%type == array_type) then
+				if (res%array%len_ /= len8) then
+					call rt_throw(state, err_rt(RC_ARRAY_SIZE_MISMATCH, &
+						"size of RHS does not match size of LHS slice"))
+					return
+				end if
+			end if
 
 			! Scalar rhs
 			if (res%type /= array_type) array_val = res
@@ -553,7 +302,7 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 			allocate(tmp_array%array)
 			tmp_array%type = array_type
 			tmp_array%array%len_ = len8
-			tmp_array%array%rank = rank_res
+			tmp_array%array%rank = rank_slice
 			tmp_array%array%kind = expl_array
 			tmp_array%array%size = size_tmp
 			if (node%is_loc) then
@@ -584,12 +333,12 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 				if (node%is_loc) then
 					index_ = subscript_i32_eval(subs, state%locs%vals(id)%array)
 					call get_array_val(state%locs%vals(id)%array, index_, tmp)
-					call compound_assign(tmp, array_val, node%op)
+					call apply_assign_op(tmp, array_val, node%op)
 					call set_array_val(state%locs%vals(id)%array, index_, tmp)
 				else
 					index_ = subscript_i32_eval(subs, state%vars%vals(id)%array)
 					call get_array_val(state%vars%vals(id)%array, index_, tmp)
-					call compound_assign(tmp, array_val, node%op)
+					call apply_assign_op(tmp, array_val, node%op)
 					call set_array_val(state%vars%vals(id)%array, index_, tmp)
 				end if
 
@@ -661,7 +410,7 @@ recursive module subroutine eval_assignment_expr(node, state, res)
 
 contains
 
-	subroutine str_arr_char_assign(node, state, rhs, id, elem_idx, nelem_)
+	subroutine str_arr_char_assign(node, state, rhs, id, elem_idx, nelem_, slots)
 
 		! Apply the char-rank subscript at lsubscripts(nelem_+1) to the
 		! element string at state%{locs|vars}%vals(id)%array%str(elem_idx+1)%s.
@@ -670,12 +419,15 @@ contains
 		! uniformly, so stepped/reversed slice assignment works the same as it
 		! does for arrays.  On step == 0, state%rt_halt is set; callers must
 		! check it on return.
+		!
+		! `slots` is forwarded to str_slice_bounds -- see its docstring
 
 		type(syntax_node_t), intent(in)    :: node
 		type(state_t),       intent(inout) :: state
 		type(value_t),       intent(in)    :: rhs
 		integer,             intent(in)    :: id, nelem_
 		integer(kind = 8),   intent(in)    :: elem_idx
+		type(value_t),       intent(in)    :: slots(:)
 
 		!********
 
@@ -687,13 +439,21 @@ contains
 		if (node%is_loc) then
 			call str_slice_bounds(node, isub, &
 				int(len(state%locs%vals(id)%array%str(elem_idx+1)%s), 8), &
-				state, il, iu, step)
+				state, il, iu, step, slots)
 		else
 			call str_slice_bounds(node, isub, &
 				int(len(state%vars%vals(id)%array%str(elem_idx+1)%s), 8), &
-				state, il, iu, step)
+				state, il, iu, step, slots)
 		end if
 		if (state%rt_halt) return
+
+		! The RHS string must exactly fill the selected window: a
+		! fixed-width character slice can't grow or shrink the element
+		if (int(len(rhs%str%s), 8) /= slice_len(il, step, iu)) then
+			call rt_throw(state, err_rt(RC_ARRAY_SIZE_MISMATCH, &
+				"size of RHS does not match size of LHS slice"))
+			return
+		end if
 
 		i8 = il
 		j8 = 1
@@ -713,72 +473,26 @@ end subroutine eval_assignment_expr
 
 !===============================================================================
 
-module subroutine eval_translation_unit(node, state, res)
+recursive module subroutine eval_array_expr(node, state, res, slots)
+
+	! eval_array_expr's only caller is the VM's OP_NEW_ARRAY handler
+	! (vm_exec.f90), which always compiles and pushes node's sub-expressions
+	! first (compile_array_expr_slots) -- so slots is always supplied
+	! (array_expr_nslots(node)-sized); consumed via the monotonic cursor `k`
+	! below in the same order -- see array_expr_nslots' docstring
+	! (bytecode.f90) for the per-kind consumption order
 
 	type(syntax_node_t), intent(in) :: node
 
 	type(state_t), intent(inout) :: state
 
 	type(value_t), intent(out) :: res
+
+	type(value_t), intent(in) :: slots(:)
 
 	!********
 
-	integer :: i
-
-	! The final statement of a unit returns the actual result.  Non-final
-	! members only change the (vars) state or define fns
-	do i = 1, size(node%members)
-
-		! Only eval statements, not fn, struct, or enum declarations
-		if (node%members(i)%kind == fn_declaration    ) cycle
-		if (node%members(i)%kind == struct_declaration) cycle
-		if (node%members(i)%kind == enum_declaration   ) cycle
-
-		call syntax_eval(node%members(i), state, res)
-
-		!print *, 'kind = ', node%members(i)%kind
-		!print *, i, ' res = ', res%to_str()
-		!print *, ''
-
-		if (state%rt_halt ) exit
-		if (state%returned) exit
-
-	end do
-
-end subroutine eval_translation_unit
-
-!===============================================================================
-
-module subroutine eval_use_statement(node, state, res)
-
-	! Evaluate a module's translation unit. This ensures that module-level
-	! statements (like `let a = [0: 10];`) are evaluated, not just parsed.
-
-	type(syntax_node_t), intent(in) :: node
-
-	type(state_t), intent(inout) :: state
-
-	type(value_t), intent(out) :: res
-
-	if (allocated(node%member)) then
-		call eval_translation_unit(node%member, state, res)
-	end if
-
-end subroutine eval_use_statement
-
-!===============================================================================
-
-recursive module subroutine eval_array_expr(node, state, res)
-
-	type(syntax_node_t), intent(in) :: node
-
-	type(state_t), intent(inout) :: state
-
-	type(value_t), intent(out) :: res
-
-	!********
-
-	integer :: i, j
+	integer :: i, j, k
 	integer(kind = 8) :: i8, j8
 
 	logical :: is_cat
@@ -793,11 +507,13 @@ recursive module subroutine eval_array_expr(node, state, res)
 	!print *, "starting eval_array_expr()"
 	!print *, 'identifier = ', node%identifier%text
 
+	k = 0
+
 	if (node%val%array%kind == step_array) then
 
-		call syntax_eval(node%lbound, state, lbound_)
-		call syntax_eval(node%step  , state, step   )
-		call syntax_eval(node%ubound, state, ubound_)
+		k = k + 1; lbound_ = slots(k)
+		k = k + 1; step    = slots(k)
+		k = k + 1; ubound_ = slots(k)
 
 		array%type = node%val%array%type
 
@@ -956,9 +672,9 @@ recursive module subroutine eval_array_expr(node, state, res)
 	else if (node%val%array%kind == len_array) then
 
 		!print *, 'len array'
-		call syntax_eval(node%lbound, state, lbound_)
-		call syntax_eval(node%ubound, state, ubound_)
-		call syntax_eval(node%len_  , state, len_   )
+		k = k + 1; lbound_ = slots(k)
+		k = k + 1; ubound_ = slots(k)
+		k = k + 1; len_    = slots(k)
 
 		array%type = node%val%array%type
 		array%len_  = len_%to_i64()
@@ -1001,13 +717,13 @@ recursive module subroutine eval_array_expr(node, state, res)
 	else if (node%val%array%kind == unif_array) then
 
 		allocate(res%array)
-		res%array%rank = size( node%size )
+		res%array%rank = size( node%size_ )
 		!print *, "rank = ", res%array%rank
 		allocate(res%array%size( res%array%rank ))
 
 		do i = 1, res%array%rank
 			!print *, "i = ", i
-			call syntax_eval(node%size(i), state, len_)
+			k = k + 1; len_ = slots(k)
 			!print *, "len_%type = ", kind_name(len_%type)
 			!print *, "len_      = ", len_%to_i64()
 			res%array%size(i) = len_%to_i64()
@@ -1019,7 +735,7 @@ recursive module subroutine eval_array_expr(node, state, res)
 		! course mutable)
 
 		!print *, 'len array'
-		call syntax_eval(node%lbound, state, lbound_)
+		k = k + 1; lbound_ = slots(k)
 
 		! Allocate in one shot without growing
 
@@ -1075,12 +791,25 @@ recursive module subroutine eval_array_expr(node, state, res)
 				do j = 1, size(lbound_%struct)
 					call value_copy(res%struct(i8)%struct(j), lbound_%struct(j))
 				end do
+
+				! Each element needs its own type/name/cookie set too (not
+				! just the outer array value), or value_to_str() falls
+				! through to the scalar default arm and prints
+				! "<invalid_value>" when the whole array is printed --
+				! indexing (a[0]) still worked before this fix because that
+				! path reads type from the outer value instead
+				res%struct(i8)%type = struct_type
+				res%struct(i8)%struct_name = lbound_%struct_name
+				if (allocated(lbound_%struct_cookie)) &
+					res%struct(i8)%struct_cookie = lbound_%struct_cookie
+				res%struct(i8)%struct_reg_idx = lbound_%struct_reg_idx
 			end do
 
 			! Arrays are homogeneous, so every element shares one struct_name
 			! for efficiency
 			res%struct_name = lbound_%struct_name
 			if (allocated(lbound_%struct_cookie)) res%struct_cookie = lbound_%struct_cookie
+			res%struct_reg_idx = lbound_%struct_reg_idx
 
 		case (enum_type)
 
@@ -1116,10 +845,8 @@ recursive module subroutine eval_array_expr(node, state, res)
 		! statement requires it to be explicit, so we might as well expand
 		! at initialization
 
-		call syntax_eval(node%lbound, state, lbound_)
-		call syntax_eval(node%ubound, state, ubound_)
-
-		!array = new_array(node%val%array%type)
+		k = k + 1; lbound_ = slots(k)
+		k = k + 1; ubound_ = slots(k)
 
 		allocate(res%array)
 		res%array%type = node%val%array%type
@@ -1142,7 +869,7 @@ recursive module subroutine eval_array_expr(node, state, res)
 
 		call allocate_array(res, res%array%len_)
 
-		!print *, 'bounds in [', lbound_%str(), ': ', ubound_%str(), ']'
+		!print *, 'bounds in [', lbound_%to_str(), ': ', ubound_%to_str(), ']'
 		!print *, 'node%val%array%type = ', node%val%array%type
 
 		if (res%array%type == i32_type) then
@@ -1168,23 +895,22 @@ recursive module subroutine eval_array_expr(node, state, res)
 		array = new_array(node%val%array%type, size(node%elems))
 
 		do i = 1, size(node%elems)
-			call syntax_eval(node%elems(i), state, elem)
+			k = k + 1; elem = slots(k)
 			if (state%rt_halt) return
-			!print *, 'elem['//str(i)//'] = ', elem%str()
+			!print *, 'elem['//str(i)//'] = ', elem%to_str()
 			call array%push(elem)
 		end do
 
-		array%rank = size( node%size )
+		array%rank = size( node%size_ )
 		allocate(array%size( array%rank ))
 		do i = 1, array%rank
-			call syntax_eval(node%size(i), state, len_)
+			k = k + 1; len_ = slots(k)
 			if (state%rt_halt) return
 			array%size(i) = len_%to_i64()
 		end do
 
 		if (size(node%elems) /= product(array%size)) then
-			call rt_throw(state, err_rt(RC_ARRAY_SIZE_MISMATCH, "size of explicit array "// &
-				"does not match number of elements"))
+			call rt_throw(state, err_rt_expl_array_size(size(node%elems), array%size))
 			return
 		end if
 
@@ -1218,9 +944,9 @@ recursive module subroutine eval_array_expr(node, state, res)
 		is_cat = .false.
 
 		do i = 1, size(node%elems)
-			call syntax_eval(node%elems(i), state, elem)
+			k = k + 1; elem = slots(k)
 			if (state%rt_halt) return
-			!print *, 'elem['//str(i)//'] = ', elem%str()
+			!print *, 'elem['//str(i)//'] = ', elem%to_str()
 
 			if (any(res%array%type == [struct_type, enum_type])) then
 				res%struct(i) = elem
@@ -1261,6 +987,7 @@ recursive module subroutine eval_array_expr(node, state, res)
 		if (allocated(node%val%struct_cookie)) then
 			res%struct_cookie = node%val%struct_cookie
 		end if
+		res%struct_reg_idx = node%val%struct_reg_idx
 		if (allocated(node%val%enum_name)) then
 			res%enum_name = node%val%enum_name
 		end if
@@ -1279,178 +1006,6 @@ end subroutine eval_array_expr
 
 !===============================================================================
 
-recursive module subroutine eval_enum_cast_expr(node, state, res)
-
-	! Evaluate `EnumName(ordinal)`.  node%val%struct(:) holds one fully-baked
-	! enum value_t per variant (set at parse time by parse_enum_cast()), so
-	! this just evaluates the ordinal expression and scans that baked list
-	! for a match -- no runtime enum registry is needed.  R32 if none matches
-
-	type(syntax_node_t), intent(in) :: node
-
-	type(state_t), intent(inout) :: state
-
-	type(value_t), intent(out) :: res
-
-	!********
-
-	type(value_t) :: arg
-
-	integer(kind = 4) :: ord
-
-	integer :: i
-
-	call syntax_eval(node%right, state, arg)
-	if (state%rt_halt) return
-
-	ord = arg%to_i32()
-
-	! Linear scan, not an array/hash lookup: variant values are arbitrary i32
-	! (explicit, sparse, negative, or aliased), so no direct-index table
-	! exists in general, and enums are small enough that this is cheap
-	do i = 1, size(node%val%struct)
-		if (node%val%struct(i)%sca%i32 == ord) then
-			res = node%val%struct(i)
-			return
-		end if
-	end do
-
-	call rt_throw(state, err_rt(RC_ENUM_CAST_RANGE, &
-		"no variant with value "//str(ord)//" in enum `"//node%val%enum_name//"`"))
-
-end subroutine eval_enum_cast_expr
-
-!===============================================================================
-
-recursive module subroutine eval_while_statement(node, state, res)
-
-	type(syntax_node_t), intent(in) :: node
-	type(state_t), intent(inout) :: state
-
-	type(value_t), intent(out) :: res
-
-	!********
-
-	type(value_t) :: condition
-
-	call syntax_eval(node%condition, state, condition)
-	state%breaked = .false.
-	do while (condition%sca%bool)
-		state%continued = .false.
-
-		call syntax_eval(node%body, state, res)
-		if (state%rt_halt) exit
-		call syntax_eval(node%condition, state, condition)
-
-		if (state%rt_halt ) exit
-		if (state%returned) exit
-		if (state%breaked ) exit
-
-	end do
-	state%breaked   = .false.
-	state%continued = .false.
-
-end subroutine eval_while_statement
-
-!===============================================================================
-
-recursive module subroutine eval_if_statement(node, state, res)
-
-	type(syntax_node_t), intent(in) :: node
-	type(state_t), intent(inout) :: state
-
-	type(value_t), intent(out) :: res
-
-	!********
-
-	type(value_t) :: condition
-
-	call syntax_eval(node%condition, state, condition)
-	!print *, 'condition = ', condition%str()
-
-	if (condition%sca%bool) then
-		!print *, 'if'
-		call syntax_eval(node%if_clause, state, res)
-
-	else if (allocated(node%else_clause)) then
-		!print *, 'else'
-		call syntax_eval(node%else_clause, state, res)
-
-	end if
-
-end subroutine eval_if_statement
-
-!===============================================================================
-
-recursive module subroutine eval_return_statement(node, state, res)
-
-	type(syntax_node_t), intent(in) :: node
-	type(state_t), intent(inout) :: state
-
-	type(value_t), intent(out) :: res
-
-	!********
-
-	!print *, "starting eval_return_statement"
-
-	state%returned = .true.
-
-	if (node%right%val%type == void_type) then
-		!res%type = unknown_type
-		return
-	end if
-
-	call syntax_eval(node%right, state, res)
-
-	!print *, "ending eval_return_statement"
-
-end subroutine eval_return_statement
-
-!===============================================================================
-
-recursive module subroutine eval_block_statement(node, state, res)
-
-	type(syntax_node_t), intent(in) :: node
-	type(state_t), intent(inout) :: state
-
-	type(value_t), intent(out) :: res
-
-	!********
-
-	integer :: i
-
-	type(value_t) :: tmp
-
-	call state%vars%push_scope()
-	call state%locs%push_scope()
-
-	! The final statement of a block returns the actual result.  Non-final
-	! members only change the (vars) state.
-	do i = 1, size(node%members)
-		call syntax_eval(node%members(i), state, tmp)
-
-		!print *, 'kind = ', node%members(i)%kind
-		!print *, i, ' tmp = ', tmp%to_str()
-		!print *, 'type = ', tmp%type, kind_name(tmp%type)
-		!print *, ''
-
-		! In case of no-op if statements and while loops
-		if (tmp%type /= unknown_type) res = tmp
-
-		if (state%rt_halt   ) exit
-		if (state%returned  ) exit
-		if (state%breaked   ) exit
-		if (state%continued ) exit  ! exit (break) the block but not the enclosing loop
-
-	end do
-
-	call state%vars%pop_scope()
-	call state%locs%pop_scope()
-
-end subroutine eval_block_statement
-
-!===============================================================================
-
-end submodule syntran__eval_control
+end submodule syntran__runtime_control
 
 !===============================================================================
