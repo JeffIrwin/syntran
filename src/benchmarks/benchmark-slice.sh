@@ -56,10 +56,10 @@ echo ""
 # 2. Helpers
 # --------------------------------------------------------------------------
 BENCHMARKS=(
-	src/benchmarks/slice-small.syntran
-	src/benchmarks/slice-large.syntran
-	src/benchmarks/slice-bounds.syntran
-	src/benchmarks/slice-str.syntran
+	src/benchmarks/array/slice-small.syntran
+	src/benchmarks/array/slice-large.syntran
+	src/benchmarks/array/slice-bounds.syntran
+	src/benchmarks/array/slice-str.syntran
 )
 
 N=3   # repetitions per (file, binary) pair

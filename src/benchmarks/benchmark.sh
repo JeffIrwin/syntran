@@ -12,17 +12,17 @@ echo "    SYNTRAN:"
 
 for ((i=1; i<=$n; i++)) ; do
 	# Locally-built version
-	time ./build/Release/syntran src/benchmarks/primes-1.syntran
+	time ./build/Release/syntran src/benchmarks/array/primes-1.syntran
 
 	### Installed version
-	#time syntran src/benchmarks/primes-1.syntran
+	#time syntran src/benchmarks/array/primes-1.syntran
 done
 
 echo "=============================================================="
 echo "    PYTHON:"
 
 for ((i=1; i<=$n; i++)) ; do
-	time python3 src/benchmarks/primes-1.py
+	time python3 src/benchmarks/array/primes-1.py
 done
 
 echo "=============================================================="

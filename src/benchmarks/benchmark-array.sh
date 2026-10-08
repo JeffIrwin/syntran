@@ -1,11 +1,11 @@
 #!/bin/bash
 # benchmark-array.sh -- whole-array benchmarks: syntran vs gfortran vs numpy vs
-# pure python.  Writes the timing tables in markdown to array-results.md
+# pure python.  Writes the timing tables in markdown to README.md
 #
 # Usage:
 #   bash src/benchmarks/benchmark-array.sh
 #
-# Each benchmark <name> has four implementations in this directory:
+# Each benchmark <name> has four implementations in src/benchmarks/array/:
 #
 #   <name>.syntran  <name>.f90  <name>_np.py  <name>_py.py
 #
@@ -21,7 +21,7 @@
 #   FFLAGS            fortran flags          (default: -O2)
 #   PYTHON            python interpreter     (default: python3)
 #   RUNS              runs per timing        (default: 3)
-#   OUT               markdown output file   (default: src/benchmarks/array-results.md)
+#   OUT               markdown output file   (default: src/benchmarks/README.md)
 #   SKIP_PURE_PYTHON  set to 1 to skip the slow pure python column (~2 min)
 #
 # If numpy is not importable from $PYTHON, its column is n/a.  This script
@@ -39,10 +39,10 @@ FC=${FC:-gfortran}
 FFLAGS=${FFLAGS:--O2}
 PYTHON=${PYTHON:-python3}
 RUNS=${RUNS:-3}
-OUT=${OUT:-src/benchmarks/array-results.md}
+OUT=${OUT:-src/benchmarks/README.md}
 SKIP_PURE_PYTHON=${SKIP_PURE_PYTHON:-0}
 
-SRC=src/benchmarks
+SRC=src/benchmarks/array
 BIN=build/benchmarks
 
 BENCHES="axpy elem stencil reduce matmul small"
