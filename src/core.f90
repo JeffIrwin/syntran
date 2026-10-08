@@ -31,6 +31,7 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - size-checking for array addition, multiplication, etc.
 	!  - port something like aoc 2019/17 or 15 here as a long test
 	!    * good non-trivial coverage of enums in a module plus other recent
 	!      features (switch/case)

@@ -1,0 +1,5 @@
+let n = 5_000_000;
+let a = 1.0e-6 * [0: n];
+let b = [0.0; n];
+for k in [0: 20] { b = b + sqrt(abs(a)) + exp(-a * a); }
+println(sum(b));

@@ -1,0 +1,9 @@
+let x = [0.0, 0.0, 0.0];
+let v = [1.0, 2.0, 3.0];
+let g = [0.0, -9.8, 0.0];
+let dt = 1.0e-6;
+for k in [0: 2_000_000] {
+	v = v + dt * g;
+	x = x + dt * v;
+}
+println(sum(x));
