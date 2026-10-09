@@ -183,8 +183,10 @@ end subroutine compile_array_expr_slots
 
 subroutine ensure_fn_entry(prog, fn_id)
 
-	! Grow prog%fn_entry / prog%fn_num_locs so that index fn_id is valid.
-	! New slots are zeroed.  No-op if the tables are already large enough.
+	! Grow prog%fn_entry / prog%fn_num_locs / prog%fn_names so that index
+	! fn_id is valid.  New slots are zeroed (fn_names left unallocated,
+	! same as a fresh string_t default).  No-op if the tables are already
+	! large enough.
 
 	type(program_t), intent(inout) :: prog
 	integer, intent(in) :: fn_id
@@ -192,24 +194,80 @@ subroutine ensure_fn_entry(prog, fn_id)
 	!*******
 
 	integer, allocatable :: tmp_entry(:), tmp_locs(:)
+	type(string_t), allocatable :: tmp_names(:)
 
 	if (.not. allocated(prog%fn_entry)) then
 		allocate(prog%fn_entry(fn_id))
 		allocate(prog%fn_num_locs(fn_id))
+		allocate(prog%fn_names(fn_id))
 		prog%fn_entry    = 0
 		prog%fn_num_locs = 0
 	else if (fn_id > size(prog%fn_entry)) then
 		call move_alloc(prog%fn_entry,    tmp_entry)
 		call move_alloc(prog%fn_num_locs, tmp_locs)
+		call move_alloc(prog%fn_names,    tmp_names)
 		allocate(prog%fn_entry(fn_id))
 		allocate(prog%fn_num_locs(fn_id))
+		allocate(prog%fn_names(fn_id))
 		prog%fn_entry    = 0
 		prog%fn_num_locs = 0
 		prog%fn_entry(1: size(tmp_entry))    = tmp_entry
 		prog%fn_num_locs(1: size(tmp_locs))  = tmp_locs
+		prog%fn_names  (1: size(tmp_names))  = tmp_names
 	end if
 
 end subroutine ensure_fn_entry
+
+!===============================================================================
+
+subroutine emit_fn_epilogue(prog, decl, fn_id)
+
+	! Emit a fn body's implicit void return and record its stack-trace name
+	! (prog%fn_names(fn_id), c.f. rt_frame_fname() in vm_exec.f90) -- the
+	! shared tail of every fn-body compile site below (compile_module_fns()
+	! x2, translation_unit's Pass 1 x2 and REPL pass x1 in compile_tree()).
+	!
+	! The implicit return itself: pop the body block's own result
+	! (block_statement compilation always leaves exactly one value on the
+	! stack, even for an empty body -- see the block_statement case in
+	! compile_node_impl()) before pushing the unknown_type sentinel, so
+	! OP_RET pops the sentinel and not the body's stranded result.
+	!
+	! Stamped with decl's own location (decl%src_id/src_pos, set by
+	! parse_fn_declaration()/parse_method_declaration() in parse_fn.f90)
+	! rather than whatever cur_id/cur_pos happens to be left over from the
+	! last statement compiled -- compile_node()'s own save/restore only
+	! covers nodes nested *within* a statement, not code emitted after
+	! compile_node() returns.  Without this, a runtime error at OP_RET
+	! itself (e.g. a by-ref receiver's writeback bounds check, OP_RET in
+	! vm_exec.f90) would show no source snippet and point at whatever
+	! statement happened to compile last.
+
+	type(program_t),     intent(inout) :: prog
+	type(syntax_node_t), intent(in)    :: decl
+	integer,              intent(in)    :: fn_id
+
+	!*******
+
+	integer :: const_idx, saved_id, saved_pos
+
+	prog%fn_names(fn_id)%s = decl%identifier%text
+
+	saved_id  = prog%cur_id
+	saved_pos = prog%cur_pos
+
+	prog%cur_id  = decl%src_id
+	prog%cur_pos = decl%src_pos
+
+	call emit(prog, OP_POP)
+	const_idx = add_const(prog, unknown_val())
+	call emit(prog, OP_LOAD_CONST, a = const_idx)
+	call emit(prog, OP_RET)
+
+	prog%cur_id  = saved_id
+	prog%cur_pos = saved_pos
+
+end subroutine emit_fn_epilogue
 
 !===============================================================================
 
@@ -233,7 +291,7 @@ recursive subroutine compile_module_fns(prog, cs, module_node)
 
 	!*******
 
-	integer :: i, j, fn_id, const_idx
+	integer :: i, j, fn_id
 
 	! Recurse into nested use_statements first so that their fns are available
 	! to any bodies compiled below that call them.
@@ -266,16 +324,7 @@ recursive subroutine compile_module_fns(prog, cs, module_node)
 			cs%in_fn_body = .true.
 			call compile_node(prog, cs, module_node%members(i)%body)
 			cs%in_fn_body = .false.
-			! Implicit void return for functions with no explicit return
-			! statement.  Pop the body block's own result (block_statement
-			! compilation always leaves exactly one value on the stack, even
-			! for an empty body -- see the block_statement case above) before
-			! pushing the unknown_type sentinel, so OP_RET pops the sentinel
-			! and not the body's stranded result.
-			call emit(prog, OP_POP)
-			const_idx = add_const(prog, unknown_val())
-			call emit(prog, OP_LOAD_CONST, a = const_idx)
-			call emit(prog, OP_RET)
+			call emit_fn_epilogue(prog, module_node%members(i), fn_id)
 		else if (module_node%members(i)%kind == struct_declaration) then
 			if (allocated(module_node%members(i)%members)) then
 				do j = 1, size(module_node%members(i)%members)
@@ -286,10 +335,7 @@ recursive subroutine compile_module_fns(prog, cs, module_node)
 					cs%in_fn_body = .true.
 					call compile_node(prog, cs, module_node%members(i)%members(j)%body)
 					cs%in_fn_body = .false.
-					call emit(prog, OP_POP)
-					const_idx = add_const(prog, unknown_val())
-					call emit(prog, OP_LOAD_CONST, a = const_idx)
-					call emit(prog, OP_RET)
+					call emit_fn_epilogue(prog, module_node%members(i)%members(j), fn_id)
 				end do
 			end if
 		end if
@@ -569,6 +615,52 @@ end subroutine compile_switch_statement
 !===============================================================================
 
 recursive subroutine compile_node(prog, cs, node)
+
+	! Thin wrapper around compile_node_impl() below: stamps prog%cur_id/
+	! cur_pos from this node's location before lowering it (restoring the
+	! caller's cur_id/cur_pos afterward), so every instruction emit() emits
+	! while inside the call -- including everything lowered by recursive
+	! calls back into compile_node() for this node's sub-expressions, which
+	! have no location of their own (node%src_id == 0) -- lands in
+	! prog%loc_id/loc_pos tagged with the enclosing statement's location.
+	! The restore on exit means code after a loop body (e.g. the back-edge
+	! jump emitted once a while/for body finishes) maps to the loop header
+	! again, not to the body's last statement.
+	!
+	! Only statement-level nodes carry a nonzero src_id (parse_statement()/
+	! parse_fn_declaration(), parse_control.f90/parse_fn.f90), so a node
+	! with src_id == 0 (the overwhelmingly common case: sub-expressions)
+	! leaves cur_id/cur_pos untouched
+
+	type(program_t),        intent(inout) :: prog
+	type(compiler_state_t), intent(inout) :: cs
+	type(syntax_node_t),    intent(in)    :: node
+
+	!*******
+
+	integer :: saved_id, saved_pos
+
+	if (node%src_id == 0) then
+		call compile_node_impl(prog, cs, node)
+		return
+	end if
+
+	saved_id  = prog%cur_id
+	saved_pos = prog%cur_pos
+
+	prog%cur_id  = node%src_id
+	prog%cur_pos = node%src_pos
+
+	call compile_node_impl(prog, cs, node)
+
+	prog%cur_id  = saved_id
+	prog%cur_pos = saved_pos
+
+end subroutine compile_node
+
+!===============================================================================
+
+recursive subroutine compile_node_impl(prog, cs, node)
 
 	! Lower one AST node to opcodes.  The contract is that this subroutine
 	! always leaves exactly one value on the operand stack after the emitted
@@ -1128,16 +1220,7 @@ recursive subroutine compile_node(prog, cs, node)
 				cs%in_fn_body = .true.
 				call compile_node(prog, cs, node%members(i)%body)
 				cs%in_fn_body = .false.
-				! Implicit void return for functions with no explicit return
-				! statement.  Pop the body block's own result (block_statement
-				! compilation always leaves exactly one value on the stack,
-				! even for an empty body) before pushing the unknown_type
-				! sentinel, so OP_RET pops the sentinel and not the body's
-				! stranded result.
-				call emit(prog, OP_POP)
-				const_idx = add_const(prog, unknown_val())
-				call emit(prog, OP_LOAD_CONST, a = const_idx)
-				call emit(prog, OP_RET)
+				call emit_fn_epilogue(prog, node%members(i), l_top)
 			else if (node%members(i)%kind == struct_declaration) then
 				if (allocated(node%members(i)%members)) then
 					do j = 1, size(node%members(i)%members)
@@ -1148,10 +1231,7 @@ recursive subroutine compile_node(prog, cs, node)
 						cs%in_fn_body = .true.
 						call compile_node(prog, cs, node%members(i)%members(j)%body)
 						cs%in_fn_body = .false.
-						call emit(prog, OP_POP)
-						const_idx = add_const(prog, unknown_val())
-						call emit(prog, OP_LOAD_CONST, a = const_idx)
-						call emit(prog, OP_RET)
+						call emit_fn_epilogue(prog, node%members(i)%members(j), l_top)
 					end do
 				end if
 			end if
@@ -1179,16 +1259,7 @@ recursive subroutine compile_node(prog, cs, node)
 				cs%in_fn_body = .true.
 				call compile_node(prog, cs, cs%fns%fns(i)%node%body)
 				cs%in_fn_body = .false.
-				! Implicit void return for functions with no explicit return
-				! statement.  Pop the body block's own result (block_statement
-				! compilation always leaves exactly one value on the stack,
-				! even for an empty body) before pushing the unknown_type
-				! sentinel, so OP_RET pops the sentinel and not the body's
-				! stranded result.
-				call emit(prog, OP_POP)
-				const_idx = add_const(prog, unknown_val())
-				call emit(prog, OP_LOAD_CONST, a = const_idx)
-				call emit(prog, OP_RET)
+				call emit_fn_epilogue(prog, cs%fns%fns(i)%node, l_top)
 			end do
 		end if
 
@@ -1674,7 +1745,7 @@ recursive subroutine compile_node(prog, cs, node)
 
 	end select
 
-end subroutine compile_node
+end subroutine compile_node_impl
 
 !===============================================================================
 

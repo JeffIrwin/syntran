@@ -729,6 +729,8 @@ recursive module subroutine syntax_node_copy(dst, src)
 	dst%num_locs      = src%num_locs
 	dst%is_loc        = src%is_loc
 	dst%root_kind     = src%root_kind
+	dst%src_id        = src%src_id
+	dst%src_pos       = src%src_pos
 	dst%is_enum_name  = src%is_enum_name
 
 	if (allocated(src%struct_name)) then
@@ -956,6 +958,8 @@ recursive module subroutine syntax_node_move(src, dst)
 	dst%num_locs        = src%num_locs
 	dst%is_loc          = src%is_loc
 	dst%root_kind       = src%root_kind
+	dst%src_id          = src%src_id
+	dst%src_pos         = src%src_pos
 	dst%is_enum_name    = src%is_enum_name
 	dst%sub_kind        = src%sub_kind
 	dst%lsub_omit       = src%lsub_omit
@@ -1031,6 +1035,8 @@ recursive module subroutine syntax_node_move_into(src, dst)
 	dst%num_locs        = src%num_locs
 	dst%is_loc          = src%is_loc
 	dst%root_kind       = src%root_kind
+	dst%src_id          = src%src_id
+	dst%src_pos         = src%src_pos
 	dst%is_enum_name    = src%is_enum_name
 	dst%sub_kind        = src%sub_kind
 	dst%lsub_omit       = src%lsub_omit

@@ -186,12 +186,16 @@ end function diag_loc_ok
 
 !===============================================================================
 
-! Helper for unit_test_runtime_errors().  Runtime (R*) diagnostics have no
-! caret/location context (unlike compile-time E* diags), so diag_loc_ok()
-! doesn't apply here.  Instead this checks that a reproduction file raises
-! [code].  Each repro lives under src/tests/test-src/errors/ (also linked as
-! an example from doc/errors.md), mirroring how get_diags_file()/diag_loc_ok()
-! work for compile-time E* errors.
+! Helper for unit_test_runtime_errors().  Unlike compile-time E* diags, a
+! runtime (R*) diagnostic has no caret/underline (err_rt() has no token span
+! to underline), so diag_loc_ok() doesn't apply here -- but it does now carry
+! a stack trace with its own "--> file:line:col" + source-line snippet (plus
+! "at fn (file:line)" per call frame), appended by append_rt_trace()
+! (vm_exec.f90) after rt_throw() halts evaluation; see unit_test_runtime_traces()
+! for coverage of that part specifically. This helper itself just checks that
+! a reproduction file raises [code].  Each repro lives under
+! src/tests/test-src/errors/ (also linked as an example from doc/errors.md),
+! mirroring how get_diags_file()/diag_loc_ok() work for compile-time E* errors.
 !
 ! The "_both_" in the name is a holdover from when this also checked the AST
 ! walker; only the VM remains, but the name was left alone to avoid touching
@@ -202,6 +206,25 @@ function rt_code_both_file(filename, code) result(both)
 	logical :: both
 	both = diag_has_code(get_diags_file(filename), code)
 end function rt_code_both_file
+
+!===============================================================================
+
+! Helper for unit_test_runtime_traces().  Checks that some single diagnostic
+! entry in diag_ contains text1 followed later by text2 -- used to confirm
+! stack-trace frames print innermost-first (e.g. "at inner" before
+! "at outer" before "at <main>")
+function diag_text_order_ok(diag_, text1, text2) result(ok)
+	type(string_vector_t), intent(in) :: diag_
+	character(len = *), intent(in) :: text1, text2
+	logical :: ok
+	integer :: k, i1, i2
+	ok = .false.
+	do k = 1, diag_%len_
+		i1 = index(diag_%v(k)%s, text1)
+		i2 = index(diag_%v(k)%s, text2)
+		if (i1 > 0 .and. i2 > i1) ok = .true.
+	end do
+end function diag_text_order_ok
 
 !===============================================================================
 
@@ -1589,6 +1612,37 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('std::OUT.name;')    == 'stdout', &
 			eval('std::ERR.is_open;') == 'true', &
 			eval('std::IN.name[0];')  == 's', &
+
+			! std::print_trace / std::stack_trace / std::caller: see
+			! unit_test_runtime_traces() for the full call-chain coverage
+			! (interpret_file() on stacktrace/on-demand.syntran and
+			! stacktrace/caller.syntran); just the basics here
+			eval('std::print_trace(); 0;') == '0', &
+			eval('std::print_trace("x"); 0;') == '0', &
+			index(eval('std::stack_trace();'), 'Stack trace:') == 1, &
+			index(eval('std::stack_trace();'), 'at <main>') > 0, &
+			! At top level there are 0 call frames (only <main>), so even
+			! skip=1 already exceeds everything -- header only, no <main>
+			! line either; see unit_test_runtime_traces()'s caller.syntran
+			! block for skip dropping just the innermost frame
+			eval('std::stack_trace(1);') == 'Stack trace:', &
+			eval('std::caller();') == '', &
+			index(eval('std::caller(0);'), '<main>') == 1, &
+			! A negative depth/skip is treated as 0 (rt_skip_frames(),
+			! vm_exec.f90), not as out-of-range
+			eval('std::caller(-1);') == eval('std::caller(0);'), &
+			eval('std::stack_trace(-1);') == eval('std::stack_trace();'), &
+			! A call through a fn pointer (OP_CALL_PTR) must show the
+			! pointed-to fn's own name ("g"), not the pointer variable's
+			! ("f") -- see stacktrace/fnptr.syntran for the R*-error case
+			eval('fn g(): str { return std::caller(0); } let f = g; f();') &
+				== 'g (<stdin>:1)', &
+			diag_has_code(get_diags('print_trace();'), EC_STD_ONLY_FN), &
+			diag_has_code(get_diags('stack_trace();'), EC_STD_ONLY_FN), &
+			diag_has_code(get_diags('caller();'), EC_STD_ONLY_FN), &
+			diag_has_code(get_diags('std::print_trace(1);'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags('let x = std::stack_trace("a");'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags('let x = std::stack_trace(1, 2);'), EC_TOO_MANY_ARGS), &
 
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
@@ -8788,6 +8842,165 @@ end subroutine unit_test_bounds_check
 
 !===============================================================================
 
+subroutine unit_test_runtime_traces(npass, nfail)
+
+	! Tests for append_rt_trace() (vm_exec.f90): the stack trace appended to a
+	! runtime (R*) diagnostic after rt_throw() halts evaluation.  Repro files
+	! live under src/tests/test-src/stacktrace/.  Each one throws
+	! RC_FOR_STEP_ZERO (R23, a runtime-valued `for` loop step of 0) -- unlike
+	! RC_SUBSCRIPT_OOB (R33, used by unit_test_bounds_check() above), R23 needs
+	! no -DSYNTRAN_BOUNDS_CHECK flag, so these run in every debug build.
+	!
+	! Covers: a 3-deep call chain (nested.syntran), a throw inside a `use`d
+	! module's fn (module.syntran/stacktrace_mod.syntran), a throw inside an
+	! #include'd fn (include.syntran/stacktrace_inc.syntran), and a throw
+	! directly in a top-level `for` body after other statements
+	! (loop.syntran) -- the last one checks that compile_node()'s cur_id/
+	! cur_pos save/restore (compile_ctrl.f90) maps the throw to the body
+	! statement's own line, not the enclosing `for` header's.
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'runtime traces'
+
+	character(len = *), parameter :: P = 'src/tests/test-src/stacktrace/'
+
+	type(string_vector_t) :: diag_
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! nested.syntran: <main> (line 25) -> outer() (line 21) -> inner() (line
+	! 12), throwing on inner()'s own `for i in [0: s: 5]` line
+	diag_ = get_diags_file(P//'nested.syntran')
+	call unit_test_coda( [ &
+		diag_has_code(diag_, RC_FOR_STEP_ZERO), &
+		diag_has_text(diag_, P//'nested.syntran:12:2'), &
+		diag_has_text(diag_, 'for i in [0: s: 5]'), &
+		diag_has_text(diag_, '  at inner ('//P//'nested.syntran:12)'), &
+		diag_has_text(diag_, '  at outer ('//P//'nested.syntran:21)'), &
+		diag_has_text(diag_, '  at <main> ('//P//'nested.syntran:25)'), &
+		! Innermost frame first
+		diag_text_order_ok(diag_, 'at inner', 'at outer'), &
+		diag_text_order_ok(diag_, 'at outer', 'at <main>') &
+		], label, npass, nfail)
+
+	! module.syntran -> stacktrace_mod.syntran: the innermost snippet and the
+	! modfn() frame should name the MODULE file, while <main> names the
+	! importing file
+	diag_ = get_diags_file(P//'module.syntran')
+	call unit_test_coda( [ &
+		diag_has_code(diag_, RC_FOR_STEP_ZERO), &
+		diag_has_text(diag_, P//'stacktrace_mod.syntran:9:2'), &
+		diag_has_text(diag_, '  at modfn ('//P//'stacktrace_mod.syntran:9)'), &
+		diag_has_text(diag_, '  at <main> ('//P//'module.syntran:8)'), &
+		diag_text_order_ok(diag_, 'at modfn', 'at <main>') &
+		], label, npass, nfail)
+
+	! include.syntran -> #include'd stacktrace_inc.syntran: same shape as the
+	! module case above, but for #include instead of `use`
+	diag_ = get_diags_file(P//'include.syntran')
+	call unit_test_coda( [ &
+		diag_has_code(diag_, RC_FOR_STEP_ZERO), &
+		diag_has_text(diag_, P//'stacktrace_inc.syntran:9:2'), &
+		diag_has_text(diag_, '  at incfn ('//P//'stacktrace_inc.syntran:9)'), &
+		diag_has_text(diag_, '  at <main> ('//P//'include.syntran:8)'), &
+		diag_text_order_ok(diag_, 'at incfn', 'at <main>') &
+		], label, npass, nfail)
+
+	! loop.syntran: no fn calls at all, so the only frame is <main> itself --
+	! it must point at the inner `for j in [0: s: 2]` line (14), not the
+	! outer `for i in [0: 3]` header (line 11)
+	diag_ = get_diags_file(P//'loop.syntran')
+	call unit_test_coda( [ &
+		diag_has_code(diag_, RC_FOR_STEP_ZERO), &
+		diag_has_text(diag_, P//'loop.syntran:14:2'), &
+		diag_has_text(diag_, 'for j in [0: s: 2]'), &
+		diag_has_text(diag_, '  at <main> ('//P//'loop.syntran:14)'), &
+		.not. diag_has_text(diag_, P//'loop.syntran:11)') &
+		], label, npass, nfail)
+
+	! on-demand.syntran: std::print_trace()/std::stack_trace() (not a runtime
+	! error -- these must NOT halt execution).  inner() calls
+	! std::print_trace() on line 14 (smoke test only, its own stdout isn't
+	! captured here) then `return`s std::stack_trace() on line 15; that str
+	! flows back up through outer() (called from <main> on line 25) to
+	! become the script's own result
+	block
+	character(len = :), allocatable :: res_
+	res_ = interpret_file(P//'on-demand.syntran', quiet = .true., diags = diag_)
+	call unit_test_coda( [ &
+		diag_%len_ == 0, &
+		index(res_, 'Stack trace:') == 1, &
+		index(res_, '  at inner ('//P//'on-demand.syntran:15)') > 0, &
+		index(res_, '  at outer ('//P//'on-demand.syntran:21)') > 0, &
+		index(res_, '  at <main> ('//P//'on-demand.syntran:25)') > 0, &
+		! Innermost frame first
+		index(res_, 'at inner') < index(res_, 'at outer'), &
+		index(res_, 'at outer') < index(res_, 'at <main>') &
+		], label, npass, nfail)
+	end block
+
+	! caller.syntran: std::caller(depth)/std::stack_trace(skip)'s optional
+	! args (rt_skip_frames(), vm_exec.f90).  <main> (line 26) -> outer()
+	! (line 23) -> inner() (lines 12-17); inner() joins six results with "|":
+	! caller() [default depth 1 -> outer], caller(0) [-> inner itself],
+	! caller(2) [-> <main>], caller(99) [out of range -> ""],
+	! stack_trace(1) [drops the innermost "at inner" line], and
+	! stack_trace(99) [drops every frame, even <main>]
+	block
+	character(len = :), allocatable :: res_
+	res_ = interpret_file(P//'caller.syntran', quiet = .true., diags = diag_)
+	call unit_test_coda( [ &
+		diag_%len_ == 0, &
+		res_ == 'outer ('//P//'caller.syntran:23)' &
+			//'|inner ('//P//'caller.syntran:13)' &
+			//'|<main> ('//P//'caller.syntran:26)' &
+			//'|' &
+			//'|Stack trace:' &
+			//line_feed//'  at outer ('//P//'caller.syntran:23)' &
+			//line_feed//'  at <main> ('//P//'caller.syntran:26)' &
+			//'|Stack trace:' &
+		], label, npass, nfail)
+	end block
+
+	! fnptr.syntran: a call through a fn pointer (OP_CALL_PTR).  Its
+	! call-site node names the *variable* holding the pointer ("f"), not
+	! the fn it resolves to at runtime ("boom") -- rt_frame_fname()
+	! (vm_exec.f90) must prefer prog%fn_names(fn_id) over that node's own
+	! identifier, or the frame prints "at  (" with no name at all
+	diag_ = get_diags_file(P//'fnptr.syntran')
+	call unit_test_coda( [ &
+		diag_has_code(diag_, RC_FOR_STEP_ZERO), &
+		diag_has_text(diag_, P//'fnptr.syntran:10:2'), &
+		diag_has_text(diag_, '  at boom ('//P//'fnptr.syntran:10)'), &
+		diag_has_text(diag_, '  at <main> ('//P//'fnptr.syntran:17)'), &
+		.not. diag_has_text(diag_, '  at  (') &
+		], label, npass, nfail)
+
+	! implicit-ret.syntran: a runtime error (R33, needs
+	! -DSYNTRAN_BOUNDS_CHECK) at a fn's *implicit* return -- bump()'s by-ref
+	! receiver writeback re-subscripts a shrunk array at OP_RET.
+	! emit_fn_epilogue() (compile_ctrl.f90) must stamp that implicit return
+	! with bump()'s own location, or this throws with no "-->" snippet and
+	! a location-less "at bump" frame.  Skipped (like unit_test_bounds_check())
+	! when the flag isn't set, since the OOB access is otherwise undefined
+	! behavior that faults straight through to a raw Fortran abort
+	if (bounds_check) then
+		diag_ = get_diags_file(P//'implicit-ret.syntran')
+		call unit_test_coda( [ &
+			diag_has_code(diag_, RC_SUBSCRIPT_OOB), &
+			diag_has_text(diag_, P//'implicit-ret.syntran:17:2'), &
+			diag_has_text(diag_, '  at bump ('//P//'implicit-ret.syntran:17)'), &
+			diag_has_text(diag_, '  at <main> ('//P//'implicit-ret.syntran:32)') &
+			], label, npass, nfail)
+	end if
+
+end subroutine unit_test_runtime_traces
+
+!===============================================================================
+
 subroutine unit_test_syntax_only(npass, nfail)
 
 	! Tests for the `--syntax-only`/`-s` CLI option's library seam: the
@@ -9483,6 +9696,7 @@ subroutine unit_tests(iostat)
 	if (run_group('error_codes')) call unit_test_error_codes(npass, nfail)
 	if (run_group('runtime_errors')) call unit_test_runtime_errors(npass, nfail)
 	if (run_group('bounds_check')) call unit_test_bounds_check(npass, nfail)
+	if (run_group('runtime_traces')) call unit_test_runtime_traces(npass, nfail)
 	if (run_group('syntax_only')) call unit_test_syntax_only(npass, nfail)
 	if (run_group('eval_api')) call unit_test_eval_api(npass, nfail)
 	if (run_group('error_locations')) call unit_test_error_locations(npass, nfail)

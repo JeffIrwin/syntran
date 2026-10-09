@@ -44,14 +44,6 @@ module syntran__core_m
 	!    * 15 has an intcode program struct getting passed down a recursive DFS
 	!    * maybe port both, they're fast
 	!    * consider 19, 21, 23, ... after i implement them
-	!  - stack trace for runtime errors
-	!    * as more minor breaking runtime guards are added for safety, e.g.
-	!      slice reassignment size checks, this is more pressing. if users have
-	!      an old script that used to work and now raises an error, it's
-	!      difficult to just see a runtime error message with no indication of
-	!      what line or file it's in
-	!    * even just one stack frame would be better than nothing if there are
-	!      perf costs
 	!  - direct enum to i64 casting. currently can only cast to i32 directly, or
 	!    to i64 awkwardly as i64(i32(Enum.variant))
 	!    * in the other direction, casting i64 to enum could fail for big nums,

@@ -461,6 +461,14 @@ module syntran__bytecode_m
 		INTR_MINVAL_EXT   = 142, INTR_MAXVAL_EXT   = 143, &
 		INTR_PRODUCT_EXT  = 144
 
+	! On-demand stack trace (std::print_trace()/std::stack_trace()/
+	! std::caller()), handled inline in OP_CALL_INTR (vm_exec.f90) like
+	! INTR_READLN/INTR_CLOSE because they need the VM's call-frame stack,
+	! which vm_call_intr() (vm_intr.f90) doesn't receive
+	integer, parameter :: &
+		INTR_PRINT_TRACE  = 145, INTR_STACK_TRACE  = 146, &
+		INTR_CALLER       = 147
+
 	!********
 
 	! A single bytecode instruction.  Kept as a plain POD record (no allocatable
@@ -496,6 +504,19 @@ module syntran__bytecode_m
 		type(instr_t), allocatable :: code(:)
 		integer :: len_ = 0, cap = 0
 
+		! Per-instruction source location, parallel to code(:) (grown/indexed
+		! together in emit() below) rather than packed into instr_t itself --
+		! instr_t stays a small POD record copied on every stack/jump op in
+		! the VM's hot dispatch loop (vm_exec.f90), while loc_id/loc_pos are
+		! only ever read once, after a runtime error has already halted
+		! execution (append_rt_trace(), vm_exec.f90).  loc_id indexes the
+		! errors module's src_registry (register_src(), errors.f90); loc_pos
+		! is a character offset into that entry's %text.  cur_id/cur_pos are
+		! the "current statement" compile_node() (compile_ctrl.f90) stamps
+		! every instruction with as it emits them
+		integer, allocatable :: loc_id(:), loc_pos(:)
+		integer :: cur_id = 0, cur_pos = 0
+
 		type(value_t), allocatable :: consts(:)
 		integer :: nconsts = 0
 
@@ -506,6 +527,18 @@ module syntran__bytecode_m
 		integer, allocatable :: fn_entry(:)
 		integer, allocatable :: fn_num_locs(:)
 		integer :: entry_main = 1
+
+		! Fn/method name, parallel to fn_entry(:)/fn_num_locs(:) (grown
+		! together in ensure_fn_entry(), compile_ctrl.f90), for stack-trace
+		! frame labels (rt_frame_fname(), vm_exec.f90).  Set once the fn's
+		! body is compiled (emit_fn_epilogue(), compile_ctrl.f90) -- unset
+		! (unallocated %s) for an id that is only forward-registered, which
+		! can't happen by the time the VM runs since every registered id is
+		! compiled before entry_main.  Needed because a call through a fn
+		! pointer (OP_CALL_PTR) has no call-site identifier naming the
+		! callee -- only the call node's AST, which names the *variable*
+		! holding the pointer, not the fn it resolves to at this call
+		type(string_t), allocatable :: fn_names(:)
 
 	end type program_t
 
@@ -649,8 +682,12 @@ function new_program() result(prog)
 	prog%nconsts = 0
 	prog%nnodes  = 0
 	prog%entry_main = 1
+	prog%cur_id  = 0
+	prog%cur_pos = 0
 
 	allocate(prog%code(INIT_CAP))
+	allocate(prog%loc_id (INIT_CAP))
+	allocate(prog%loc_pos(INIT_CAP))
 
 end function new_program
 
@@ -670,6 +707,7 @@ subroutine emit(prog, op, a, b, c)
 	!*******
 
 	type(instr_t), allocatable :: tmp(:)
+	integer, allocatable :: tmp_loc(:)
 
 	prog%len_ = prog%len_ + 1
 
@@ -678,6 +716,15 @@ subroutine emit(prog, op, a, b, c)
 		allocate(tmp(prog%cap))
 		tmp(1 : prog%len_ - 1) = prog%code(1 : prog%len_ - 1)
 		call move_alloc(tmp, prog%code)
+
+		! loc_id/loc_pos grow in lockstep with code(:), same cap
+		allocate(tmp_loc(prog%cap))
+		tmp_loc(1 : prog%len_ - 1) = prog%loc_id(1 : prog%len_ - 1)
+		call move_alloc(tmp_loc, prog%loc_id)
+
+		allocate(tmp_loc(prog%cap))
+		tmp_loc(1 : prog%len_ - 1) = prog%loc_pos(1 : prog%len_ - 1)
+		call move_alloc(tmp_loc, prog%loc_pos)
 	end if
 
 	prog%code(prog%len_)%op = op
@@ -687,6 +734,9 @@ subroutine emit(prog, op, a, b, c)
 	if (present(a)) prog%code(prog%len_)%a = a
 	if (present(b)) prog%code(prog%len_)%b = b
 	if (present(c)) prog%code(prog%len_)%c = c
+
+	prog%loc_id (prog%len_) = prog%cur_id
+	prog%loc_pos(prog%len_) = prog%cur_pos
 
 end subroutine emit
 
@@ -897,6 +947,9 @@ pure integer function intr_id_from_name(name) result(id)
 	case ("hasenv");         id = INTR_HASENV
 	case ("exists");         id = INTR_EXISTS
 	case ("try_open");       id = INTR_TRY_OPEN
+	case ("print_trace");    id = INTR_PRINT_TRACE
+	case ("stack_trace");    id = INTR_STACK_TRACE
+	case ("caller");         id = INTR_CALLER
 	case ("0count_dim");     id = INTR_COUNT_DIM
 	case ("0all_dim");       id = INTR_ALL_DIM
 	case ("0any_dim");       id = INTR_ANY_DIM

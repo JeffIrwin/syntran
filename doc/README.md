@@ -140,6 +140,24 @@ zero-indexed, and a `dim` outside of `0 <= dim < rank` is a runtime error
 
 Related functions: [`all`](#all)
 
+## `caller`
+```rust
+fn caller(): str
+fn caller(depth: i32): str
+```
+
+Return the `"<fn> (file:line)"` label of the call-chain frame `depth` steps
+up from the current call, with no leading `"  at "` (unlike
+[`stack_trace`](#stack_trace), this is a single label, not a multi-line
+trace).  `depth` 0 is the current function itself (where `std::caller()` was
+called from); the default, 1, is the function that called *that* function.
+A `depth` beyond the top of the call chain (including calling it directly
+from `<main>` with the default depth) returns `""`.  A negative `depth` is
+treated as `0`.  Must be called with the `std::` prefix, e.g.
+`std::caller()`.
+
+Related functions: [`print_trace`](#print_trace), [`stack_trace`](#stack_trace)
+
 ## `char`
 ```rust
 fn char(i: i32): str
@@ -456,6 +474,23 @@ Any invalid numbers will cause a runtime error.
 
 Related functions: [`parse_i32`](`parse_i32`), [`str`](#str)
 
+## `print_trace`
+```rust
+fn print_trace()
+fn print_trace(label: str)
+```
+
+Print a stack trace of the current call chain to standard output, without
+halting execution.  Each line is `at <fn> (file:line)`, innermost call first,
+down to `at <main>` -- the same frames a runtime (`R*`) error prints
+automatically, minus its source-line snippet.  If `label` is given, it's
+appended to the `Stack trace:` header line, e.g. for a debug checkpoint:
+`std::print_trace("got here")` prints `Stack trace: got here` followed by the
+usual frame lines.  Must be called with the `std::` prefix, e.g.
+`std::print_trace()`.
+
+Related functions: [`caller`](#caller), [`stack_trace`](#stack_trace)
+
 ## `println`
 ```rust
 fn println(s0: any, s1: any, s2: any, ...)
@@ -502,6 +537,24 @@ fn size(array: [any; any_rank], dim: i32): i32
 
 Determine the extent of `array` along a specified dimension `dim`
 <!-- , or the total number of elements in ARRAY if DIM is absent. -->
+
+## `stack_trace`
+```rust
+fn stack_trace(): str
+fn stack_trace(skip: i32): str
+```
+
+Return a stack trace of the current call chain as a `str`, in the same
+format [`print_trace`](#print_trace) prints to standard output -- useful for
+logging to a file or [`std::ERR`](#writeln) instead.  If `skip` is given, the
+`skip` innermost frames are dropped -- useful inside a logging helper that
+wraps `std::stack_trace()` and wants to omit its own frame, the way
+JavaScript's `Error.captureStackTrace(obj, fn)` does.  `skip` beyond the
+whole call chain (even past `<main>`) just returns the `Stack trace:` header
+with no frame lines.  A negative `skip` is treated as `0`.  Must be called
+with the `std::` prefix, e.g. `std::stack_trace()`.
+
+Related functions: [`caller`](#caller), [`print_trace`](#print_trace)
 
 ## `str`
 ```rust

@@ -1,0 +1,8 @@
+// Stack-trace regression test (see nested.syntran's docstring): the throw
+// happens inside a fn from an #include'd file, so the innermost frame's
+// file should be stacktrace_inc.syntran, not this file, while <main> should
+// still be this file.
+
+#include("stacktrace_inc.syntran");
+
+let z = incfn();

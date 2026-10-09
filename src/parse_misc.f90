@@ -950,6 +950,17 @@ recursive module subroutine new_parser(parser, str_, src_file, contexts, unit_)
 
 	! Preprocess then convert to standard array (and parser class member)
 
+	! Register this file/include/module's context in the process-global
+	! src_registry (errors.f90) before anything else gets a chance to see
+	! it, so every statement parsed below can be stamped with a stable
+	! src_id for runtime-error stack traces (parse_statement(),
+	! parse_control.f90).  An #include'd file gets its own context/src_id
+	! here too: preprocess() (parse_misc.f90), called just below, recurses
+	! into new_parser() for each #include, so each included file's
+	! statements are stamped with *that* recursive call's src_id, not this
+	! outer one's
+	lexer%context%src_id = register_src(lexer%context)
+
 	! For correct ordering wrt token%unit_, the current parser context is pushed
 	! first, before preprocessing.
 	call contexts%push( lexer%context )

@@ -377,6 +377,16 @@ subroutine state_destroy(state)
 	! types_copy.f90.  Call this at every exit of syntran_interpret()/
 	! syntran_eval() (syntran.f90), which own state_t's only instance per
 	! interpret/eval call
+	!
+	! Also resets the errors module's process-global src_registry
+	! (reset_src_registry(), errors.f90): every fn/statement node that
+	! could reference a src_id lives in the %fns/AST just destroyed above
+	! (or in a program_t/syntax_node_t local to the caller that's about to
+	! go out of scope too), so nothing reachable after this call still
+	! needs an entry registered during it.  This is what keeps a
+	! long-running embedder calling syntran_eval()/syntran_interpret_file()
+	! in a loop with many distinct one-off scripts from growing
+	! src_registry without bound
 
 	type(state_t), intent(inout) :: state
 
@@ -385,6 +395,8 @@ subroutine state_destroy(state)
 	call structs_destroy(state%structs)
 	call enums_destroy(state%enums)
 	call fns_destroy(state%fns)
+
+	call reset_src_registry()
 
 end subroutine state_destroy
 

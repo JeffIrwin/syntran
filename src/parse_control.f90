@@ -1344,6 +1344,17 @@ recursive module subroutine parse_statement(parser, statement)
 
 	type(text_span_t) :: span
 
+	! Captured before dispatch so every statement kind gets a location --
+	! not just the `default` expr-statement case below -- for runtime-error
+	! stack traces (c.f. append_rt_trace(), vm_exec.f90).  parser%contexts
+	! is a per-compilation copy (new_parser(), parse_misc.f90) of the
+	! process-global src_registry (errors.f90); its %src_id field is what
+	! survives past parsing
+	integer :: stmt_src_id, stmt_src_pos
+
+	stmt_src_pos = parser%peek_pos(0)
+	stmt_src_id  = parser%contexts%v(parser%current_unit())%src_id
+
 	select case (parser%current_kind())
 	case (lbrace_token)
 		call parser%parse_block_statement(statement)
@@ -1439,6 +1450,12 @@ recursive module subroutine parse_statement(parser, statement)
 		end if
 
 	end select
+
+	! Stamp the location captured above onto the finished node.  statement
+	! is intent(out), so this must come after every branch above has had a
+	! chance to set it -- not before
+	statement%src_id  = stmt_src_id
+	statement%src_pos = stmt_src_pos
 
 end subroutine parse_statement
 

@@ -1,0 +1,17 @@
+// Regression test for stack-trace frames through an indirect call
+// (OP_CALL_PTR, vm_exec.f90): a fn pointer's call-site node names the
+// *variable* holding the pointer (`f` here), not the fn it resolves to at
+// runtime, so the frame label must come from prog%fn_names(fn_id)
+// (rt_frame_fname(), vm_exec.f90) and show "boom", never an empty name.
+
+fn boom(x: i32): i32
+{
+	let s = 0;
+	for i in [0: s: 5]
+	{
+	}
+	return x;
+}
+
+let f = boom;
+let z = f(1);

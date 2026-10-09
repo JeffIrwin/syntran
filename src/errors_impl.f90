@@ -62,6 +62,141 @@ end procedure err_rt
 
 !===============================================================================
 
+function rt_line_of(context, pos) result(i)
+
+	! Shared line-number lookup for src_loc_str()/rt_trace_snippet() below,
+	! factored out of underline()'s identical maxloc trick.  Not part of the
+	! parent module's interface -- a plain submodule-local helper, so it's
+	! only reachable from procedures in this file
+
+	type(text_context_t), intent(in) :: context
+	integer, intent(in) :: pos
+	integer :: i
+
+	integer :: i1(1)
+
+	i1 = maxloc(context%lines, context%lines <= pos)
+	i = min(size(context%lines) - 1, max(1, i1(1)))
+
+end function rt_line_of
+
+
+!===============================================================================
+
+module procedure register_src
+
+	! Dedupe by (src_file, text): a module/include re-parsed on the parser's
+	! second pass, or imported from two call sites, should not grow
+	! src_registry again.  Each REPL line still gets its own entry since its
+	! text differs even though src_file ("<stdin>") repeats across lines
+
+	integer :: prev_id
+
+	! src_registry is a bare `save` module variable (see its docstring in
+	! errors.f90), never run through new_context_vector(), so %v starts
+	! unallocated and %len_/%cap start undefined -- initialize both
+	! registries on first use
+	if (.not. allocated(src_registry%v)) src_registry = new_context_vector()
+	if (src_registry_map%capacity <= 0) call src_registry_map%init(64)
+
+	if (src_registry_map%get(context%src_file, prev_id)) then
+		if (prev_id >= 1 .and. prev_id <= src_registry%len_) then
+			if (src_registry%v(prev_id)%text == context%text) then
+				id = prev_id
+				return
+			end if
+		end if
+	end if
+
+	call src_registry%push(context)
+	id = src_registry%len_
+	call src_registry_map%set(context%src_file, id)
+
+end procedure register_src
+
+
+!===============================================================================
+
+module procedure reset_src_registry
+
+	! Reassigning src_registry its own fresh new_context_vector() frees the
+	! old %v(:) (text_context_vector_t has no user-defined assignment, so
+	! this is a plain structure assignment -- the old allocatable component
+	! is deallocated before the new, empty one is assigned).  destroy()
+	! zeroes src_registry_map%capacity, which doubles as the "uninitialized"
+	! state register_src() already checks for, so the next register_src()
+	! call reinitializes it lazily, same as on first use ever
+	src_registry = new_context_vector()
+	call src_registry_map%destroy()
+
+end procedure reset_src_registry
+
+
+!===============================================================================
+
+module procedure src_loc_str
+
+	integer :: i
+
+	str_ = ''
+	if (src_id < 1 .or. src_id > src_registry%len_) return
+
+	i = rt_line_of(src_registry%v(src_id), pos)
+	str_ = src_registry%v(src_id)%src_file//':'//str(i)
+
+end procedure src_loc_str
+
+
+!===============================================================================
+
+module procedure rt_trace_snippet
+
+	! Rust-style "--> file:line:col" + source-line snippet, no carets (there's
+	! no token span here, just one position).  Shares its line-lookup/
+	! tab-handling/trailing-newline-trim logic with underline() below, minus
+	! the caret-underline tail
+
+	character(len = :), allocatable :: str_i, spaces, fg1, rst, col, text
+	integer :: i, str_i_len, start, last
+
+	str_ = ''
+	if (src_id < 1 .or. src_id > src_registry%len_) return
+
+	associate (context => src_registry%v(src_id))
+
+		i = rt_line_of(context, pos)
+
+		str_i = str(i)
+		str_i_len = len(str_i)
+		spaces = repeat(' ', str_i_len + 2)
+
+		start = context%lines(i)
+		last  = context%lines(i+1) - 1
+
+		do while (last > start .and. (context%text(last:last) == line_feed .or. &
+		          context%text(last:last) == carriage_return))
+			last = last - 1
+		end do
+
+		text = tabs2spaces(context%text(start: last))
+		col  = str(pos - context%lines(i) + 1)
+
+		fg1 = fg_bright_cyan
+		rst = color_reset
+
+		str_ = line_feed//fg1//spaces(2:)//"--> "//rst//context%src_file &
+			//":"//str_i//":"//col//line_feed &
+			//fg1//     spaces//"| "//line_feed &
+			//fg1//" "//str_i//" | "//rst//text//line_feed &
+			//fg1//     spaces//"| "//color_reset
+
+	end associate
+
+end procedure rt_trace_snippet
+
+
+!===============================================================================
+
 module procedure get_all_error_codes
 	! Every error/warning code in the registry.  Used by the error-code unit
 	! test to check uniqueness and format.  Keep this in sync with the
