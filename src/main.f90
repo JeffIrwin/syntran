@@ -14,6 +14,8 @@ program main
 
 	type(args_t) :: args
 
+	type(transpile_t) :: transpile
+
 	!********
 
 	! What happens if there's an error while parsing args?  Here I initialize to
@@ -45,6 +47,25 @@ program main
 		else
 			res = syntran_eval(args%command, script_args = args%script_args, &
 				syntax_only = .true., io = io)
+		end if
+
+	else if (args%transpile) then
+		! Write the program as Fortran source for the user to compile, instead of
+		! running it.  The value of the last statement is only printed by the
+		! generated program if we're not --quiet, like the interpreter
+		transpile%print_result = .not. args%quiet
+
+		if (args%syntran_file_arg) then
+			res = syntran_interpret_file(args%syntran_file, &
+				chdir_ = args%chdir, script_args = args%script_args, &
+				transpile = transpile, io = io)
+		else
+			res = syntran_eval(args%command, script_args = args%script_args, &
+				transpile = transpile, io = io)
+		end if
+
+		if (io == EXIT_SUCCESS) then
+			call syntran_write_transpiled(transpile, args%transpile_out, io)
 		end if
 
 	else if (args%interactive) then

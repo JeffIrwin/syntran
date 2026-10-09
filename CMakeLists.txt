@@ -215,11 +215,16 @@ set(LIB_SRC
 	${SRC_DIR}/parse_fn.f90
 	${SRC_DIR}/parse_misc.f90
 	${SRC_DIR}/repl.f90
+	${SRC_DIR}/rt/syntran_rt.f90
 	${SRC_DIR}/runtime.f90
 	${SRC_DIR}/runtime_array.f90
 	${SRC_DIR}/runtime_control.f90
 	${SRC_DIR}/runtime_expr.f90
 	${SRC_DIR}/syntran.f90
+	${SRC_DIR}/transpile.f90
+	${SRC_DIR}/transpile_expr.f90
+	${SRC_DIR}/transpile_rt.f90
+	${SRC_DIR}/transpile_stmt.f90
 	${SRC_DIR}/types.f90
 	${SRC_DIR}/types_copy.f90
 	${SRC_DIR}/types_dict.f90

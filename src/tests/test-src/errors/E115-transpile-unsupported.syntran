@@ -1,0 +1,19 @@
+// E115: transpile-unsupported
+// A valid program, which the interpreter runs fine, but uses a construct that
+// `syntran --transpile` can't turn into Fortran yet, here a file handle.  This
+// is only an error when transpiling
+
+fn count_lines(filename: str): i32
+{
+	let n = 0;
+	let f = open(filename, "r");
+	while not eof(f)
+	{
+		let line = readln(f);
+		n += 1;
+	}
+	close(f);
+	return n;
+}
+
+return 0;

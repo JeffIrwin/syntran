@@ -1,0 +1,100 @@
+// Scalar operators and intrinsic functions.  These programs are run by both
+// the interpreter and the Fortran transpiler (utils/test-transpile.sh), which
+// must print the same thing.  The return value is the number of failed checks
+
+let status = 0;
+
+fn check(ok: bool): i32
+{
+	if (ok) return 0;
+	return 1;
+}
+
+// Integer arithmetic, with negative operands
+println(7 / 2, " ", -7 / 2, " ", 7 % 3, " ", -7 % 3, " ", 7 % -3);
+status += check(7 / 2 == 3);
+status += check(-7 / 2 == -3);
+status += check(-7 % 3 == -1);
+
+// Mixed i32, i64, f32, f64
+let a = 3;
+let b = 4'i64;
+let c = 1.5f;
+let d = 2.5;
+println(a + b, " ", a * c, " ", b / c, " ", a + d, " ", c * d);
+println(a < b, " ", c < d, " ", b == 4, " ", a != 3);
+
+// Powers: integer, float, and mixed exponents
+println(2 ** 10, " ", 2.0 ** 3, " ", 2.0 ** 3'i64, " ", 9 ** 0.5, " ", 2'i64 ** 40);
+println(1.1 ** 2, " ", 1.1f ** 2, " ", 2.0 ** -1);
+
+// Bitwise operators, which are logical shifts
+let m = 0xf0f0_f0f0;
+println(m, " ", m >> 4, " ", m << 4, " ", m & 0xff, " ", m | 0xf, " ", m ^ m, " ", !m);
+println(1'i64 << 40, " ", (-1'i64) >> 60, " ", -1 >> 28);
+status += check((m >> 28) == 15);
+
+// Compound assignment of every kind
+let x = 100;
+x += 5; x -= 3; x *= 2; x /= 4; x %= 7; x **= 3;
+println(x);
+let y = 6;
+y &= 3; y |= 8; y ^= 5; y <<= 2; y >>= 1;
+println(y);
+let f = 1.5;
+f += 1; f *= 3; f -= 0.25; f /= 2; f **= 2;
+println(f);
+let s = "ab";
+s += "cd";
+println(s);
+
+// Booleans
+let t = true;
+let u = false;
+println(t and u, " ", t or u, " ", not t, " ", t == u, " ", t != u);
+
+// Math intrinsics, f64 and f32.  The arguments are variables because a
+// compiler folds a call with a literal argument at compile time, with a result
+// that may be 1 ulp different from the math library's at run time
+let one = 1.0;
+let half = 0.5;
+let two = 2.0;
+let ten = 10.0;
+let thou = 1000.0;
+let eight = 8.0;
+let one32 = 1.0f;
+let two32 = 2.0f;
+let eight32 = 8.0f;
+println(abs(-3), " ", abs(-3.5), " ", abs(-2.5f), " ", abs(-4'i64));
+println(sqrt(two), " ", sqrt(two32), " ", exp(one), " ", exp(one32));
+println(log(ten), " ", log10(thou), " ", log2(eight), " ", log2(eight32));
+println(sin(one), " ", cos(one), " ", tan(one), " ", sin(one32), " ", cos(one32));
+println(asin(half), " ", acos(half), " ", atan(half));
+println(sind(30.0 * one), " ", cosd(60.0 * one), " ", tand(45.0 * one));
+println(min(3, 1, 2), " ", max(3, 1, 2), " ", min(1.5, 0.5), " ", max(1.5f, 2.5f));
+println(min(3'i64, 5'i64), " ", max(3'i64, 5'i64));
+
+// Conversions
+println(i32(3.9), " ", i32(-3.9), " ", i64(3.9), " ", i32(7'i64), " ", i32("A"));
+println(char(65), " ", char(122), " ", len("hello"), " ", repeat("ab", 3));
+println(parse_i32("42"), " ", parse_i64("-9000000000"), " ", parse_f32("1.5"), " ", parse_f64("2.25"));
+status += check(parse_i32("42") == 42);
+status += check(i32("A") == 65);
+
+// Strings
+let str1 = "hello";
+println(str1[0], " ", str1[1: 3], " ", str1[3:], " ", str1[:2], " ", str1[1], str1[4]);
+println(str("a", 1, 2.5f, true, 3'i64, "z"));
+println(str1 == "hello", " ", str1 != "hello", " ", "a" < "b", " ", "a" < "a ", " ", "abc" >= "abd");
+println(str1 + " " + "world");
+let i = 2;
+println(str1[i * 2 - 3], " ", str1[i + 1: i + 3]);
+
+// Quotes and special characters in a string
+println("it's a ""quote"" ", "tab:", char(9), "|");
+
+// Printing floats, which aren't trimmed as scalars
+println(1.0, "|", 0.1, "|", 1.0e10, "|", 1.0e-10, "|", 3.0f, "|", 1.0e20f);
+println(str(1.0), "|", str(0.5f));
+
+return status;

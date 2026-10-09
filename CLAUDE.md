@@ -117,6 +117,17 @@ Syntran script tests are in `src/tests/test-src/` organized by category. To run 
 fpm run --profile debug -- src/tests/test-src/modules/test-01.syntran
 ```
 
+### Testing the Fortran backend
+`unit_test_transpile` in `src/tests/test.f90` only checks the generated source.
+To compile and run every test program and sample through both backends and diff
+their output, which needs a Fortran compiler:
+```bash
+bash utils/test-transpile.sh                  # uses build/v1/bin/syntran and gfortran
+bash utils/test-transpile.sh --only 'fns/'    # a subset, by path regex
+bash utils/test-transpile.sh --update-pass-list  # after coverage grows
+```
+Every file in `utils/transpile-pass.txt` must keep passing.
+
 ### Testing README.md code blocks
 `README.md`'s code blocks are annotated with hidden `<!-- syntran-begin -->`
 markers and run in CI to catch doc drift. Requires a build at
@@ -174,6 +185,28 @@ The interpreter follows a lexer → parser → bytecode compiler → VM pipeline
   - `intr_fns_math.f90` - Math functions (abs, exp, log, etc.)
   - `intr_fns_minmax.f90` - Min/max functions
   - `intr_fns_trig.f90` - Trigonometric functions (sin, cos, etc.)
+
+### Fortran Backend (`--transpile`)
+An alternative to `compile*.f90` + `vm*.f90`: instead of bytecode, the typed AST
+is lowered to the source of a standalone modern Fortran program that the user
+compiles themselves.  User docs are in `doc/transpile.md`.
+- `src/transpile.f90` - Interface module (`syntran__transpile_m`), the public
+  `transpile_t` options/result type, and the internal `emitter_t` state
+- `src/transpile_*.f90` - Submodules:
+  - `transpile_expr.f90` - Expressions, array literals, subscripts, intrinsics
+  - `transpile_stmt.f90` - Statements, fns, and assembling the whole program
+  - `transpile_rt.f90` - **Generated**, never edit by hand.  The runtime below
+    as a table of string literals.  Regenerate with `bash src/gen_transpile_rt.sh`
+- `src/rt/syntran_rt.f90` - The runtime module that is embedded in every
+  transpiled program (number formatting, ranges, etc.).  It is also compiled
+  into the library, so it is checked on every build.  **Use spaces, not tabs**,
+  because it ends up in users' programs, and keep lines under 100 chars
+- Diagnostic `E115` is reported for constructs that aren't supported yet
+
+Variables are emitted as `<name>_g<id>`/`<name>_l<id>` using the parser's unique
+slot ids, so syntran's block scopes and shadowing never need to be mirrored in
+Fortran.  The emitter reads types from `node%val`, and fn signatures from
+`state%fns`, since a `fn_declaration` node only has slots.
 
 ### Math Operations (auto-generated)
 Binary arithmetic operations are generated from `src/math_bin_template.f90` via `src/gen_math.sh`:

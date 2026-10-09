@@ -80,6 +80,68 @@ end function get_diags_file
 
 !===============================================================================
 
+function transpile_src(str_, print_result, trim_result) result(src)
+
+	! The Fortran source that a syntran string transpiles to, as one string with
+	! a line_feed after each line.  Empty if there were diagnostics
+
+	character(len = *), intent(in) :: str_
+	logical, intent(in), optional :: print_result, trim_result
+	character(len = :), allocatable :: src
+
+	character(len = :), allocatable :: res_
+	integer :: i
+	type(string_vector_t) :: diag_
+	type(transpile_t) :: t
+
+	if (present(print_result)) t%print_result = print_result
+	if (present(trim_result )) t%trim_result  = trim_result
+
+	res_ = eval(str_, .true., diags = diag_, transpile = t)
+
+	src = ''
+	if (diag_%len_ > 0) return
+	do i = 1, t%src%len_
+		src = src//t%src%v(i)%s//line_feed
+	end do
+
+end function transpile_src
+
+!===============================================================================
+
+function get_diags_transpile(str_) result(diag_)
+	! Diagnostics from transpiling a string, which for a valid program are
+	! only constructs that aren't supported yet
+	character(len = *), intent(in) :: str_
+	type(string_vector_t) :: diag_
+	character(len = :), allocatable :: res_
+	type(transpile_t) :: t
+	res_ = eval(str_, .true., diags = diag_, transpile = t)
+end function get_diags_transpile
+
+!===============================================================================
+
+function get_diags_transpile_file(filename) result(diag_)
+	character(len = *), intent(in) :: filename
+	type(string_vector_t) :: diag_
+	character(len = :), allocatable :: res_
+	type(transpile_t) :: t
+	res_ = interpret_file(filename, quiet = .true., diags = diag_, transpile = t)
+end function get_diags_transpile_file
+
+!===============================================================================
+
+function transpiles_ok(filename) result(ok)
+	! Does a file transpile without any diagnostics?
+	character(len = *), intent(in) :: filename
+	logical :: ok
+	type(string_vector_t) :: diag_
+	diag_ = get_diags_transpile_file(filename)
+	ok = diag_%len_ == 0
+end function transpiles_ok
+
+!===============================================================================
+
 function diag_has_code(diag_, code) result(found)
 	type(string_vector_t), intent(in) :: diag_
 	character(len = *), intent(in) :: code
@@ -3957,6 +4019,11 @@ subroutine unit_test_fns(npass, nfail)
 			! used to abort on a double free -- and calling one via implicit
 			! self (`f(x)` == `self.f(x)`), which used to be E29
 			interpret_file(path//'test-44.syntran', quiet) == 'true', &
+			! A by-value array/string parameter is a copy, even when the original
+			! is assigned through a global or by-ref parameter during the call
+			! (the Fortran transpiler only skips the copy when it can prove
+			! there's no such aliasing)
+			interpret_file(path//'test-45.syntran', quiet) == '0', &
 			! Printing a struct with a fn-pointer member renders the
 			! member's signature via value_to_str()'s fn_type case, same as
 			! a bare fn-pointer value (test-33 above)
@@ -9526,7 +9593,9 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E114-missing-let-name.syntran'), &
 				EC_MISSING_LET_NAME, P//'E114-missing-let-name.syntran', 7, 6, 1), &
 			diag_count_code(get_diags_file(P//'E114-missing-let-name.syntran'), &
-				EC_MISSING_LET_NAME) == 1 &
+				EC_MISSING_LET_NAME) == 1, &
+			diag_loc_ok(get_diags_transpile_file(P//'E115-transpile-unsupported.syntran'), &
+				EC_TRANSPILE_UNSUPPORTED, P//'E115-transpile-unsupported.syntran', 9, 10, 4) &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
@@ -9581,6 +9650,118 @@ subroutine unit_test_dir_unreadable_errors(npass, nfail)
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_dir_unreadable_errors
+
+!===============================================================================
+
+subroutine unit_test_transpile(npass, nfail)
+
+	! The Fortran backend.  These only check the generated source and the
+	! diagnostics, which doesn't need a Fortran compiler.  Compiling and running
+	! the generated programs and comparing their output with the interpreter's is
+	! utils/test-transpile.sh
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'Fortran transpiler'
+	character(len = *), parameter :: P = 'src/tests/test-src/errors/'
+	character(len = *), parameter :: T = 'src/tests/test-src/'
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! The generated program has the runtime, a main procedure, and a
+			! program to call it
+			index(transpile_src('let x = 1;'), 'module syntran_rt') > 0, &
+			index(transpile_src('let x = 1;'), 'subroutine syntran_main()') > 0, &
+			index(transpile_src('let x = 1;'), 'program syntran_program') > 0, &
+
+			! Variables are named by their slot, so shadowing can't clash even
+			! across types
+			index(transpile_src('let x = 1; { let x = "s"; println(x); } return x;'), &
+				'integer(int32) :: x_g5') > 0, &
+			index(transpile_src('let x = 1; { let x = "s"; println(x); } return x;'), &
+				'character(len = :), allocatable :: x_g6') > 0, &
+			index(transpile_src('let x = 1; { let x = 2.0; } return x;'), &
+				'real(real64) :: x_g6') > 0, &
+
+			! The result of the program is printed like the CLI does, unless it
+			! is told not to
+			index(transpile_src('let x = 1;'), 'call rt_result(') > 0, &
+			index(transpile_src('let x = 1;', print_result = .false.), 'call rt_result(') == 0, &
+			index(transpile_src('let x = 1;'), 'call rt_result(trim(adjustl(') == 0, &
+			index(transpile_src('let x = 1;', trim_result = .true.), &
+				'call rt_result(trim(adjustl(') > 0, &
+
+			! A loop has no value, so the interpreter prints an invalid value
+			index(transpile_src('let x = 0; while (x < 3) x += 1;'), &
+				'Error: <invalid_value>') > 0, &
+
+			! A user fn is a recursive procedure, with its parameter copied
+			index(transpile_src('fn f(a: i32): i32 { return a; } return f(1);'), &
+				'recursive function f_f') > 0, &
+
+			! A user's name can't clash with the runtime's names, whatever its case
+			index(transpile_src('fn rt_str(x: i32): i32 { return x; } return rt_str(1);'), &
+				'urt_str_f') > 0, &
+			index(transpile_src('let RT_print = 1; return RT_print;'), 'uRT_print_g') > 0, &
+
+			! Arrays are 1-based in Fortran, but 0-based in syntran
+			index(transpile_src('let a = [1, 2, 3]; return a[0];'), '(1_int32)') > 0, &
+			index(transpile_src('let a = [1, 2, 3]; return a[1:3];'), '(2_int32:3_int32)') > 0, &
+
+			! The programs which the transpiler tests compare between backends
+			! still need to work as programs in the interpreter, with no failed
+			! checks of their own.  The generated programs are compared with the
+			! interpreter's output by utils/test-transpile.sh
+			interpret_file(T//'transpile/test-01.syntran', .true.) == '0', &
+			interpret_file(T//'transpile/test-02.syntran', .true.) == '0', &
+			interpret_file(T//'transpile/test-03.syntran', .true.) == '0', &
+			transpiles_ok(T//'transpile/test-01.syntran'), &
+			transpiles_ok(T//'transpile/test-02.syntran'), &
+			transpiles_ok(T//'transpile/test-03.syntran'), &
+
+			! Most of the tests programs are supported
+			transpiles_ok(T//'fns/test-01.syntran'), &
+			transpiles_ok(T//'recursion/test-01.syntran'), &
+			transpiles_ok(T//'while-loops/test-01.syntran'), &
+			transpiles_ok(T//'for-loops/test-01.syntran'), &
+			transpiles_ok(T//'var-scopes/test-01.syntran'), &
+
+			! Unsupported constructs are diagnostics.  Everything else in the
+			! program is still checked, one diagnostic per statement
+			diag_has_code(get_diags_transpile_file(P//'E115-transpile-unsupported.syntran'), &
+				EC_TRANSPILE_UNSUPPORTED), &
+			diag_count_code(get_diags_transpile_file(P//'E115-transpile-unsupported.syntran'), &
+				EC_TRANSPILE_UNSUPPORTED) == 4, &
+			diag_has_code(get_diags_transpile_file(T//'struct/test-01.syntran'), &
+				EC_TRANSPILE_UNSUPPORTED), &
+			diag_has_code(get_diags_transpile_file(T//'switch/test-01.syntran'), &
+				EC_TRANSPILE_UNSUPPORTED), &
+			diag_has_code(get_diags_transpile_file(T//'modules/boxuser.syntran'), &
+				EC_TRANSPILE_UNSUPPORTED), &
+
+			! ... but a transpile-only diagnostic isn't an error when evaluating
+			.not. diag_has_code(get_diags_file(P//'E115-transpile-unsupported.syntran'), &
+				EC_TRANSPILE_UNSUPPORTED), &
+
+			! A program with a parse error is reported as usual, instead
+			.not. diag_has_code(get_diags_transpile('let x = ;'), EC_TRANSPILE_UNSUPPORTED), &
+			len(transpile_src('let x = ;')) == 0, &
+
+			! Nothing is generated for a program with diagnostics
+			len(transpile_src('let f = open("a.txt", "r");')) == 0 &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_transpile
 
 !===============================================================================
 
@@ -9694,6 +9875,7 @@ subroutine unit_tests(iostat)
 	if (run_group('bad_syntax')) call unit_test_bad_syntax(npass, nfail)
 	if (run_group('return_paths')) call unit_test_return_paths(npass, nfail)
 	if (run_group('error_codes')) call unit_test_error_codes(npass, nfail)
+	if (run_group('transpile')) call unit_test_transpile(npass, nfail)
 	if (run_group('runtime_errors')) call unit_test_runtime_errors(npass, nfail)
 	if (run_group('bounds_check')) call unit_test_bounds_check(npass, nfail)
 	if (run_group('runtime_traces')) call unit_test_runtime_traces(npass, nfail)

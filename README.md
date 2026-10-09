@@ -325,6 +325,24 @@ Note: global block statement is not required as of 0.0.13.  Multiple statements 
 Make sure to wrap the entire script in a main block with braces `{}`.  The global block `{}` is not required when interactively using the interpreter because it parses and evaluates one statement at a time.  However, if you forget the global block `{}` in a script file, only the first statement will be parsed and any trailing junk statements will be unexpected.
 -->
 
+### Transpiling to Fortran
+
+Instead of running a program with the interpreter, `syntran --transpile`
+translates it to a standalone modern Fortran program, which you compile
+yourself with the Fortran compiler of your choice:
+
+<!-- syntran-begin mode=skip reason="shell invocation example" -->
+```
+syntran --transpile fib.f90 fib.syntran
+gfortran -O3 fib.f90 -o fib
+./fib
+```
+<!-- syntran-end -->
+
+Most programs which only use numbers, strings, arrays, and functions are
+supported so far.  See [doc/transpile.md](doc/transpile.md) for what is, and for
+how the generated program differs from interpreting.
+
 ### Other command-line arguments
 
 Run `syntran -h` to see a comprehensive listing of syntran command-line arguments:
@@ -352,6 +370,7 @@ Run `syntran -h` to see a comprehensive listing of syntran command-line argument
      --permissive-return Downgrade missing-return errors to warnings
      --cd                Resolve the script's relative file paths against its own directory
      -s --syntax-only    Parse and type check without running the program
+     -t --transpile <f>  Write the program as Fortran source to <f> ('-' for stdout) instead of running it
      -- <args>...        Pass remaining arguments to script via std::args()
 ```
 <!-- syntran-expect
@@ -374,6 +393,7 @@ Run `syntran -h` to see a comprehensive listing of syntran command-line argument
      --permissive-return Downgrade missing-return errors to warnings
      --cd                Resolve the script's relative file paths against its own directory
      -s --syntax-only    Parse and type check without running the program
+     -t --transpile <f>  Write the program as Fortran source to <f> ('-' for stdout) instead of running it
      -- <args>...        Pass remaining arguments to script via std::args()
 -->
 <!-- syntran-end -->

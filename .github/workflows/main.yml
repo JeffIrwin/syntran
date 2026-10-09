@@ -45,6 +45,11 @@
 			},
 			{
 				"if": "matrix.os == 'ubuntu-24.04'",
+				"name": "Check embedded transpiler runtime is up to date",
+				"run": "bash src/gen_transpile_rt.sh && git diff --exit-code src/transpile_rt.f90"
+			},
+			{
+				"if": "matrix.os == 'ubuntu-24.04'",
 				"name": "Set ubuntu PATH",
 				"run": "echo \"$HOME/bin\" >> $GITHUB_PATH"
 			},
@@ -236,6 +241,17 @@
 				"run":
 				"
 					bash ./utils/test-samples.sh \n
+				"
+			},
+			{
+				"if": "matrix.os == 'ubuntu-24.04'",
+				"name": "Test transpiler",
+				"shell": "bash",
+				"run":
+				"
+					# Transpile every test program and sample to Fortran, \n
+					# compile it, and compare its output with the interpreter's \n
+					bash ./utils/test-transpile.sh ./build/Debug/syntran gfortran-14 \n
 				"
 			},
 			{

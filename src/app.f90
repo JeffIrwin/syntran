@@ -18,7 +18,7 @@ module syntran__app_m
 
 	type args_t
 
-		character(len = :), allocatable :: syntran_file, command, color
+		character(len = :), allocatable :: syntran_file, command, color, transpile_out
 
 		integer :: maxerr
 
@@ -30,6 +30,7 @@ module syntran__app_m
 			quiet              = .false., &
 			syntax_only        = .false., &
 			syntran_file_arg   = .false., &
+			transpile          = .false., &
 			version            = .false., &
 			help               = .false.
 
@@ -234,6 +235,10 @@ function parse_args() result(args)
 		case ("-s", "--syntax-only")
 			args%syntax_only = .true.
 
+		case ("-t", "--transpile")
+			args%transpile = .true.
+			call get_next_arg(i, args%transpile_out)
+
 		case ("--version")
 			args%version = .true.
 
@@ -273,6 +278,14 @@ function parse_args() result(args)
 		error = .true.
 	end if
 
+	! Same for --transpile
+	if (args%transpile .and. .not. args%help .and. .not. args%version .and. &
+		.not. (args%syntran_file_arg .or. args%command_arg)) then
+		write(*,*) err_prefix//"--transpile requires a <file.syntran> "// &
+			"or -c <cmd> argument"
+		error = .true.
+	end if
+
 	url = 'https://github.com/JeffIrwin/syntran'
 
 	version = &
@@ -286,12 +299,14 @@ function parse_args() result(args)
 			( &
 				args%command_arg      .or. &
 				args%syntax_only      .or. &
+				args%transpile        .or. &
 				args%version          .or. &
 				args%syntran_file_arg .or. &
 				args%help                  &
 			)
 
-		if (.not. args%command_arg .and. .not. args%syntax_only) then
+		if (.not. args%command_arg .and. .not. args%syntax_only .and. &
+			.not. args%transpile) then
 			write(*,*)
 			write(*,*) fg_bright_magenta//lang_name//' '//version//color_reset
 			write(*,*) fg_bright_magenta//url//color_reset
@@ -335,6 +350,7 @@ function parse_args() result(args)
 		write(*,*) "    --permissive-return Downgrade missing-return errors to warnings"
 		write(*,*) "    --cd                Resolve the script's relative file paths against its own directory"
 		write(*,*) "    -s --syntax-only    Parse and type check without running the program"
+		write(*,*) "    -t --transpile <f>  Write the program as Fortran source to <f> ('-' for stdout) instead of running it"
 		write(*,*) "    -- <args>...        Pass remaining arguments to script via std::args()"
 		write(*,*)
 
