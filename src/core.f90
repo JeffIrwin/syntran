@@ -31,6 +31,11 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - api documentation
+	!    * the readme does not mention the eval*() functions and how to call
+	!      them from a simple fortran program
+	!    * could be a good selling point to the fortran community
+	!    * maybe make an 'examples' dir per fpm standard layout
 	!  - size-checking for array addition, multiplication, etc.
 	!  - port something like aoc 2019/17 or 15 here as a long test
 	!    * good non-trivial coverage of enums in a module plus other recent
