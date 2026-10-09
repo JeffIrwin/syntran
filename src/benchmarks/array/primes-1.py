@@ -1,21 +1,22 @@
+def main():
+    n = 60000
+    #n = 100
 
-n = 60000
-#n = 100
+    prime = 0
 
-prime = 0
+    for i in range(0, n):
+        #print("i = ", i)
 
-for i in range(0, n):
-    #print("i = ", i)
+        is_composite = False;
 
-    is_composite = False;
+        for j in range(2, i//2 + 1):
+            divisible = j * (i // j) == i
+            is_composite = is_composite or divisible
+            if (is_composite): break
 
-    for j in range(2, i//2 + 1):
-        divisible = j * (i // j) == i
-        is_composite = is_composite or divisible
-        if (is_composite): break
+        if not is_composite:
+            prime = i
 
-    if not is_composite:
-        prime = i
+    print("prime = ", prime)
 
-print("prime = ", prime)
-
+main()

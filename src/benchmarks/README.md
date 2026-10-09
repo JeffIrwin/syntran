@@ -22,12 +22,12 @@ gfortran, and numpy are the best of 3 runs; pure python is a single run.
 
 | benchmark | syntran | gfortran | numpy | python | syntran / gfortran | syntran / numpy | checksums |
 |---|--:|--:|--:|--:|--:|--:|:-:|
-| axpy | 0.443 | 0.126 | 0.237 | 15.562 | 3.5x | 1.9x | ok |
-| elem | 0.354 | 0.174 | 0.308 | 10.673 | 2.0x | 1.1x | ok |
-| stencil | 0.347 | 0.055 | 0.219 | 20.258 | 6.3x | 1.6x | ok |
-| reduce | 1.612 | 1.053 | 0.480 | 37.275 | 1.5x | 3.4x | ok |
-| matmul | 0.029 | 0.025 | 0.045 | 12.822 | 1.2x | 0.6x | ok |
-| small | 1.178 | 0.012 | 1.554 | 0.849 | 98.2x | 0.8x | ok |
+| axpy | 0.448 | 0.126 | 0.236 | 15.674 | 3.6x | 1.9x | ok |
+| elem | 0.360 | 0.175 | 0.310 | 11.156 | 2.1x | 1.2x | ok |
+| stencil | 0.346 | 0.054 | 0.214 | 17.681 | 6.4x | 1.6x | ok |
+| reduce | 1.617 | 1.067 | 0.473 | 38.857 | 1.5x | 3.4x | ok |
+| matmul | 0.033 | 0.024 | 0.041 | 13.481 | 1.4x | 0.8x | ok |
+| small | 1.176 | 0.012 | 1.492 | 0.757 | 98.0x | 0.8x | ok |
 
 ## Array size sweep
 
@@ -37,13 +37,13 @@ of each array operation.
 
 | array size n | syntran | gfortran | numpy | python | syntran / gfortran | syntran / numpy | checksums |
 |--:|--:|--:|--:|--:|--:|--:|:-:|
-| 3 | 11.404 | 0.044 | 15.011 | 8.227 | 259.2x | 0.8x | ok |
-| 10 | 3.541 | 0.040 | 4.588 | 4.907 | 88.5x | 0.8x | ok |
-| 100 | 0.458 | 0.035 | 0.520 | 3.309 | 13.1x | 0.9x | ok |
-| 1000 | 0.121 | 0.032 | 0.117 | 3.155 | 3.8x | 1.0x | ok |
-| 10000 | 0.095 | 0.031 | 0.090 | 3.137 | 3.1x | 1.1x | ok |
-| 100000 | 0.090 | 0.031 | 0.078 | 3.367 | 2.9x | 1.2x | ok |
-| 1000000 | 0.108 | 0.034 | 0.081 | 3.608 | 3.2x | 1.3x | ok |
+| 3 | 11.550 | 0.057 | 14.339 | 8.045 | 202.6x | 0.8x | ok |
+| 10 | 3.387 | 0.037 | 4.461 | 4.519 | 91.5x | 0.8x | ok |
+| 100 | 0.453 | 0.035 | 0.502 | 3.174 | 12.9x | 0.9x | ok |
+| 1000 | 0.120 | 0.032 | 0.111 | 3.315 | 3.8x | 1.1x | ok |
+| 10000 | 0.096 | 0.031 | 0.086 | 3.123 | 3.1x | 1.1x | ok |
+| 100000 | 0.090 | 0.031 | 0.074 | 3.042 | 2.9x | 1.2x | ok |
+| 1000000 | 0.108 | 0.034 | 0.077 | 3.421 | 3.2x | 1.4x | ok |
 
 The checksums column compares the printed result of all implementations
 (rel tol 1e-8).  Anything other than `ok` means an implementation printed a
