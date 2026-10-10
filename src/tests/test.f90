@@ -9714,9 +9714,19 @@ subroutine unit_test_transpile(npass, nfail)
 	character(len = *), parameter :: P = 'src/tests/test-src/errors/'
 	character(len = *), parameter :: T = 'src/tests/test-src/'
 
+	character(len = 8) :: sub_text
+	logical :: keeps_subnormals
 	logical, allocatable :: tests(:)
+	real :: sub_val
 
 	write(*,*) 'Unit testing '//label//' ...'
+
+	! A build with fast-math flushes subnormals to zero, including the ones that
+	! the interpreter reads from a literal, so there's no subnormal for the
+	! emitter to see there.  Read one at run time, like the interpreter does
+	sub_text = '1.0e-45'
+	read(sub_text, *) sub_val
+	keeps_subnormals = sub_val /= 0 .and. abs(sub_val) < tiny(sub_val)
 
 	tests = &
 		[   &
@@ -9799,8 +9809,9 @@ subroutine unit_test_transpile(npass, nfail)
 			index(transpile_src('let x = 1.5f; return x;'), '1.5_real32') > 0, &
 
 			! A subnormal is written as its bits, which can't be flushed to zero
-			index(transpile_src("let x = 1.0e-45'f32; return x;"), &
-				'transfer(1, 0.0_real32)') > 0, &
+			(.not. keeps_subnormals .or. &
+				index(transpile_src("let x = 1.0e-45'f32; return x;"), &
+				'transfer(1, 0.0_real32)') > 0), &
 			index(transpile_src('let x = 7; return x;'), '= 7'//line_feed) > 0, &
 			index(transpile_src("let x = 7'i64; return x;"), '7_int64') > 0, &
 

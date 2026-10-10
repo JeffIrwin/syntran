@@ -316,6 +316,7 @@ src/tests/test-src/transpile/test-09.syntran
 src/tests/test-src/transpile/test-10.syntran
 src/tests/test-src/transpile/test-11.syntran
 src/tests/test-src/transpile/test-12.syntran
+src/tests/test-src/transpile/test-13.syntran
 src/tests/test-src/var-scopes/test-01.syntran
 src/tests/test-src/var-scopes/test-02.syntran
 src/tests/test-src/var-scopes/test-03.syntran
