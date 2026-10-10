@@ -117,6 +117,13 @@ module syntran__transpile_m
 		! variables
 		type(string_vector_t) :: tdecls
 
+		! The signatures of the fn pointers that are used, each a type in the
+		! generated program: an abstract interface of the signature and a derived
+		! type with a procedure pointer component of it, which is the value.  The
+		! key of a signature is its type name, like `fn(i32): i32`
+		type(value_vector_t) :: sigs
+		type(string_vector_t) :: sig_keys
+
 		! Fortran source of the current procedure's body and of its local
 		! declarations.  Locals get declared lazily as they are encountered, so
 		! the declarations can be written ahead of the body once it is done
@@ -222,7 +229,7 @@ module syntran__transpile_m
 		! Sets `ok` to false (and returns garbage) if the type can't be
 		! transpiled yet
 		module function decl_line(em, val, name, ok) result(s)
-			type(emitter_t), intent(in) :: em
+			type(emitter_t), intent(inout) :: em
 			type(value_t), intent(in) :: val
 			character(len = *), intent(in) :: name
 			logical, intent(out) :: ok
@@ -319,6 +326,14 @@ module syntran__transpile_m
 			type(value_t), intent(in) :: val
 			integer :: k
 		end function struct_slot_of
+
+		! Position in the signatures of the fn pointer type of `val`, which is added
+		! if it's new
+		module function fptr_slot(em, val) result(k)
+			type(emitter_t), intent(inout) :: em
+			type(value_t), intent(in) :: val
+			integer :: k
+		end function fptr_slot
 
 		! Name of the derived type of the struct at position `k` of the table
 		module function struct_tname(em, k) result(s)

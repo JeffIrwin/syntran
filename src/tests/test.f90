@@ -9726,6 +9726,7 @@ subroutine unit_test_transpile(npass, nfail)
 			interpret_file(T//'transpile/test-04.syntran', .true.) == '0', &
 			interpret_file(T//'transpile/test-05.syntran', .true.) == '0', &
 			interpret_file(T//'transpile/test-06.syntran', .true.) == '0', &
+			interpret_file(T//'transpile/test-08.syntran', .true.) == '0', &
 			transpiles_ok(T//'transpile/test-01.syntran'), &
 			transpiles_ok(T//'transpile/test-02.syntran'), &
 			transpiles_ok(T//'transpile/test-03.syntran'), &
@@ -9733,6 +9734,7 @@ subroutine unit_test_transpile(npass, nfail)
 			transpiles_ok(T//'transpile/test-05.syntran'), &
 			transpiles_ok(T//'transpile/test-06.syntran'), &
 			transpiles_ok(T//'transpile/test-07.syntran'), &
+			transpiles_ok(T//'transpile/test-08.syntran'), &
 
 			! Most of the tests programs are supported
 			transpiles_ok(T//'fns/test-01.syntran'), &
@@ -9788,10 +9790,11 @@ subroutine unit_test_transpile(npass, nfail)
 				EC_TRANSPILE_UNSUPPORTED), &
 			diag_count_code(get_diags_transpile_file(P//'E115-transpile-unsupported.syntran'), &
 				EC_TRANSPILE_UNSUPPORTED) == 4, &
-			diag_has_code(get_diags_transpile_file(T//'fns/test-24.syntran'), &
-				EC_TRANSPILE_UNSUPPORTED), &
-
-			! ... and structs, modules, and file I/O, which are supported, are not
+			! ... and structs, modules, file I/O, and fn pointers, which are supported,
+			! are not
+			transpiles_ok(T//'fns/test-24.syntran'), &
+			index(transpile_src('fn f(x: i32): i32 { return x; } fn g(h: fn(i32): i32): i32 ' &
+				//'{ return h(1); } return g(f);'), 'abstract interface') > 0, &
 			transpiles_ok(T//'struct/test-01.syntran'), &
 			transpiles_ok(T//'modules/boxuser.syntran'), &
 			transpiles_ok(T//'io/test-01.syntran'), &

@@ -150,7 +150,7 @@ end function fn_name
 
 module function decl_line(em, val, name, ok) result(s)
 
-	type(emitter_t), intent(in) :: em
+	type(emitter_t), intent(inout) :: em
 	type(value_t), intent(in) :: val
 	character(len = *), intent(in) :: name
 	logical, intent(out) :: ok
@@ -213,6 +213,15 @@ module function decl_line(em, val, name, ok) result(s)
 		spec = 'type('//struct_tname(em, k)//')'
 	case (file_type)
 		spec = 'type(rt_file_t)'
+	case (fn_type)
+		if (val%type == array_type) then
+			! The signature of the elements isn't known
+			ok = .false.
+			s = ''
+			return
+		end if
+		k = fptr_slot(em, val)
+		spec = 'type(fp'//str(k)//'_t)'
 	case (str_type)
 		if (val%type == array_type) then
 			spec = 'type(rt_str_t)'
@@ -455,7 +464,10 @@ module function str_of(em, val, s) result(r)
 		if (k == 0) call em_unsupported(em, 'an enum of unknown type')
 	end if
 
-	if (sk > 0) then
+	if (val%type == fn_type) then
+		! A fn pointer prints as its type
+		r = "'"//type_name(val)//"'"
+	else if (sk > 0) then
 		if (.not. is_arr(val)) then
 			r = struct_fn(em, sk, 'str')//'('//s//')'
 		else if (val%array%rank == 1) then
@@ -537,6 +549,33 @@ function same_struct_name(a, b) result(same)
 	end if
 
 end function same_struct_name
+
+!===============================================================================
+
+module function fptr_slot(em, val) result(k)
+
+	type(emitter_t), intent(inout) :: em
+	type(value_t), intent(in) :: val
+	integer :: k
+
+	integer :: i
+
+	character(len = :), allocatable :: key
+
+	key = type_name(val)
+
+	do i = 1, em%sig_keys%len_
+		if (em%sig_keys%v(i)%s == key) then
+			k = i
+			return
+		end if
+	end do
+
+	call em%sig_keys%push(key)
+	call em%sigs%push(val)
+	k = em%sig_keys%len_
+
+end function fptr_slot
 
 !===============================================================================
 
@@ -996,6 +1035,34 @@ recursive function emit_binary(em, node) result(s)
 			return
 		end if
 
+		if (lt == fn_type .and. rt == fn_type) then
+			if (node%op%kind /= eequals_token .and. node%op%kind /= bang_equals_token) then
+				call em_unsupported(em, 'ordering comparison of fn pointers')
+				s = '.false.'
+				return
+			end if
+
+			if (node%left%kind == fn_ref_expr .and. node%right%kind == fn_ref_expr) then
+				! Two names of fns, which are the same fn or not
+				s = merge('.true. ', '.false.', node%left%id_index == node%right%id_index)
+				if (node%op%kind == bang_equals_token) &
+					s = merge('.false.', '.true. ', node%left%id_index == node%right%id_index)
+				return
+			end if
+
+			! The procedure pointer of a value, or the name of a fn.  A fn name has to
+			! be the second argument of associated()
+			if (node%left%kind == fn_ref_expr) then
+				s = 'associated('//r//'%p, '//fn_ref_name(em, node%left)//')'
+			else if (node%right%kind == fn_ref_expr) then
+				s = 'associated('//l//'%p, '//fn_ref_name(em, node%right)//')'
+			else
+				s = 'associated('//l//'%p, '//r//'%p)'
+			end if
+			if (node%op%kind == bang_equals_token) s = '(.not. '//s//')'
+			return
+		end if
+
 		if (lt == enum_type .and. rt == enum_type) then
 			ct = enum_slot_of(em, node%left%val)
 			if (ct == 0) ct = enum_slot_of(em, node%right%val)
@@ -1376,6 +1443,16 @@ recursive module function emit_name_ref(em, node, hoist, target) result(s)
 	if (allocated(node%member) .or. node%root_kind /= 0) then
 		! A member of a struct, or of several nested ones
 		s = emit_dot_ref(em, node, do_hoist, str_hoist)
+		return
+	end if
+
+	! The slots of the global scope that come first are the constants of `std::`
+	if (.not. node%is_loc .and. node%id_index >= 1 .and. node%id_index <= 4) then
+		if (node%id_index == 1) then
+			s = '3.14159265358979323846_real64'
+		else
+			s = 'rt_std_file('//str(node%id_index)//')'
+		end if
 		return
 	end if
 
@@ -2235,6 +2312,92 @@ end function emit_struct_instance
 
 !===============================================================================
 
+function fn_ref_name(em, node) result(s)
+
+	! The name of the Fortran procedure that the fn_ref_expr `node` refers to
+
+	type(emitter_t), intent(in) :: em
+	type(syntax_node_t), intent(in) :: node
+	character(len = :), allocatable :: s
+
+	character(len = :), allocatable :: name
+
+	name = node%identifier%text
+	if (associated(em%fns)) then
+		if (node%id_index >= 1 .and. node%id_index <= size(em%fns%fns)) then
+			if (allocated(em%fns%fns(node%id_index)%node)) then
+				name = em%fns%fns(node%id_index)%node%identifier%text
+			end if
+		end if
+	end if
+
+	s = fn_name(name, node%id_index)
+
+end function fn_ref_name
+
+!===============================================================================
+
+function emit_fn_ref(em, node) result(s)
+
+	! A bare fn name is a value of the fn pointer type of its signature
+
+	type(emitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	character(len = :), allocatable :: s
+
+	s = 'fp'//str(fptr_slot(em, node%val))//'_t('//fn_ref_name(em, node)//')'
+
+end function emit_fn_ref
+
+!===============================================================================
+
+recursive function emit_ptr_call(em, node) result(s)
+
+	! A call of a fn through a fn pointer variable `f(x)`, or through a member of
+	! a struct `s.f(x)`.  The procedure pointer is the component of the value
+
+	type(emitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	character(len = :), allocatable :: s
+
+	!********
+
+	character(len = :), allocatable :: callee, tmp
+
+	integer :: i
+
+	type(slot_info_t) :: info
+
+	if (allocated(node%left)) then
+		callee = emit_expr(em, node%left)
+
+		! Fortran can't take a component of a fn result
+		if (node%left%kind /= dot_expr .and. node%left%kind /= name_expr) then
+			tmp = new_tmp(em, 'type(fp'//str(fptr_slot(em, node%left%val))//'_t)', 'fpv')
+			call em_line(em, tmp//' = '//callee)
+			callee = tmp
+		end if
+	else
+		callee = var_name(node)
+		info = lookup_slot(em, node%is_loc, node%id_index)
+		if (allocated(info%fname)) callee = info%fname
+	end if
+
+	s = callee//'%p('
+
+	if (allocated(node%args)) then
+		do i = 1, size(node%args)
+			if (i > 1) s = s//', '
+			s = s//emit_expr(em, node%args(i))
+		end do
+	end if
+
+	s = s//')'
+
+end function emit_ptr_call
+
+!===============================================================================
+
 function emit_enum_access(em, node) result(s)
 
 	! `Suit.Clubs` is the index of the variant, which is not necessarily its
@@ -2321,6 +2484,12 @@ recursive module function emit_expr(em, node) result(s)
 
 	case (struct_instance_expr)
 		s = emit_struct_instance(em, node)
+
+	case (fn_ref_expr)
+		s = emit_fn_ref(em, node)
+
+	case (fn_call_ptr_expr)
+		s = emit_ptr_call(em, node)
 
 	case (method_call_expr)
 		s = emit_user_call(em, node)

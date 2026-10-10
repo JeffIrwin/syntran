@@ -1,0 +1,151 @@
+// Function pointers.  These programs are run by both the interpreter and the
+// Fortran transpiler (utils/test-transpile.sh), which must print the same
+// thing.  The return value is the number of failed checks
+
+let status = 0;
+
+fn check(ok: bool): i32
+{
+	if (ok) return 0;
+	return 1;
+}
+
+fn inc(n: i32): i32
+{
+	return n + 1;
+}
+
+fn dbl(n: i32): i32
+{
+	return 2 * n;
+}
+
+fn half(x: f64): f64
+{
+	return 0.5 * x;
+}
+
+fn scale(v: [f64; :]): [f64; :]
+{
+	return 3.0 * v;
+}
+
+fn shout(s: str): str
+{
+	return s + "!";
+}
+
+// A variable of a fn pointer type, which can be reassigned
+let f = inc;
+println(f(1), " ", f(10));
+f = dbl;
+println(f(1), " ", f(10));
+status += check(f(4) == 8);
+
+// A fn pointer is printed as its type
+println(f);
+
+// Equality is of the fns that they point to
+let g = dbl;
+println(f == g, " ", f != g, " ", f == inc);
+status += check(f == g);
+status += check(f != inc);
+
+// Passing a fn to another fn, and the fn that is passed to a fn which takes one
+fn apply(h: fn(i32): i32, x: i32): i32
+{
+	return h(x);
+}
+
+fn apply_twice(h: fn(i32): i32, x: i32): i32
+{
+	return apply(h, apply(h, x));
+}
+
+println(apply(inc, 5), " ", apply(dbl, 5), " ", apply_twice(dbl, 5));
+status += check(apply_twice(dbl, 5) == 20);
+
+// Parameters of other types
+fn apply_f64(h: fn(f64): f64, x: f64): f64
+{
+	return h(x);
+}
+
+fn apply_vec(h: fn([f64; :]): [f64; :], v: [f64; :]): [f64; :]
+{
+	return h(v);
+}
+
+fn apply_str(h: fn(str): str, s: str): str
+{
+	return h(s);
+}
+
+println(apply_f64(half, 5.0), " ", apply_vec(scale, [1.0, 2.0]), " ", apply_str(shout, "hey"));
+status += check(apply_f64(half, 5.0) == 2.5);
+
+// A fn can take its pointer parameter and assign it, which isn't seen outside
+fn reassign(h: fn(i32): i32, x: i32): i32
+{
+	h = dbl;
+	return h(x);
+}
+
+let k = inc;
+println(reassign(k, 7), " ", k(7));
+status += check(k(7) == 8);
+
+// Returning a fn
+fn choose(use_dbl: bool): fn(i32): i32
+{
+	if (use_dbl) return dbl;
+	return inc;
+}
+
+let c = choose(true);
+let d = choose(false);
+println(c(8), " ", d(8));
+status += check(c(8) == 16);
+
+// A void fn pointer
+let total = 0;
+fn bump()
+{
+	total += 1;
+}
+
+fn call_it(h: fn())
+{
+	h();
+	h();
+}
+
+call_it(bump);
+println(total);
+status += check(total == 2);
+
+// A fn pointer as a member of a struct
+struct Op
+{
+	name: str,
+	run: fn(i32): i32,
+}
+
+let op = Op{name = "double", run = dbl};
+println(op.name, " ", op.run(21));
+status += check(op.run(21) == 42);
+op.run = inc;
+println(op.run(21));
+status += check(op.run(21) == 22);
+
+// A fn that takes a fn which takes a fn
+fn call_via(outer: fn(fn(i32): i32, i32): i32, inner: fn(i32): i32, x: i32): i32
+{
+	return outer(inner, x);
+}
+
+println(call_via(apply, dbl, 6));
+status += check(call_via(apply, dbl, 6) == 12);
+
+println(status);
+return status;

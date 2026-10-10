@@ -175,7 +175,8 @@ recursive subroutine emit_call_stmt(em, node)
 	end if
 
 	if (node%val%type == void_type) then
-		if (node%kind == fn_call_expr .or. node%kind == method_call_expr) then
+		if (node%kind == fn_call_expr .or. node%kind == method_call_expr .or. &
+				node%kind == fn_call_ptr_expr) then
 			call em_line(em, 'call '//emit_expr(em, node))
 		else
 			call em_unsupported(em, 'the intrinsic fn `'// &
@@ -1043,7 +1044,7 @@ recursive subroutine emit_discard(em, node)
 	type(syntax_node_t), intent(in) :: node
 
 	select case (node%kind)
-	case (fn_call_expr, fn_call_intr_expr, method_call_expr)
+	case (fn_call_expr, fn_call_intr_expr, method_call_expr, fn_call_ptr_expr)
 		call emit_call_stmt(em, node)
 	case default
 		! A pure expression has no side effects
@@ -1103,7 +1104,7 @@ recursive subroutine emit_result_stmt(em, node)
 		! The target, e.g. a whole array or just the element that was assigned
 		call emit_result_str(em, str_of(em, node%val, emit_name_ref(em, node)))
 
-	case (fn_call_expr, fn_call_intr_expr, method_call_expr)
+	case (fn_call_expr, fn_call_intr_expr, method_call_expr, fn_call_ptr_expr)
 		if (node%val%type == void_type) then
 			call emit_call_stmt(em, node)
 			! println() has an empty result while other void fns have none.  exit()
@@ -1257,7 +1258,7 @@ recursive module subroutine emit_stmt(em, node)
 	case (return_statement)
 		call emit_return(em, node)
 
-	case (fn_call_expr, fn_call_intr_expr, method_call_expr)
+	case (fn_call_expr, fn_call_intr_expr, method_call_expr, fn_call_ptr_expr)
 		call emit_call_stmt(em, node)
 
 	case (fn_declaration)
@@ -1554,6 +1555,11 @@ recursive function alias_hazard(node, fn_id, ref_slots) result(found)
 			return
 		end if
 
+	case (fn_call_ptr_expr)
+		! Which fn this runs isn't known, and it could assign to anything
+		found = .true.
+		return
+
 	case (fn_call_expr, method_call_expr)
 		if (node%id_index /= fn_id) then
 			found = .true.
@@ -1614,7 +1620,7 @@ function elem_spec(em, val) result(s)
 	! Type spec of a scalar's type, or of an array's elements, for a dummy
 	! argument
 
-	type(emitter_t), intent(in) :: em
+	type(emitter_t), intent(inout) :: em
 	type(value_t), intent(in) :: val
 	character(len = :), allocatable :: s
 
@@ -1634,6 +1640,8 @@ function elem_spec(em, val) result(s)
 		else
 			s = 'integer(int32)'
 		end if
+	else if (t == fn_type) then
+		s = 'type(fp'//str(fptr_slot(em, val))//'_t)'
 	else
 		s = type_spec(t)
 	end if
@@ -1947,13 +1955,240 @@ function member_str(em, v, x) result(r)
 		r = 'trim(adjustl(rt_str('//x//')))'
 	case (str_type)
 		r = 'rt_quote('//x//')'
-	case (enum_type, struct_type)
+	case (enum_type, struct_type, fn_type)
 		r = str_of(em, v, x)
 	case default
 		r = 'rt_str('//x//')'
 	end select
 
 end function member_str
+
+!===============================================================================
+
+recursive function val_level(em, v) result(lv)
+
+	! How far down the types that a type is made of go, which is the order that
+	! the derived types have to be defined in: a struct comes after the types of
+	! its members, and a fn pointer after the types in its signature
+
+	type(emitter_t), intent(inout) :: em
+	type(value_t), intent(in) :: v
+	integer :: lv
+
+	integer :: k
+
+	lv = 0
+
+	if (elem_type(v) == struct_type) then
+		k = struct_slot_of(em, v)
+		if (k > 0) lv = 1 + struct_level(em, k)
+
+	else if (v%type == fn_type) then
+		lv = 1 + sig_level(em, fptr_slot(em, v))
+
+	end if
+
+end function val_level
+
+!===============================================================================
+
+recursive function struct_level(em, k) result(lv)
+
+	type(emitter_t), intent(inout) :: em
+	integer, intent(in) :: k
+	integer :: lv
+
+	character(len = :), allocatable :: mname
+
+	integer :: m
+
+	logical :: ok
+
+	type(value_t) :: mval
+
+	lv = 0
+	do m = 1, em%structs%table(k)%val%num_vars
+		call struct_member(em, k, m, mval, mname, ok)
+		if (.not. ok) cycle
+		lv = max(lv, val_level(em, mval))
+	end do
+
+end function struct_level
+
+!===============================================================================
+
+recursive function sig_level(em, s) result(lv)
+
+	type(emitter_t), intent(inout) :: em
+	integer, intent(in) :: s
+	integer :: lv
+
+	integer :: i
+
+	type(value_t) :: sig
+
+	lv = 0
+
+	! The signature may get more signatures added below, which moves the vector
+	sig = em%sigs%v(s)
+
+	if (allocated(sig%fn_params)) then
+		do i = 1, size(sig%fn_params)
+			lv = max(lv, val_level(em, sig%fn_params(i)))
+		end do
+	end if
+	if (allocated(sig%fn_ret)) lv = max(lv, val_level(em, sig%fn_ret))
+
+end function sig_level
+
+!===============================================================================
+
+subroutine emit_type_decls(em, order)
+
+	! The derived types of the structs at positions `order` of the table, and of
+	! the fn pointers.  A fn pointer type is an abstract interface of a fn with
+	! its signature, and a derived type that has a procedure pointer of that
+	! interface, so that a fn pointer is a value which can be a component, an
+	! argument, or a result.  Each type comes after the types that it uses
+
+	type(emitter_t), intent(inout) :: em
+	integer, intent(in) :: order(:)
+
+	!********
+
+	character(len = :), allocatable :: line, mname, id, tn, sn
+
+	integer :: i, j, m, n, s, nsig
+	integer, allocatable :: kind_(:), idx(:), lev(:)
+
+	logical :: ok
+
+	type(value_t) :: mval, sig
+
+	! Register the fn pointers in members of structs, and those that they have
+	! in their own signatures
+	do i = 1, size(order)
+		m = struct_level(em, order(i))
+	end do
+	s = 1
+	do while (s <= em%sigs%len_)
+		m = sig_level(em, s)
+		s = s + 1
+	end do
+
+	nsig = em%sigs%len_
+	n = size(order) + nsig
+	allocate(kind_(n), idx(n), lev(n))
+
+	do i = 1, size(order)
+		kind_(i) = 1
+		idx(i) = order(i)
+		lev(i) = struct_level(em, order(i))
+	end do
+	do s = 1, nsig
+		kind_(size(order) + s) = 2
+		idx(size(order) + s) = s
+		lev(size(order) + s) = sig_level(em, s)
+	end do
+
+	! Insertion sort by level, which keeps the order of the structs, which is the
+	! order that they were declared in, and then of the signatures
+	do i = 2, n
+		call insert_sorted(i, kind_(i), idx(i), lev(i))
+	end do
+
+	do i = 1, n
+
+		if (kind_(i) == 1) then
+
+			m = idx(i)
+			tn = struct_tname(em, m)
+			call em%tdecls%push('    type :: '//tn)
+			do j = 1, em%structs%table(m)%val%num_vars
+				call struct_member(em, m, j, mval, mname, ok)
+				if (.not. ok) cycle
+				line = decl_line(em, mval, 'm'//str(j), ok)
+				if (.not. ok) line = 'integer(int32) :: m'//str(j)
+				call em%tdecls%push('        '//line//'  ! '//mname)
+			end do
+			call em%tdecls%push('    end type '//tn)
+			call em%tdecls%push('')
+
+		else
+
+			s = idx(i)
+			id = str(s)
+			sn = 'fi'//id
+			sig = em%sigs%v(s)
+
+			line = ''
+			if (allocated(sig%fn_params)) then
+				do j = 1, size(sig%fn_params)
+					if (j > 1) line = line//', '
+					line = line//'a'//str(j)
+				end do
+			end if
+
+			if (allocated(sig%fn_ret)) then
+				if (sig%fn_ret%type == void_type) then
+					call em%tdecls%push('    abstract interface')
+					call em%tdecls%push('        subroutine '//sn//'('//line//')')
+				else
+					call em%tdecls%push('    abstract interface')
+					call em%tdecls%push('        function '//sn//'('//line//') result(r)')
+				end if
+			end if
+
+			! The names of the module aren't known in an interface body otherwise
+			call em%tdecls%push('            import')
+
+			if (allocated(sig%fn_params)) then
+				do j = 1, size(sig%fn_params)
+					line = elem_spec(em, sig%fn_params(j))//', intent(in) :: a'//str(j)
+					if (is_arr(sig%fn_params(j))) &
+						line = line//dims_of(sig%fn_params(j)%array%rank)
+					call em%tdecls%push('            '//line)
+				end do
+			end if
+
+			if (allocated(sig%fn_ret)) then
+				if (sig%fn_ret%type == void_type) then
+					call em%tdecls%push('        end subroutine '//sn)
+				else
+					line = decl_line(em, sig%fn_ret, 'r', ok)
+					if (.not. ok) line = 'integer(int32) :: r'
+					call em%tdecls%push('            '//line)
+					call em%tdecls%push('        end function '//sn)
+				end if
+			end if
+			call em%tdecls%push('    end interface')
+			call em%tdecls%push('    type :: fp'//id//'_t')
+			call em%tdecls%push('        procedure('//sn//'), pointer, nopass :: p => null()')
+			call em%tdecls%push('    end type fp'//id//'_t')
+			call em%tdecls%push('')
+
+		end if
+	end do
+
+contains
+
+	subroutine insert_sorted(pos, k_, ix_, lv_)
+		integer, intent(in) :: pos, k_, ix_, lv_
+		integer :: p
+		p = pos - 1
+		do while (p >= 1)
+			if (lev(p) <= lv_) exit
+			kind_(p + 1) = kind_(p)
+			idx(p + 1) = idx(p)
+			lev(p + 1) = lev(p)
+			p = p - 1
+		end do
+		kind_(p + 1) = k_
+		idx(p + 1) = ix_
+		lev(p + 1) = lv_
+	end subroutine insert_sorted
+
+end subroutine emit_type_decls
 
 !===============================================================================
 
@@ -1987,7 +2222,10 @@ subroutine emit_struct_procs(em)
 	type(value_t) :: mval
 
 	if (.not. associated(em%structs)) return
-	if (.not. allocated(em%structs%table)) return
+	if (.not. allocated(em%structs%table)) then
+		call emit_type_decls(em, [integer ::])
+		return
+	end if
 
 	! Table positions of the structs, without duplicates by cookie, by id
 	n = 0
@@ -2021,23 +2259,14 @@ subroutine emit_struct_procs(em)
 		order(j + 1) = k
 	end do
 
+	call emit_type_decls(em, order(1: n))
+
 	do i = 1, n
 		k = order(i)
 		id = str(em%structs%table(k)%id_index)
 		tn = struct_tname(em, k)
 
 		associate (st => em%structs%table(k)%val)
-
-			call em%tdecls%push('    type :: '//tn)
-			do m = 1, st%num_vars
-				call struct_member(em, k, m, mval, mname, ok)
-				if (.not. ok) cycle
-				line = decl_line(em, mval, 'm'//str(m), ok)
-				if (.not. ok) line = 'integer(int32) :: m'//str(m)
-				call em%tdecls%push('        '//line//'  ! '//mname)
-			end do
-			call em%tdecls%push('    end type '//tn)
-			call em%tdecls%push('')
 
 			! The string of one struct
 			call em%procs%push('    function st'//id//'_str(x) result(s)')
@@ -2278,6 +2507,8 @@ module subroutine transpile_tree(tree, state, t, diags)
 	em%enums => state%enums
 	em%structs => state%structs
 	em%tdecls = new_string_vector()
+	em%sigs = new_value_vector()
+	em%sig_keys = new_string_vector()
 	em%print_result = t%print_result
 	em%trim_result  = t%trim_result
 

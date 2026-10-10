@@ -38,6 +38,7 @@ module syntran_rt
         character(len = :), allocatable :: name
         logical :: is_open = .false., mode_read = .false., mode_write = .false.
         logical :: eof = .false.
+        logical :: is_std = .false.
     end type rt_file_t
 
     ! Whether reading from stdin has hit the end of input, for the forms of
@@ -1024,12 +1025,14 @@ function rt_readln(f) result(s)
         call rt_fatal('readln() was called for file "' // f%name // &
             '" which was not opened in read mode "r"')
     end if
+    if (f%is_std) f%eof = rt_stdin_eof
     if (f%eof) then
         call rt_fatal('cannot readln() from file "' // f%name // '" past end of file')
     end if
     s = rt_read_line(f%unit, io)
     if (io == iostat_end) then
         f%eof = .true.
+        if (f%is_std) rt_stdin_eof = .true.
     else if (io /= 0 .and. io /= iostat_eor) then
         call rt_fatal('cannot readln() from file "' // f%name // '"')
     end if
@@ -1058,7 +1061,31 @@ function rt_eof(f) result(r)
             '" which was not opened in read mode "r"')
     end if
     r = f%eof
+    if (f%is_std) r = rt_stdin_eof
 end function rt_eof
+
+function rt_std_file(k) result(f)
+    ! std::IN, std::OUT, and std::ERR, which are the 2nd, 3rd, and 4th of the
+    ! constants of `std::`
+    integer, intent(in) :: k
+    type(rt_file_t) :: f
+    f%is_open = .true.
+    f%is_std = .true.
+    select case (k)
+    case (2)
+        f%name = 'stdin'
+        f%unit = input_unit
+        f%mode_read = .true.
+    case (3)
+        f%name = 'stdout'
+        f%unit = output_unit
+        f%mode_write = .true.
+    case default
+        f%name = 'stderr'
+        f%unit = error_unit
+        f%mode_write = .true.
+    end select
+end function rt_std_file
 
 function rt_eof_stdin() result(r)
     logical :: r

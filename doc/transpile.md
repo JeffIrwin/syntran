@@ -56,7 +56,10 @@ This is a subset of the language so far:
   enums, a bare enum name as in `for v in Suit`, and `switch` on an enum
 - File I/O: `open`, `std::try_open`, `close`, `writeln`, `readln`, `eof`,
   `std::exists`, the members `f.is_open`, `f.eof`, and `f.name`, and `readln()`
-  and `eof()` of standard input.  `std::getenv`, `std::hasenv`, and `std::args()`
+  and `eof()` of standard input.  `std::IN`, `std::OUT`, `std::ERR`, `std::PI`,
+  `std::getenv`, `std::hasenv`, and `std::args()`
+- Function pointers: a variable of a fn type, passing and returning one, a member
+  of a struct that is one, calling one, and comparing two with `==` and `!=`
 - Modules: `use`, qualified and glob imports, aliases, subdirectories, and the
   fns and variables of a module, including modules that import others.  The
   statements of a module run where it is imported
@@ -73,9 +76,8 @@ Programs which use these are rejected with
 [E115](errors.md#e115----transpile-unsupported), pointing at each statement
 which isn't supported.  Run them with the interpreter instead.
 
-- Function pointers
-- The `std::` variables, like `std::IN` and `std::PI`, and `std::` functions other
-  than the ones above
+- The call stack of the interpreter, which is `std::caller()`,
+  `std::print_trace()`, and `std::stack_trace()`
 - Assignment as a value inside the condition of a `while` loop or an `else if`
 - Printing an array, or having an array of strings, with a rank above 4
 
