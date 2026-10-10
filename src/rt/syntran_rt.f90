@@ -20,6 +20,20 @@
 ! avoid_runtime_prefix() in transpile_expr.f90), so there are no clashes.  The
 ! exception is what this module re-exports from iso_fortran_env, which the
 ! transpiler doesn't let a program's names have either (see reserved_name()).
+!
+! Layout: a generated program only gets the procedures that it uses, which
+! split_units() in transpile.f90 finds by the layout of this file, and
+! transpile_rt_units_ok() checks.  So
+!
+!   - the module's one `contains` is at column 1, before the first procedure
+!   - a procedure starts at column 1 with `function` or `subroutine`, possibly
+!     after `pure`, `elemental` or `recursive`, so its type is declared in its
+!     body, and ends with `end function` or `end subroutine` at column 1.  Its
+!     internal procedures are indented
+!   - a generic `interface` is indented by 4 spaces, in the module's
+!     declarations.  The comment lines right above it come with it
+!   - the comment lines above a procedure come with it too, up to the end of
+!     the previous procedure
 
 module syntran_rt
 

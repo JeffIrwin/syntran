@@ -2959,12 +2959,13 @@ module subroutine transpile_tree(tree, state, t, diags)
 
 	!********
 
-	integer :: i, last
+	integer :: i, last, n_user
 	logical :: no_diags
 
 	type(emitter_t) :: em
 	type(integer_vector_t) :: done
-	type(string_vector_t) :: rt, main_decls, src
+	type(string_vector_t) :: rt, main_decls, src, roots, tail
+	type(unit_t), allocatable :: runits(:), hunits(:), pool(:)
 
 	em%fns => state%fns
 	em%enums => state%enums
@@ -3043,8 +3044,18 @@ module subroutine transpile_tree(tree, state, t, diags)
 		end do
 	end if
 
+	! The helpers of the enums and structs go last, which lets them be taken off
+	! the end, to be left out when nothing uses them
+	n_user = em%procs%len_
 	call emit_enum_procs(em)
 	call emit_struct_procs(em)
+
+	tail = new_string_vector()
+	do i = n_user + 1, em%procs%len_
+		call tail%push(em%procs%v(i)%s)
+	end do
+	em%procs%len_ = n_user
+	call split_units(tail, 4, .false., hunits)
 
 	!********
 	! Assemble the program
@@ -3054,8 +3065,21 @@ module subroutine transpile_tree(tree, state, t, diags)
 
 	src = new_string_vector()
 
+	! Only the parts of the runtime, and the helpers, that the program refers to
+	! are in it, with those that they refer to in turn
 	rt = transpile_rt_src()
-	call src%push_all(rt)
+	call split_units(rt, 0, .true., runits)
+	pool = [runits, hunits]
+
+	roots = new_string_vector()
+	call roots%push_all(em%tdecls)
+	call roots%push_all(em%gdecls)
+	call roots%push_all(em%procs)
+	call shake_units(pool, roots)
+
+	do i = 1, size(runits)
+		if (pool(i)%keep) call push_unit(src, pool(i))
+	end do
 
 	call src%push('')
 	call src%push('!'//repeat('=', 79))
@@ -3078,6 +3102,9 @@ module subroutine transpile_tree(tree, state, t, diags)
 	call src%push('contains')
 	call src%push('')
 	call src%push_all(em%procs)
+	do i = size(runits) + 1, size(pool)
+		if (pool(i)%keep) call push_unit(src, pool(i))
+	end do
 	call src%push('end module syntran_prog')
 	call src%push('')
 	call src%push('program syntran_program')

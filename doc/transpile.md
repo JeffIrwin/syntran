@@ -12,9 +12,9 @@ gfortran -O3 fib.f90 -o fib
 `-t` is short for `--transpile`.  Its argument is the output file, or `-` for
 standard output.  The input is a file, or a command string with `-c`.
 
-The generated file is self-contained.  It embeds the small runtime that it needs
-(formatting numbers like `println()` does, array ranges, etc.), so there is
-nothing to link against.  It needs a compiler which supports Fortran 2018, for
+The generated file is self-contained.  It embeds the parts of the small runtime
+that it needs (formatting numbers like `println()` does, array ranges, etc.), so
+there is nothing to link against.  It needs a compiler which supports Fortran 2018, for
 assumed-rank arrays.  CI compiles and runs every test program and sample with
 gfortran 14.  Other compilers that implement Fortran 2018 should work too, but
 aren't tested regularly.
@@ -127,11 +127,24 @@ internally, and an array of strings is an array of a small wrapper type.
 Functions are `recursive` procedures of a module, and the top-level statements
 are a subroutine.
 
-By-value array and string parameters are copied on entry, unless the compiler
-can see that nothing could change the caller's variable during the call.
+A by-value number, bool, or enum parameter has the `value` attribute, so it is
+the function's own copy, which the body may assign to.  By-value array and
+string parameters are copied on entry if the body assigns to them, or if the
+compiler can't see that nothing could change the caller's variable during the
+call.
+
+Operations are written with only the parentheses that Fortran needs to group
+them the way syntran's tree does, so `a + b * c` and `(a + b) * c` come out
+as they were, and `a - (b - c)` keeps its parentheses.  A range loop
+`for i in [0: n]` is `do i = 0, n - 1`, unless the body assigns to `i`, in
+which case a hidden counter is copied to it.  `println()` is one call that
+writes its whole line, after evaluating all of its arguments.
 
 The runtime is in [`src/rt/syntran_rt.f90`](../src/rt/syntran_rt.f90).  It is
-embedded in `src/transpile_rt.f90` by `src/gen_transpile_rt.sh`.
+embedded in `src/transpile_rt.f90` by `src/gen_transpile_rt.sh`.  Only the
+procedures that the program names are in the generated file, and those that they
+name in turn, as are the helpers of the structs and enums that it uses.  That
+relies on the layout that the header of the runtime describes.
 
 To check a change to the transpiler, run
 

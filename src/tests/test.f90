@@ -9676,6 +9676,8 @@ subroutine unit_test_transpile(npass, nfail)
 	! the generated programs and comparing their output with the interpreter's is
 	! utils/test-transpile.sh
 
+	use syntran__transpile_m, only: transpile_rt_units_ok
+
 	implicit none
 
 	integer, intent(inout) :: npass, nfail
@@ -9883,6 +9885,53 @@ subroutine unit_test_transpile(npass, nfail)
 			index(transpile_src('fn f(ok: bool): i32 { if (ok) return 1; return 0; } ' &
 				//'let a = 1; return f(a == 1);'), 'f(a == 1)') > 0, &
 			index(transpile_src('let a = 1.5; return abs(a - 2.0);'), 'abs(a - 2.0_real64)') > 0, &
+
+			! Only the parts of the runtime that a program uses, and what they use,
+			! are in it.  The runtime can be split into units and put back
+			transpile_rt_units_ok(), &
+			index(transpile_src('println(1);'), 'function rt_str_i32(') > 0, &
+			index(transpile_src('println(1);'), 'subroutine rt_println(') > 0, &
+			index(transpile_src('println(1);'), 'rt_str_a_i32_1') == 0, &
+			index(transpile_src('println(1);'), 'rt_open') == 0, &
+			index(transpile_src('println(1);'), 'rt_readln') == 0, &
+			index(transpile_src('println(1);'), 'rt_reshape_str') == 0, &
+			index(transpile_src('println(1);'), 'subroutine rt_result(') > 0, &
+			index(transpile_src('println(1);', print_result = .false.), &
+				'subroutine rt_result(') == 0, &
+			! A generic interface keeps its specifics, and they keep what they call
+			index(transpile_src('println([1, 2]);'), 'function rt_str_a_i64_2(') > 0, &
+			index(transpile_src('println([1, 2]);'), 'function rt_join(') > 0, &
+			index(transpile_src('let f = open("x.txt", "r"); close(f);'), &
+				'function rt_open(') > 0, &
+			index(transpile_src('let f = open("x.txt", "r"); close(f);'), &
+				'function rt_str_a_i64_2(') == 0, &
+
+			! The helpers of structs and enums are only there if they are used, and
+			! those they use come with them
+			index(transpile_src('struct P{x:i32} let p = P{x = 1}; println(p.x);'), &
+				'P_st1_str') == 0, &
+			index(transpile_src('struct P{x:i32} let p = P{x = 1}; println(p.x);'), &
+				'type :: P_st1') > 0, &
+			index(transpile_src('struct P{x:i32} let p = P{x = 1}; println(p);'), &
+				'function P_st1_str(') > 0, &
+			index(transpile_src('struct P{x:i32} let p = P{x = 1}; println(p);'), &
+				'P_st1_join') == 0, &
+			index(transpile_src('struct P{x:i32} let ps = [P{x = 1}]; println(ps);'), &
+				'function P_st1_join(') > 0, &
+			index(transpile_src('struct P{x:i32} let ps = [P{x = 1}]; println(ps);'), &
+				'function P_st1_str(') > 0, &
+			index(transpile_src('struct P{x:i32} let ps = [P{x = 1}]; println(ps);'), &
+				'P_st1_fill') == 0, &
+			index(transpile_src('struct P{x:i32} let ps = [P{x = 1}; 3]; println(size(ps));'), &
+				'function P_st1_fill(') > 0, &
+			index(transpile_src('enum Dir { N, S } let x = 1; println(x);'), &
+				'Dir_en1_') == 0, &
+			index(transpile_src('enum Dir { N, S } let d = Dir.S; println(d);'), &
+				'function Dir_en1_str(') > 0, &
+			index(transpile_src('enum Dir { N, S } let d = Dir.S; println(d);'), &
+				'Dir_en1_val') == 0, &
+			index(transpile_src('enum Dir { N, S } let d = Dir.S; println(i32(d));'), &
+				'function Dir_en1_val(') > 0, &
 
 			! The programs which the transpiler tests compare between backends
 			! still need to work as programs in the interpreter, with no failed

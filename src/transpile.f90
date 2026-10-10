@@ -61,6 +61,25 @@ module syntran__transpile_m
 
 	!********
 
+	type unit_t
+
+		! A piece of the source of a generated program that can be left out if
+		! nothing refers to it: a procedure, or a generic interface, of the
+		! runtime or of the helpers of a struct or an enum.  See shake_units()
+
+		! The lower case name that the unit is referred to by, or empty for a
+		! piece which is always kept
+		character(len = :), allocatable :: name
+
+		! The unit's lines, including the comments and blank lines before it
+		type(string_vector_t) :: lines
+
+		logical :: keep = .false.
+
+	end type unit_t
+
+	!********
+
 	type slot_info_t
 
 		! What the emitter remembers about a declared variable.  A reference to
@@ -707,6 +726,434 @@ recursive function int_literal(node, val) result(is_lit)
 	end if
 
 end function int_literal
+
+!===============================================================================
+
+function new_unit(name) result(u)
+
+	character(len = *), intent(in) :: name
+	type(unit_t) :: u
+
+	u%name = name
+	u%lines = new_string_vector()
+	u%keep = len(name) == 0
+
+end function new_unit
+
+!===============================================================================
+
+subroutine classify_line(line, indent, kind_, name)
+
+	! What a line of the source of a procedure or interface is, for
+	! split_units().  A procedure's own lines are indented by `indent`, and an
+	! interface's by 4
+	!
+	!   kind_ 0  anything else
+	!         1  the first line of a procedure, whose lower case name is `name`
+	!         2  the last line of a procedure
+	!         3  the first line of an interface, which is called `name`
+	!         4  the last line of an interface
+
+	character(len = *), intent(in) :: line
+	integer, intent(in) :: indent
+	integer, intent(out) :: kind_
+	character(len = :), allocatable, intent(out) :: name
+
+	!********
+
+	character(len = :), allocatable :: low, rest
+	character(len = 10), parameter :: prefixes(5) = &
+		[character(len = 10) :: 'pure ', 'elemental ', 'recursive ', 'impure ', 'module ']
+
+	integer :: i, j, ind
+	logical :: found
+
+	kind_ = 0
+	name = ''
+
+	! Indentation is only spaces
+	ind = verify(line, ' ') - 1
+	if (ind < 0) return
+	low = to_lower(line(ind+1:))
+
+	if (ind == 4) then
+		if (low == 'end interface' .or. index(low, 'end interface ') == 1) then
+			kind_ = 4
+			return
+		end if
+		if (index(low, 'interface ') == 1) then
+			rest = adjustl(low(len('interface ')+1:))
+			j = verify(rest, 'abcdefghijklmnopqrstuvwxyz0123456789_')
+			if (j == 0) j = len(rest) + 1
+			if (j > 1) then
+				kind_ = 3
+				name = rest(1: j-1)
+			end if
+			return
+		end if
+	end if
+
+	if (ind /= indent) return
+
+	if (index(low, 'end function') == 1 .or. index(low, 'end subroutine') == 1) then
+		kind_ = 2
+		return
+	end if
+
+	! Any of the prefixes, in any order, then `function` or `subroutine`
+	rest = low
+	found = .true.
+	do while (found)
+		found = .false.
+		do i = 1, size(prefixes)
+			if (index(rest, trim(prefixes(i)) // ' ') == 1) then
+				rest = adjustl(rest(len_trim(prefixes(i)) + 2:))
+				found = .true.
+			end if
+		end do
+	end do
+
+	if (index(rest, 'function ') == 1) then
+		rest = adjustl(rest(len('function ')+1:))
+	else if (index(rest, 'subroutine ') == 1) then
+		rest = adjustl(rest(len('subroutine ')+1:))
+	else
+		return
+	end if
+
+	j = verify(rest, 'abcdefghijklmnopqrstuvwxyz0123456789_')
+	if (j == 0) j = len(rest) + 1
+	if (j > 1) then
+		kind_ = 1
+		name = rest(1: j-1)
+	end if
+
+end subroutine classify_line
+
+!===============================================================================
+
+subroutine split_units(lines, indent, prelude, units)
+
+	! Split the source of a runtime module, or the procedures of some helpers, in
+	! units, in order.  Concatenating the lines of the units is the input again
+	!
+	! Each procedure is a unit named after it, together with the comments and
+	! blank lines that come before it.  Procedures are at `indent`.  If `prelude`,
+	! then `lines` is a module, whose generic interfaces are units before its
+	! first `contains`, and the rest of what is there is always kept, as are the
+	! lines after the last procedure.  This relies on the layout of
+	! src/rt/syntran_rt.f90, which says so
+
+	type(string_vector_t), intent(in) :: lines
+	integer, intent(in) :: indent
+	logical, intent(in) :: prelude
+	type(unit_t), allocatable, intent(out) :: units(:)
+
+	!********
+
+	character(len = :), allocatable :: name
+	integer :: i, kind_, state, n, k
+
+	type(unit_t) :: cur, ifc
+
+	! 0: before the module's `contains`, outside of an interface
+	! 1: in an interface
+	! 2: between procedures
+	! 3: in a procedure
+	state = 2
+	if (prelude) state = 0
+
+	allocate(units(0))
+	cur = new_unit('')
+
+	do i = 1, lines%len_
+		associate (line => lines%v(i)%s)
+
+			select case (state)
+
+			case (0)
+				call classify_line(line, 4, kind_, name)
+				if (kind_ == 3) then
+					! The comment lines right above are the interface's own
+					n = cur%lines%len_
+					do while (n > 0)
+						if (index(adjustl(cur%lines%v(n)%s), '!') /= 1) exit
+						if (verify(cur%lines%v(n)%s, ' ') /= 5) exit
+						n = n - 1
+					end do
+					ifc = new_unit(name)
+					do k = n + 1, cur%lines%len_
+						call ifc%lines%push(cur%lines%v(k)%s)
+					end do
+					cur%lines%len_ = n
+					call add_unit(cur)
+					cur = ifc
+					call cur%lines%push(line)
+					state = 1
+				else if (to_lower(trim(line)) == 'contains') then
+					call cur%lines%push(line)
+					call add_unit(cur)
+					cur = new_unit('')
+					state = 2
+				else
+					call cur%lines%push(line)
+				end if
+
+			case (1)
+				call cur%lines%push(line)
+				call classify_line(line, 4, kind_, name)
+				if (kind_ == 4) then
+					call add_unit(cur)
+					cur = new_unit('')
+					state = 0
+				end if
+
+			case (2)
+				call classify_line(line, indent, kind_, name)
+				if (kind_ == 1) then
+					! What came since the last procedure is this one's
+					cur%name = name
+					cur%keep = .false.
+					state = 3
+				end if
+				call cur%lines%push(line)
+
+			case (3)
+				call cur%lines%push(line)
+				call classify_line(line, indent, kind_, name)
+				if (kind_ == 2) then
+					call add_unit(cur)
+					cur = new_unit('')
+					state = 2
+				end if
+
+			end select
+
+		end associate
+	end do
+
+	call add_unit(cur)
+
+contains
+
+	subroutine add_unit(u)
+		type(unit_t), intent(in) :: u
+		units = [units, u]
+	end subroutine add_unit
+
+end subroutine split_units
+
+!===============================================================================
+
+subroutine shake_units(units, roots)
+
+	! Mark the units that are needed by the lines of `roots`, or by a kept unit.
+	! Those are the units that always stay, and the ones that have their name
+	! in a line, outside of a comment or a string, which is how the Fortran
+	! reads them.  This is conservative: a unit that is only named is kept
+	! whether it's called or not, so what is dropped is certainly not used
+
+	type(unit_t), intent(inout) :: units(:)
+	type(string_vector_t), intent(in) :: roots
+
+	!********
+
+	integer, allocatable :: table(:), queue(:)
+	integer :: i, j, m, nq, head
+
+	m = 16
+	do while (m < 4 * size(units) + 4)
+		m = m * 2
+	end do
+	allocate(table(0: m - 1), queue(size(units)))
+	table = 0
+
+	do i = 1, size(units)
+		if (len(units(i)%name) == 0) cycle
+		j = iand(hash(units(i)%name), m - 1)
+		do while (table(j) /= 0)
+			j = iand(j + 1, m - 1)
+		end do
+		table(j) = i
+	end do
+
+	nq = 0
+	do i = 1, size(units)
+		if (units(i)%keep) then
+			nq = nq + 1
+			queue(nq) = i
+		end if
+	end do
+
+	do j = 1, roots%len_
+		call scan(roots%v(j)%s)
+	end do
+
+	head = 1
+	do while (head <= nq)
+		i = queue(head)
+		head = head + 1
+		do j = 1, units(i)%lines%len_
+			call scan(units(i)%lines%v(j)%s)
+		end do
+	end do
+
+contains
+
+	function hash(s) result(h)
+		character(len = *), intent(in) :: s
+		integer :: h
+		integer :: k
+		h = 5381
+		do k = 1, len(s)
+			h = iand(h * 33 + iachar(s(k:k)), 2**24 - 1)
+		end do
+	end function hash
+
+	subroutine scan(line)
+
+		! Every identifier of a line is a reference to the unit that it names
+
+		character(len = *), intent(in) :: line
+
+		integer :: p, q, c, u, k
+		logical :: in_quote
+
+		in_quote = .false.
+		p = 1
+		do while (p <= len(line))
+			c = iachar(line(p:p))
+			if (line(p:p) == "'") then
+				in_quote = .not. in_quote
+				p = p + 1
+			else if (in_quote) then
+				p = p + 1
+			else if (line(p:p) == '!') then
+				exit
+			else if (is_alnum(c)) then
+				! A name, or a number which may have a kind, like `1e5_real64`
+				q = p
+				do while (q <= len(line))
+					if (.not. is_alnum(iachar(line(q:q)))) exit
+					q = q + 1
+				end do
+				if (.not. (c >= iachar('0') .and. c <= iachar('9'))) then
+					u = lookup(to_lower(line(p: q-1)))
+					if (u > 0) then
+						if (.not. units(u)%keep) then
+							units(u)%keep = .true.
+							nq = nq + 1
+							queue(nq) = u
+						end if
+					end if
+				end if
+				p = q
+			else
+				p = p + 1
+			end if
+		end do
+
+	end subroutine scan
+
+	function is_alnum(c) result(r)
+		integer, intent(in) :: c
+		logical :: r
+		r = (c >= iachar('a') .and. c <= iachar('z')) .or. &
+			(c >= iachar('A') .and. c <= iachar('Z')) .or. &
+			(c >= iachar('0') .and. c <= iachar('9')) .or. c == iachar('_')
+	end function is_alnum
+
+	function lookup(name) result(u)
+		character(len = *), intent(in) :: name
+		integer :: u
+		integer :: j
+		u = 0
+		j = iand(hash(name), m - 1)
+		do while (table(j) /= 0)
+			if (units(table(j))%name == name) then
+				u = table(j)
+				return
+			end if
+			j = iand(j + 1, m - 1)
+		end do
+	end function lookup
+
+end subroutine shake_units
+
+!===============================================================================
+
+subroutine push_unit(dst, u)
+
+	! Append the lines of a unit, without more than one blank line in a row, which
+	! is what the leftovers of units that were left out would otherwise be
+
+	type(string_vector_t), intent(inout) :: dst
+	type(unit_t), intent(in) :: u
+
+	integer :: i
+
+	do i = 1, u%lines%len_
+		if (len_trim(u%lines%v(i)%s) == 0 .and. dst%len_ > 0) then
+			if (len_trim(dst%v(dst%len_)%s) == 0) cycle
+		end if
+		call dst%push(u%lines%v(i)%s)
+	end do
+
+end subroutine push_unit
+
+!===============================================================================
+
+function transpile_rt_units_ok() result(ok)
+
+	! Does the runtime split into units that are put back together as it was, and
+	! is every procedure of it a unit of its own?  The splitter relies on the
+	! layout of src/rt/syntran_rt.f90
+
+	logical :: ok
+
+	integer :: i, j, k, n_proc, n_end, kind_
+	character(len = :), allocatable :: name
+
+	type(string_vector_t) :: rt
+	type(unit_t), allocatable :: units(:)
+
+	rt = transpile_rt_src()
+	call split_units(rt, 0, .true., units)
+
+	! The same lines, in the same order
+	ok = .true.
+	k = 0
+	do i = 1, size(units)
+		do j = 1, units(i)%lines%len_
+			k = k + 1
+			if (k > rt%len_) then
+				ok = .false.
+				return
+			end if
+			if (units(i)%lines%v(j)%s /= rt%v(k)%s) ok = .false.
+		end do
+	end do
+	if (k /= rt%len_) ok = .false.
+
+	! Every procedure at the top level of the module is a unit, once
+	n_proc = 0
+	n_end  = 0
+	do i = 1, rt%len_
+		call classify_line(rt%v(i)%s, 0, kind_, name)
+		if (kind_ == 1) n_proc = n_proc + 1
+		if (kind_ == 2) n_end  = n_end  + 1
+	end do
+	if (n_proc /= n_end) ok = .false.
+	if (n_proc == 0) ok = .false.
+
+	k = 0
+	do i = 1, size(units)
+		if (len(units(i)%name) > 0) k = k + 1
+	end do
+	! The units are the procedures and the generic interfaces
+	if (k < n_proc) ok = .false.
+
+end function transpile_rt_units_ok
 
 !===============================================================================
 
