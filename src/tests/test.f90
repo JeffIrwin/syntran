@@ -9843,6 +9843,47 @@ subroutine unit_test_transpile(npass, nfail)
 				"call rt_println(rt_str(x) // 'ab' // rt_str(x))") > 0, &
 			index(transpile_src('let x = 1; println("a", x);'), 'rt_print(') == 0, &
 
+			! Parentheses are only there where Fortran needs them to read the
+			! operations as syntran's tree does
+			index(transpile_src('let a=1;let b=2;let c=3;let d=4; return a + b + c + d;'), &
+				'rt_str(a + b + c + d)') > 0, &
+			index(transpile_src('let a=1;let b=2;let c=3; return a - (b - c);'), &
+				'rt_str(a - (b - c))') > 0, &
+			index(transpile_src('let a=1;let b=2;let c=3; return a - b - c;'), &
+				'rt_str(a - b - c)') > 0, &
+			index(transpile_src('let a=1;let b=2;let c=3; return (a + b) * c;'), &
+				'rt_str((a + b) * c)') > 0, &
+			index(transpile_src('let a=1;let b=2;let c=3; return a + b * c;'), &
+				'rt_str(a + b * c)') > 0, &
+			index(transpile_src('let a=1;let b=2;let c=3; return a / b * c;'), &
+				'rt_str(a / b * c)') > 0, &
+			index(transpile_src('let a=1;let b=2;let c=3; return a / (b * c);'), &
+				'rt_str(a / (b * c))') > 0, &
+			index(transpile_src('let a=1;let b=2;let c=3; return -a * b;'), &
+				'rt_str((-a) * b)') > 0, &
+			index(transpile_src('let a=1;let b=2; return a - -b;'), 'rt_str(a - (-b))') > 0, &
+			index(transpile_src('let a=1;let b=2;let c=3; return a * b ** c;'), &
+				'rt_str(a * b ** c)') > 0, &
+			index(transpile_src('let a=1;let b=2;let c=3; return (a * b) ** c;'), &
+				'rt_str((a * b) ** c)') > 0, &
+			index(transpile_src('let a=1;let b=2;let c=3; return (a + b) % c;'), &
+				'mod(a + b, c)') > 0, &
+			index(transpile_src('let a=1;let b=2;let c=3; return a + b == c;'), &
+				'(a + b == c)') > 0, &
+			index(transpile_src('let a=true;let b=false;let c=true; return (a and b) or c;'), &
+				'a .and. b .or. c') > 0, &
+			index(transpile_src('let a=true;let b=false;let c=true; return a and (b or c);'), &
+				'a .and. (b .or. c)') > 0, &
+			index(transpile_src('let a=1;let b=2;let c=3;let d=4; return (a == b) == (c == d);'), &
+				'a == b .eqv. c == d') > 0, &
+			index(transpile_src('let a=1;let b=2; return (a < b) == (b < a) != true;'), &
+				'.neqv.') > 0, &
+			index(transpile_src('let a=1; let x = 2.5; return a + x;'), &
+				'real(a, real64) + x') > 0, &
+			index(transpile_src('fn f(ok: bool): i32 { if (ok) return 1; return 0; } ' &
+				//'let a = 1; return f(a == 1);'), 'f(a == 1)') > 0, &
+			index(transpile_src('let a = 1.5; return abs(a - 2.0);'), 'abs(a - 2.0_real64)') > 0, &
+
 			! The programs which the transpiler tests compare between backends
 			! still need to work as programs in the interpreter, with no failed
 			! checks of their own.  The generated programs are compared with the

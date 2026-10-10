@@ -150,6 +150,60 @@ status += check(size(m, 1) == 3);
 status += check(sum(m, 1)[0] == 1 + 3 + 5);
 
 //==============================================================================
+// Operations that are not wrapped in parentheses of their own are still
+// grouped as syntran's tree says, which makes a difference for floats
+
+let p = 10;
+let q = 3;
+let r = 4;
+let w = 2;
+status += check(p - (q - r) == 11);
+status += check(p - q - r == 3);
+status += check((p + q) * r == 52);
+status += check(p + q * r == 22);
+status += check(p / q * r == 12);
+status += check(p / (q * r) == 0);
+status += check(p % q * r == 4);
+status += check(p % (q * r) == 10);
+status += check(-p * q == -30);
+status += check(p - -q == 13);
+status += check(p ** 2 - q ** 2 * r == 64);
+status += check((p - q) ** 2 == 49);
+status += check(p << 1 + q == 160);
+status += check((p | q) & r == 0 + (11 & 4));
+println(2 ** 3 ** 2, " ", (2 ** 3) ** 2, " ", 2 ** (3 ** 2));
+
+let x = 0.1;
+let y = 0.2;
+let z = 0.3;
+println(x + y - z);
+println(x - (y - z));
+println(x + (y + z));
+println((x + y) + z);
+println(x * y + z);
+println(x * (y + z));
+println(x / y / z);
+println(x / (y / z));
+println(x - y - z - x);
+println(x - (y - (z - x)));
+
+let bt = true;
+let bf = false;
+status += check((bt and bf) or bt);
+status += check(bt and (bf or bt));
+status += check(not (bt and bf));
+status += check((bt == bf) == bf);
+status += check((p < q) == bf);
+status += check(p < q or q < r and r < w == false);
+status += check((p > q and q < r) != (r < w));
+
+let big = 3'i64;
+status += check(big * (p + q) == 39'i64);
+status += check(p * q + big == 33'i64);
+status += check(p + big * q == 19'i64);
+status += check(x + p * y == 2.1);
+
+//==============================================================================
 // println() evaluates all of its arguments before it writes any of them, and
 // writes them as one line
 

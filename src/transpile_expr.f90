@@ -5,9 +5,13 @@ submodule (syntran__transpile_m) syntran__transpile_expr
 
 	! Fortran backend: expressions.
 	!
-	! Every expression is emitted fully parenthesized because the tree has no
-	! paren nodes, so precedence is not recoverable (nor does it need to be,
-	! since Fortran's precedence differs from syntran's anyway)
+	! Every operation is emitted parenthesized as a whole, because the tree has
+	! no paren nodes, so syntran's precedence is not recoverable (nor does it
+	! need to be, since the tree says how the operations group).  An operation
+	! takes the parentheses off of an operand that Fortran's own precedence
+	! would group the same way anyway, like the `a * b` of `a * b + c`, and
+	! those of a call's argument.  See operand() and emitter_t%prec.  A unary
+	! operation always keeps its parentheses
 	!
 	! Types are made explicit.  Wherever syntran implicitly widens an operand
 	! (e.g. i32 + f64), the emitted code converts it to the type of the whole
@@ -692,7 +696,13 @@ module function str_of(em, val, s) result(r)
 	character(len = *), intent(in) :: s
 	character(len = :), allocatable :: r
 
+	character(len = :), allocatable :: u
+
 	integer :: k, sk
+
+	! The operand of a call is in its list of arguments, which has no need for
+	! the parentheses of an operation
+	u = unparen(s)
 
 	sk = 0
 	if (elem_type(val) == struct_type) then
@@ -711,25 +721,25 @@ module function str_of(em, val, s) result(r)
 		r = "'"//type_name(val)//"'"
 	else if (sk > 0) then
 		if (.not. is_arr(val)) then
-			r = struct_fn(em, sk, 'str')//'('//s//')'
+			r = struct_fn(em, sk, 'str')//'('//u//')'
 		else if (val%array%rank == 1) then
-			r = 'rt_arr_wrap('//struct_fn(em, sk, 'join')//'('//s//'), 1)'
+			r = 'rt_arr_wrap('//struct_fn(em, sk, 'join')//'('//u//'), 1)'
 		else
-			r = 'rt_arr_wrap('//struct_fn(em, sk, 'join')//'(reshape('//s//', [size('//s// &
+			r = 'rt_arr_wrap('//struct_fn(em, sk, 'join')//'(reshape('//u//', [size('//u// &
 				')])), '//str(val%array%rank)//')'
 		end if
 	else if (k > 0) then
 		if (is_arr(val)) then
-			r = 'rt_str_a('//enum_fn(em, k, 'strs')//'('//s//'))'
+			r = 'rt_str_a('//enum_fn(em, k, 'strs')//'('//u//'))'
 		else
-			r = enum_fn(em, k, 'str')//'('//s//')'
+			r = enum_fn(em, k, 'str')//'('//u//')'
 		end if
 	else if (is_arr(val)) then
-		r = 'rt_str_a('//s//')'
+		r = 'rt_str_a('//u//')'
 	else if (val%type == str_type) then
 		r = s
 	else
-		r = 'rt_str('//s//')'
+		r = 'rt_str('//u//')'
 	end if
 
 end function str_of
@@ -1333,13 +1343,16 @@ end function as_rt_str
 
 !===============================================================================
 
-function emit_str_binary(em, node, l, r) result(s)
+function emit_str_binary(em, node, l, r, lvl) result(s)
 
-	! A binary operator where both operands are strings, or arrays of strings
+	! A binary operator where both operands are strings, or arrays of strings.
+	! `lvl` is the precedence level of the result, if it is a parenthesized
+	! operation (see emitter_t%prec)
 
 	type(emitter_t), intent(inout) :: em
 	type(syntax_node_t), intent(in) :: node
 	character(len = *), intent(in) :: l, r
+	integer, intent(out) :: lvl
 	character(len = :), allocatable :: s
 
 	!********
@@ -1347,6 +1360,8 @@ function emit_str_binary(em, node, l, r) result(s)
 	character(len = :), allocatable :: la, ra
 
 	logical :: elem
+
+	lvl = 0
 
 	elem = is_arr(node%left%val) .or. is_arr(node%right%val)
 
@@ -1378,8 +1393,9 @@ function emit_str_binary(em, node, l, r) result(s)
 		select case (node%op%kind)
 		case (plus_token)
 			s = '('//l//' // '//r//')'
+			lvl = 6
 		case (eequals_token)
-			s = 'rt_str_eq('//l//', '//r//')'
+			s = 'rt_str_eq('//unparen(l)//', '//unparen(r)//')'
 		case (bang_equals_token)
 			s = '(.not. rt_str_eq('//l//', '//r//'))'
 		case (less_token)
@@ -1400,7 +1416,7 @@ end function emit_str_binary
 
 !===============================================================================
 
-function emit_pow(l, r, lt, rt, restype) result(s)
+function emit_pow(l, r, lt, rt, restype, lvl) result(s)
 
 	! `l ** r`.  The operands are not both converted to the result type, because
 	! a real to an integer power is not the same operation as a real to a real
@@ -1410,6 +1426,7 @@ function emit_pow(l, r, lt, rt, restype) result(s)
 
 	character(len = *), intent(in) :: l, r
 	integer, intent(in) :: lt, rt, restype
+	integer, intent(out) :: lvl
 	character(len = :), allocatable :: s
 
 	character(len = :), allocatable :: l2, r2
@@ -1436,6 +1453,10 @@ function emit_pow(l, r, lt, rt, restype) result(s)
 	end if
 
 	s = convert('('//l2//' ** '//r2//')', nt, restype)
+
+	! Only the power itself has a precedence, not a conversion of it
+	lvl = 0
+	if (nt == restype) lvl = 10
 
 end function emit_pow
 
@@ -1479,20 +1500,94 @@ end function is_str_concat
 
 !===============================================================================
 
+function operand(s, slvl, plvl, strip_equal) result(r)
+
+	! An operand `s` of an operator of precedence `plvl`, without the parentheses
+	! that the emitter put around it (see emitter_t%prec) if Fortran would read
+	! the operation the same way without them.  `slvl` is the precedence of the
+	! operand, or 0 if it has no parentheses of its own to take off
+	!
+	! An operand of an equal precedence needs them, unless `strip_equal`, which is
+	! for the left operand of a left-associative operator, and for any operand of
+	! an associative one
+
+	character(len = *), intent(in) :: s
+	integer, intent(in) :: slvl, plvl
+	logical, intent(in) :: strip_equal
+	character(len = :), allocatable :: r
+
+	r = s
+	if (slvl <= 0) return
+	if (slvl > plvl .or. (slvl == plvl .and. strip_equal)) r = unparen(s)
+
+end function operand
+
+!===============================================================================
+
+subroutine widen_operand(s, slvl, from, to)
+
+	! Convert an operand to the type `to`.  The result is a call, which is an atom
+	! and has an argument list to put the operand in without its parentheses
+
+	character(len = :), allocatable, intent(inout) :: s
+	integer, intent(inout) :: slvl
+	integer, intent(in) :: from, to
+
+	if (from == to) return
+
+	if (slvl > 0) s = unparen(s)
+	s = convert(s, from, to)
+	slvl = 0
+
+end subroutine widen_operand
+
+!===============================================================================
+
 recursive function emit_binary(em, node) result(s)
+
+	! A binary operation is wrapped in parentheses, which its parent takes off
+	! if it doesn't need them.  emit_binary_lvl() says which operation it is for
+	! that, as a Fortran precedence level (see emitter_t%prec)
 
 	type(emitter_t), intent(inout) :: em
 	type(syntax_node_t), intent(in) :: node
+	character(len = :), allocatable :: s
+
+	integer :: lvl
+
+	s = emit_binary_lvl(em, node, lvl)
+	em%prec = lvl
+
+end function emit_binary
+
+!===============================================================================
+
+recursive function emit_binary_lvl(em, node, lvl) result(s)
+
+	! The levels of the operators, from the lowest.  Fortran's unary minus has the
+	! level of the binary one, but a unary operation always keeps its own
+	! parentheses, because Fortran doesn't allow `a * -b`
+	!
+	!   1  .eqv. .neqv.        5  < <= > >= == /=      9  * /
+	!   2  .or.                6  //                   10 **
+	!   3  .and.               8  + -
+
+	type(emitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	integer, intent(out) :: lvl
 	character(len = :), allocatable :: s
 
 	!********
 
 	character(len = :), allocatable :: l, r
 
-	integer :: lt, rt, ct, restype
+	integer :: lt, rt, ct, restype, lp, rp
+
+	lvl = 0
 
 	if (is_str_concat(node)) then
 		s = '('//emit_concat(em, node)//')'
+		lvl = 6
 		return
 	end if
 
@@ -1501,7 +1596,9 @@ recursive function emit_binary(em, node) result(s)
 	restype = elem_type(node%val)
 
 	l = emit_expr(em, node%left)
+	lp = em%prec
 	r = emit_expr(em, node%right)
+	rp = em%prec
 
 	if (node%op%kind == matmul_token) then
 		ct = wider_type(lt, rt)
@@ -1513,16 +1610,20 @@ recursive function emit_binary(em, node) result(s)
 		if (is_arr(node%left%val) .and. is_arr(node%right%val)) then
 			if (node%left%val%array%rank == 1 .and. node%right%val%array%rank == 1) then
 				! Two vectors are a dot product, which is a scalar
-				s = 'dot_product('//convert(l, lt, ct)//', '//convert(r, rt, ct)//')'
+				s = 'dot_product('//convert(unparen(l), lt, ct)//', '// &
+					convert(unparen(r), rt, ct)//')'
 				return
 			end if
 		end if
-		s = 'matmul('//convert(l, lt, ct)//', '//convert(r, rt, ct)//')'
+		s = 'matmul('//convert(unparen(l), lt, ct)//', '//convert(unparen(r), rt, ct)//')'
 		return
 	end if
 
 	if (lt == str_type .and. rt == str_type) then
-		s = emit_str_binary(em, node, l, r)
+		! Strings are only joined, or compared in a call.  An operand that is a
+		! concatenation is always an associative part of this one
+		s = emit_str_binary(em, node, operand(l, lp, 6, .true.), &
+			operand(r, rp, 6, .true.), lvl)
 		return
 	end if
 
@@ -1539,25 +1640,32 @@ recursive function emit_binary(em, node) result(s)
 		end if
 
 		if (node%op%kind == sstar_token) then
-			s = emit_pow(l, r, lt, rt, restype)
+			s = emit_pow(l, r, lt, rt, restype, lvl)
 			return
 		end if
 
-		l = convert(l, lt, restype)
-		r = convert(r, rt, restype)
+		call widen_operand(l, lp, lt, restype)
+		call widen_operand(r, rp, rt, restype)
 
+		! Operations of equal precedence are left-associative in both languages,
+		! so the parentheses of the left operand can go, but those of the right
+		! one can't: `a - (b - c)`
 		select case (node%op%kind)
 		case (plus_token)
-			s = '('//l//' + '//r//')'
+			s = '('//operand(l, lp, 8, .true.)//' + '//operand(r, rp, 8, .false.)//')'
+			lvl = 8
 		case (minus_token)
-			s = '('//l//' - '//r//')'
+			s = '('//operand(l, lp, 8, .true.)//' - '//operand(r, rp, 8, .false.)//')'
+			lvl = 8
 		case (star_token)
-			s = '('//l//' * '//r//')'
+			s = '('//operand(l, lp, 9, .true.)//' * '//operand(r, rp, 9, .false.)//')'
+			lvl = 9
 		case (slash_token)
-			s = '('//l//' / '//r//')'
+			s = '('//operand(l, lp, 9, .true.)//' / '//operand(r, rp, 9, .false.)//')'
+			lvl = 9
 		case (percent_token)
 			! Fortran's mod() is consistent with C's `%`, like syntran's
-			s = 'mod('//l//', '//r//')'
+			s = 'mod('//unparen(l)//', '//unparen(r)//')'
 		end select
 
 	case (eequals_token, bang_equals_token, less_token, less_equals_token, &
@@ -1566,9 +1674,13 @@ recursive function emit_binary(em, node) result(s)
 		if (lt == bool_type .and. rt == bool_type) then
 			select case (node%op%kind)
 			case (eequals_token)
-				s = '('//l//' .eqv. '//r//')'
+				s = '('//operand(l, lp, 1, .true.)//' .eqv. '// &
+					operand(r, rp, 1, .false.)//')'
+				lvl = 1
 			case (bang_equals_token)
-				s = '('//l//' .neqv. '//r//')'
+				s = '('//operand(l, lp, 1, .true.)//' .neqv. '// &
+					operand(r, rp, 1, .false.)//')'
+				lvl = 1
 			case default
 				call em_unsupported(em, 'ordering comparison of booleans')
 				s = '.false.'
@@ -1623,8 +1735,13 @@ recursive function emit_binary(em, node) result(s)
 		end if
 
 		ct = wider_type(lt, rt)
-		l = convert(l, lt, ct)
-		r = convert(r, rt, ct)
+		call widen_operand(l, lp, lt, ct)
+		call widen_operand(r, rp, rt, ct)
+
+		! A comparison can't be an operand of another one, so its operands are
+		! only ever arithmetic, which is above it
+		l = operand(l, lp, 5, .false.)
+		r = operand(r, rp, 5, .false.)
 
 		select case (node%op%kind)
 		case (eequals_token)
@@ -1640,12 +1757,15 @@ recursive function emit_binary(em, node) result(s)
 		case (greater_equals_token)
 			s = '('//l//' >= '//r//')'
 		end select
+		lvl = 5
 
 	case (and_keyword)
-		s = '('//l//' .and. '//r//')'
+		s = '('//operand(l, lp, 3, .true.)//' .and. '//operand(r, rp, 3, .false.)//')'
+		lvl = 3
 
 	case (or_keyword)
-		s = '('//l//' .or. '//r//')'
+		s = '('//operand(l, lp, 2, .true.)//' .or. '//operand(r, rp, 2, .false.)//')'
+		lvl = 2
 
 	case (amp_token, pipe_token, caret_token)
 		if (.not. (lt == i32_type .or. lt == i64_type)) then
@@ -1655,8 +1775,10 @@ recursive function emit_binary(em, node) result(s)
 		end if
 
 		ct = wider_type(lt, rt)
-		l = convert(l, lt, ct)
-		r = convert(r, rt, ct)
+		call widen_operand(l, lp, lt, ct)
+		call widen_operand(r, rp, rt, ct)
+		l = unparen(l)
+		r = unparen(r)
 
 		select case (node%op%kind)
 		case (amp_token)
@@ -1678,9 +1800,9 @@ recursive function emit_binary(em, node) result(s)
 		! the right operand is an i64.  Both are logical shifts, so a `>>` doesn't
 		! extend the sign bit
 		if (node%op%kind == lless_token) then
-			s = convert('shiftl('//l//', '//r//')', lt, restype)
+			s = convert('shiftl('//unparen(l)//', '//unparen(r)//')', lt, restype)
 		else
-			s = convert('shiftr('//l//', '//r//')', lt, restype)
+			s = convert('shiftr('//unparen(l)//', '//unparen(r)//')', lt, restype)
 		end if
 
 	case default
@@ -1689,7 +1811,7 @@ recursive function emit_binary(em, node) result(s)
 
 	end select
 
-end function emit_binary
+end function emit_binary_lvl
 
 !===============================================================================
 
@@ -2628,7 +2750,7 @@ recursive function emit_user_call(em, node) result(s)
 				end if
 
 			else
-				arg = emit_expr(em, node%args(i))
+				arg = unparen(emit_expr(em, node%args(i)))
 
 				! Convert by-value args to the declared parameter type
 				if (associated(em%fns) .and. pi >= 1) then
@@ -2820,10 +2942,12 @@ recursive function emit_intr_call(em, node) result(s)
 		end if
 	end if
 
+	! Nearly every argument is in the list of arguments of a call, so it doesn't
+	! need the parentheses of an operation
 	a1 = ''
 	a2 = ''
-	if (n >= 1) a1 = emit_expr(em, node%args(1))
-	if (n >= 2) a2 = emit_expr(em, node%args(2))
+	if (n >= 1) a1 = unparen(emit_expr(em, node%args(1)))
+	if (n >= 2) a2 = unparen(emit_expr(em, node%args(2)))
 
 	select case (base)
 
@@ -2838,7 +2962,7 @@ recursive function emit_intr_call(em, node) result(s)
 			else if (i == 2) then
 				arg_i = a2
 			else
-				arg_i = emit_expr(em, node%args(i))
+				arg_i = unparen(emit_expr(em, node%args(i)))
 			end if
 
 			s = s//str_of(em, node%args(i)%val, arg_i)
@@ -2889,7 +3013,8 @@ recursive function emit_intr_call(em, node) result(s)
 		case ('mask')
 			args = args//', mask = '//a2
 		case ('dim_mask')
-			args = args//', dim = '//dim_plus_one(node%args(2), a2)//', mask = '//emit_expr(em, node%args(3))
+			args = args//', dim = '//dim_plus_one(node%args(2), a2)//', mask = '// &
+				unparen(emit_expr(em, node%args(3)))
 		end select
 		s = base//'('//args//')'
 
@@ -2919,7 +3044,7 @@ recursive function emit_intr_call(em, node) result(s)
 			else if (i == 2) then
 				s = s//a2
 			else
-				s = s//emit_expr(em, node%args(i))
+				s = s//unparen(emit_expr(em, node%args(i)))
 			end if
 		end do
 		s = s//')'
@@ -3242,7 +3367,7 @@ recursive function emit_ptr_call(em, node) result(s)
 	if (allocated(node%args)) then
 		do i = 1, size(node%args)
 			if (i > 1) s = s//', '
-			s = s//emit_expr(em, node%args(i))
+			s = s//unparen(emit_expr(em, node%args(i)))
 		end do
 	end if
 
@@ -3418,6 +3543,10 @@ recursive module function emit_expr(em, node) result(s)
 		s = '0'
 
 	end select
+
+	! A binary operation says what it is itself.  Anything else, even if it
+	! passes along the string of one, keeps its own parentheses
+	if (node%kind /= binary_expr) em%prec = 0
 
 end function emit_expr
 

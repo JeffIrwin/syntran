@@ -104,6 +104,13 @@ module syntran__transpile_m
 		! Counter for hidden compiler-generated variables
 		integer :: tmp_count = 0
 
+		! The Fortran precedence level of the expression that emit_expr() last
+		! returned, if that is a binary operation which is wrapped in parentheses
+		! as a whole, so that its parent can leave them out where they aren't
+		! needed.  It is 0 for anything else, which is an atom or comes with
+		! whatever parentheses it needs.  Only meaningful right after emit_expr()
+		integer :: prec = 0
+
 		! The `, step, lb = lb, ub = ub` arguments of rt_str_step_set(), left by
 		! the designator of an assignment target which is a stepped slice of a
 		! string, like `s[:-1:]`.  Fortran can't assign to a strided substring, so
