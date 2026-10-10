@@ -77,8 +77,10 @@ module syntran__transpile_m
 		! reference `field` for the implicit `self.field`
 		character(len = :), allocatable :: fname
 
-		! For a fn pointer, what the fn returns
-		type(value_t), allocatable :: ret
+		! For a fn pointer, the type of what the fn returns.  These aren't a
+		! value_t, whose nested components (a fn returning a fn) the compiler
+		! can't be trusted to free, as value_destroy() says
+		integer :: ret_type = unknown_type, ret_elem = unknown_type, ret_rank = 0
 
 	end type slot_info_t
 
@@ -569,8 +571,11 @@ subroutine record_slot(em, is_loc, id, val)
 	else if (val%type == fn_type .and. allocated(val%fn_ret)) then
 		! For a fn pointer, the struct that the fn returns
 		info%sk = struct_slot_of(em, val%fn_ret)
-		allocate(info%ret)
-		info%ret = val%fn_ret
+		info%ret_type = val%fn_ret%type
+		if (val%fn_ret%type == array_type .and. allocated(val%fn_ret%array)) then
+			info%ret_elem = val%fn_ret%array%type
+			info%ret_rank = val%fn_ret%array%rank
+		end if
 	end if
 
 	if (is_loc) then

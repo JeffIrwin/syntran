@@ -607,6 +607,30 @@ end subroutine emit_str_slice_assign
 
 !===============================================================================
 
+function shallow_val(src) result(r)
+
+	! The type of a value, without what a fn pointer's value nests inside of it.
+	! A copy of a fn that returns a fn that returns a fn, which a local value_t
+	! would free implicitly, is a double free
+
+	type(value_t), intent(in) :: src
+	type(value_t) :: r
+
+	r%type = src%type
+	if (allocated(src%array)) then
+		allocate(r%array)
+		r%array%type = src%array%type
+		r%array%rank = src%array%rank
+	end if
+	if (allocated(src%struct_cookie)) r%struct_cookie = src%struct_cookie
+	if (allocated(src%struct_name)) r%struct_name = src%struct_name
+	if (allocated(src%enum_cookie)) r%enum_cookie = src%enum_cookie
+	if (allocated(src%enum_name)) r%enum_name = src%enum_name
+
+end function shallow_val
+
+!===============================================================================
+
 module function fptr_slot(em, val) result(k)
 
 	type(emitter_t), intent(inout) :: em
@@ -1698,7 +1722,7 @@ recursive function emit_dot_ref(em, node, do_hoist, str_hoist) result(s)
 		if (node%root_kind == fn_call_ptr_expr) then
 			! What the fn returns is part of the type of the pointer
 			if (allocated(node%left)) then
-				if (allocated(node%left%val%fn_ret)) rv = node%left%val%fn_ret
+				if (allocated(node%left%val%fn_ret)) rv = shallow_val(node%left%val%fn_ret)
 			else
 				info = lookup_slot(em, node%is_loc, node%id_index)
 				if (info%sk > 0) then
@@ -1708,7 +1732,7 @@ recursive function emit_dot_ref(em, node, do_hoist, str_hoist) result(s)
 				end if
 			end if
 		else
-			rv = em%fns%fns(node%id_index)%type
+			rv = shallow_val(em%fns%fns(node%id_index)%type)
 		end if
 
 		em%tmp_count = em%tmp_count + 1
@@ -1814,6 +1838,8 @@ recursive function emit_member_chain(em, m, base, sk, do_hoist, str_hoist) resul
 	if (allocated(m%member)) then
 		s = emit_member_chain(em, m%member, s, minfo%sk, do_hoist, str_hoist)
 	end if
+
+	call value_destroy(mval)
 
 end function emit_member_chain
 
@@ -2448,6 +2474,8 @@ recursive function emit_struct_instance(em, node) result(s)
 
 	s = struct_tname(em, k)//'('//args//')'
 
+	call value_destroy(mval)
+
 end function emit_struct_instance
 
 !===============================================================================
@@ -2478,7 +2506,7 @@ recursive function emit_subscripted_call(em, node) result(s)
 		return
 	end if
 
-	rv = em%fns%fns(node%id_index)%type
+	rv = shallow_val(em%fns%fns(node%id_index)%type)
 
 	em%tmp_count = em%tmp_count + 1
 	tmp = 'sc_t'//str(em%tmp_count)
@@ -2676,9 +2704,14 @@ recursive function emit_ptr_call(em, node) result(s)
 	if (allocated(node%lsubscripts)) then
 		! The result is subscripted, so it is stored first
 		if (allocated(node%left)) then
-			if (allocated(node%left%val%fn_ret)) rv = node%left%val%fn_ret
-		else if (allocated(info%ret)) then
-			rv = info%ret
+			if (allocated(node%left%val%fn_ret)) rv = shallow_val(node%left%val%fn_ret)
+		else
+			rv%type = info%ret_type
+			if (info%ret_type == array_type) then
+				allocate(rv%array)
+				rv%array%type = info%ret_elem
+				rv%array%rank = info%ret_rank
+			end if
 		end if
 
 		if (em%in_cond .or. rv%type /= array_type) then

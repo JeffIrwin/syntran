@@ -1898,6 +1898,8 @@ recursive subroutine emit_fn(em, decl, self_sk)
 
 	em%top_level = .true.
 
+	call value_destroy(pval)
+
 end subroutine emit_fn
 
 !===============================================================================
@@ -1957,9 +1959,12 @@ subroutine check_struct_members(em, node)
 		line = decl_line(em, mval, 'm', ok)
 		if (.not. ok) then
 			call em_unsupported(em, 'a struct member of type `'//kind_name(mval%type)//'`')
+			call value_destroy(mval)
 			return
 		end if
 	end do
+
+	call value_destroy(mval)
 
 end subroutine check_struct_members
 
@@ -2070,6 +2075,8 @@ recursive function struct_level(em, k) result(lv)
 		lv = max(lv, val_level(em, mval))
 	end do
 
+	call value_destroy(mval)
+
 end function struct_level
 
 !===============================================================================
@@ -2095,6 +2102,9 @@ recursive function sig_level(em, s) result(lv)
 		end do
 	end if
 	if (allocated(sig%fn_ret)) lv = max(lv, val_level(em, sig%fn_ret))
+
+	! Explicitly, like the rest of the code does, since a signature nests
+	call value_destroy(sig)
 
 end function sig_level
 
@@ -2230,6 +2240,9 @@ subroutine emit_type_decls(em, order)
 
 		end if
 	end do
+
+	call value_destroy(mval)
+	call value_destroy(sig)
 
 contains
 
@@ -2373,6 +2386,8 @@ subroutine emit_struct_procs(em)
 
 		end associate
 	end do
+
+	call value_destroy(mval)
 
 end subroutine emit_struct_procs
 
@@ -2684,6 +2699,9 @@ module subroutine transpile_tree(tree, state, t, diags)
 	call src%push('')
 
 	if (no_diags) t%src = src
+
+	! Explicitly, since fn pointer types nest
+	if (allocated(em%sigs%v)) call value_array_destroy(em%sigs%v)
 
 end subroutine transpile_tree
 
