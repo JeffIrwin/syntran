@@ -505,6 +505,41 @@ end function new_tmp
 
 !===============================================================================
 
+function is_int_lit_text(s, paren) result(ok)
+
+	! Is the Fortran expression `s` the text of an integer literal, like `3`,
+	! `-3`, or either of those in parentheses?  If so, `paren` says if it's
+	! wrapped in parentheses
+
+	character(len = *), intent(in) :: s
+	logical, intent(out) :: paren
+	logical :: ok
+
+	integer :: i0, i1
+
+	ok = .false.
+
+	i0 = 1
+	i1 = len(s)
+
+	paren = .false.
+	if (i1 > 2) paren = s(1:1) == '(' .and. s(i1:i1) == ')'
+	if (paren) then
+		i0 = 2
+		i1 = i1 - 1
+	end if
+
+	if (i1 >= i0) then
+		if (s(i0:i0) == '-') i0 = i0 + 1
+	end if
+	if (i0 > i1) return
+
+	ok = verify(s(i0: i1), '0123456789') == 0
+
+end function is_int_lit_text
+
+!===============================================================================
+
 module function convert(s, from, to) result(r)
 
 	! Works elementwise on arrays too, in which case `from` and `to` are the
@@ -514,6 +549,8 @@ module function convert(s, from, to) result(r)
 	integer, intent(in) :: from, to
 	character(len = :), allocatable :: r
 
+	logical :: paren
+
 	r = s
 	if (from == to) return
 
@@ -521,6 +558,17 @@ module function convert(s, from, to) result(r)
 	case (i32_type)
 		r = 'int('//s//', int32)'
 	case (i64_type)
+		! An i32 literal, like `3` or `(-3)`, is just an i64 literal
+		if (from == i32_type) then
+			if (is_int_lit_text(s, paren)) then
+				if (paren) then
+					r = s(1: len(s) - 1)//'_int64)'
+				else
+					r = s//'_int64'
+				end if
+				return
+			end if
+		end if
 		r = 'int('//s//', int64)'
 	case (f32_type)
 		r = 'real('//s//', real32)'
@@ -1679,43 +1727,6 @@ end function emit_unary
 
 !===============================================================================
 
-recursive function int_literal(node, val) result(is_lit)
-
-	! Is this an integer literal, possibly with a sign?  The parser keeps the
-	! sign of `-1` as a unary operator.  If so, its value is `val`
-
-	type(syntax_node_t), intent(in) :: node
-	integer(kind = 8), intent(out) :: val
-	logical :: is_lit
-
-	integer(kind = 8) :: inner
-
-	is_lit = .false.
-	val = 0
-
-	if (node%kind == literal_expr) then
-		if (node%val%type == i32_type) then
-			val = node%val%sca%i32
-			is_lit = .true.
-		else if (node%val%type == i64_type) then
-			val = node%val%sca%i64
-			is_lit = .true.
-		end if
-
-	else if (node%kind == unary_expr) then
-		if (node%op%kind == minus_token .or. node%op%kind == plus_token) then
-			if (int_literal(node%right, inner)) then
-				is_lit = .true.
-				val = inner
-				if (node%op%kind == minus_token) val = -inner
-			end if
-		end if
-	end if
-
-end function int_literal
-
-!===============================================================================
-
 recursive function plus_one(em, node) result(s)
 
 	! The 1-based Fortran index for a 0-based syntran index expression
@@ -2391,6 +2402,8 @@ recursive function emit_array_expr(em, node) result(s)
 
 	integer :: i, k, t, kind_
 
+	logical :: typed
+
 	t = node%val%array%type
 	kind_ = node%val%array%kind
 
@@ -2521,7 +2534,23 @@ recursive function emit_array_expr(em, node) result(s)
 			end if
 		end do
 
-		s = '['//spec//' :: '//elems//']'
+		! The type spec converts the elements, and gives an empty array its type.
+		! It's redundant for a non-empty array of numbers or bools whose elements
+		! already all have the type of the array
+		typed = .true.
+		select case (t)
+		case (i32_type, i64_type, f32_type, f64_type, bool_type)
+			typed = size(node%elems) == 0
+			do i = 1, size(node%elems)
+				if (elem_type(node%elems(i)%val) /= t) typed = .true.
+			end do
+		end select
+
+		if (typed) then
+			s = '['//spec//' :: '//elems//']'
+		else
+			s = '['//elems//']'
+		end if
 
 		if (kind_ == size_array .and. t == struct_type) then
 			call em_unsupported(em, 'an array of structs of rank above 1')
@@ -2732,6 +2761,30 @@ end function file_var
 
 !===============================================================================
 
+function dim_plus_one(node, a) result(s)
+
+	! The 1-based Fortran dim argument for the 0-based syntran dimension `node`,
+	! whose text is `a`
+
+	type(syntax_node_t), intent(in) :: node
+	character(len = *), intent(in) :: a
+	character(len = :), allocatable :: s
+
+	integer(kind = 8) :: v
+
+	if (int_literal(node, v)) then
+		if (abs(v) < 2_8**30) then
+			s = str(v + 1)
+			return
+		end if
+	end if
+
+	s = convert(a, elem_type(node%val), i32_type)//' + 1'
+
+end function dim_plus_one
+
+!===============================================================================
+
 recursive function emit_intr_call(em, node) result(s)
 
 	! Call of an intrinsic fn which returns a value.  Overloaded intrinsics were
@@ -2807,24 +2860,22 @@ recursive function emit_intr_call(em, node) result(s)
 
 	case ('size')
 		if (n == 2) then
-			s = convert('size('//a1//', dim = '//convert(a2, elem_type(node%args(2)%val), &
-				i32_type)//' + 1, kind = int64)', i64_type, elem_type(node%val))
+			s = convert('size('//a1//', dim = '//dim_plus_one(node%args(2), a2)// &
+				', kind = int64)', i64_type, elem_type(node%val))
 		else
 			s = convert('size('//a1//', kind = int64)', i64_type, elem_type(node%val))
 		end if
 
 	case ('count')
 		if (suffix == 'dim') then
-			s = 'count('//a1//', dim = '//convert(a2, elem_type(node%args(2)%val), &
-				i32_type)//' + 1, kind = int64)'
+			s = 'count('//a1//', dim = '//dim_plus_one(node%args(2), a2)//', kind = int64)'
 		else
 			s = convert('count('//a1//', kind = int64)', i64_type, elem_type(node%val))
 		end if
 
 	case ('all', 'any')
 		if (suffix == 'dim') then
-			s = base//'('//a1//', dim = '//convert(a2, elem_type(node%args(2)%val), &
-				i32_type)//' + 1)'
+			s = base//'('//a1//', dim = '//dim_plus_one(node%args(2), a2)//')'
 		else
 			s = base//'('//a1//')'
 		end if
@@ -2834,13 +2885,11 @@ recursive function emit_intr_call(em, node) result(s)
 		args = a1
 		select case (suffix(index(suffix, '_') + 1:))
 		case ('dim')
-			args = args//', dim = '//convert(a2, elem_type(node%args(2)%val), &
-				i32_type)//' + 1'
+			args = args//', dim = '//dim_plus_one(node%args(2), a2)
 		case ('mask')
 			args = args//', mask = '//a2
 		case ('dim_mask')
-			args = args//', dim = '//convert(a2, elem_type(node%args(2)%val), &
-				i32_type)//' + 1, mask = '//emit_expr(em, node%args(3))
+			args = args//', dim = '//dim_plus_one(node%args(2), a2)//', mask = '//emit_expr(em, node%args(3))
 		end select
 		s = base//'('//args//')'
 

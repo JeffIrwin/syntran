@@ -666,6 +666,43 @@ end function is_simple
 
 !===============================================================================
 
+recursive function int_literal(node, val) result(is_lit)
+
+	! Is this an integer literal, possibly with a sign?  The parser keeps the
+	! sign of `-1` as a unary operator.  If so, its value is `val`
+
+	type(syntax_node_t), intent(in) :: node
+	integer(kind = 8), intent(out) :: val
+	logical :: is_lit
+
+	integer(kind = 8) :: inner
+
+	is_lit = .false.
+	val = 0
+
+	if (node%kind == literal_expr) then
+		if (node%val%type == i32_type) then
+			val = node%val%sca%i32
+			is_lit = .true.
+		else if (node%val%type == i64_type) then
+			val = node%val%sca%i64
+			is_lit = .true.
+		end if
+
+	else if (node%kind == unary_expr) then
+		if (node%op%kind == minus_token .or. node%op%kind == plus_token) then
+			if (int_literal(node%right, inner)) then
+				is_lit = .true.
+				val = inner
+				if (node%op%kind == minus_token) val = -inner
+			end if
+		end if
+	end if
+
+end function int_literal
+
+!===============================================================================
+
 function is_file_var(node) result(is_var)
 
 	! Is this a plain variable that a file handle is updated through, as an

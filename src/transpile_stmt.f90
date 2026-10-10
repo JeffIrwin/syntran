@@ -1027,10 +1027,13 @@ recursive subroutine emit_for_range(em, node)
 
 	!********
 
-	character(len = :), allocatable :: it, lb, ub, step, tmp
+	character(len = :), allocatable :: it, lb, ub, step, tmp, bound
 	character(len = 2) :: kindstr
 
 	integer :: elem
+	integer(kind = 8) :: ubv, sv
+
+	logical :: ub_lit, st_lit
 
 	type(value_t) :: var_val
 
@@ -1044,19 +1047,51 @@ recursive subroutine emit_for_range(em, node)
 
 		it = new_tmp(em, type_spec(elem), 'it')
 
+		! Literal bounds and steps are folded, well away from overflow
+		ub_lit = int_literal(arr%ubound_, ubv)
+		if (ub_lit) ub_lit = abs(ubv) < 2_8**30
+
 		if (arr%val%array%kind == step_array) then
-			step = convert(emit_expr(em, arr%step), elem_type(arr%step%val), elem)
-			if (.not. is_simple(arr%step)) then
-				! Used twice below
-				tmp = new_tmp(em, type_spec(elem), 'step')
-				call em_line(em, tmp//' = '//step)
-				step = tmp
+
+			st_lit = int_literal(arr%step, sv)
+			if (st_lit) st_lit = sv /= 0 .and. abs(sv) < 2_8**30
+
+			if (st_lit) then
+				! The sign of the step is the direction of the loop, and the upper
+				! bound is exclusive in either direction
+				step = lit_text(sv)
+				if (ub_lit) then
+					bound = lit_text(ubv - sign(1_8, sv))
+				else if (sv > 0) then
+					bound = ub//' - 1'
+				else
+					bound = ub//' + 1'
+				end if
+				if (sv == 1) then
+					call em_line(em, 'do '//it//' = '//lb//', '//bound)
+				else
+					call em_line(em, 'do '//it//' = '//lb//', '//bound//', '//step)
+				end if
+
+			else
+				step = convert(emit_expr(em, arr%step), elem_type(arr%step%val), elem)
+				if (.not. is_simple(arr%step)) then
+					! Used twice below
+					tmp = new_tmp(em, type_spec(elem), 'step')
+					call em_line(em, tmp//' = '//step)
+					step = tmp
+				end if
+				call em_line(em, 'do '//it//' = '//lb//', '//ub//' - sign(1_int'// &
+					kindstr//', '//step//'), '//step)
 			end if
-			! The upper bound is exclusive, in either direction
-			call em_line(em, 'do '//it//' = '//lb//', '//ub//' - sign(1_int'// &
-				kindstr//', '//step//'), '//step)
+
 		else
-			call em_line(em, 'do '//it//' = '//lb//', '//ub//' - 1')
+			if (ub_lit) then
+				bound = lit_text(ubv - 1)
+			else
+				bound = ub//' - 1'
+			end if
+			call em_line(em, 'do '//it//' = '//lb//', '//bound)
 		end if
 
 	end associate
@@ -1072,6 +1107,16 @@ recursive subroutine emit_for_range(em, node)
 	em%indent = em%indent - 1
 
 	call em_line(em, 'end do')
+
+contains
+
+	function lit_text(v) result(t)
+		! An integer literal of the kind of the loop
+		integer(kind = 8), intent(in) :: v
+		character(len = :), allocatable :: t
+		t = str(v)
+		if (elem == i64_type) t = t//'_int64'
+	end function lit_text
 
 end subroutine emit_for_range
 
