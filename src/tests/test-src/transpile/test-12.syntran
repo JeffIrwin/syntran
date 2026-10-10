@@ -1,0 +1,153 @@
+// Constructs that the transpiler writes in a shorter form than the general
+// one, which must still do the same thing as the interpreter.  These programs
+// are run by both the interpreter and the Fortran transpiler
+// (utils/test-transpile.sh), which must print the same thing.  The return
+// value is the number of failed checks
+
+let status = 0;
+
+fn check(ok: bool): i32
+{
+	if (ok) return 0;
+	return 1;
+}
+
+//==============================================================================
+// Scalar parameters are passed by value, and are free to be assigned to
+
+fn bump(n: i32): i32
+{
+	n += 1;
+	return n * 2;
+}
+
+fn scale(x: f64, k: i64): f64
+{
+	x *= 2.0;
+	k += 1'i64;
+	return x * k;
+}
+
+fn flip(b: bool): bool
+{
+	b = not b;
+	return b;
+}
+
+fn rec(n: i32): i32
+{
+	if (n <= 0) return 0;
+	n -= 1;
+	return n + rec(n);
+}
+
+let v = 4;
+println(bump(v), " ", v);
+status += check(bump(v) == 10);
+status += check(v == 4);
+status += check(scale(1.5, 2'i64) == 9.0);
+status += check(flip(true) == false);
+status += check(rec(5) == 10);
+
+//==============================================================================
+// Range loops
+
+fn sum_to(n: i32): i32
+{
+	let s = 0;
+	for i in [0: n]
+	{
+		s += i;
+	}
+	return s;
+}
+
+fn add_ten(x: &i32)
+{
+	x += 10;
+}
+
+let t = 0;
+for i in [0: 4]
+{
+	t += i;
+}
+status += check(t == 6);
+
+t = 0;
+for i in [0: 2: 10]
+{
+	t += i;
+}
+status += check(t == 20);
+
+t = 0;
+for i in [10: -3: 0]
+{
+	t += i;
+}
+status += check(t == 10 + 7 + 4 + 1);
+
+// A loop variable that is assigned to, or passed by reference, still starts
+// each iteration at the next value
+t = 0;
+for i in [0: 3]
+{
+	i += 5;
+	t += i;
+}
+status += check(t == 5 + 6 + 7);
+
+t = 0;
+for i in [0: 3]
+{
+	add_ten(&i);
+	t += i;
+}
+status += check(t == 10 + 11 + 12);
+
+let n = 5;
+t = 0;
+for i in [n: -2: 0]
+{
+	t += i;
+}
+status += check(t == 5 + 3 + 1);
+status += check(sum_to(5) == 10);
+
+let t64 = 0'i64;
+for i in [0'i64: 3'i64]
+{
+	t64 += i;
+}
+status += check(t64 == 3'i64);
+
+// Nothing runs
+t = 0;
+for i in [3: 3]
+{
+	t += 1;
+}
+status += check(t == 0);
+
+//==============================================================================
+// Literals that are widened, and array literals
+
+let a = [1, 2, 3];
+let b = [1.5, 2.5];
+let c = [true, false];
+let d = [1'i64, 2'i64];
+status += check(size(a, 0) == 3);
+status += check(size(a) == 3);
+status += check(sum(a) == 6);
+status += check(sum(b) == 4.0);
+status += check(c[0] and not c[1]);
+status += check(sum(d) == 3'i64);
+
+let m = [1, 2, 3, 4, 5, 6; 2, 3];
+status += check(size(m, 0) == 2);
+status += check(size(m, 1) == 3);
+status += check(sum(m, 1)[0] == 1 + 3 + 5);
+
+println(status);
+return status;

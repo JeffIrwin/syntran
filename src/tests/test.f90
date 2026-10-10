@@ -9803,15 +9803,27 @@ subroutine unit_test_transpile(npass, nfail)
 			index(transpile_src('let a = [1, 2]; return size(a) == 2;'), &
 				'int(2, int64)') == 0, &
 			index(transpile_src('let t = 0; for i in [0: 4] { t += i; }'), &
-				'do it_t1 = 0, 3') > 0, &
+				'do i = 0, 3') > 0, &
 			index(transpile_src('let t = 0; for i in [0: 2: 10] { t += i; }'), &
-				'do it_t1 = 0, 9, 2') > 0, &
+				'do i = 0, 9, 2') > 0, &
 			index(transpile_src('let t = 0; for i in [10: -3: 0] { t += i; }'), &
-				'do it_t1 = 10, 1, -3') > 0, &
+				'do i = 10, 1, -3') > 0, &
 			index(transpile_src("let t = 0; for i in [0'i64: 3'i64] { t += 1; }"), &
-				'do it_t1 = 0_int64, 2_int64') > 0, &
+				'do i = 0_int64, 2_int64') > 0, &
 			index(transpile_src('let n = 4; let t = 0; for i in [0: n] { t += i; }'), &
-				'do it_t1 = 0, n - 1') > 0, &
+				'do i = 0, n - 1') > 0, &
+
+			! The loop variable is the do variable, unless the body assigns to it or
+			! passes it by reference, which Fortran doesn't allow.  A fn's too
+			index(transpile_src('let t = 0; for i in [0: 4] { t += i; }'), 'it_t') == 0, &
+			index(transpile_src('let t = 0; for i in [0: 4] { i += 1; t += i; }'), &
+				'do it_t1 = 0, 3') > 0, &
+			index(transpile_src('fn f(x: &i32) { x += 1; } let t = 0; for i in [0: 4] ' &
+				//'{ f(&i); t += i; }'), 'do it_t1 = 0, 3') > 0, &
+			index(transpile_src('fn f(n: i32): i32 { let t = 0; for i in [0: n] ' &
+				//'{ t += i; } return t; } return f(3);'), 'do i = 0, n - 1') > 0, &
+			index(transpile_src('fn f(n: i32): i32 { let t = 0; for i in [0: n] ' &
+				//'{ i += 1; t += i; } return t; } return f(3);'), 'do it_t') > 0, &
 
 			! The type spec of an array constructor is only there when it's needed
 			index(transpile_src('let a = [1, 2, 3]; return a;'), 'a = [1, 2, 3]') > 0, &
@@ -9833,6 +9845,7 @@ subroutine unit_test_transpile(npass, nfail)
 			interpret_file(T//'transpile/test-08.syntran', .true.) == '0', &
 			interpret_file(T//'transpile/test-09.syntran', .true.) == '0', &
 			interpret_file(T//'transpile/test-11.syntran', .true.) == '0', &
+			interpret_file(T//'transpile/test-12.syntran', .true.) == '0', &
 			transpiles_ok(T//'transpile/test-01.syntran'), &
 			transpiles_ok(T//'transpile/test-02.syntran'), &
 			transpiles_ok(T//'transpile/test-03.syntran'), &
@@ -9844,6 +9857,7 @@ subroutine unit_test_transpile(npass, nfail)
 			transpiles_ok(T//'transpile/test-09.syntran'), &
 			transpiles_ok(T//'transpile/test-10.syntran'), &
 			transpiles_ok(T//'transpile/test-11.syntran'), &
+			transpiles_ok(T//'transpile/test-12.syntran'), &
 
 			! Most of the tests programs are supported
 			transpiles_ok(T//'fns/test-01.syntran'), &

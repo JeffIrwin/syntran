@@ -1033,7 +1033,7 @@ recursive subroutine emit_for_range(em, node)
 	integer :: elem
 	integer(kind = 8) :: ubv, sv
 
-	logical :: ub_lit, st_lit
+	logical :: ub_lit, st_lit, direct
 
 	type(value_t) :: var_val
 
@@ -1045,7 +1045,16 @@ recursive subroutine emit_for_range(em, node)
 		lb = convert(emit_expr(em, arr%lbound_), elem_type(arr%lbound_%val), elem)
 		ub = convert(emit_expr(em, arr%ubound_), elem_type(arr%ubound_%val), elem)
 
-		it = new_tmp(em, type_spec(elem), 'it')
+		! The loop variable is the do variable itself, unless the body assigns to
+		! it, which Fortran doesn't allow.  Then a hidden counter is copied to it
+		direct = .not. modifies_slot(node%body, node%id_index, node%is_loc)
+		var_val%type = elem
+		if (direct) then
+			call declare_var(em, node, var_val)
+			it = var_name(em, node)
+		else
+			it = new_tmp(em, type_spec(elem), 'it')
+		end if
 
 		! Literal bounds and steps are folded, well away from overflow
 		ub_lit = int_literal(arr%ubound_, ubv)
@@ -1096,12 +1105,11 @@ recursive subroutine emit_for_range(em, node)
 
 	end associate
 
-	var_val%type = elem
-	call declare_var(em, node, var_val)
+	if (.not. direct) call declare_var(em, node, var_val)
 
 	em%indent = em%indent + 1
 	em%loop_depth = em%loop_depth + 1
-	call em_line(em, var_name(em, node)//' = '//it)
+	if (.not. direct) call em_line(em, var_name(em, node)//' = '//it)
 	call emit_stmt(em, node%body)
 	em%loop_depth = em%loop_depth - 1
 	em%indent = em%indent - 1
@@ -1595,26 +1603,32 @@ end subroutine get_children
 
 !===============================================================================
 
-recursive function modifies_slot(node, slot) result(found)
+recursive function modifies_slot(node, slot, loc) result(found)
 
-	! Is the local variable in `slot` assigned to anywhere in this tree, or
-	! passed by reference to a fn which could assign to it?
+	! Is the variable in `slot` assigned to anywhere in this tree, or passed by
+	! reference to a fn which could assign to it?  It's a local variable unless
+	! `loc` says otherwise, in which case it's a global
 
 	type(syntax_node_t), intent(in), target :: node
 	integer, intent(in) :: slot
+	logical, intent(in), optional :: loc
 	logical :: found
 
 	integer :: i, n
+	logical :: want_loc
 	type(node_ptr_t), allocatable :: kids(:)
 
 	found = .false.
+
+	want_loc = .true.
+	if (present(loc)) want_loc = loc
 
 	select case (node%kind)
 
 	case (assignment_expr)
 		! The target is the node itself.  That includes assignment to an
 		! element or slice of the variable
-		if (node%is_loc .and. node%id_index == slot) then
+		if ((node%is_loc .eqv. want_loc) .and. node%id_index == slot) then
 			found = .true.
 			return
 		end if
@@ -1626,7 +1640,8 @@ recursive function modifies_slot(node, slot) result(found)
 		if (allocated(node%is_ref) .and. allocated(node%args)) then
 			do i = 1, size(node%args)
 				if (.not. node%is_ref(i)) cycle
-				if (node%args(i)%is_loc .and. node%args(i)%id_index == slot .and. &
+				if ((node%args(i)%is_loc .eqv. want_loc) .and. &
+						node%args(i)%id_index == slot .and. &
 						(node%args(i)%kind == name_expr .or. &
 						node%args(i)%kind == dot_expr)) then
 					found = .true.
@@ -1639,7 +1654,7 @@ recursive function modifies_slot(node, slot) result(found)
 
 	call get_children(node, kids, n)
 	do i = 1, n
-		if (modifies_slot(kids(i)%p, slot)) then
+		if (modifies_slot(kids(i)%p, slot, want_loc)) then
 			found = .true.
 			return
 		end if
