@@ -8,7 +8,6 @@ samples/arithmetic2.syntran
 samples/array-fns.syntran
 samples/arrays.syntran
 samples/base64.syntran
-samples/betweenle.syntran
 samples/bin-search.syntran
 samples/blocks.syntran
 samples/bridge/utils.syntran
@@ -45,7 +44,6 @@ samples/vec_i32.syntran
 samples/wave-equation-1d/wave.syntran
 samples/wave-equation-2d/wave.syntran
 samples/while.syntran
-samples/wordle.syntran
 src/tests/test-src/array-bool/test-01.syntran
 src/tests/test-src/array-f32/test-01.syntran
 src/tests/test-src/array-f32/test-02.syntran

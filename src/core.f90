@@ -31,6 +31,11 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - "note syntran's ** is left-associative: 64, unlike Fortran's 512, so
+	!    those parentheses must stay"
+	!    * is claude saying i did math wrong? op precedence should probably be
+	!      the same as fortran unless this is genuinely non-standard across
+	!      languages
 	!  - api documentation
 	!    * the readme does not mention the eval*() functions and how to call
 	!      them from a simple fortran program

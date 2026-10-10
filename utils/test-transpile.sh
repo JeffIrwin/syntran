@@ -21,6 +21,10 @@
 # to be supported can't quietly regress to SKIP.  When transpiler coverage
 # grows, add the newly passing files to that list with --update-pass-list.
 #
+# Files whose result depends on the machine (e.g. samples that read a system
+# dictionary which CI doesn't have) are listed in `excluded` below instead.
+# They're never run, so they can't be added to the pass list by a rebaseline
+#
 # Usage:
 #   bash utils/test-transpile.sh [options] [syntran_binary] [fortran_compiler]
 #
@@ -181,6 +185,17 @@ else
 	echo "keeping generated programs in $TMP"
 fi
 
+# Files that are never tested, because their result depends on the machine they
+# run on.  These read the system dictionary ~/.local/share/dict/american-english,
+# which exists on a dev box but not in CI.  Merely leaving them out of
+# transpile-pass.txt isn't enough: they PASS locally, so rebaselining with
+# --update-pass-list there would add them back, and CI would then report a
+# REGRESSION.  Excluding them here keeps them out of every run
+excluded=(
+	samples/betweenle.syntran
+	samples/wordle.syntran
+)
+
 # Error repro files are designed to be invalid, and the stack trace tests depend
 # on the interpreter's own runtime error output
 files=$(
@@ -189,7 +204,7 @@ files=$(
 		find src/tests/test-src -name '*.syntran' \
 			-not -path 'src/tests/test-src/errors/*' \
 			-not -path 'src/tests/test-src/stacktrace/*'
-	} | sort
+	} | grep -vxF "$(printf '%s\n' "${excluded[@]}")" | sort
 )
 if [ -n "$only" ]; then
 	files=$(echo "$files" | grep -E "$only")
@@ -265,6 +280,13 @@ elif [ -f "$PASS_LIST" ] && [ -z "$only" ]; then
 	missing=0
 	while IFS= read -r req; do
 		[ -z "$req" ] && continue
+		for ex in "${excluded[@]}"; do
+			if [ "$ex" = "$req" ]; then
+				echo "error: $req is excluded in $0 but listed in $PASS_LIST"
+				missing=$((missing + 1))
+				continue 2
+			fi
+		done
 		found=0
 		for p in "${passed[@]+"${passed[@]}"}"; do
 			if [ "$p" = "$req" ]; then found=1; break; fi
