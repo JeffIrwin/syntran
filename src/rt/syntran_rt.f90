@@ -187,6 +187,57 @@ end function rt_char_at
 
 !===============================================================================
 
+! The 0-based indices of s[lb: step: ub] for a string of length n.  An omitted
+! bound depends on the sign of the step, like the interpreter's.  The bound is
+! exclusive
+function rt_str_step_idx(n, step, lb, ub) result(r)
+    integer(int64), intent(in) :: n, step
+    integer(int64), intent(in), optional :: lb, ub
+    integer(int64), allocatable :: r(:)
+    integer(int64) :: lb_, ub_
+    if (step == 0) call rt_fatal('subscript step is 0')
+    lb_ = 0
+    if (step < 0) lb_ = n - 1
+    ub_ = n
+    if (step < 0) ub_ = -1
+    if (present(lb)) lb_ = lb
+    if (present(ub)) ub_ = ub
+    r = rt_step_i64(lb_, step, ub_)
+end function rt_str_step_idx
+
+! s[lb: step: ub], like a reversed `s[:-1:]`
+function rt_str_step(s, step, lb, ub) result(r)
+    character(len = *), intent(in) :: s
+    integer(int64), intent(in) :: step
+    integer(int64), intent(in), optional :: lb, ub
+    character(len = :), allocatable :: r
+    integer(int64), allocatable :: idx(:)
+    integer :: i
+    idx = rt_str_step_idx(int(len(s), int64), step, lb, ub)
+    allocate(character(len = size(idx)) :: r)
+    do i = 1, size(idx)
+        r(i:i) = s(idx(i) + 1: idx(i) + 1)
+    end do
+end function rt_str_step
+
+! s[lb: step: ub] = rhs
+subroutine rt_str_step_set(s, rhs, step, lb, ub)
+    character(len = *), intent(inout) :: s
+    character(len = *), intent(in) :: rhs
+    integer(int64), intent(in) :: step
+    integer(int64), intent(in), optional :: lb, ub
+    integer(int64), allocatable :: idx(:)
+    integer :: i
+    idx = rt_str_step_idx(int(len(s), int64), step, lb, ub)
+    if (size(idx) /= len(rhs)) &
+        call rt_fatal('size of RHS does not match size of LHS slice')
+    do i = 1, size(idx)
+        s(idx(i) + 1: idx(i) + 1) = rhs(i:i)
+    end do
+end subroutine rt_str_step_set
+
+!===============================================================================
+
 ! println() writes each argument without advancing, then ends the line
 subroutine rt_print(s)
     character(len = *), intent(in) :: s

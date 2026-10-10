@@ -220,7 +220,7 @@ recursive module subroutine emit_assign(em, node)
 
 	!********
 
-	character(len = :), allocatable :: lhs, rhs, op_str, fn_str
+	character(len = :), allocatable :: lhs, rhs, op_str, fn_str, tmp
 
 	integer :: ct, lt, rt
 
@@ -240,8 +240,20 @@ recursive module subroutine emit_assign(em, node)
 
 	! A compound assignment names its target twice, so anything with side
 	! effects in a subscript is only evaluated once, up front
+	if (allocated(em%str_step)) deallocate(em%str_step)
 	lhs = emit_name_ref(em, node, hoist = compound, target = .true.)
 	rhs = emit_expr(em, node%right)
+
+	if (allocated(em%str_step)) then
+		! A stepped slice of a string, which can't be a Fortran substring.  The
+		! rhs is stored first, so that a call isn't aliased by an rhs which names
+		! the target, like `s[:-1:] = s`
+		tmp = new_tmp(em, 'character(len = :), allocatable', 'sr')
+		call em_line(em, tmp//' = '//rhs)
+		call em_line(em, 'call rt_str_step_set('//lhs//', '//tmp//em%str_step//')')
+		deallocate(em%str_step)
+		return
+	end if
 
 	if (lt == str_type) then
 		! An array of strings is an array of wrappers, so a lone string needs

@@ -98,6 +98,13 @@ module syntran__transpile_m
 		! Counter for hidden compiler-generated variables
 		integer :: tmp_count = 0
 
+		! The `, step, lb = lb, ub = ub` arguments of rt_str_step_set(), left by
+		! the designator of an assignment target which is a stepped slice of a
+		! string, like `s[:-1:]`.  Fortran can't assign to a strided substring, so
+		! the designator is the whole string and the assignment is a call.  Not
+		! allocated otherwise
+		character(len = :), allocatable :: str_step
+
 		! Source location of the statement being emitted, for diagnostics
 		integer :: cur_src_id = 0, cur_src_pos = 0
 

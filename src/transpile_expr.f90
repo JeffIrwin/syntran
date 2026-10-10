@@ -563,7 +563,7 @@ module subroutine emit_str_slice_assign(em, node, done)
 
 	!********
 
-	character(len = :), allocatable :: base, i_, lo, hi, rhs
+	character(len = :), allocatable :: base, i_, lo, hi, rhs, sargs, tmp
 
 	type(slot_info_t) :: info
 
@@ -579,7 +579,8 @@ module subroutine emit_str_slice_assign(em, node, done)
 	associate (sub => node%lsubscripts(1))
 		if (sub%sub_kind /= range_sub .and. sub%sub_kind /= all_sub) return
 		if (node%lsubscripts(2)%sub_kind /= scalar_sub .and. &
-				node%lsubscripts(2)%sub_kind /= range_sub) return
+				node%lsubscripts(2)%sub_kind /= range_sub .and. &
+				node%lsubscripts(2)%sub_kind /= step_sub) return
 	end associate
 
 	base = var_name(node)
@@ -594,10 +595,26 @@ module subroutine emit_str_slice_assign(em, node, done)
 		if (.not. node%lsubscripts(1)%usub_omit) hi = emit_expr(em, node%usubscripts(1))
 	end if
 
+	sargs = ''
+	if (node%lsubscripts(2)%sub_kind == step_sub) then
+		sargs = str_step_args(em, node, 2, .true.)
+
+		! Stored first, so that a call isn't aliased by an rhs which names an
+		! element
+		tmp = new_tmp(em, 'character(len = :), allocatable', 'sr')
+		call em_line(em, tmp//' = '//rhs)
+		rhs = tmp
+	end if
+
 	i_ = new_tmp(em, 'integer(int64)', 'si')
 	call em_line(em, 'do '//i_//' = '//lo//', '//hi)
 	em%indent = em%indent + 1
-	call em_line(em, base//'('//i_//')%s('//emit_char_sub(em, node, 2, .true.)//') = '//rhs)
+	if (node%lsubscripts(2)%sub_kind == step_sub) then
+		call em_line(em, 'call rt_str_step_set('//base//'('//i_//')%s, '//rhs// &
+			sargs//')')
+	else
+		call em_line(em, base//'('//i_//')%s('//emit_char_sub(em, node, 2, .true.)//') = '//rhs)
+	end if
 	em%indent = em%indent - 1
 	call em_line(em, 'end do')
 
@@ -1489,6 +1506,96 @@ end function emit_char_sub
 
 !===============================================================================
 
+recursive function str_step_args(em, node, i, do_hoist) result(s)
+
+	! The arguments `, step, lb = lb, ub = ub` of rt_str_step() and
+	! rt_str_step_set(), for a stepped subscript i of a string.  An omitted
+	! bound is left out, since it depends on the sign of the step at run time.
+	! Each is evaluated once, by the callee.  That's not enough if the call is
+	! in a loop, so `do_hoist` first evaluates anything but a variable or
+	! literal into a temporary
+
+	type(emitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	integer, intent(in) :: i
+	logical, intent(in), optional :: do_hoist
+	character(len = :), allocatable :: s
+
+	!********
+
+	logical :: hoist
+
+	hoist = .false.
+	if (present(do_hoist)) hoist = do_hoist
+
+	associate (sub => node%lsubscripts(i), step => node%ssubscripts(i), &
+			upper => node%usubscripts(i))
+
+		s = ', '//i64_arg(em, step, hoist)
+
+		if (.not. sub%lsub_omit) s = s//', lb = '//i64_arg(em, sub, hoist)
+
+		if (.not. sub%usub_omit) s = s//', ub = '//i64_arg(em, upper, hoist)
+
+	end associate
+
+end function str_step_args
+
+!===============================================================================
+
+recursive function i64_arg(em, node, do_hoist) result(s)
+
+	! An integer expression as an int64, in a temporary if `do_hoist` and it's
+	! not a variable or literal
+
+	type(emitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	logical, intent(in) :: do_hoist
+	character(len = :), allocatable :: s
+
+	!********
+
+	character(len = :), allocatable :: tmp
+
+	integer(kind = 8) :: lit
+
+	s = convert(emit_expr(em, node), elem_type(node%val), i64_type)
+
+	if (do_hoist .and. .not. is_simple(node) .and. .not. int_literal(node, lit)) then
+		tmp = new_tmp(em, 'integer(int64)', 'sa')
+		call em_line(em, tmp//' = '//s)
+		s = tmp
+	end if
+
+end function i64_arg
+
+!===============================================================================
+
+recursive function str_step_ref(em, node, i, desig, as_target) result(s)
+
+	! A stepped slice `desig[lb: step: ub]` of a string, whose designator is
+	! `desig`.  It is a call to rt_str_step(), unless it's assigned to.  Then it
+	! is the string itself, and the arguments for rt_str_step_set() are left in
+	! em%str_step
+
+	type(emitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	integer, intent(in) :: i
+	character(len = *), intent(in) :: desig
+	logical, intent(in) :: as_target
+	character(len = :), allocatable :: s
+
+	if (as_target) then
+		em%str_step = str_step_args(em, node, i)
+		s = desig
+	else
+		s = 'rt_str_step('//desig//str_step_args(em, node, i)//')'
+	end if
+
+end function str_step_ref
+
+!===============================================================================
+
 recursive module function emit_name_ref(em, node, hoist, target) result(s)
 
 	! The Fortran designator of a reference to a variable: a name_expr, or the
@@ -1592,6 +1699,11 @@ recursive function subscripted(em, node, base, info, do_hoist, str_hoist) result
 			return
 		end if
 
+		if (node%lsubscripts(1)%sub_kind == step_sub) then
+			s = str_step_ref(em, node, 1, base, str_hoist)
+			return
+		end if
+
 		s = base//'('//emit_char_sub(em, node, 1, str_hoist)//')'
 		return
 	end if
@@ -1623,6 +1735,11 @@ recursive function subscripted(em, node, base, info, do_hoist, str_hoist) result
 			s = 'rt_char_at('//base//'('//subs//')%s, '// &
 				convert(emit_expr(em, node%lsubscripts(nsub)), &
 				elem_type(node%lsubscripts(nsub)%val), i64_type)//')'
+			return
+		end if
+
+		if (node%lsubscripts(nsub)%sub_kind == step_sub) then
+			s = str_step_ref(em, node, nsub, base//'('//subs//')%s', str_hoist)
 			return
 		end if
 
@@ -2072,6 +2189,10 @@ recursive function emit_user_call(em, node) result(s)
 					! A member of a struct is a variable too, and so is an element of
 					! an array that a method is called on
 					arg = emit_name_ref(em, node%args(i), target = .true.)
+					if (allocated(em%str_step)) then
+						call em_unsupported(em, 'a stepped string slice passed by reference')
+						deallocate(em%str_step)
+					end if
 				else if (node%args(i)%kind /= name_expr .or. &
 						allocated(node%args(i)%lsubscripts)) then
 					call em_unsupported(em, 'a by-reference argument that is not a plain variable')

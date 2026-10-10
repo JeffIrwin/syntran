@@ -85,6 +85,39 @@ s2[2] += "zz";
 s2[0: 2] = "q";
 println(s2, " ", s2[1, 0], " ", str(s2));
 
+// Strings with a step, like the arrays above.  The omitted bounds of a negative
+// step are the whole string reversed
+let rs = "hello world";
+let rk = -1;
+let rz = 0;
+let re = "";
+println(rs[:-1:], "|", rs[:2:], "|", rs[1:2:], "|", rs[3:-1:], "|", rs[8:-2:-1]);
+println(rs[:rk:], "|", rs[2:rk:], "|", rs[rz:3:], "|", rs[:2:7], "|", "[", re[:-1:], "]");
+let rv = ["hello", "world"];
+println(rv[0, :-1:], " ", rv[1, :2:], " ", rv[1, 3:-1:]);
+status += check(rs[:-1:] == "dlrow olleh");
+status += check(rs[:2:] == "hlowrd");
+status += check(rv[0, :-1:] == "olleh");
+
+// ... and assigned to
+let ws = "hello";
+ws[:-1:] = "olleh";
+status += check(ws == "hello");
+ws[:-1:] = "abcde";
+status += check(ws == "edcba");
+ws[:-1:] = ws;
+status += check(ws == "abcde");
+ws[1:2:] = "XY";
+status += check(ws == "aXcYe");
+rv[1, :2:] = "WRD";
+status += check(rv[1] == "WoRlD");
+let rw = ["abc", "def", "ghi"];
+rw[0: 2, :-1:] = "xyz";
+status += check(rw[0] == "zyx" and rw[1] == "zyx" and rw[2] == "ghi");
+rw[:, :-1:] = rw[0];
+status += check(rw[2] == "xyz");
+println(ws, " ", rv, " ", rw);
+
 // Iteration over arrays, strings, and ranges of every type
 let total = 0;
 for v in a

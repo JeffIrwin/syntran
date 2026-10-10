@@ -9807,6 +9807,16 @@ subroutine unit_test_transpile(npass, nfail)
 			index(transpile_src('let a = [1, 2]; let r = 0; switch a { case [1, 2] ' &
 				//'{ r = 1; } } return r;'), 'rt_arr_eq(') > 0, &
 
+			! A string with a step can't be a Fortran substring, so it's a call, for
+			! reading and for assigning
+			index(transpile_src('let s = "abc"; println(s[:-1:]);'), 'rt_str_step(') > 0, &
+			index(transpile_src('let s = "abc"; s[:-1:] = "xyz"; println(s);'), &
+				'call rt_str_step_set(') > 0, &
+			index(transpile_src('let v = ["ab", "cd"]; v[0: 2, :-1:] = "xy"; println(v);'), &
+				'call rt_str_step_set(') > 0, &
+			.not. diag_has_code(get_diags_transpile('let s = "abc"; println(s[:-1:]);'), &
+				EC_TRANSPILE_UNSUPPORTED), &
+
 			! Unsupported constructs are diagnostics.  Everything else in the
 			! program is still checked, one diagnostic per statement
 			diag_has_code(get_diags_transpile_file(P//'E115-transpile-unsupported.syntran'), &
