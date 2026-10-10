@@ -211,6 +211,8 @@ module function decl_line(em, val, name, ok) result(s)
 			return
 		end if
 		spec = 'type('//struct_tname(em, k)//')'
+	case (file_type)
+		spec = 'type(rt_file_t)'
 	case (str_type)
 		if (val%type == array_type) then
 			spec = 'type(rt_str_t)'
@@ -1587,6 +1589,23 @@ recursive function emit_dot_ref(em, node, do_hoist, str_hoist) result(s)
 		sk = info%sk
 		if (allocated(info%fname)) s = info%fname
 
+		if (info%type == file_type) then
+			! `f.is_open`, `f.eof`, and `f.name` are components of the handle
+			select case (node%member%id_index)
+			case (FILE_MEM_IS_OPEN)
+				s = s//'%is_open'
+			case (FILE_MEM_EOF)
+				s = s//'%eof'
+			case default
+				s = s//'%name'
+				if (allocated(node%member%lsubscripts)) then
+					info%type = str_type
+					s = subscripted(em, node%member, s, info, do_hoist, str_hoist)
+				end if
+			end select
+			return
+		end if
+
 		if (allocated(node%lsubscripts)) then
 			s = subscripted(em, node, s, info, do_hoist, str_hoist)
 		end if
@@ -1949,6 +1968,28 @@ end function node_is_ref
 
 !===============================================================================
 
+function file_var(em, arg, s) result(r)
+
+	! A file handle that is read from or closed is updated, so it has to be a
+	! variable.  Any other expression is stored in a temporary first, which is
+	! what the interpreter's handle is too, having no variable to update
+
+	type(emitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: arg
+	character(len = *), intent(in) :: s
+	character(len = :), allocatable :: r
+
+	if (arg%kind == name_expr .and. .not. allocated(arg%lsubscripts)) then
+		r = s
+	else
+		r = new_tmp(em, 'type(rt_file_t)', 'fh')
+		call em_line(em, r//' = '//s)
+	end if
+
+end function file_var
+
+!===============================================================================
+
 recursive function emit_intr_call(em, node) result(s)
 
 	! Call of an intrinsic fn which returns a value.  Overloaded intrinsics were
@@ -2091,6 +2132,32 @@ recursive function emit_intr_call(em, node) result(s)
 			end if
 		end do
 		s = s//')'
+
+	case ('open', 'try_open')
+		s = 'rt_open('//a1//', '//a2//', '//merge('.true. ', '.false.', base == 'open')//')'
+
+	case ('readln')
+		if (n == 0) then
+			s = 'rt_readln_stdin()'
+		else
+			s = 'rt_readln('//file_var(em, node%args(1), a1)//')'
+		end if
+
+	case ('eof')
+		if (n == 0) then
+			s = 'rt_eof_stdin()'
+		else
+			s = 'rt_eof('//a1//')'
+		end if
+
+	case ('exists')
+		s = 'rt_exists('//a1//')'
+
+	case ('getenv', 'hasenv')
+		s = 'rt_'//base//'('//a1//')'
+
+	case ('args')
+		s = 'rt_args()'
 
 	case ('i32', 'i64')
 		kind_str = merge('int32', 'int64', base == 'i32')

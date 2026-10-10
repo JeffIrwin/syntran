@@ -1,9 +1,14 @@
 samples/aes.syntran
+samples/aoc/2020/1/main.syntran
+samples/aoc/2020/2/main.syntran
+samples/aoc/2020/3/main.syntran
+samples/args.syntran
 samples/arithmetic.syntran
 samples/arithmetic2.syntran
 samples/array-fns.syntran
 samples/arrays.syntran
 samples/base64.syntran
+samples/betweenle.syntran
 samples/bin-search.syntran
 samples/blocks.syntran
 samples/bridge/utils.syntran
@@ -15,9 +20,12 @@ samples/fibonacci-3.syntran
 samples/fibonacci-4.syntran
 samples/for.syntran
 samples/gcd.syntran
+samples/hello_name.syntran
+samples/logo.syntran
 samples/md5.syntran
 samples/pi-1.syntran
 samples/pi-2.syntran
+samples/poople.syntran
 samples/primes-1.syntran
 samples/primes-2.syntran
 samples/primes-3.syntran
@@ -36,6 +44,7 @@ samples/vec_i32.syntran
 samples/wave-equation-1d/wave.syntran
 samples/wave-equation-2d/wave.syntran
 samples/while.syntran
+samples/wordle.syntran
 src/tests/test-src/array-bool/test-01.syntran
 src/tests/test-src/array-f32/test-01.syntran
 src/tests/test-src/array-f32/test-02.syntran
@@ -265,6 +274,7 @@ src/tests/test-src/transpile/test-03.syntran
 src/tests/test-src/transpile/test-04.syntran
 src/tests/test-src/transpile/test-05.syntran
 src/tests/test-src/transpile/test-06.syntran
+src/tests/test-src/transpile/test-07.syntran
 src/tests/test-src/var-scopes/test-01.syntran
 src/tests/test-src/var-scopes/test-02.syntran
 src/tests/test-src/var-scopes/test-03.syntran

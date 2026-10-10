@@ -707,8 +707,8 @@ or `let = 3;`.
 ### E115 -- transpile-unsupported
 
 A construct which the Fortran transpiler (`syntran --transpile`) can't
-translate yet, e.g. file I/O, a struct, an enum, a `switch`, or a `use`
-statement.  The program is still valid.  Run it with the interpreter instead,
+translate, e.g. a function pointer or the interpreter's own call stack with
+`std::caller()`.  The program is still valid.  Run it with the interpreter instead,
 i.e. without `--transpile`.  This is only ever reported when transpiling.  There
 is at most one diagnostic for each statement.
 

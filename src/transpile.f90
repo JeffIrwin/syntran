@@ -446,6 +446,8 @@ function type_spec(type_) result(s)
 	case (enum_type)
 		! The index of the variant
 		s = 'integer(int32)'
+	case (file_type)
+		s = 'type(rt_file_t)'
 	case default
 		s = 'integer(int32)'
 	end select

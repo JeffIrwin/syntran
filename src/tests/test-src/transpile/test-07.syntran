@@ -1,0 +1,74 @@
+// File I/O.  These programs are run by both the interpreter and the Fortran
+// transpiler (utils/test-transpile.sh), which must print the same thing.  It
+// writes a scratch file next to itself, which is git-ignored
+//
+// The return value is the number of failed checks
+
+let status = 0;
+
+fn check(ok: bool): i32
+{
+	if (ok) return 0;
+	return 1;
+}
+
+enum Color
+{
+	Red,
+	Green,
+}
+
+let path = "test-07-scratch.tmp";
+
+// Write values of several types, and an array and an enum like println() does
+let fo = open(path, "w");
+println(fo.is_open, " ", fo.name);
+writeln(fo, "first line");
+writeln(fo, "a", 1, " ", 2.5, " ", true, " ", [1, 2, 3], " ", Color.Green);
+writeln(fo, "");
+writeln(fo, "last line");
+close(fo);
+println(fo.is_open);
+status += check(not fo.is_open);
+
+// Read them back.  The eof flag is only set by reading past the end
+let fi = open(path, "r");
+println(fi.is_open, " ", fi.eof, " ", eof(fi));
+let n = 0;
+while not eof(fi)
+{
+	let line = readln(fi);
+	println(n, " [", line, "] ", fi.eof);
+	n += 1;
+}
+println(n, " ", eof(fi), " ", fi.eof);
+close(fi);
+status += check(n == 5);
+
+// A copy of a handle shares the file's position, but not the eof flag
+let g = open(path, "r");
+let h = g;
+let a = readln(g);
+let b = readln(h);
+println(a == b, " ", g.eof, " ", h.eof);
+status += check(a != b);
+close(g);
+close(h);
+
+// Existence, and an open that fails
+println(std::exists(path), " ", std::exists("no-such-file-7.tmp"));
+let bad = std::try_open("no-such-file-7.tmp", "r");
+println(bad.is_open, " ", bad.name);
+status += check(not bad.is_open);
+
+// The environment, which always has a name that isn't set in it
+println(std::hasenv("SYNTRAN_NO_SUCH_VARIABLE_7"));
+status += check(not std::hasenv("SYNTRAN_NO_SUCH_VARIABLE_7"));
+
+// Standard input, which is empty
+println(eof());
+let s = readln();
+println("[", s, "] ", eof());
+
+println(status);
+return status;

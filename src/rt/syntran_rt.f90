@@ -22,7 +22,7 @@
 module syntran_rt
 
     use, intrinsic :: iso_fortran_env, only: int32, int64, real32, real64, output_unit, &
-        error_unit
+        error_unit, input_unit, iostat_end, iostat_eor
     implicit none
 
     ! Arrays of strings are arrays of this, because Fortran has no array of
@@ -30,6 +30,19 @@ module syntran_rt
     type :: rt_str_t
         character(len = :), allocatable :: s
     end type rt_str_t
+
+    ! A file handle.  Like the interpreter's, it is a value: reading from it
+    ! updates the variable that it was read through, not other copies
+    type :: rt_file_t
+        integer :: unit = -1
+        character(len = :), allocatable :: name
+        logical :: is_open = .false., mode_read = .false., mode_write = .false.
+        logical :: eof = .false.
+    end type rt_file_t
+
+    ! Whether reading from stdin has hit the end of input, for the forms of
+    ! readln() and eof() with no argument
+    logical, save :: rt_stdin_eof = .false.
 
     ! Convert a scalar to a string exactly like syntran's println()/str() do.
     ! Note that the real kinds are *not* trimmed, for column alignment
@@ -921,6 +934,203 @@ contains
         end do
     end function items
 end function rt_str_a_rt_str
+
+!===============================================================================
+
+!===============================================================================
+
+! File I/O.  A failure is fatal, where the interpreter's is a runtime error
+
+function rt_read_line(iu, iostat) result(s)
+    ! Reads one character at a time, so that it works on stdin too
+    integer, intent(in) :: iu
+    integer, intent(out) :: iostat
+    character(len = :), allocatable :: s
+    character :: c
+    character(len = 256) :: buf
+    integer :: io, n
+    s = ''
+    n = 0
+    do
+        read(iu, '(a)', advance = 'no', iostat = io) c
+        if (io /= 0) exit
+        n = n + 1
+        buf(n:n) = c
+        if (n == len(buf)) then
+            s = s // buf(1:n)
+            n = 0
+        end if
+    end do
+    if (n > 0) s = s // buf(1:n)
+    iostat = io
+end function rt_read_line
+
+function rt_open(name, mode, must_open) result(f)
+    character(len = *), intent(in) :: name, mode
+    logical, intent(in) :: must_open
+    type(rt_file_t) :: f
+    character(len = :), allocatable :: status
+    integer :: i, io
+    f%name = name
+    f%unit = -1
+    do i = 1, len(mode)
+        select case (mode(i:i))
+        case ('r')
+            f%mode_read = .true.
+        case ('w')
+            f%mode_write = .true.
+        case default
+            call rt_fatal('bad file mode character "' // mode(i:i) // '"')
+        end select
+    end do
+    if (f%mode_read .and. f%mode_write) then
+        call rt_fatal('cannot open file "' // name // '" in combined read/write mode "' &
+            // mode // '"')
+    end if
+    if (f%mode_read) then
+        status = 'old'
+    else
+        status = 'unknown'
+    end if
+    open(newunit = f%unit, file = name, status = status, iostat = io)
+    if (io /= 0) then
+        f%unit = -1
+        if (must_open) call rt_fatal('cannot open file "' // name // '"')
+        return
+    end if
+    f%eof = .false.
+    f%is_open = .true.
+end function rt_open
+
+subroutine rt_close(f)
+    type(rt_file_t), intent(inout) :: f
+    integer :: io
+    if (.not. f%is_open) then
+        call rt_fatal('close() was called for file "' // f%name // '" which is not open')
+    end if
+    f%is_open = .false.
+    close(f%unit, iostat = io)
+    if (io /= 0) call rt_fatal('cannot close() file "' // f%name // '"')
+end subroutine rt_close
+
+function rt_readln(f) result(s)
+    type(rt_file_t), intent(inout) :: f
+    character(len = :), allocatable :: s
+    integer :: io
+    if (.not. f%is_open) then
+        call rt_fatal('readln() was called for file "' // f%name // '" which is not open')
+    end if
+    if (.not. f%mode_read) then
+        call rt_fatal('readln() was called for file "' // f%name // &
+            '" which was not opened in read mode "r"')
+    end if
+    if (f%eof) then
+        call rt_fatal('cannot readln() from file "' // f%name // '" past end of file')
+    end if
+    s = rt_read_line(f%unit, io)
+    if (io == iostat_end) then
+        f%eof = .true.
+    else if (io /= 0 .and. io /= iostat_eor) then
+        call rt_fatal('cannot readln() from file "' // f%name // '"')
+    end if
+end function rt_readln
+
+function rt_readln_stdin() result(s)
+    character(len = :), allocatable :: s
+    integer :: io
+    if (rt_stdin_eof) call rt_fatal('cannot readln() from stdin past end of input')
+    s = rt_read_line(input_unit, io)
+    if (io == iostat_end) then
+        rt_stdin_eof = .true.
+    else if (io /= 0 .and. io /= iostat_eor) then
+        call rt_fatal('cannot readln() from stdin')
+    end if
+end function rt_readln_stdin
+
+function rt_eof(f) result(r)
+    type(rt_file_t), intent(in) :: f
+    logical :: r
+    if (.not. f%is_open) then
+        call rt_fatal('eof() was called for file "' // f%name // '" which is not open')
+    end if
+    if (.not. f%mode_read) then
+        call rt_fatal('eof() was called for file "' // f%name // &
+            '" which was not opened in read mode "r"')
+    end if
+    r = f%eof
+end function rt_eof
+
+function rt_eof_stdin() result(r)
+    logical :: r
+    r = rt_stdin_eof
+end function rt_eof_stdin
+
+subroutine rt_write(f, s)
+    ! One of the values of writeln(), which isn't ended until rt_write_end()
+    type(rt_file_t), intent(in) :: f
+    character(len = *), intent(in) :: s
+    integer :: io
+    if (.not. f%is_open) then
+        call rt_fatal('writeln() was called for file "' // f%name // '" which is not open')
+    end if
+    if (.not. f%mode_write) then
+        call rt_fatal('writeln() was called for file "' // f%name // &
+            '" which was not opened in write mode "w"')
+    end if
+    write(f%unit, '(a)', advance = 'no', iostat = io) s
+    if (io /= 0) call rt_fatal('cannot writeln() to file "' // f%name // '"')
+end subroutine rt_write
+
+subroutine rt_write_end(f)
+    type(rt_file_t), intent(in) :: f
+    integer :: io
+    if (.not. f%is_open) then
+        call rt_fatal('writeln() was called for file "' // f%name // '" which is not open')
+    end if
+    if (.not. f%mode_write) then
+        call rt_fatal('writeln() was called for file "' // f%name // &
+            '" which was not opened in write mode "w"')
+    end if
+    write(f%unit, *, iostat = io)
+    if (io /= 0) call rt_fatal('cannot writeln() to file "' // f%name // '"')
+end subroutine rt_write_end
+
+function rt_exists(path) result(r)
+    character(len = *), intent(in) :: path
+    logical :: r
+    inquire(file = path, exist = r)
+end function rt_exists
+
+function rt_getenv(name) result(s)
+    character(len = *), intent(in) :: name
+    character(len = :), allocatable :: s
+    integer :: n, st
+    call get_environment_variable(name, length = n, status = st)
+    if (st /= 0) call rt_fatal('environment variable "' // name // '" is not set')
+    allocate(character(len = n) :: s)
+    if (n > 0) call get_environment_variable(name, value = s)
+end function rt_getenv
+
+function rt_hasenv(name) result(r)
+    character(len = *), intent(in) :: name
+    logical :: r
+    integer :: st
+    call get_environment_variable(name, status = st)
+    r = st == 0
+end function rt_hasenv
+
+function rt_args() result(r)
+    ! The command line arguments of the program
+    type(rt_str_t), allocatable :: r(:)
+    integer :: i, n, m
+    n = command_argument_count()
+    allocate(r(n))
+    do i = 1, n
+        call get_command_argument(i, length = m)
+        allocate(character(len = m) :: r(i)%s)
+        if (m > 0) call get_command_argument(i, value = r(i)%s)
+    end do
+end function rt_args
 
 !===============================================================================
 

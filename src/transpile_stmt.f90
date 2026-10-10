@@ -103,6 +103,37 @@ end subroutine emit_print
 
 !===============================================================================
 
+recursive subroutine emit_writeln(em, node)
+
+	! writeln(f, a, b, ...) writes each argument as println() does, without a
+	! separator, to the file, and then ends the line
+
+	type(emitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+
+	character(len = :), allocatable :: f, tmp
+
+	integer :: i
+
+	f = emit_expr(em, node%args(1))
+	if (node%args(1)%kind /= name_expr .or. allocated(node%args(1)%lsubscripts)) then
+		! Used for each of the values
+		tmp = new_tmp(em, 'type(rt_file_t)', 'fh')
+		call em_line(em, tmp//' = '//f)
+		f = tmp
+	end if
+
+	do i = 2, size(node%args)
+		call em_line(em, 'call rt_write('//f//', '// &
+			str_of(em, node%args(i)%val, emit_expr(em, node%args(i)))//')')
+	end do
+
+	call em_line(em, 'call rt_write_end('//f//')')
+
+end subroutine emit_writeln
+
+!===============================================================================
+
 recursive subroutine emit_call_stmt(em, node)
 
 	! A call whose value, if any, is discarded
@@ -110,7 +141,7 @@ recursive subroutine emit_call_stmt(em, node)
 	type(emitter_t), intent(inout) :: em
 	type(syntax_node_t), intent(in) :: node
 
-	character(len = :), allocatable :: tmp
+	character(len = :), allocatable :: tmp, f
 
 	if (node%kind == fn_call_intr_expr) then
 		select case (node%identifier%text)
@@ -122,6 +153,22 @@ recursive subroutine emit_call_stmt(em, node)
 			call em_line(em, 'call rt_exit('// &
 				convert(emit_expr(em, node%args(1)), elem_type(node%args(1)%val), &
 				i32_type)//')')
+			return
+
+		case ('writeln')
+			call emit_writeln(em, node)
+			return
+
+		case ('close')
+			f = emit_expr(em, node%args(1))
+			if (node%args(1)%kind /= name_expr .or. allocated(node%args(1)%lsubscripts)) then
+				! Not a variable to update, so there is nothing for the closed handle
+				! to be seen by.  It is still closed
+				tmp = new_tmp(em, 'type(rt_file_t)', 'fh')
+				call em_line(em, tmp//' = '//f)
+				f = tmp
+			end if
+			call em_line(em, 'call rt_close('//f//')')
 			return
 
 		end select

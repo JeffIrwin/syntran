@@ -9595,7 +9595,7 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_count_code(get_diags_file(P//'E114-missing-let-name.syntran'), &
 				EC_MISSING_LET_NAME) == 1, &
 			diag_loc_ok(get_diags_transpile_file(P//'E115-transpile-unsupported.syntran'), &
-				EC_TRANSPILE_UNSUPPORTED, P//'E115-transpile-unsupported.syntran', 9, 10, 4) &
+				EC_TRANSPILE_UNSUPPORTED, P//'E115-transpile-unsupported.syntran', 9, 15, 6) &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
@@ -9732,6 +9732,7 @@ subroutine unit_test_transpile(npass, nfail)
 			transpiles_ok(T//'transpile/test-04.syntran'), &
 			transpiles_ok(T//'transpile/test-05.syntran'), &
 			transpiles_ok(T//'transpile/test-06.syntran'), &
+			transpiles_ok(T//'transpile/test-07.syntran'), &
 
 			! Most of the tests programs are supported
 			transpiles_ok(T//'fns/test-01.syntran'), &
@@ -9787,12 +9788,13 @@ subroutine unit_test_transpile(npass, nfail)
 				EC_TRANSPILE_UNSUPPORTED), &
 			diag_count_code(get_diags_transpile_file(P//'E115-transpile-unsupported.syntran'), &
 				EC_TRANSPILE_UNSUPPORTED) == 4, &
-			diag_has_code(get_diags_transpile_file(T//'io/test-01.syntran'), &
+			diag_has_code(get_diags_transpile_file(T//'fns/test-24.syntran'), &
 				EC_TRANSPILE_UNSUPPORTED), &
 
-			! ... and structs and modules, which are supported, are not
+			! ... and structs, modules, and file I/O, which are supported, are not
 			transpiles_ok(T//'struct/test-01.syntran'), &
 			transpiles_ok(T//'modules/boxuser.syntran'), &
+			transpiles_ok(T//'io/test-01.syntran'), &
 
 			! ... but a transpile-only diagnostic isn't an error when evaluating
 			.not. diag_has_code(get_diags_file(P//'E115-transpile-unsupported.syntran'), &
@@ -9803,7 +9805,7 @@ subroutine unit_test_transpile(npass, nfail)
 			len(transpile_src('let x = ;')) == 0, &
 
 			! Nothing is generated for a program with diagnostics
-			len(transpile_src('let f = open("a.txt", "r");')) == 0 &
+			len(transpile_src('let c = std::caller();')) == 0 &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

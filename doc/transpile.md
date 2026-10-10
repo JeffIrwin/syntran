@@ -54,6 +54,9 @@ This is a subset of the language so far:
 - Enums: declarations (with explicit values and aliases), `Suit.Hearts`, the
   casts `i32(Suit.Hearts)` and `Suit(2)`, comparison, printing, arrays of
   enums, a bare enum name as in `for v in Suit`, and `switch` on an enum
+- File I/O: `open`, `std::try_open`, `close`, `writeln`, `readln`, `eof`,
+  `std::exists`, the members `f.is_open`, `f.eof`, and `f.name`, and `readln()`
+  and `eof()` of standard input.  `std::getenv`, `std::hasenv`, and `std::args()`
 - Modules: `use`, qualified and glob imports, aliases, subdirectories, and the
   fns and variables of a module, including modules that import others.  The
   statements of a module run where it is imported
@@ -71,8 +74,8 @@ Programs which use these are rejected with
 which isn't supported.  Run them with the interpreter instead.
 
 - Function pointers
-- File I/O: `open`, `readln`, `writeln`, `eof`, `close`
-- `std::` functions and variables, including `std::args()`
+- The `std::` variables, like `std::IN` and `std::PI`, and `std::` functions other
+  than the ones above
 - Assignment as a value inside the condition of a `while` loop or an `else if`
 - Printing an array, or having an array of strings, with a rank above 4
 
@@ -91,6 +94,10 @@ things are different:
 - Floating point results can differ in the last digits if you compile with
   options like `-Ofast` or `-ffast-math`.  So can calls of math functions with
   constant arguments, which a compiler may evaluate itself when compiling.
+- File I/O errors, like opening a file that doesn't exist, stop the program with
+  a Fortran runtime error that has its own message.  `std::args()` is all of
+  the command line arguments of the compiled program, while the interpreter's
+  are those after `--`.
 - A function that doesn't return a value on some path isn't detected at run
   time.
 - The `Exiting syntran with status` message of `exit()` is never colored.
