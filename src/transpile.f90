@@ -584,6 +584,73 @@ end function unparen
 
 !===============================================================================
 
+function literal_value(s, v) result(is_lit)
+
+	! Is the Fortran expression `s` a single string literal, like `'it''s'`
+	! (and not a concatenation of them)?  If so, `v` is the string that it is
+	! the literal of
+
+	character(len = *), intent(in) :: s
+	character(len = :), allocatable, intent(out) :: v
+	logical :: is_lit
+
+	integer :: i, n
+
+	is_lit = .false.
+	v = ''
+
+	n = len(s)
+	if (n < 2) return
+	if (s(1:1) /= "'" .or. s(n:n) /= "'") return
+
+	i = 2
+	do while (i <= n)
+		if (s(i:i) == "'") then
+			if (i < n) then
+				if (s(i+1:i+1) == "'") then
+					! A doubled quote
+					v = v//"'"
+					i = i + 2
+					cycle
+				end if
+			end if
+			! The closing quote, which has to be the last character
+			if (i /= n) return
+			is_lit = .true.
+			return
+		end if
+		v = v//s(i:i)
+		i = i + 1
+	end do
+
+end function literal_value
+
+!===============================================================================
+
+function quote_literal(v) result(s)
+
+	! The Fortran literal of the printable string `v`, the inverse of
+	! literal_value()
+
+	character(len = *), intent(in) :: v
+	character(len = :), allocatable :: s
+
+	integer :: i
+
+	s = "'"
+	do i = 1, len(v)
+		if (v(i:i) == "'") then
+			s = s//"''"
+		else
+			s = s//v(i:i)
+		end if
+	end do
+	s = s//"'"
+
+end function quote_literal
+
+!===============================================================================
+
 function is_simple(node) result(simple)
 
 	! Can this expression be evaluated more than once, without a temporary,

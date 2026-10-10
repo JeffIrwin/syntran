@@ -55,10 +55,17 @@ subroutine emit_result_str(em, s)
 	type(emitter_t), intent(inout) :: em
 	character(len = *), intent(in) :: s
 
+	character(len = :), allocatable :: v
+
 	if (.not. em%print_result) return
 
 	if (em%trim_result) then
-		call em_line(em, 'call rt_result(trim(adjustl('//s//')))')
+		if (literal_value(s, v)) then
+			! Known now, no need to trim it at run time
+			call em_line(em, 'call rt_result('//quote_literal(trim(adjustl(v)))//')')
+		else
+			call em_line(em, 'call rt_result(trim(adjustl('//s//')))')
+		end if
 	else
 		call em_line(em, 'call rt_result('//s//')')
 	end if
@@ -1428,13 +1435,20 @@ end subroutine push_wrapped
 subroutine push_proc(em, header, footer, ret_decls)
 
 	! Move the body and declarations that have been accumulated for one
-	! procedure into em%procs, wrapped in its header and footer
+	! procedure into em%procs, wrapped in its header and footer.  A `return` as
+	! the last statement of the procedure itself (not nested in anything, so
+	! indented once) does nothing, and is dropped
 
 	type(emitter_t), intent(inout) :: em
 	character(len = *), intent(in) :: header, footer
 	type(string_vector_t), intent(in) :: ret_decls
 
-	integer :: i
+	integer :: i, nbody
+
+	nbody = em%body%len_
+	if (nbody > 0) then
+		if (em%body%v(nbody)%s == '    return') nbody = nbody - 1
+	end if
 
 	call push_wrapped(em%procs, '    '//header)
 	do i = 1, ret_decls%len_
@@ -1443,7 +1457,7 @@ subroutine push_proc(em, header, footer, ret_decls)
 	do i = 1, em%decls%len_
 		call push_wrapped(em%procs, '        '//em%decls%v(i)%s)
 	end do
-	do i = 1, em%body%len_
+	do i = 1, nbody
 		call push_wrapped(em%procs, '    '//em%body%v(i)%s)
 	end do
 	call em%procs%push('    '//footer)

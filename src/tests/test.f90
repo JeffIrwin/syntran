@@ -9769,6 +9769,24 @@ subroutine unit_test_transpile(npass, nfail)
 			eval('fn f(a: i32): i32 { a += 1; return a; } let b = 4; return f(b) * 10 + b;', &
 				.true.) == '54', &
 
+			! A `return` that ends a procedure is dropped, but not one that is
+			! nested in something
+			index(transpile_src('fn f(a: i32): i32 { return a; } return f(1);'), &
+				'return'//line_feed//'    end function') == 0, &
+			index(transpile_src('let x = 1; return x;'), &
+				'return'//line_feed//'    end subroutine syntran_main') == 0, &
+			index(transpile_src('fn f(a: i32): i32 { if (a > 0) { return 1; } return 2; } ' &
+				//'return f(1);'), '            return') > 0, &
+
+			! A result that is a literal is trimmed when it's transpiled
+			index(transpile_src('println("a");', trim_result = .true.), &
+				"call rt_result('')") > 0, &
+			index(transpile_src('println("a");', trim_result = .true.), &
+				'call rt_result(trim(adjustl(') == 0, &
+			index(transpile_src('return "  hi  ";', trim_result = .true.), &
+				"call rt_result('hi')") > 0, &
+			index(transpile_src('return "  hi  ";'), "call rt_result('  hi  ')") > 0, &
+
 			! A user's name can't clash with the runtime's names, whatever its case
 			index(transpile_src('fn rt_str(x: i32): i32 { return x; } return rt_str(1);'), &
 				'urt_str(') > 0, &
