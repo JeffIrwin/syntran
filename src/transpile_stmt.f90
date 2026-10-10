@@ -224,13 +224,19 @@ recursive module subroutine emit_assign(em, node)
 
 	integer :: ct, lt, rt
 
-	logical :: compound, lhs_arr, rhs_arr
+	logical :: compound, lhs_arr, rhs_arr, done
 
 	lt = elem_type(node%val)
 	rt = elem_type(node%right%val)
 	lhs_arr = is_arr(node%val)
 	rhs_arr = is_arr(node%right%val)
 	compound = node%op%kind /= equals_token
+
+	! A character of each string of a slice of strings
+	if (lt == str_type .and. .not. compound .and. .not. rhs_arr) then
+		call emit_str_slice_assign(em, node, done)
+		if (done) return
+	end if
 
 	! A compound assignment names its target twice, so anything with side
 	! effects in a subscript is only evaluated once, up front
@@ -474,13 +480,22 @@ contains
 	recursive subroutine emit_else(clause)
 		type(syntax_node_t), intent(in) :: clause
 		character(len = :), allocatable :: cond
+		type(string_vector_t) :: hoisted
 		if (clause%kind == if_statement) then
 			! This condition isn't reached on every pass through the statement, so
-			! nothing can be hoisted ahead of the whole `if`
-			em%in_cond = .true.
-			cond = emit_expr(em, clause%condition)
-			em%in_cond = .false.
-			call em_line(em, 'else if ('//unparen(cond)//') then')
+			! nothing can be hoisted ahead of the whole `if`.  If it needs
+			! statements first, it's a nested `if` in the `else` instead
+			call emit_cond(em, clause%condition, cond, hoisted)
+
+			if (hoisted%len_ == 0) then
+				call em_line(em, 'else if ('//unparen(cond)//') then')
+			else
+				call em_line(em, 'else')
+				em%indent = em%indent + 1
+				call em%body%push_all(hoisted)
+				call em_line(em, 'if ('//unparen(cond)//') then')
+			end if
+
 			call emit_branch(clause%if_clause)
 			if (allocated(clause%else_clause)) then
 				call emit_else(clause%else_clause)
@@ -488,6 +503,11 @@ contains
 				call em_line(em, 'else')
 				em%indent = em%indent + 1
 				call emit_result_invalid(em)
+				em%indent = em%indent - 1
+			end if
+
+			if (hoisted%len_ > 0) then
+				call em_line(em, 'end if')
 				em%indent = em%indent - 1
 			end if
 		else
@@ -804,6 +824,33 @@ end subroutine emit_switch
 
 !===============================================================================
 
+recursive subroutine emit_cond(em, node, cond, hoisted)
+
+	! The Fortran condition for the expression `node`, and the statements which
+	! have to run before it, which the expression hoisted.  They are at one
+	! level deeper than the current indentation, which is where they go
+
+	type(emitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	character(len = :), allocatable, intent(out) :: cond
+	type(string_vector_t), intent(out) :: hoisted
+
+	type(string_vector_t) :: saved
+
+	saved = em%body
+	em%body = new_string_vector()
+	em%indent = em%indent + 1
+
+	cond = emit_expr(em, node)
+
+	hoisted = em%body
+	em%body = saved
+	em%indent = em%indent - 1
+
+end subroutine emit_cond
+
+!===============================================================================
+
 recursive subroutine emit_while(em, node)
 
 	type(emitter_t), intent(inout) :: em
@@ -811,12 +858,22 @@ recursive subroutine emit_while(em, node)
 
 	character(len = :), allocatable :: cond
 
-	em%in_cond = .true.
-	cond = emit_expr(em, node%condition)
-	em%in_cond = .false.
+	type(string_vector_t) :: hoisted
 
-	call em_line(em, 'do while ('//unparen(cond)//')')
-	em%indent = em%indent + 1
+	! The condition is evaluated on each pass, so what it needs done first, like
+	! an assignment that is used as a value, goes in the loop
+	call emit_cond(em, node%condition, cond, hoisted)
+
+	if (hoisted%len_ == 0) then
+		call em_line(em, 'do while ('//unparen(cond)//')')
+		em%indent = em%indent + 1
+	else
+		call em_line(em, 'do')
+		em%indent = em%indent + 1
+		call em%body%push_all(hoisted)
+		call em_line(em, 'if (.not. ('//unparen(cond)//')) exit')
+	end if
+
 	em%loop_depth = em%loop_depth + 1
 	call emit_stmt(em, node%body)
 	em%loop_depth = em%loop_depth - 1

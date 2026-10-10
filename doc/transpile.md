@@ -78,7 +78,6 @@ which isn't supported.  Run them with the interpreter instead.
 
 - The call stack of the interpreter, which is `std::caller()`,
   `std::print_trace()`, and `std::stack_trace()`
-- Assignment as a value inside the condition of a `while` loop or an `else if`
 - Printing an array, or having an array of strings, with a rank above 4
 
 ## Differences from the interpreter

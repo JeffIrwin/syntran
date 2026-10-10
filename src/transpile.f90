@@ -77,6 +77,9 @@ module syntran__transpile_m
 		! reference `field` for the implicit `self.field`
 		character(len = :), allocatable :: fname
 
+		! For a fn pointer, what the fn returns
+		type(value_t), allocatable :: ret
+
 	end type slot_info_t
 
 	!********
@@ -335,6 +338,14 @@ module syntran__transpile_m
 			integer :: k
 		end function fptr_slot
 
+		! `a[i] = rhs` for an array of strings with a subscript of a character of
+		! each element, where `i` is a range.  A loop over the elements
+		module subroutine emit_str_slice_assign(em, node, done)
+			type(emitter_t), intent(inout) :: em
+			type(syntax_node_t), intent(in) :: node
+			logical, intent(out) :: done
+		end subroutine emit_str_slice_assign
+
 		! Name of the derived type of the struct at position `k` of the table
 		module function struct_tname(em, k) result(s)
 			type(emitter_t), intent(in) :: em
@@ -555,6 +566,11 @@ subroutine record_slot(em, is_loc, id, val)
 	end if
 	if (val%type == struct_type .or. info%elem == struct_type) then
 		info%sk = struct_slot_of(em, val)
+	else if (val%type == fn_type .and. allocated(val%fn_ret)) then
+		! For a fn pointer, the struct that the fn returns
+		info%sk = struct_slot_of(em, val%fn_ret)
+		allocate(info%ret)
+		info%ret = val%fn_ret
 	end if
 
 	if (is_loc) then

@@ -65,6 +65,7 @@ src/tests/test-src/array-i32/test-07.syntran
 src/tests/test-src/array-i32/test-08.syntran
 src/tests/test-src/array-i32/test-09.syntran
 src/tests/test-src/array-str/test-01.syntran
+src/tests/test-src/array-str/test-02.syntran
 src/tests/test-src/bitwise/test-01.syntran
 src/tests/test-src/bitwise/test-02.syntran
 src/tests/test-src/bitwise/test-03.syntran
@@ -95,6 +96,7 @@ src/tests/test-src/dict/test-04.syntran
 src/tests/test-src/enum/test-01.syntran
 src/tests/test-src/enum/test-02.syntran
 src/tests/test-src/enum/test-03.syntran
+src/tests/test-src/enum/test-04.syntran
 src/tests/test-src/enum/test-05.syntran
 src/tests/test-src/enum/test-06.syntran
 src/tests/test-src/enum/test-07.syntran
@@ -145,12 +147,14 @@ src/tests/test-src/fns/test-31.syntran
 src/tests/test-src/fns/test-33.syntran
 src/tests/test-src/fns/test-34.syntran
 src/tests/test-src/fns/test-35.syntran
+src/tests/test-src/fns/test-36.syntran
 src/tests/test-src/fns/test-37.syntran
 src/tests/test-src/fns/test-38.syntran
 src/tests/test-src/fns/test-39.syntran
 src/tests/test-src/fns/test-40.syntran
 src/tests/test-src/fns/test-41.syntran
 src/tests/test-src/fns/test-42.syntran
+src/tests/test-src/fns/test-43.syntran
 src/tests/test-src/fns/test-44.syntran
 src/tests/test-src/fns/test-45.syntran
 src/tests/test-src/for-loops/test-01.syntran
@@ -159,6 +163,7 @@ src/tests/test-src/for-loops/test-03.syntran
 src/tests/test-src/for-loops/test-04.syntran
 src/tests/test-src/for-loops/test-05.syntran
 src/tests/test-src/for-loops/test-06.syntran
+src/tests/test-src/for-loops/test-07.syntran
 src/tests/test-src/for-loops/test-08.syntran
 src/tests/test-src/for-loops/test-09.syntran
 src/tests/test-src/if-else-statements/test-01.syntran
@@ -196,6 +201,7 @@ src/tests/test-src/linear-algebra/test-05.syntran
 src/tests/test-src/linear-algebra/test-06.syntran
 src/tests/test-src/linear-algebra/test-07.syntran
 src/tests/test-src/linear-algebra/test-08.syntran
+src/tests/test-src/linear-algebra/test-09.syntran
 src/tests/test-src/modules/array_mod.syntran
 src/tests/test-src/modules/arrstruct_mod.syntran
 src/tests/test-src/modules/box.syntran
@@ -243,6 +249,7 @@ src/tests/test-src/modules/test-struct-mod.syntran
 src/tests/test-src/modules/test-struct-transitive.syntran
 src/tests/test-src/modules/utils.syntran
 src/tests/test-src/nd-i32/logo-lowres.syntran
+src/tests/test-src/nd-i32/reduce-dim.syntran
 src/tests/test-src/nd-i32/reduce-mask.syntran
 src/tests/test-src/nd-i32/test-01.syntran
 src/tests/test-src/nd-i32/test-02.syntran

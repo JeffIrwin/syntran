@@ -552,6 +552,61 @@ end function same_struct_name
 
 !===============================================================================
 
+module subroutine emit_str_slice_assign(em, node, done)
+
+	! `u[0:2, 0] = "X"` sets a character of each of the strings of a slice of a
+	! rank 1 array of strings, which Fortran can't say in one statement
+
+	type(emitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	logical, intent(out) :: done
+
+	!********
+
+	character(len = :), allocatable :: base, i_, lo, hi, rhs
+
+	type(slot_info_t) :: info
+
+	done = .false.
+	if (.not. allocated(node%lsubscripts)) return
+	if (allocated(node%member)) return
+	if (size(node%lsubscripts) /= 2) return
+
+	info = lookup_slot(em, node%is_loc, node%id_index)
+	if (.not. info%known) return
+	if (info%type /= array_type .or. info%elem /= str_type .or. info%rank /= 1) return
+
+	associate (sub => node%lsubscripts(1))
+		if (sub%sub_kind /= range_sub .and. sub%sub_kind /= all_sub) return
+		if (node%lsubscripts(2)%sub_kind /= scalar_sub .and. &
+				node%lsubscripts(2)%sub_kind /= range_sub) return
+	end associate
+
+	base = var_name(node)
+	if (allocated(info%fname)) base = info%fname
+
+	rhs = emit_expr(em, node%right)
+
+	lo = '1'
+	hi = 'size('//base//')'
+	if (node%lsubscripts(1)%sub_kind == range_sub) then
+		if (.not. node%lsubscripts(1)%lsub_omit) lo = plus_one(em, node%lsubscripts(1))
+		if (.not. node%lsubscripts(1)%usub_omit) hi = emit_expr(em, node%usubscripts(1))
+	end if
+
+	i_ = new_tmp(em, 'integer(int64)', 'si')
+	call em_line(em, 'do '//i_//' = '//lo//', '//hi)
+	em%indent = em%indent + 1
+	call em_line(em, base//'('//i_//')%s('//emit_char_sub(em, node, 2, .true.)//') = '//rhs)
+	em%indent = em%indent - 1
+	call em_line(em, 'end do')
+
+	done = .true.
+
+end subroutine emit_str_slice_assign
+
+!===============================================================================
+
 module function fptr_slot(em, val) result(k)
 
 	type(emitter_t), intent(inout) :: em
@@ -1623,7 +1678,8 @@ recursive function emit_dot_ref(em, node, do_hoist, str_hoist) result(s)
 			return
 		end if
 
-		if (node%root_kind /= fn_call_expr .and. node%root_kind /= method_call_expr) then
+		if (node%root_kind /= fn_call_expr .and. node%root_kind /= method_call_expr .and. &
+				node%root_kind /= fn_call_ptr_expr) then
 			call em_unsupported(em, 'a member of the result of a `'// &
 				kind_name(node%root_kind)//'`')
 			return
@@ -1639,7 +1695,21 @@ recursive function emit_dot_ref(em, node, do_hoist, str_hoist) result(s)
 		root%root_kind = 0
 		deallocate(root%member)
 
-		rv = em%fns%fns(node%id_index)%type
+		if (node%root_kind == fn_call_ptr_expr) then
+			! What the fn returns is part of the type of the pointer
+			if (allocated(node%left)) then
+				if (allocated(node%left%val%fn_ret)) rv = node%left%val%fn_ret
+			else
+				info = lookup_slot(em, node%is_loc, node%id_index)
+				if (info%sk > 0) then
+					rv%type = struct_type
+					rv%struct_cookie = em%structs%table(info%sk)%val%cookie
+					rv%struct_name = em%structs%table(info%sk)%key
+				end if
+			end if
+		else
+			rv = em%fns%fns(node%id_index)%type
+		end if
 
 		em%tmp_count = em%tmp_count + 1
 		tmp = 'sr_t'//str(em%tmp_count)
@@ -2045,6 +2115,62 @@ end function node_is_ref
 
 !===============================================================================
 
+function emit_reshape(em, node, a1, a2) result(s)
+
+	! std::reshape(a, shape).  The size of the shape has to be known to Fortran,
+	! and it is the rank of the result, which the parser knows.  So the elements
+	! of the shape are taken one at a time from the array of them
+
+	type(emitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	character(len = *), intent(in) :: a1, a2
+	character(len = :), allocatable :: s
+
+	character(len = :), allocatable :: tmp, shp, line, shp64
+
+	integer :: i, rank_
+
+	logical :: ok
+
+	rank_ = node%val%array%rank
+	if (rank_ < 1) then
+		call em_unsupported(em, 'a reshape to an unknown rank', node%identifier%pos)
+		s = a1
+		return
+	end if
+
+	em%tmp_count = em%tmp_count + 1
+	tmp = 'shp_t'//str(em%tmp_count)
+	line = decl_line(em, node%args(2)%val, tmp, ok)
+	call em%decls%push(line)
+	call em_line(em, tmp//' = '//a2)
+
+	shp = ''
+	shp64 = ''
+	do i = 1, rank_
+		if (i > 1) then
+			shp = shp//', '
+			shp64 = shp64//', '
+		end if
+		shp = shp//tmp//'('//str(i)//')'
+		shp64 = shp64//'int('//tmp//'('//str(i)//'), int64)'
+	end do
+
+	if (elem_type(node%args(1)%val) == str_type) then
+		if (rank_ < 2 .or. rank_ > 4) then
+			call em_unsupported(em, 'an array of strings of rank '//str(rank_))
+			s = a1
+			return
+		end if
+		s = 'rt_reshape_str_'//str(rank_)//'('//a1//', '//shp64//')'
+	else
+		s = 'reshape('//a1//', [ '//shp//' ])'
+	end if
+
+end function emit_reshape
+
+!===============================================================================
+
 function file_var(em, arg, s) result(r)
 
 	! A file handle that is read from or closed is updated, so it has to be a
@@ -2210,6 +2336,20 @@ recursive function emit_intr_call(em, node) result(s)
 		end do
 		s = s//')'
 
+	case ('reshape')
+		s = emit_reshape(em, node, a1, a2)
+
+	case ('transpose')
+		if (elem_type(node%args(1)%val) == str_type) then
+			call em_unsupported(em, 'the transpose of an array of strings', node%identifier%pos)
+			s = a1
+		else
+			s = 'transpose('//a1//')'
+		end if
+
+	case ('shape')
+		s = 'int(shape('//a1//'), int64)'
+
 	case ('open', 'try_open')
 		s = 'rt_open('//a1//', '//a2//', '//merge('.true. ', '.false.', base == 'open')//')'
 
@@ -2312,6 +2452,141 @@ end function emit_struct_instance
 
 !===============================================================================
 
+recursive function emit_subscripted_call(em, node) result(s)
+
+	! `f(x)[i]`: the result of the call is stored in a temporary, which is then
+	! subscripted, since Fortran can't subscript a fn result
+
+	type(emitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	character(len = :), allocatable :: s
+
+	!********
+
+	character(len = :), allocatable :: tmp, line
+
+	logical :: ok
+
+	type(slot_info_t) :: info
+
+	type(value_t) :: rv
+
+	s = '0'
+
+	if (em%in_cond) then
+		call em_unsupported(em, 'a subscripted fn call in a loop condition or `else if`')
+		return
+	end if
+
+	rv = em%fns%fns(node%id_index)%type
+
+	em%tmp_count = em%tmp_count + 1
+	tmp = 'sc_t'//str(em%tmp_count)
+	line = decl_line(em, rv, tmp, ok)
+	if (.not. ok) then
+		call em_unsupported(em, 'a fn result of type `'//kind_name(rv%type)//'`')
+		return
+	end if
+	call em%decls%push(line)
+	call em_line(em, tmp//' = '//emit_user_call(em, node))
+
+	info%known = .true.
+	info%type = rv%type
+	if (rv%type == array_type .and. allocated(rv%array)) then
+		info%elem = rv%array%type
+		info%rank = rv%array%rank
+	end if
+	if (info%elem == struct_type) info%sk = struct_slot_of(em, rv)
+
+	s = subscripted(em, node, tmp, info, .false., .false.)
+
+end function emit_subscripted_call
+
+!===============================================================================
+
+recursive function emit_subscripted_intr(em, node) result(s)
+
+	! `sum(a, 0)[i]`: the result of an intrinsic is stored in a temporary, which is
+	! subscripted.  The array that it is has a rank which is the number of the
+	! subscripts, and the type of what they select
+
+	type(emitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	character(len = :), allocatable :: s
+
+	!********
+
+	character(len = :), allocatable :: tmp, line
+
+	logical :: ok
+
+	type(slot_info_t) :: info
+
+	type(value_t) :: rv
+
+	s = '0'
+
+	if (em%in_cond) then
+		call em_unsupported(em, 'a subscripted fn call in a loop condition or `else if`')
+		return
+	end if
+
+	rv%type = array_type
+	allocate(rv%array)
+	rv%array%type = elem_type(node%val)
+	rv%array%rank = size(node%lsubscripts)
+
+	em%tmp_count = em%tmp_count + 1
+	tmp = 'sc_t'//str(em%tmp_count)
+	line = decl_line(em, rv, tmp, ok)
+	if (.not. ok .or. rv%array%type == str_type) then
+		call em_unsupported(em, 'a subscripted fn call')
+		return
+	end if
+	call em%decls%push(line)
+	call em_line(em, tmp//' = '//emit_intr_call(em, node))
+
+	info%known = .true.
+	info%type = array_type
+	info%elem = rv%array%type
+	info%rank = rv%array%rank
+
+	s = subscripted(em, node, tmp, info, .false., .false.)
+
+end function emit_subscripted_intr
+
+!===============================================================================
+
+recursive function emit_let_expr(em, node) result(s)
+
+	! A `let` used as a value, like `(let a = 1) + (let b = a)`.  It is hoisted
+	! ahead of its statement, like an assignment that is used as a value, and then
+	! its variable is read
+
+	type(emitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	character(len = :), allocatable :: s
+
+	character(len = :), allocatable :: rhs
+
+	s = '0'
+
+	if (em%in_cond) then
+		call em_unsupported(em, 'a `let` in a loop condition or `else if`')
+		return
+	end if
+
+	rhs = emit_expr(em, node%right)
+	call declare_var(em, node, node%val)
+	call em_line(em, var_name(node)//' = '// &
+		unparen(convert(rhs, elem_type(node%right%val), elem_type(node%val))))
+
+	s = var_name(node)
+
+end function emit_let_expr
+
+!===============================================================================
+
 function fn_ref_name(em, node) result(s)
 
 	! The name of the Fortran procedure that the fn_ref_expr `node` refers to
@@ -2362,11 +2637,15 @@ recursive function emit_ptr_call(em, node) result(s)
 
 	!********
 
-	character(len = :), allocatable :: callee, tmp
+	character(len = :), allocatable :: callee, tmp, line
 
 	integer :: i
 
-	type(slot_info_t) :: info
+	logical :: ok
+
+	type(slot_info_t) :: info, sinfo
+
+	type(value_t) :: rv
 
 	if (allocated(node%left)) then
 		callee = emit_expr(em, node%left)
@@ -2393,6 +2672,36 @@ recursive function emit_ptr_call(em, node) result(s)
 	end if
 
 	s = s//')'
+
+	if (allocated(node%lsubscripts)) then
+		! The result is subscripted, so it is stored first
+		if (allocated(node%left)) then
+			if (allocated(node%left%val%fn_ret)) rv = node%left%val%fn_ret
+		else if (allocated(info%ret)) then
+			rv = info%ret
+		end if
+
+		if (em%in_cond .or. rv%type /= array_type) then
+			call em_unsupported(em, 'a subscripted fn call')
+			return
+		end if
+
+		em%tmp_count = em%tmp_count + 1
+		tmp = 'sc_t'//str(em%tmp_count)
+		line = decl_line(em, rv, tmp, ok)
+		if (.not. ok) then
+			call em_unsupported(em, 'a subscripted fn call')
+			return
+		end if
+		call em%decls%push(line)
+		call em_line(em, tmp//' = '//s)
+
+		sinfo%known = .true.
+		sinfo%type = array_type
+		sinfo%elem = rv%array%type
+		sinfo%rank = rv%array%rank
+		s = subscripted(em, node, tmp, sinfo, .false., .false.)
+	end if
 
 end function emit_ptr_call
 
@@ -2492,7 +2801,14 @@ recursive module function emit_expr(em, node) result(s)
 		s = emit_ptr_call(em, node)
 
 	case (method_call_expr)
-		s = emit_user_call(em, node)
+		if (allocated(node%lsubscripts)) then
+			s = emit_subscripted_call(em, node)
+		else
+			s = emit_user_call(em, node)
+		end if
+
+	case (let_expr)
+		s = emit_let_expr(em, node)
 
 	case (binary_expr)
 		s = emit_binary(em, node)
@@ -2502,14 +2818,17 @@ recursive module function emit_expr(em, node) result(s)
 
 	case (fn_call_expr)
 		if (allocated(node%lsubscripts)) then
-			call em_unsupported(em, 'a subscripted fn call')
-			s = '0'
+			s = emit_subscripted_call(em, node)
 		else
 			s = emit_user_call(em, node)
 		end if
 
 	case (fn_call_intr_expr)
-		s = emit_intr_call(em, node)
+		if (allocated(node%lsubscripts)) then
+			s = emit_subscripted_intr(em, node)
+		else
+			s = emit_intr_call(em, node)
+		end if
 
 	case (assignment_expr)
 		s = emit_assign_expr(em, node)
