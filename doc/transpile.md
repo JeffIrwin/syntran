@@ -30,8 +30,8 @@ since it is compiled natively, and since the compiler can optimize it.
 
 This is a subset of the language so far:
 
-- Types: `i32`, `i64`, `f32`, `f64`, `bool`, `str`, and arrays of those of any
-  rank
+- Types: `i32`, `i64`, `f32`, `f64`, `bool`, `str`, enums, and arrays of those
+  of any rank
 - Variables and assignment, including compound assignment, assignment to
   elements and slices of arrays and to characters of strings, and assignment
   used as a value, like `a = b = 1`.  Scopes and shadowing
@@ -46,6 +46,9 @@ This is a subset of the language so far:
 - Subscripts and slices, including steps, omitted bounds, and vector subscripts
 - Functions, including recursion, arrays as parameters and return values, and
   parameters passed by reference with `&` or `&const`
+- Enums: declarations (with explicit values and aliases), `Suit.Hearts`, the
+  casts `i32(Suit.Hearts)` and `Suit(2)`, comparison, printing, arrays of
+  enums, a bare enum name as in `for v in Suit`, and `switch` on an enum
 - Modules: `use`, qualified and glob imports, aliases, subdirectories, and the
   fns and variables of a module, including modules that import others.  The
   statements of a module run where it is imported
@@ -62,7 +65,7 @@ Programs which use these are rejected with
 [E115](errors.md#e115----transpile-unsupported), pointing at each statement
 which isn't supported.  Run them with the interpreter instead.
 
-- Structs and methods, and enums, including in a module
+- Structs and methods, including in a module
 - Function pointers
 - File I/O: `open`, `readln`, `writeln`, `eof`, `close`
 - `std::` functions and variables, including `std::args()`

@@ -200,6 +200,8 @@ module function decl_line(val, name, ok) result(s)
 		spec = 'real(real64)'
 	case (bool_type)
 		spec = 'logical'
+	case (enum_type)
+		spec = 'integer(int32)'
 	case (str_type)
 		if (val%type == array_type) then
 			spec = 'type(rt_str_t)'
@@ -313,6 +315,144 @@ module function convert(s, from, to) result(r)
 	end select
 
 end function convert
+
+!===============================================================================
+
+module function enum_slot_of(em, val) result(k)
+
+	type(emitter_t), intent(in) :: em
+	type(value_t), intent(in) :: val
+	integer :: k
+
+	integer :: i
+
+	k = 0
+	if (.not. associated(em%enums)) return
+	if (.not. allocated(em%enums%table)) return
+
+	do i = 1, size(em%enums%table)
+		if (.not. allocated(em%enums%table(i)%key)) cycle
+		if (.not. allocated(em%enums%table(i)%val)) cycle
+
+		if (allocated(val%enum_cookie) .and. allocated(em%enums%table(i)%val%cookie)) then
+			if (em%enums%table(i)%val%cookie == val%enum_cookie) then
+				k = i
+				return
+			end if
+		else if (allocated(val%enum_name)) then
+			if (em%enums%table(i)%key == val%enum_name) then
+				k = i
+				return
+			end if
+		end if
+	end do
+
+end function enum_slot_of
+
+!===============================================================================
+
+module function enum_fn(em, k, suffix) result(s)
+
+	type(emitter_t), intent(in) :: em
+	integer, intent(in) :: k
+	character(len = *), intent(in) :: suffix
+	character(len = :), allocatable :: s
+
+	s = 'enum'//str(em%enums%table(k)%id_index)//'_'//suffix
+
+end function enum_fn
+
+!===============================================================================
+
+function enum_has_alias(e) result(has)
+
+	! Do two variants of an enum have the same backing value?  Then comparing
+	! the indices of variants isn't the same as comparing their values
+
+	type(enum_t), intent(in) :: e
+	logical :: has
+
+	integer :: i, j
+
+	has = .false.
+	do i = 1, e%num_vars
+		do j = i + 1, e%num_vars
+			if (e%variant_values(i) == e%variant_values(j)) has = .true.
+		end do
+	end do
+
+end function enum_has_alias
+
+!===============================================================================
+
+module function enum_cmp(em, k, op, l, r) result(s)
+
+	type(emitter_t), intent(in) :: em
+	integer, intent(in) :: k, op
+	character(len = *), intent(in) :: l, r
+	character(len = :), allocatable :: s
+
+	character(len = :), allocatable :: ops, a, b
+
+	select case (op)
+	case (eequals_token)
+		ops = '=='
+	case (bang_equals_token)
+		ops = '/='
+	case (less_token)
+		ops = '<'
+	case (less_equals_token)
+		ops = '<='
+	case (greater_token)
+		ops = '>'
+	case default
+		ops = '>='
+	end select
+
+	a = l
+	b = r
+	if (.not. (op == eequals_token .or. op == bang_equals_token) .or. &
+			enum_has_alias(em%enums%table(k)%val)) then
+		a = enum_fn(em, k, 'val')//'('//l//')'
+		b = enum_fn(em, k, 'val')//'('//r//')'
+	end if
+
+	s = '('//a//' '//ops//' '//b//')'
+
+end function enum_cmp
+
+!===============================================================================
+
+module function str_of(em, val, s) result(r)
+
+	type(emitter_t), intent(inout) :: em
+	type(value_t), intent(in) :: val
+	character(len = *), intent(in) :: s
+	character(len = :), allocatable :: r
+
+	integer :: k
+
+	k = 0
+	if (elem_type(val) == enum_type) then
+		k = enum_slot_of(em, val)
+		if (k == 0) call em_unsupported(em, 'an enum of unknown type')
+	end if
+
+	if (k > 0) then
+		if (is_arr(val)) then
+			r = 'rt_str_a('//enum_fn(em, k, 'strs')//'('//s//'))'
+		else
+			r = enum_fn(em, k, 'str')//'('//s//')'
+		end if
+	else if (is_arr(val)) then
+		r = 'rt_str_a('//s//')'
+	else if (val%type == str_type) then
+		r = s
+	else
+		r = 'rt_str('//s//')'
+	end if
+
+end function str_of
 
 !===============================================================================
 
@@ -709,6 +849,18 @@ recursive function emit_binary(em, node) result(s)
 				call em_unsupported(em, 'ordering comparison of booleans')
 				s = '.false.'
 			end select
+			return
+		end if
+
+		if (lt == enum_type .and. rt == enum_type) then
+			ct = enum_slot_of(em, node%left%val)
+			if (ct == 0) ct = enum_slot_of(em, node%right%val)
+			if (ct == 0) then
+				call em_unsupported(em, 'an enum of unknown type')
+				s = '.false.'
+			else
+				s = enum_cmp(em, ct, node%op%kind, l, r)
+			end if
 			return
 		end if
 
@@ -1303,6 +1455,8 @@ recursive function emit_array_expr(em, node) result(s)
 			spec = 'real(real64)'
 		case (bool_type)
 			spec = 'logical'
+		case (enum_type)
+			spec = 'integer(int32)'
 		case (str_type)
 			! A derived type in a type-spec is just its name
 			spec = 'rt_str_t'
@@ -1491,13 +1645,7 @@ recursive function emit_intr_call(em, node) result(s)
 				arg_i = emit_expr(em, node%args(i))
 			end if
 
-			if (is_arr(node%args(i)%val)) then
-				s = s//'rt_str_a('//arg_i//')'
-			else if (node%args(i)%val%type == str_type) then
-				s = s//arg_i
-			else
-				s = s//'rt_str('//arg_i//')'
-			end if
+			s = s//str_of(em, node%args(i)%val, arg_i)
 		end do
 		if (len(s) == 0) s = "''"
 		s = '('//s//')'
@@ -1589,6 +1737,15 @@ recursive function emit_intr_call(em, node) result(s)
 		if (elem_type(node%args(1)%val) == str_type) then
 			! The code of a single character
 			s = 'int(iachar('//a1//'), '//kind_str//')'
+		else if (elem_type(node%args(1)%val) == enum_type) then
+			! The backing value of an enum variant
+			t = enum_slot_of(em, node%args(1)%val)
+			if (t == 0) then
+				call em_unsupported(em, 'an enum of unknown type')
+				s = '0'
+			else
+				s = 'int('//enum_fn(em, t, 'val')//'('//a1//'), '//kind_str//')'
+			end if
 		else
 			s = 'int('//a1//', '//kind_str//')'
 		end if
@@ -1601,6 +1758,64 @@ recursive function emit_intr_call(em, node) result(s)
 	end select
 
 end function emit_intr_call
+
+!===============================================================================
+
+function emit_enum_access(em, node) result(s)
+
+	! `Suit.Clubs` is the index of the variant, which is not necessarily its
+	! backing value
+
+	type(emitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	character(len = :), allocatable :: s
+
+	integer :: i, k
+
+	s = '0_int32'
+
+	k = enum_slot_of(em, node%val)
+	if (k == 0 .or. .not. allocated(node%val%enum_variant)) then
+		call em_unsupported(em, 'an enum of unknown type')
+		return
+	end if
+
+	associate (e => em%enums%table(k)%val)
+		do i = 1, e%num_vars
+			if (e%variant_names%v(i)%s == node%val%enum_variant) then
+				s = str(i - 1)//'_int32'
+				return
+			end if
+		end do
+	end associate
+
+	call em_unsupported(em, 'an enum variant that is not found')
+
+end function emit_enum_access
+
+!===============================================================================
+
+recursive function emit_enum_cast(em, node) result(s)
+
+	! `Suit(2)` is the first variant with the backing value 2
+
+	type(emitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	character(len = :), allocatable :: s
+
+	integer :: k
+
+	k = enum_slot_of(em, node%val)
+	if (k == 0) then
+		call em_unsupported(em, 'an enum of unknown type')
+		s = '0_int32'
+		return
+	end if
+
+	s = enum_fn(em, k, 'of')//'('// &
+		convert(emit_expr(em, node%right), elem_type(node%right%val), i32_type)//')'
+
+end function emit_enum_cast
 
 !===============================================================================
 
@@ -1619,12 +1834,13 @@ recursive module function emit_expr(em, node) result(s)
 		s = emit_name_ref(em, node)
 
 	case (array_expr)
-		if (node%is_enum_name .or. allocated(node%val%enum_name)) then
-			call em_unsupported(em, 'an enum')
-			s = '0'
-		else
-			s = emit_array_expr(em, node)
-		end if
+		s = emit_array_expr(em, node)
+
+	case (enum_access_expr)
+		s = emit_enum_access(em, node)
+
+	case (enum_cast_expr)
+		s = emit_enum_cast(em, node)
 
 	case (binary_expr)
 		s = emit_binary(em, node)

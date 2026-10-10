@@ -80,27 +80,6 @@ end subroutine emit_result_invalid
 
 !===============================================================================
 
-function str_of(val, s) result(r)
-
-	! A Fortran expression for the string that syntran makes from a value, given
-	! the Fortran expression `s` for the value itself
-
-	type(value_t), intent(in) :: val
-	character(len = *), intent(in) :: s
-	character(len = :), allocatable :: r
-
-	if (is_arr(val)) then
-		r = 'rt_str_a('//s//')'
-	else if (val%type == str_type) then
-		r = s
-	else
-		r = 'rt_str('//s//')'
-	end if
-
-end function str_of
-
-!===============================================================================
-
 recursive subroutine emit_print(em, node)
 
 	! println(a, b, ...) writes each argument, without a separator, and then
@@ -114,7 +93,7 @@ recursive subroutine emit_print(em, node)
 	if (allocated(node%args)) then
 		do i = 1, size(node%args)
 			call em_line(em, 'call rt_print('// &
-				str_of(node%args(i)%val, emit_expr(em, node%args(i)))//')')
+				str_of(em, node%args(i)%val, emit_expr(em, node%args(i)))//')')
 		end do
 	end if
 
@@ -529,9 +508,9 @@ recursive function case_cmp(em, subj, sval, v, op) result(s)
 
 	!********
 
-	character(len = :), allocatable :: r, tmp
+	character(len = :), allocatable :: r, tmp, a, b
 
-	integer :: st, vt, ct
+	integer :: st, vt, ct, k
 
 	r  = emit_expr(em, v)
 	st = elem_type(sval)
@@ -547,10 +526,19 @@ recursive function case_cmp(em, subj, sval, v, op) result(s)
 		ct = st
 		if (is_numeric_type(st) .and. is_numeric_type(vt)) ct = wider_type(st, vt)
 
-		s = 'rt_arr_eq(shape('//subj//'), '// &
-			convert('reshape('//subj//', [size('//subj//')])', st, ct)//', '// &
-			'shape('//tmp//'), '// &
-			convert('reshape('//tmp//', [size('//tmp//')])', vt, ct)//')'
+		a = 'reshape('//subj//', [size('//subj//')])'
+		b = 'reshape('//tmp//', [size('//tmp//')])'
+		if (st == enum_type) then
+			! Variants are equal if their backing values are
+			k = enum_slot_of(em, sval)
+			if (k > 0) then
+				a = enum_fn(em, k, 'val')//'('//a//')'
+				b = enum_fn(em, k, 'val')//'('//b//')'
+			end if
+		end if
+
+		s = 'rt_arr_eq(shape('//subj//'), '//convert(a, st, ct)//', '// &
+			'shape('//tmp//'), '//convert(b, vt, ct)//')'
 
 	else if (st == str_type) then
 		if (op == less_token) then
@@ -561,6 +549,15 @@ recursive function case_cmp(em, subj, sval, v, op) result(s)
 
 	else if (st == bool_type) then
 		s = '('//subj//' .eqv. '//r//')'
+
+	else if (st == enum_type) then
+		k = enum_slot_of(em, sval)
+		if (k == 0) then
+			call em_unsupported(em, 'an enum of unknown type')
+			s = '.false.'
+		else
+			s = enum_cmp(em, k, op, subj, r)
+		end if
 
 	else if (is_numeric_type(st) .and. is_numeric_type(vt)) then
 		ct = wider_type(st, vt)
@@ -976,7 +973,7 @@ recursive subroutine emit_return(em, node)
 		if (is_void) then
 			call emit_result_invalid(em)
 		else if (em%print_result) then
-			call emit_result_str(em, str_of(node%right%val, emit_expr(em, node%right)))
+			call emit_result_str(em, str_of(em, node%right%val, emit_expr(em, node%right)))
 		else
 			call emit_discard(em, node%right)
 		end if
@@ -1055,7 +1052,7 @@ recursive subroutine emit_result_stmt(em, node)
 
 	case (let_expr)
 		call emit_stmt(em, node)
-		call emit_result_str(em, str_of(node%val, var_name(node)))
+		call emit_result_str(em, str_of(em, node%val, var_name(node)))
 
 	case (assignment_expr)
 		call emit_stmt(em, node)
@@ -1063,7 +1060,7 @@ recursive subroutine emit_result_stmt(em, node)
 			! Already reported as unsupported by emit_stmt()
 		else
 			! The target, e.g. a whole array or just the element that was assigned
-			call emit_result_str(em, str_of(node%val, emit_name_ref(em, node)))
+			call emit_result_str(em, str_of(em, node%val, emit_name_ref(em, node)))
 		end if
 
 	case (fn_call_expr, fn_call_intr_expr)
@@ -1097,7 +1094,7 @@ recursive subroutine emit_result_expr(em, node)
 	if (node%val%type == unknown_type .or. node%val%type == void_type) then
 		call emit_result_invalid(em)
 	else if (em%print_result) then
-		call emit_result_str(em, str_of(node%val, emit_expr(em, node)))
+		call emit_result_str(em, str_of(em, node%val, emit_expr(em, node)))
 	else
 		call emit_discard(em, node)
 	end if
@@ -1226,7 +1223,8 @@ recursive module subroutine emit_stmt(em, node)
 		call em_unsupported(em, 'a struct declaration')
 
 	case (enum_declaration)
-		call em_unsupported(em, 'an enum declaration')
+		! Nothing runs.  The enum's helper fns are emitted with the program (c.f.
+		! emit_enum_procs())
 
 	case (switch_statement)
 		call emit_switch(em, node, .false.)
@@ -1759,6 +1757,121 @@ end subroutine emit_fn
 
 !===============================================================================
 
+subroutine emit_enum_procs(em)
+
+	! Helper fns of each enum, as module procedures.  An enum value in the
+	! generated program is the zero-based index of its variant, so that its name
+	! is known when printing, even when variants are aliases with equal backing
+	! values:
+	!
+	!   enumN_strs(i)  the name of variant i, like `Suit.Clubs`, as an rt_str_t
+	!   enumN_str(i)   the same as a string, for a single variant
+	!   enumN_val(i)   the backing value of variant i, `i32(Suit.Clubs)`
+	!   enumN_of(v)    the first variant with backing value v, `Suit(v)`
+	!
+	! They're elemental so that they work on arrays of enums too
+
+	type(emitter_t), intent(inout) :: em
+
+	!********
+
+	character(len = :), allocatable :: id, nm
+	integer :: i, j, k
+	logical :: dup, first
+
+	if (.not. associated(em%enums)) return
+	if (.not. allocated(em%enums%table)) return
+
+	do k = 1, size(em%enums%table)
+		if (.not. allocated(em%enums%table(k)%key)) cycle
+		if (.not. allocated(em%enums%table(k)%val)) cycle
+		if (.not. allocated(em%enums%table(k)%val%cookie)) cycle
+
+		! An enum may be in the table under more than one name.  This is the one
+		! that enum_slot_of() finds first
+		dup = .false.
+		do j = 1, k - 1
+			if (.not. allocated(em%enums%table(j)%val)) cycle
+			if (.not. allocated(em%enums%table(j)%val%cookie)) cycle
+			if (em%enums%table(j)%val%cookie == em%enums%table(k)%val%cookie) dup = .true.
+		end do
+		if (dup) cycle
+
+		id = 'enum'//str(em%enums%table(k)%id_index)
+		nm = em%enums%table(k)%key
+
+		associate (e => em%enums%table(k)%val)
+
+			call em%procs%push('    elemental function '//id//'_strs(v) result(r)')
+			call em%procs%push('        integer(int32), intent(in) :: v')
+			call em%procs%push('        type(rt_str_t) :: r')
+			call em%procs%push('        select case (v)')
+			do i = 1, e%num_vars
+				call em%procs%push('        case ('//str(i - 1)//'_int32)')
+				call em%procs%push("            r%s = '"//nm//'.'//e%variant_names%v(i)%s//"'")
+			end do
+			call em%procs%push('        case default')
+			call em%procs%push("            r%s = '"//nm//".<invalid>'")
+			call em%procs%push('        end select')
+			call em%procs%push('    end function '//id//'_strs')
+			call em%procs%push('')
+
+			call em%procs%push('    function '//id//'_str(v) result(r)')
+			call em%procs%push('        integer(int32), intent(in) :: v')
+			call em%procs%push('        character(len = :), allocatable :: r')
+			call em%procs%push('        select case (v)')
+			do i = 1, e%num_vars
+				call em%procs%push('        case ('//str(i - 1)//'_int32)')
+				call em%procs%push("            r = '"//nm//'.'//e%variant_names%v(i)%s//"'")
+			end do
+			call em%procs%push('        case default')
+			call em%procs%push("            r = '"//nm//".<invalid>'")
+			call em%procs%push('        end select')
+			call em%procs%push('    end function '//id//'_str')
+			call em%procs%push('')
+
+			call em%procs%push('    elemental function '//id//'_val(v) result(r)')
+			call em%procs%push('        integer(int32), intent(in) :: v')
+			call em%procs%push('        integer(int32) :: r')
+			call em%procs%push('        select case (v)')
+			do i = 1, e%num_vars
+				call em%procs%push('        case ('//str(i - 1)//'_int32)')
+				call em%procs%push('            r = '//str(e%variant_values(i))//'_int32')
+			end do
+			call em%procs%push('        case default')
+			call em%procs%push('            r = -1_int32')
+			call em%procs%push('        end select')
+			call em%procs%push('    end function '//id//'_val')
+			call em%procs%push('')
+
+			call em%procs%push('    elemental function '//id//'_of(v) result(r)')
+			call em%procs%push('        integer(int32), intent(in) :: v')
+			call em%procs%push('        integer(int32) :: r')
+			call em%procs%push('        select case (v)')
+			do i = 1, e%num_vars
+				! Only the first variant with a value, since `case` can't repeat one
+				first = .true.
+				do j = 1, i - 1
+					if (e%variant_values(j) == e%variant_values(i)) first = .false.
+				end do
+				if (.not. first) cycle
+				call em%procs%push('        case ('//str(e%variant_values(i))//'_int32)')
+				call em%procs%push('            r = '//str(i - 1)//'_int32')
+			end do
+			call em%procs%push('        case default')
+			call em%procs%push('            r = -1_int32')
+			call em%procs%push('        end select')
+			call em%procs%push('    end function '//id//'_of')
+			call em%procs%push('')
+
+		end associate
+
+	end do
+
+end subroutine emit_enum_procs
+
+!===============================================================================
+
 function insert_intent(line, intent_str) result(r)
 
 	! Add an attribute to a declaration like `real(real32) :: x` or
@@ -1797,6 +1910,7 @@ module subroutine transpile_tree(tree, state, t, diags)
 	type(string_vector_t) :: rt, main_decls, src
 
 	em%fns => state%fns
+	em%enums => state%enums
 	em%print_result = t%print_result
 	em%trim_result  = t%trim_result
 
@@ -1861,6 +1975,8 @@ module subroutine transpile_tree(tree, state, t, diags)
 			call emit_module_fns(em, tree%members(i)%member, done)
 		end do
 	end if
+
+	call emit_enum_procs(em)
 
 	!********
 	! Assemble the program

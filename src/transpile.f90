@@ -95,6 +95,11 @@ module syntran__transpile_m
 		! Fn table, for the signatures of user fns
 		type(fns_t), pointer :: fns => null()
 
+		! Enum table, for the variants of the enums.  An enum value is emitted as
+		! the zero-based index of its variant, and the enum's helper fns (see
+		! emit_enum_procs()) map that to the variant's name and backing value
+		type(enums_t), pointer :: enums => null()
+
 		! Fortran source of the current procedure's body and of its local
 		! declarations.  Locals get declared lazily as they are encountered, so
 		! the declarations can be written ahead of the body once it is done
@@ -251,6 +256,44 @@ module syntran__transpile_m
 			character(len = :), allocatable :: r
 		end function convert
 
+		! A Fortran expression for the string that syntran makes from a value,
+		! given the Fortran expression `s` for the value itself
+		module function str_of(em, val, s) result(r)
+			type(emitter_t), intent(inout) :: em
+			type(value_t), intent(in) :: val
+			character(len = *), intent(in) :: s
+			character(len = :), allocatable :: r
+		end function str_of
+
+		! Position in the enum table of the enum that `val` is a value or an array
+		! of, or 0 if it is unknown
+		module function enum_slot_of(em, val) result(k)
+			type(emitter_t), intent(in) :: em
+			type(value_t), intent(in) :: val
+			integer :: k
+		end function enum_slot_of
+
+		! Name of a helper fn of the enum at position `k` of the table.  The
+		! `suffix` is `str` for the name of a variant as a string, `strs` for it
+		! as an rt_str_t which is elemental, `val` for its backing value, or `of`
+		! for the variant that has a backing value
+		module function enum_fn(em, k, suffix) result(s)
+			type(emitter_t), intent(in) :: em
+			integer, intent(in) :: k
+			character(len = *), intent(in) :: suffix
+			character(len = :), allocatable :: s
+		end function enum_fn
+
+		! Comparison of two enum expressions, `op` being a comparison token.  It
+		! is the comparison of backing values, which only differs from comparing
+		! the variants' indices if the enum has aliases
+		module function enum_cmp(em, k, op, l, r) result(s)
+			type(emitter_t), intent(in) :: em
+			integer, intent(in) :: k, op
+			character(len = *), intent(in) :: l, r
+			character(len = :), allocatable :: s
+		end function enum_cmp
+
 	end interface
 
 !===============================================================================
@@ -357,6 +400,9 @@ function type_spec(type_) result(s)
 		s = 'logical'
 	case (str_type)
 		s = 'character(len = :), allocatable'
+	case (enum_type)
+		! The index of the variant
+		s = 'integer(int32)'
 	case default
 		s = 'integer(int32)'
 	end select

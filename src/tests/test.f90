@@ -9724,10 +9724,12 @@ subroutine unit_test_transpile(npass, nfail)
 			interpret_file(T//'transpile/test-02.syntran', .true.) == '0', &
 			interpret_file(T//'transpile/test-03.syntran', .true.) == '0', &
 			interpret_file(T//'transpile/test-04.syntran', .true.) == '0', &
+			interpret_file(T//'transpile/test-05.syntran', .true.) == '0', &
 			transpiles_ok(T//'transpile/test-01.syntran'), &
 			transpiles_ok(T//'transpile/test-02.syntran'), &
 			transpiles_ok(T//'transpile/test-03.syntran'), &
 			transpiles_ok(T//'transpile/test-04.syntran'), &
+			transpiles_ok(T//'transpile/test-05.syntran'), &
 
 			! Most of the tests programs are supported
 			transpiles_ok(T//'fns/test-01.syntran'), &
@@ -9737,6 +9739,13 @@ subroutine unit_test_transpile(npass, nfail)
 			transpiles_ok(T//'var-scopes/test-01.syntran'), &
 			transpiles_ok(T//'switch/test-01.syntran'), &
 			transpiles_ok(T//'switch/test-09.syntran'), &
+
+			! An enum value is the index of its variant, with helper fns for its name
+			! and its backing value
+			index(transpile_src('enum Dir { N, S = 5 } let d = Dir.S; println(d);'), &
+				'enum') > 0, &
+			index(transpile_src('enum Dir { N, S = 5 } let d = Dir.S; println(i32(d));'), &
+				'_val(') > 0, &
 
 			! A module's fns, its variables, and its own imports.  Its init code runs
 			! where it is imported
