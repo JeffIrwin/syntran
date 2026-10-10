@@ -109,6 +109,21 @@ end function transpile_src
 
 !===============================================================================
 
+function transpile_is_empty(str_) result(empty)
+
+	! Does transpiling a program generate nothing?  A fn rather than `len()` of
+	! transpile_src() in the list of tests, which Intel Fortran takes for a
+	! constant expression
+
+	character(len = *), intent(in) :: str_
+	logical :: empty
+
+	empty = len(transpile_src(str_)) == 0
+
+end function transpile_is_empty
+
+!===============================================================================
+
 function get_diags_transpile(str_) result(diag_)
 	! Diagnostics from transpiling a string, which for a valid program are
 	! only constructs that aren't supported yet
@@ -9807,10 +9822,10 @@ subroutine unit_test_transpile(npass, nfail)
 
 			! A program with a parse error is reported as usual, instead
 			.not. diag_has_code(get_diags_transpile('let x = ;'), EC_TRANSPILE_UNSUPPORTED), &
-			len(transpile_src('let x = ;')) == 0, &
+			transpile_is_empty('let x = ;'), &
 
 			! Nothing is generated for a program with diagnostics
-			len(transpile_src('let c = std::caller();')) == 0 &
+			transpile_is_empty('let c = std::caller();') &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

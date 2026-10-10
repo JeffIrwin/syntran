@@ -2115,7 +2115,7 @@ subroutine emit_type_decls(em, order)
 
 	character(len = :), allocatable :: line, mname, id, tn, sn
 
-	integer :: i, j, m, n, s, nsig
+	integer :: i, j, k1, k2, k3, m, n, s, nsig
 	integer, allocatable :: kind_(:), idx(:), lev(:)
 
 	logical :: ok
@@ -2151,7 +2151,11 @@ subroutine emit_type_decls(em, order)
 	! Insertion sort by level, which keeps the order of the structs, which is the
 	! order that they were declared in, and then of the signatures
 	do i = 2, n
-		call insert_sorted(i, kind_(i), idx(i), lev(i))
+		! Copies, since the elements that are shifted below include these
+		k1 = kind_(i)
+		k2 = idx(i)
+		k3 = lev(i)
+		call insert_sorted(i, k1, k2, k3)
 	end do
 
 	do i = 1, n
