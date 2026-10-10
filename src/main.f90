@@ -54,6 +54,7 @@ program main
 		! running it.  The value of the last statement is only printed by the
 		! generated program if we're not --quiet, like the interpreter
 		transpile%print_result = .not. args%quiet
+		transpile%shake_fns = .not. args%keep_unused_fns
 
 		if (args%syntran_file_arg) then
 			res = syntran_interpret_file(args%syntran_file, &

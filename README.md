@@ -395,6 +395,7 @@ Run `syntran -h` to see a comprehensive listing of syntran command-line argument
      --cd                Resolve the script's relative file paths against its own directory
      -s --syntax-only    Parse and type check without running the program
      -t --transpile <f>  Write the program as Fortran source to <f> ('-' for stdout) instead of running it
+     --keep-unused-fns   With --transpile, also write the fns that nothing calls
      -- <args>...        Pass remaining arguments to script via std::args()
 ```
 <!-- syntran-expect
@@ -418,6 +419,7 @@ Run `syntran -h` to see a comprehensive listing of syntran command-line argument
      --cd                Resolve the script's relative file paths against its own directory
      -s --syntax-only    Parse and type check without running the program
      -t --transpile <f>  Write the program as Fortran source to <f> ('-' for stdout) instead of running it
+     --keep-unused-fns   With --transpile, also write the fns that nothing calls
      -- <args>...        Pass remaining arguments to script via std::args()
 -->
 <!-- syntran-end -->

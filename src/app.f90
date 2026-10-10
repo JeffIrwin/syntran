@@ -26,6 +26,7 @@ module syntran__app_m
 			chdir              = .false., &
 			command_arg        = .false., &
 			interactive        = .false., &
+			keep_unused_fns    = .false., &
 			permissive_return  = .false., &
 			quiet              = .false., &
 			syntax_only        = .false., &
@@ -239,6 +240,9 @@ function parse_args() result(args)
 			args%transpile = .true.
 			call get_next_arg(i, args%transpile_out)
 
+		case ("--keep-unused-fns")
+			args%keep_unused_fns = .true.
+
 		case ("--version")
 			args%version = .true.
 
@@ -290,6 +294,13 @@ function parse_args() result(args)
 	if (args%transpile .and. args%syntax_only .and. .not. args%help .and. &
 		.not. args%version) then
 		write(*,*) err_prefix//"--transpile and --syntax-only cannot be used together"
+		error = .true.
+	end if
+
+	! It's an option of the transpiler, so it does nothing otherwise
+	if (args%keep_unused_fns .and. .not. args%transpile .and. .not. args%help .and. &
+		.not. args%version) then
+		write(*,*) err_prefix//"--keep-unused-fns requires --transpile"
 		error = .true.
 	end if
 
@@ -358,6 +369,7 @@ function parse_args() result(args)
 		write(*,*) "    --cd                Resolve the script's relative file paths against its own directory"
 		write(*,*) "    -s --syntax-only    Parse and type check without running the program"
 		write(*,*) "    -t --transpile <f>  Write the program as Fortran source to <f> ('-' for stdout) instead of running it"
+		write(*,*) "    --keep-unused-fns   With --transpile, also write the fns that nothing calls"
 		write(*,*) "    -- <args>...        Pass remaining arguments to script via std::args()"
 		write(*,*)
 

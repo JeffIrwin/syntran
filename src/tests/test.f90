@@ -80,13 +80,13 @@ end function get_diags_file
 
 !===============================================================================
 
-function transpile_src(str_, print_result, trim_result) result(src)
+function transpile_src(str_, print_result, trim_result, shake_fns) result(src)
 
 	! The Fortran source that a syntran string transpiles to, as one string with
 	! a line_feed after each line.  Empty if there were diagnostics
 
 	character(len = *), intent(in) :: str_
-	logical, intent(in), optional :: print_result, trim_result
+	logical, intent(in), optional :: print_result, trim_result, shake_fns
 	character(len = :), allocatable :: src
 
 	character(len = :), allocatable :: res_
@@ -96,6 +96,9 @@ function transpile_src(str_, print_result, trim_result) result(src)
 
 	if (present(print_result)) t%print_result = print_result
 	if (present(trim_result )) t%trim_result  = trim_result
+	if (present(shake_fns)) then
+		t%shake_fns = shake_fns
+	end if
 
 	res_ = eval(str_, .true., diags = diag_, transpile = t)
 
@@ -9755,8 +9758,25 @@ subroutine unit_test_transpile(npass, nfail)
 			! fn doesn't have the name of a global
 			index(transpile_src('let n = 1; fn f(n: i32): i32 { return n; } return f(n);'), &
 				'value :: n_l1') > 0, &
-			index(transpile_src('let f = 1; fn f(a: i32): i32 { return a; } return f;'), &
-				'function f_f') > 0, &
+			index(transpile_src('let f = 1; fn f(a: i32): i32 { return a; } return f;', &
+				shake_fns = .false.), 'function f_f') > 0, &
+
+			! A fn that nothing calls is left out, unless it's asked to be kept.  One
+			! that is only called by another that is kept is in too, and so is one
+			! that is only named as a value
+			index(transpile_src('fn f(): i32 { return 1; } fn g(): i32 { return 2; } ' &
+				//'println(g());'), 'function f(') == 0, &
+			index(transpile_src('fn f(): i32 { return 1; } fn g(): i32 { return 2; } ' &
+				//'println(g());'), 'function g(') > 0, &
+			index(transpile_src('fn f(): i32 { return 1; } fn g(): i32 { return 2; } ' &
+				//'println(g());', shake_fns = .false.), 'function f(') > 0, &
+			index(transpile_src('fn f(): i32 { return 1; } fn g(): i32 { return f(); } ' &
+				//'println(g());'), 'function f(') > 0, &
+			index(transpile_src('fn f(): i32 { return 1; } fn g(): i32 { return f(); } ' &
+				//'fn h(): i32 { return g(); } println(1);'), 'function g(') == 0, &
+			index(transpile_src('fn f(x: i32): i32 { return x; } ' &
+				//'fn call(h: fn(i32): i32): i32 { return h(1); } println(call(f));'), &
+				'function f(') > 0, &
 
 			! The literals are as they are in the source, and of the default kind
 			! if it's int32

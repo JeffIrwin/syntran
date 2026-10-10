@@ -146,6 +146,11 @@ procedures that the program names are in the generated file, and those that they
 name in turn, as are the helpers of the structs and enums that it uses.  That
 relies on the layout that the header of the runtime describes.
 
+The program's own fns are left out in the same way when nothing calls them or
+names them, which matters for a module that is imported from more than one
+place, since every import has its own copy of the module's fns and most of them
+go unused.  Pass `--keep-unused-fns` to write all of them.
+
 To check a change to the transpiler, run
 
 ```

@@ -54,6 +54,10 @@ module syntran__transpile_m
 		! a `-c` command string
 		logical :: trim_result = .false.
 
+		! Leave out the fns that nothing calls or names, like the runtime's
+		! procedures.  The CLI sets this false with `--keep-unused-fns`
+		logical :: shake_fns = .true.
+
 		! The generated Fortran source, one element per line
 		type(string_vector_t) :: src
 
