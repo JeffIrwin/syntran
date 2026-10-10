@@ -149,5 +149,25 @@ status += check(size(m, 0) == 2);
 status += check(size(m, 1) == 3);
 status += check(sum(m, 1)[0] == 1 + 3 + 5);
 
+//==============================================================================
+// println() evaluates all of its arguments before it writes any of them, and
+// writes them as one line
+
+let calls = 0;
+
+fn say(s: str): str
+{
+	calls += 1;
+	println("say ", s);
+	return s;
+}
+
+println("a ", say("b"), " c ", say("d"), "", "!", "?");
+status += check(calls == 2);
+println();
+println("");
+println("it's ", "x");
+println(1, 2.5, true, [1, 2], "x" + "y");
+
 println(status);
 return status;

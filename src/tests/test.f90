@@ -9832,6 +9832,17 @@ subroutine unit_test_transpile(npass, nfail)
 			index(transpile_src('let a = ["a", "b"]; return a;'), '[rt_str_t ::') > 0, &
 			index(transpile_src('let a = [1, 2, 3]; return a;'), 'integer(int32) :: 1') == 0, &
 
+			! println() is one call, with its arguments joined and adjacent literals
+			! made one
+			index(transpile_src('let x = 1; println("a", x);'), &
+				"call rt_println('a' // rt_str(x))") > 0, &
+			index(transpile_src('println("a", "b", "c");'), "call rt_println('abc')") > 0, &
+			index(transpile_src('println();'), "call rt_println('')") > 0, &
+			index(transpile_src('println("it''s");'), "call rt_println('it''s')") > 0, &
+			index(transpile_src('let x = 1; println(x, "a", "b", x);'), &
+				"call rt_println(rt_str(x) // 'ab' // rt_str(x))") > 0, &
+			index(transpile_src('let x = 1; println("a", x);'), 'rt_print(') == 0, &
+
 			! The programs which the transpiler tests compare between backends
 			! still need to work as programs in the interpreter, with no failed
 			! checks of their own.  The generated programs are compared with the

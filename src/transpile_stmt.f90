@@ -87,6 +87,58 @@ end subroutine emit_result_invalid
 
 !===============================================================================
 
+recursive function print_args(em, node, first) result(s)
+
+	! The string that println() or writeln() writes: its arguments from the
+	! `first`, as one Fortran expression of their strings, joined with `//`.
+	! Literals that are next to each other are one literal
+	!
+	! The whole line is written at once, after every argument is evaluated, like
+	! the interpreter does
+
+	type(emitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	integer, intent(in) :: first
+	character(len = :), allocatable :: s
+
+	!********
+
+	character(len = :), allocatable :: cur, v, pend
+
+	integer :: i
+
+	s = ''
+	pend = ''
+
+	if (allocated(node%args)) then
+		do i = first, size(node%args)
+			cur = str_of(em, node%args(i)%val, emit_expr(em, node%args(i)))
+			if (literal_value(cur, v)) then
+				pend = pend//v
+			else
+				call flush_literal()
+				if (len(s) > 0) s = s//' // '
+				s = s//cur
+			end if
+		end do
+	end if
+
+	call flush_literal()
+	if (len(s) == 0) s = "''"
+
+contains
+
+	subroutine flush_literal()
+		if (len(pend) == 0) return
+		if (len(s) > 0) s = s//' // '
+		s = s//quote_literal(pend)
+		pend = ''
+	end subroutine flush_literal
+
+end function print_args
+
+!===============================================================================
+
 recursive subroutine emit_print(em, node)
 
 	! println(a, b, ...) writes each argument, without a separator, and then
@@ -95,16 +147,7 @@ recursive subroutine emit_print(em, node)
 	type(emitter_t), intent(inout) :: em
 	type(syntax_node_t), intent(in) :: node
 
-	integer :: i
-
-	if (allocated(node%args)) then
-		do i = 1, size(node%args)
-			call em_line(em, 'call rt_print('// &
-				str_of(em, node%args(i)%val, emit_expr(em, node%args(i)))//')')
-		end do
-	end if
-
-	call em_line(em, 'call rt_endl()')
+	call em_line(em, 'call rt_println('//print_args(em, node, 1)//')')
 
 end subroutine emit_print
 
@@ -118,24 +161,8 @@ recursive subroutine emit_writeln(em, node)
 	type(emitter_t), intent(inout) :: em
 	type(syntax_node_t), intent(in) :: node
 
-	character(len = :), allocatable :: f, tmp
-
-	integer :: i
-
-	f = emit_expr(em, node%args(1))
-	if (node%args(1)%kind /= name_expr .or. allocated(node%args(1)%lsubscripts)) then
-		! Used for each of the values
-		tmp = new_tmp(em, 'type(rt_file_t)', 'fh')
-		call em_line(em, tmp//' = '//f)
-		f = tmp
-	end if
-
-	do i = 2, size(node%args)
-		call em_line(em, 'call rt_write('//f//', '// &
-			str_of(em, node%args(i)%val, emit_expr(em, node%args(i)))//')')
-	end do
-
-	call em_line(em, 'call rt_write_end('//f//')')
+	call em_line(em, 'call rt_writeln('//emit_expr(em, node%args(1))//', '// &
+		print_args(em, node, 2)//')')
 
 end subroutine emit_writeln
 

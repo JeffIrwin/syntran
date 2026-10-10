@@ -240,17 +240,11 @@ end subroutine rt_str_step_set
 
 !===============================================================================
 
-! println() writes each argument without advancing, then ends the line
-subroutine rt_print(s)
+! println() writes all of its arguments, which the caller has joined, as one line
+subroutine rt_println(s)
     character(len = *), intent(in) :: s
-    write(output_unit, '(a)', advance = 'no') s
-end subroutine rt_print
-
-!===============================================================================
-
-subroutine rt_endl()
-    write(output_unit, *)
-end subroutine rt_endl
+    write(output_unit, '(a)') s
+end subroutine rt_println
 
 !===============================================================================
 
@@ -1148,8 +1142,9 @@ function rt_eof_stdin() result(r)
     r = rt_stdin_eof
 end function rt_eof_stdin
 
-subroutine rt_write(f, s)
-    ! One of the values of writeln(), which isn't ended until rt_write_end()
+! writeln() writes all of its values after the file, which the caller has joined,
+! as one line
+subroutine rt_writeln(f, s)
     type(rt_file_t), intent(in) :: f
     character(len = *), intent(in) :: s
     integer :: io
@@ -1160,23 +1155,9 @@ subroutine rt_write(f, s)
         call rt_fatal('writeln() was called for file "' // f%name // &
             '" which was not opened in write mode "w"')
     end if
-    write(f%unit, '(a)', advance = 'no', iostat = io) s
+    write(f%unit, '(a)', iostat = io) s
     if (io /= 0) call rt_fatal('cannot writeln() to file "' // f%name // '"')
-end subroutine rt_write
-
-subroutine rt_write_end(f)
-    type(rt_file_t), intent(in) :: f
-    integer :: io
-    if (.not. f%is_open) then
-        call rt_fatal('writeln() was called for file "' // f%name // '" which is not open')
-    end if
-    if (.not. f%mode_write) then
-        call rt_fatal('writeln() was called for file "' // f%name // &
-            '" which was not opened in write mode "w"')
-    end if
-    write(f%unit, *, iostat = io)
-    if (io /= 0) call rt_fatal('cannot writeln() to file "' // f%name // '"')
-end subroutine rt_write_end
+end subroutine rt_writeln
 
 function rt_exists(path) result(r)
     character(len = *), intent(in) :: path
