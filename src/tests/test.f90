@@ -9729,7 +9729,7 @@ subroutine unit_test_transpile(npass, nfail)
 			! A local doesn't have the name of a global that is hidden by it, and a
 			! fn doesn't have the name of a global
 			index(transpile_src('let n = 1; fn f(n: i32): i32 { return n; } return f(n);'), &
-				':: n_l1_a') > 0, &
+				'value :: n_l1') > 0, &
 			index(transpile_src('let f = 1; fn f(a: i32): i32 { return a; } return f;'), &
 				'function f_f') > 0, &
 
@@ -9755,9 +9755,19 @@ subroutine unit_test_transpile(npass, nfail)
 			index(transpile_src('let x = 0; while (x < 3) x += 1;'), &
 				'Error: <invalid_value>') > 0, &
 
-			! A user fn is a recursive procedure, with its parameter copied
+			! A user fn is a recursive procedure.  A scalar parameter is `value`, so
+			! it isn't copied by hand even when the body assigns to it, but an
+			! array that is assigned to is
 			index(transpile_src('fn f(a: i32): i32 { return a; } return f(1);'), &
 				'recursive function f(') > 0, &
+			index(transpile_src('fn f(a: i32): i32 { return a; } return f(1);'), &
+				'integer(int32), value :: a') > 0, &
+			index(transpile_src('fn f(a: i32): i32 { a += 1; return a; } return f(1);'), &
+				'a_a') == 0, &
+			index(transpile_src('fn f(a: [i32; :]): i32 { a[0] = 1; return a[0]; } ' &
+				//'return f([1, 2]);'), 'a_a') > 0, &
+			eval('fn f(a: i32): i32 { a += 1; return a; } let b = 4; return f(b) * 10 + b;', &
+				.true.) == '54', &
 
 			! A user's name can't clash with the runtime's names, whatever its case
 			index(transpile_src('fn rt_str(x: i32): i32 { return x; } return rt_str(1);'), &

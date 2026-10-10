@@ -1684,6 +1684,30 @@ end function dims_of
 
 !===============================================================================
 
+function scalar_by_value(val) result(by_value)
+
+	! Is this a plain scalar (a number, bool or enum), which a by-value
+	! parameter can pass with Fortran's `value` attribute?  The dummy argument is
+	! then the callee's own copy, which the body is free to assign to.  Strings,
+	! arrays, structs and fn pointers aren't
+	!
+	! An enum value is an `integer(int32)` in the generated program
+
+	type(value_t), intent(in) :: val
+	logical :: by_value
+
+	by_value = .false.
+	if (is_arr(val)) return
+
+	select case (val%type)
+	case (i32_type, i64_type, f32_type, f64_type, bool_type, enum_type)
+		by_value = .true.
+	end select
+
+end function scalar_by_value
+
+!===============================================================================
+
 function elem_spec(em, val) result(s)
 
 	! Type spec of a scalar's type, or of an array's elements, for a dummy
@@ -1948,9 +1972,11 @@ recursive subroutine emit_fn(em, decl, self_sk)
 	! Emit a user fn as a Fortran procedure.  It is always `recursive`, which
 	! also makes all of its local variables automatic (not `save`)
 	!
-	! By-value parameters are copied into a local at entry, so that the body is
-	! free to assign to them.  By-reference parameters are `intent(inout)`, and
-	! allocatable if they are arrays or strings so that they can be resized
+	! A by-value scalar is a `value` dummy argument, which is already the fn's
+	! own copy.  Any other by-value parameter is read-only (`intent(in)`), and
+	! is copied into a local at entry if the body assigns to it.  By-reference
+	! parameters are `intent(inout)`, and allocatable if they are arrays or
+	! strings so that they can be resized
 
 	! A method has a struct as the first parameter, which is its `self`.  Pass
 	! `self_sk`, the position of the struct in the table, for a method
@@ -2078,10 +2104,20 @@ recursive subroutine emit_fn(em, decl, self_sk)
 				end if
 			end if
 
+			if (scalar_by_value(pval)) then
+				! A scalar is passed by value, so the dummy argument is the local
+				! itself.  It can be assigned to, and nothing can alias it
+				dummy_names = dummy_names//local
+				call ret_decls%push(elem_spec(em, pval)//', value :: '//local)
+				call em%seen_local%push(2 * slot + 1)
+				call record_slot(em, .true., slot, pval)
+				cycle
+			end if
+
 			use_direct = .false.
 			if (is_arr(pval) .or. pval%type == str_type) then
-				! Copying a scalar is free.  An array or string is only worth not
-				! copying if it can't be affected by anything else
+				! An array or string is only worth not copying if it can't be
+				! affected by anything else
 				use_direct = .not. modifies_slot(decl%body, slot)
 				if (use_direct) use_direct = .not. alias_hazard(decl%body, &
 					decl%id_index, ref_slots)
@@ -2459,7 +2495,13 @@ subroutine emit_type_decls(em, order)
 
 			if (allocated(sig%fn_params)) then
 				do j = 1, size(sig%fn_params)
-					line = elem_spec(em, sig%fn_params(j))//', intent(in) :: a'//str(j)
+					! Characteristics have to match those of the procedures that it
+					! points to, so a scalar is `value` here too
+					if (scalar_by_value(sig%fn_params(j))) then
+						line = elem_spec(em, sig%fn_params(j))//', value :: a'//str(j)
+					else
+						line = elem_spec(em, sig%fn_params(j))//', intent(in) :: a'//str(j)
+					end if
 					if (is_arr(sig%fn_params(j))) &
 						line = line//dims_of(sig%fn_params(j)%array%rank)
 					call em%tdecls%push('            '//line)
