@@ -37,11 +37,26 @@ module syntran_rt
         module procedure rt_str_bool, rt_str_i32, rt_str_i64, rt_str_f32, rt_str_f64, rt_str_str
     end interface rt_str
 
-    ! Convert an array of any rank to a string, like rt_str() does for a scalar
+    ! Convert an array of rank 1 to 4 to a string, like rt_str() does for a scalar.
+    ! These have explicit ranks and call the assumed-rank rt_str_a_<type> below,
+    ! because gfortran mishandles an empty array *expression* that is passed
+    ! straight to an assumed-rank dummy argument
     interface rt_str_a
-        module procedure rt_str_a_bool, rt_str_a_i32, rt_str_a_i64, rt_str_a_f32, &
-            rt_str_a_f64, rt_str_a_str
+        module procedure rt_str_a_bool_1, rt_str_a_bool_2, rt_str_a_bool_3, &
+            rt_str_a_bool_4, rt_str_a_i32_1, rt_str_a_i32_2, rt_str_a_i32_3, &
+            rt_str_a_i32_4, rt_str_a_i64_1, rt_str_a_i64_2, rt_str_a_i64_3, &
+            rt_str_a_i64_4, rt_str_a_f32_1, rt_str_a_f32_2, rt_str_a_f32_3, &
+            rt_str_a_f32_4, rt_str_a_f64_1, rt_str_a_f64_2, rt_str_a_f64_3, &
+            rt_str_a_f64_4, rt_str_a_str_1, rt_str_a_str_2, rt_str_a_str_3, &
+            rt_str_a_str_4
     end interface rt_str_a
+
+    ! Whole-array equality of two arrays of the same rank, given as shapes and
+    ! flattened elements: one bool, false if the shapes differ
+    interface rt_arr_eq
+        module procedure rt_arr_eq_bool, rt_arr_eq_i32, rt_arr_eq_i64, rt_arr_eq_f32, &
+            rt_arr_eq_f64, rt_arr_eq_str
+    end interface rt_arr_eq
 
 contains
 
@@ -645,6 +660,152 @@ end function rt_str_a_str
 
 !===============================================================================
 
+function rt_str_a_bool_1(x) result(s)
+    logical, intent(in) :: x(:)
+    character(len = :), allocatable :: s
+    s = rt_str_a_bool(x)
+end function rt_str_a_bool_1
+
+function rt_str_a_bool_2(x) result(s)
+    logical, intent(in) :: x(:,:)
+    character(len = :), allocatable :: s
+    s = rt_str_a_bool(x)
+end function rt_str_a_bool_2
+
+function rt_str_a_bool_3(x) result(s)
+    logical, intent(in) :: x(:,:,:)
+    character(len = :), allocatable :: s
+    s = rt_str_a_bool(x)
+end function rt_str_a_bool_3
+
+function rt_str_a_bool_4(x) result(s)
+    logical, intent(in) :: x(:,:,:,:)
+    character(len = :), allocatable :: s
+    s = rt_str_a_bool(x)
+end function rt_str_a_bool_4
+
+function rt_str_a_i32_1(x) result(s)
+    integer(int32), intent(in) :: x(:)
+    character(len = :), allocatable :: s
+    s = rt_str_a_i32(x)
+end function rt_str_a_i32_1
+
+function rt_str_a_i32_2(x) result(s)
+    integer(int32), intent(in) :: x(:,:)
+    character(len = :), allocatable :: s
+    s = rt_str_a_i32(x)
+end function rt_str_a_i32_2
+
+function rt_str_a_i32_3(x) result(s)
+    integer(int32), intent(in) :: x(:,:,:)
+    character(len = :), allocatable :: s
+    s = rt_str_a_i32(x)
+end function rt_str_a_i32_3
+
+function rt_str_a_i32_4(x) result(s)
+    integer(int32), intent(in) :: x(:,:,:,:)
+    character(len = :), allocatable :: s
+    s = rt_str_a_i32(x)
+end function rt_str_a_i32_4
+
+function rt_str_a_i64_1(x) result(s)
+    integer(int64), intent(in) :: x(:)
+    character(len = :), allocatable :: s
+    s = rt_str_a_i64(x)
+end function rt_str_a_i64_1
+
+function rt_str_a_i64_2(x) result(s)
+    integer(int64), intent(in) :: x(:,:)
+    character(len = :), allocatable :: s
+    s = rt_str_a_i64(x)
+end function rt_str_a_i64_2
+
+function rt_str_a_i64_3(x) result(s)
+    integer(int64), intent(in) :: x(:,:,:)
+    character(len = :), allocatable :: s
+    s = rt_str_a_i64(x)
+end function rt_str_a_i64_3
+
+function rt_str_a_i64_4(x) result(s)
+    integer(int64), intent(in) :: x(:,:,:,:)
+    character(len = :), allocatable :: s
+    s = rt_str_a_i64(x)
+end function rt_str_a_i64_4
+
+function rt_str_a_f32_1(x) result(s)
+    real(real32), intent(in) :: x(:)
+    character(len = :), allocatable :: s
+    s = rt_str_a_f32(x)
+end function rt_str_a_f32_1
+
+function rt_str_a_f32_2(x) result(s)
+    real(real32), intent(in) :: x(:,:)
+    character(len = :), allocatable :: s
+    s = rt_str_a_f32(x)
+end function rt_str_a_f32_2
+
+function rt_str_a_f32_3(x) result(s)
+    real(real32), intent(in) :: x(:,:,:)
+    character(len = :), allocatable :: s
+    s = rt_str_a_f32(x)
+end function rt_str_a_f32_3
+
+function rt_str_a_f32_4(x) result(s)
+    real(real32), intent(in) :: x(:,:,:,:)
+    character(len = :), allocatable :: s
+    s = rt_str_a_f32(x)
+end function rt_str_a_f32_4
+
+function rt_str_a_f64_1(x) result(s)
+    real(real64), intent(in) :: x(:)
+    character(len = :), allocatable :: s
+    s = rt_str_a_f64(x)
+end function rt_str_a_f64_1
+
+function rt_str_a_f64_2(x) result(s)
+    real(real64), intent(in) :: x(:,:)
+    character(len = :), allocatable :: s
+    s = rt_str_a_f64(x)
+end function rt_str_a_f64_2
+
+function rt_str_a_f64_3(x) result(s)
+    real(real64), intent(in) :: x(:,:,:)
+    character(len = :), allocatable :: s
+    s = rt_str_a_f64(x)
+end function rt_str_a_f64_3
+
+function rt_str_a_f64_4(x) result(s)
+    real(real64), intent(in) :: x(:,:,:,:)
+    character(len = :), allocatable :: s
+    s = rt_str_a_f64(x)
+end function rt_str_a_f64_4
+
+function rt_str_a_str_1(x) result(s)
+    type(rt_str_t), intent(in) :: x(:)
+    character(len = :), allocatable :: s
+    s = rt_str_a_str(x)
+end function rt_str_a_str_1
+
+function rt_str_a_str_2(x) result(s)
+    type(rt_str_t), intent(in) :: x(:,:)
+    character(len = :), allocatable :: s
+    s = rt_str_a_str(x)
+end function rt_str_a_str_2
+
+function rt_str_a_str_3(x) result(s)
+    type(rt_str_t), intent(in) :: x(:,:,:)
+    character(len = :), allocatable :: s
+    s = rt_str_a_str(x)
+end function rt_str_a_str_3
+
+function rt_str_a_str_4(x) result(s)
+    type(rt_str_t), intent(in) :: x(:,:,:,:)
+    character(len = :), allocatable :: s
+    s = rt_str_a_str(x)
+end function rt_str_a_str_4
+
+!===============================================================================
+
 ! Elemental versions of the operators that Fortran doesn't have for the
 ! strings in an array of rt_str_t
 
@@ -671,6 +832,75 @@ elemental function rt_str_t_of(s) result(r)
     type(rt_str_t) :: r
     r%s = s
 end function rt_str_t_of
+
+!===============================================================================
+
+! Whole-array equality, for the match of a `switch` on an array.  Unlike the
+! elementwise `==` it is a single bool, and arrays of different shapes are just
+! not equal.  Each array is passed as its shape and its elements flattened to
+! rank 1, like `rt_arr_eq(shape(a), reshape(a, [size(a)]), shape(b), ...)`.  That
+! is for any rank, and it avoids an assumed-rank dummy argument, which gfortran
+! gets wrong for an empty array expression
+
+function rt_arr_eq_bool(sa, va, sb, vb) result(r)
+    integer, intent(in) :: sa(:), sb(:)
+    logical, intent(in) :: va(:), vb(:)
+    logical :: r
+    r = .false.
+    if (size(sa) /= size(sb)) return
+    if (any(sa /= sb)) return
+    r = all(va .eqv. vb)
+end function rt_arr_eq_bool
+
+function rt_arr_eq_i32(sa, va, sb, vb) result(r)
+    integer, intent(in) :: sa(:), sb(:)
+    integer(int32), intent(in) :: va(:), vb(:)
+    logical :: r
+    r = .false.
+    if (size(sa) /= size(sb)) return
+    if (any(sa /= sb)) return
+    r = all(va == vb)
+end function rt_arr_eq_i32
+
+function rt_arr_eq_i64(sa, va, sb, vb) result(r)
+    integer, intent(in) :: sa(:), sb(:)
+    integer(int64), intent(in) :: va(:), vb(:)
+    logical :: r
+    r = .false.
+    if (size(sa) /= size(sb)) return
+    if (any(sa /= sb)) return
+    r = all(va == vb)
+end function rt_arr_eq_i64
+
+function rt_arr_eq_f32(sa, va, sb, vb) result(r)
+    integer, intent(in) :: sa(:), sb(:)
+    real(real32), intent(in) :: va(:), vb(:)
+    logical :: r
+    r = .false.
+    if (size(sa) /= size(sb)) return
+    if (any(sa /= sb)) return
+    r = all(va == vb)
+end function rt_arr_eq_f32
+
+function rt_arr_eq_f64(sa, va, sb, vb) result(r)
+    integer, intent(in) :: sa(:), sb(:)
+    real(real64), intent(in) :: va(:), vb(:)
+    logical :: r
+    r = .false.
+    if (size(sa) /= size(sb)) return
+    if (any(sa /= sb)) return
+    r = all(va == vb)
+end function rt_arr_eq_f64
+
+function rt_arr_eq_str(sa, va, sb, vb) result(r)
+    integer, intent(in) :: sa(:), sb(:)
+    type(rt_str_t), intent(in) :: va(:), vb(:)
+    logical :: r
+    r = .false.
+    if (size(sa) /= size(sb)) return
+    if (any(sa /= sb)) return
+    r = all(rt_eq(va, vb))
+end function rt_arr_eq_str
 
 !===============================================================================
 

@@ -325,6 +325,19 @@ recursive function has_loopless_break(node) result(found)
 		if (found) return
 		if (allocated(node%else_clause)) found = has_loopless_break(node%else_clause)
 
+	case (switch_statement)
+		! The arms of a switch behave like the clauses of an `if`
+		if (allocated(node%members)) then
+			do i = 1, size(node%members)
+				if (.not. allocated(node%members(i)%body)) cycle
+				if (has_loopless_break(node%members(i)%body)) then
+					found = .true.
+					return
+				end if
+			end do
+		end if
+		if (allocated(node%else_clause)) found = has_loopless_break(node%else_clause)
+
 	end select
 
 end function has_loopless_break
@@ -462,6 +475,292 @@ contains
 	end subroutine emit_else
 
 end subroutine emit_if
+
+!===============================================================================
+
+recursive function is_pure_case(node) result(pure_)
+
+	! Can the match value (or range) of a `case` be evaluated whether or not an
+	! earlier value of its arm matched, because it has no side effects and nothing
+	! has to be hoisted out of it?  Otherwise the values have to be tested in
+	! order, stopping at the first match, like the interpreter does
+
+	type(syntax_node_t), intent(in) :: node
+	logical :: pure_
+
+	! An array has to be stored in a hidden variable first
+	if (node%kind /= case_range) then
+		if (is_arr(node%val)) then
+			pure_ = .false.
+			return
+		end if
+	end if
+
+	select case (node%kind)
+	case (literal_expr)
+		pure_ = .true.
+	case (name_expr)
+		pure_ = .not. allocated(node%lsubscripts)
+	case (unary_expr)
+		pure_ = .false.
+		if (allocated(node%right)) pure_ = is_pure_case(node%right)
+	case (case_range)
+		pure_ = is_pure_case(node%lbound_) .and. is_pure_case(node%ubound_)
+	case default
+		pure_ = .false.
+	end select
+
+end function is_pure_case
+
+!===============================================================================
+
+recursive function case_cmp(em, subj, sval, v, op) result(s)
+
+	! Fortran expression for `<subject> == v` if `op` is eequals_token, or for
+	! `<subject> < v` if it is less_token.  `subj` is the hidden variable that the
+	! subject was stored in and `sval` is its value, for the type
+
+	type(emitter_t), intent(inout) :: em
+	character(len = *), intent(in) :: subj
+	type(value_t), intent(in) :: sval
+	type(syntax_node_t), intent(in) :: v
+	integer, intent(in) :: op
+	character(len = :), allocatable :: s
+
+	!********
+
+	character(len = :), allocatable :: r, tmp
+
+	integer :: st, vt, ct
+
+	r  = emit_expr(em, v)
+	st = elem_type(sval)
+	vt = elem_type(v%val)
+
+	if (is_arr(sval)) then
+		! Whole-array equality.  Ranges of arrays aren't allowed by the parser.  The
+		! value is stored in a hidden variable first, so that its shape and its
+		! elements can both be read from it
+		tmp = new_tmp_of(em, v%val, 'cv')
+		call em_line(em, tmp//' = '//unparen(r))
+
+		ct = st
+		if (is_numeric_type(st) .and. is_numeric_type(vt)) ct = wider_type(st, vt)
+
+		s = 'rt_arr_eq(shape('//subj//'), '// &
+			convert('reshape('//subj//', [size('//subj//')])', st, ct)//', '// &
+			'shape('//tmp//'), '// &
+			convert('reshape('//tmp//', [size('//tmp//')])', vt, ct)//')'
+
+	else if (st == str_type) then
+		if (op == less_token) then
+			s = 'rt_str_lt('//subj//', '//r//')'
+		else
+			s = 'rt_str_eq('//subj//', '//r//')'
+		end if
+
+	else if (st == bool_type) then
+		s = '('//subj//' .eqv. '//r//')'
+
+	else if (is_numeric_type(st) .and. is_numeric_type(vt)) then
+		ct = wider_type(st, vt)
+		if (op == less_token) then
+			s = '('//convert(subj, st, ct)//' < '//convert(r, vt, ct)//')'
+		else
+			s = '('//convert(subj, st, ct)//' == '//convert(r, vt, ct)//')'
+		end if
+
+	else
+		call em_unsupported(em, 'a `switch` on type `'//kind_name(st)//'`')
+		s = '.false.'
+
+	end if
+
+end function case_cmp
+
+!===============================================================================
+
+recursive function case_test(em, subj, sval, v) result(s)
+
+	! Fortran condition for whether a case value or range matches the subject.
+	! A range is half-open like the interpreter's: `lo <= subj < hi`, tested as
+	! "not (subj < lo) and subj < hi"
+
+	type(emitter_t), intent(inout) :: em
+	character(len = *), intent(in) :: subj
+	type(value_t), intent(in) :: sval
+	type(syntax_node_t), intent(in) :: v
+	character(len = :), allocatable :: s
+
+	if (v%kind == case_range) then
+		s = '(.not. '//case_cmp(em, subj, sval, v%lbound_, less_token)//' .and. '// &
+			case_cmp(em, subj, sval, v%ubound_, less_token)//')'
+	else
+		s = case_cmp(em, subj, sval, v, eequals_token)
+	end if
+
+end function case_test
+
+!===============================================================================
+
+recursive subroutine emit_switch(em, node, is_result)
+
+	! A switch statement is a chain of arms inside a named Fortran `block`.  The
+	! subject is stored once in a hidden variable.  An arm whose value (or one of
+	! its values) matches and whose guard holds runs its body and then leaves
+	! the block, so that a guard which is false falls through to the next arm, like
+	! the interpreter's.  The `default` arm is last, and its position in the
+	! source doesn't matter
+	!
+	!   sw_t3 = <subject>
+	!   sw_t3_blk: block
+	!       if (<match 1>) then
+	!           if (<guard>) then
+	!               <body>
+	!               exit sw_t3_blk
+	!           end if
+	!       end if
+	!       ...
+	!       <default body>
+	!   end block sw_t3_blk
+	!
+	! The values of an arm are tested in order, and only up to the first that
+	! matches, because a value can be a call with side effects.  An arm whose
+	! values can't have any is tested with a single condition
+	!
+	! If is_result, the value of the body that ran is the program's result, and a
+	! switch that matched nothing has none
+
+	type(emitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	logical, intent(in) :: is_result
+
+	!********
+
+	character(len = :), allocatable :: label, subj, matched, test
+
+	integer :: i, j, nelems, narms, depth
+
+	logical :: all_pure, has_guard
+
+	em%tmp_count = em%tmp_count + 1
+	label = 'sw_blk'//str(em%tmp_count)
+
+	test = emit_expr(em, node%condition)
+	subj = new_tmp_of(em, node%condition%val, 'sw')
+	call em_line(em, subj//' = '//unparen(test))
+
+	call em_line(em, label//': block')
+	em%indent = em%indent + 1
+
+	narms = 0
+	if (allocated(node%members)) narms = size(node%members)
+
+	do i = 1, narms
+
+		depth = 0
+
+		nelems = 0
+		if (allocated(node%members(i)%elems)) nelems = size(node%members(i)%elems)
+
+		if (nelems > 0) then
+
+			all_pure = .true.
+			do j = 1, nelems
+				if (.not. is_pure_case(node%members(i)%elems(j))) all_pure = .false.
+			end do
+
+			if (all_pure) then
+				test = ''
+				do j = 1, nelems
+					if (j > 1) test = test//' .or. '
+					test = test//case_test(em, subj, node%condition%val, &
+						node%members(i)%elems(j))
+				end do
+				call em_line(em, 'if ('//unparen(test)//') then')
+				em%indent = em%indent + 1
+				depth = depth + 1
+
+			else
+				! Stop at the first value that matches
+				matched = new_tmp(em, 'logical', 'm')
+				call em_line(em, matched//' = .false.')
+
+				do j = 1, nelems
+					call em_line(em, 'if (.not. '//matched//') then')
+					em%indent = em%indent + 1
+
+					associate (v => node%members(i)%elems(j))
+						if (v%kind == case_range) then
+							! The upper bound isn't evaluated for a subject below the
+							! lower bound
+							test = case_cmp(em, subj, node%condition%val, v%lbound_, &
+								less_token)
+							call em_line(em, 'if (.not. '//test//') then')
+							em%indent = em%indent + 1
+							test = case_cmp(em, subj, node%condition%val, v%ubound_, &
+								less_token)
+							call em_line(em, matched//' = '//unparen(test))
+							em%indent = em%indent - 1
+							call em_line(em, 'end if')
+						else
+							test = case_cmp(em, subj, node%condition%val, v, eequals_token)
+							call em_line(em, matched//' = '//unparen(test))
+						end if
+					end associate
+
+					em%indent = em%indent - 1
+					call em_line(em, 'end if')
+				end do
+
+				call em_line(em, 'if ('//matched//') then')
+				em%indent = em%indent + 1
+				depth = depth + 1
+
+			end if
+		end if
+
+		! The guard is only evaluated once a value has matched, or at once for an
+		! arm that is nothing but a guard
+		has_guard = allocated(node%members(i)%condition)
+		if (has_guard) then
+			test = emit_expr(em, node%members(i)%condition)
+			call em_line(em, 'if ('//unparen(test)//') then')
+			em%indent = em%indent + 1
+			depth = depth + 1
+		end if
+
+		call emit_arm_body(node%members(i)%body)
+		call em_line(em, 'exit '//label)
+
+		do j = 1, depth
+			em%indent = em%indent - 1
+			call em_line(em, 'end if')
+		end do
+
+	end do
+
+	if (allocated(node%else_clause)) then
+		call emit_arm_body(node%else_clause)
+	else if (is_result) then
+		call emit_result_invalid(em)
+	end if
+
+	em%indent = em%indent - 1
+	call em_line(em, 'end block '//label)
+
+contains
+
+	recursive subroutine emit_arm_body(body)
+		type(syntax_node_t), intent(in) :: body
+		if (is_result) then
+			call emit_result_stmt(em, body)
+		else
+			call emit_stmt(em, body)
+		end if
+	end subroutine emit_arm_body
+
+end subroutine emit_switch
 
 !===============================================================================
 
@@ -743,8 +1042,16 @@ recursive subroutine emit_result_stmt(em, node)
 	case (return_statement)
 		call emit_stmt(em, node)
 
-	case (struct_declaration, enum_declaration, switch_statement, use_statement)
+	case (switch_statement)
+		call emit_switch(em, node, .true.)
+
+	case (struct_declaration, enum_declaration)
 		call emit_stmt(em, node)
+
+	case (use_statement)
+		! Its value is nothing
+		call emit_stmt(em, node)
+		call emit_result_invalid(em)
 
 	case (let_expr)
 		call emit_stmt(em, node)
@@ -796,6 +1103,68 @@ recursive subroutine emit_result_expr(em, node)
 	end if
 
 end subroutine emit_result_expr
+
+!===============================================================================
+
+recursive subroutine emit_use(em, node)
+
+	! A module's own top-level statements, like `let count = 0;`, run where it is
+	! imported.  Its fns are emitted with the rest of them (c.f. emit_module_fns()).
+	! The parser numbered the module's variables and fns together with the
+	! importer's, so they are named like any other global and need no mapping
+
+	type(emitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+
+	integer :: i
+
+	if (.not. allocated(node%member)) return
+	if (.not. allocated(node%member%members)) return
+
+	do i = 1, size(node%member%members)
+		if (node%member%members(i)%kind == fn_declaration) cycle
+		call emit_stmt(em, node%member%members(i))
+	end do
+
+end subroutine emit_use
+
+!===============================================================================
+
+recursive subroutine emit_module_fns(em, unit, done)
+
+	! Emit the fns of an imported module, and of the modules that it imports.
+	! `done` has the ids of the fns that are already emitted, which a module that
+	! is imported from two places isn't to do again
+
+	type(emitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: unit
+	type(integer_vector_t), intent(inout) :: done
+
+	integer :: i, j
+	logical :: found
+
+	if (.not. allocated(unit%members)) return
+
+	do i = 1, size(unit%members)
+		if (unit%members(i)%kind /= use_statement) cycle
+		if (.not. allocated(unit%members(i)%member)) cycle
+		call emit_module_fns(em, unit%members(i)%member, done)
+	end do
+
+	do i = 1, size(unit%members)
+		if (unit%members(i)%kind /= fn_declaration) cycle
+
+		found = .false.
+		do j = 1, done%len_
+			if (done%v(j) == unit%members(i)%id_index) found = .true.
+		end do
+		if (found) cycle
+
+		call done%push(unit%members(i)%id_index)
+		call emit_fn(em, unit%members(i))
+	end do
+
+end subroutine emit_module_fns
 
 !===============================================================================
 
@@ -860,10 +1229,10 @@ recursive module subroutine emit_stmt(em, node)
 		call em_unsupported(em, 'an enum declaration')
 
 	case (switch_statement)
-		call em_unsupported(em, 'a `switch` statement')
+		call emit_switch(em, node, .false.)
 
 	case (use_statement)
-		call em_unsupported(em, 'a `use` statement')
+		call emit_use(em, node)
 
 	case default
 		! A bare expression statement, which at most has side effects from calls
@@ -1424,6 +1793,7 @@ module subroutine transpile_tree(tree, state, t, diags)
 	logical :: no_diags
 
 	type(emitter_t) :: em
+	type(integer_vector_t) :: done
 	type(string_vector_t) :: rt, main_decls, src
 
 	em%fns => state%fns
@@ -1452,7 +1822,12 @@ module subroutine transpile_tree(tree, state, t, diags)
 	last = 0
 	if (allocated(tree%members)) then
 		do i = 1, size(tree%members)
-			if (tree%members(i)%kind /= fn_declaration) last = i
+			! Declarations aren't statements that run, so they have no value
+			select case (tree%members(i)%kind)
+			case (fn_declaration, struct_declaration, enum_declaration)
+			case default
+				last = i
+			end select
 		end do
 	end if
 
@@ -1471,10 +1846,19 @@ module subroutine transpile_tree(tree, state, t, diags)
 	main_decls = new_string_vector()
 	call push_proc(em, 'subroutine syntran_main()', 'end subroutine syntran_main', main_decls)
 
-	! Fns have their own state, so they don't interleave with the above
+	! Fns have their own state, so they don't interleave with the above.  Those of
+	! the modules come with their own diagnostics, in the module's source
+	done = new_integer_vector()
 	if (allocated(tree%members)) then
 		do i = 1, size(tree%members)
-			if (tree%members(i)%kind == fn_declaration) call emit_fn(em, tree%members(i))
+			if (tree%members(i)%kind /= fn_declaration) cycle
+			call done%push(tree%members(i)%id_index)
+			call emit_fn(em, tree%members(i))
+		end do
+		do i = 1, size(tree%members)
+			if (tree%members(i)%kind /= use_statement) cycle
+			if (.not. allocated(tree%members(i)%member)) cycle
+			call emit_module_fns(em, tree%members(i)%member, done)
 		end do
 	end if
 

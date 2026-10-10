@@ -39,11 +39,16 @@ This is a subset of the language so far:
   (`@`).  They are also elementwise on arrays, and `+` and the comparisons are
   elementwise on arrays of strings
 - `if`, `else if`, `else`, `while`, `for`, `break`, `continue`, `return`
+- `switch`, with value, range, and guard arms, and a `default`.  The subject can
+  be a scalar or a whole array
 - Array literals of every form: `[a, b, c]`, `[a: b]`, `[a: step: b]`,
   `[a: b; n]`, `[v; n, m]`, and `[a, b, c, d; n, m]`
 - Subscripts and slices, including steps, omitted bounds, and vector subscripts
 - Functions, including recursion, arrays as parameters and return values, and
   parameters passed by reference with `&` or `&const`
+- Modules: `use`, qualified and glob imports, aliases, subdirectories, and the
+  fns and variables of a module, including modules that import others.  The
+  statements of a module run where it is imported
 - These intrinsic functions: `println`, `str`, `len`, `repeat`, `char`, `size`,
   `count`, `all`, `any`, `sum`, `product`, `minval`, `maxval` (with `dim` and
   `mask` too), `norm2`, `dot`, `min`, `max`, `abs`, `exp`, `log`, `log2`,
@@ -57,9 +62,8 @@ Programs which use these are rejected with
 [E115](errors.md#e115----transpile-unsupported), pointing at each statement
 which isn't supported.  Run them with the interpreter instead.
 
-- Structs and methods, enums, and `switch`
+- Structs and methods, and enums, including in a module
 - Function pointers
-- Modules, i.e. `use`
 - File I/O: `open`, `readln`, `writeln`, `eof`, `close`
 - `std::` functions and variables, including `std::args()`
 - Assignment as a value inside the condition of a `while` loop or an `else if`

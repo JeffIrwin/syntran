@@ -9723,9 +9723,11 @@ subroutine unit_test_transpile(npass, nfail)
 			interpret_file(T//'transpile/test-01.syntran', .true.) == '0', &
 			interpret_file(T//'transpile/test-02.syntran', .true.) == '0', &
 			interpret_file(T//'transpile/test-03.syntran', .true.) == '0', &
+			interpret_file(T//'transpile/test-04.syntran', .true.) == '0', &
 			transpiles_ok(T//'transpile/test-01.syntran'), &
 			transpiles_ok(T//'transpile/test-02.syntran'), &
 			transpiles_ok(T//'transpile/test-03.syntran'), &
+			transpiles_ok(T//'transpile/test-04.syntran'), &
 
 			! Most of the tests programs are supported
 			transpiles_ok(T//'fns/test-01.syntran'), &
@@ -9733,6 +9735,26 @@ subroutine unit_test_transpile(npass, nfail)
 			transpiles_ok(T//'while-loops/test-01.syntran'), &
 			transpiles_ok(T//'for-loops/test-01.syntran'), &
 			transpiles_ok(T//'var-scopes/test-01.syntran'), &
+			transpiles_ok(T//'switch/test-01.syntran'), &
+			transpiles_ok(T//'switch/test-09.syntran'), &
+
+			! A module's fns, its variables, and its own imports.  Its init code runs
+			! where it is imported
+			transpiles_ok(T//'modules/test-01.syntran'), &
+			transpiles_ok(T//'modules/test-modvar-01.syntran'), &
+			transpiles_ok(T//'modules/test-alias-01.syntran'), &
+			transpiles_ok(T//'modules/subdir/deep/test-grandparent.syntran'), &
+
+			! A switch is a named block that each arm leaves once it has run, with
+			! the subject stored once.  An array subject compares the shape and the
+			! elements
+			index(transpile_src('let x = 2; let r = 0; switch x { case 1 { r = 1; } ' &
+				//'case 2:5 { r = 2; } default { r = 3; } } return r;'), &
+				'sw_blk1: block') > 0, &
+			index(transpile_src('let x = 2; let r = 0; switch x { case 1 { r = 1; } ' &
+				//'default { r = 3; } } return r;'), 'exit sw_blk') > 0, &
+			index(transpile_src('let a = [1, 2]; let r = 0; switch a { case [1, 2] ' &
+				//'{ r = 1; } } return r;'), 'rt_arr_eq(') > 0, &
 
 			! Unsupported constructs are diagnostics.  Everything else in the
 			! program is still checked, one diagnostic per statement
@@ -9741,8 +9763,6 @@ subroutine unit_test_transpile(npass, nfail)
 			diag_count_code(get_diags_transpile_file(P//'E115-transpile-unsupported.syntran'), &
 				EC_TRANSPILE_UNSUPPORTED) == 4, &
 			diag_has_code(get_diags_transpile_file(T//'struct/test-01.syntran'), &
-				EC_TRANSPILE_UNSUPPORTED), &
-			diag_has_code(get_diags_transpile_file(T//'switch/test-01.syntran'), &
 				EC_TRANSPILE_UNSUPPORTED), &
 			diag_has_code(get_diags_transpile_file(T//'modules/boxuser.syntran'), &
 				EC_TRANSPILE_UNSUPPORTED), &
