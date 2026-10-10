@@ -316,6 +316,7 @@ module procedure get_all_error_codes
 	call codes%push(EC_FN_MISSING_PARENS)
 	call codes%push(EC_MISSING_LET_EQUALS)
 	call codes%push(EC_MISSING_LET_NAME)
+	call codes%push(EC_TRANSPILE_UNSUPPORTED)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -1160,6 +1161,19 @@ module procedure err_missing_let_name
 		//" x = <value>;"//color_reset//"`"
 
 end procedure err_missing_let_name
+
+
+!===============================================================================
+
+module procedure err_transpile_unsupported
+
+	err = err_pre(EC_TRANSPILE_UNSUPPORTED) &
+		//what//' is not supported by the Fortran transpiler yet' &
+		//underline(context, span)//" unsupported" &
+		//color_reset//line_feed//fg_bright_green//"help"//color_reset &
+		//": run the program with the interpreter instead, i.e. without `--transpile`"
+
+end procedure err_transpile_unsupported
 
 
 !===============================================================================

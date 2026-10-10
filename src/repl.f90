@@ -268,6 +268,10 @@ subroutine repl_help_vars(state, ou)
 	do i = 1, state%fns%capacity
 		if (.not. allocated(state%fns%table(i)%key)) cycle
 		if (state%fns%table(i)%val%is_intr) cycle
+
+		! Per-id alias of an imported method, c.f. parse_use_statement()
+		if (index(state%fns%table(i)%key, "#") > 0) cycle
+
 		any_fns = .true.
 		write(ou, "(a)") tab//state%fns%table(i)%key
 	end do

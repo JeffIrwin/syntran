@@ -1,0 +1,34 @@
+// Standard input through the std::IN handle.  These programs are run by both
+// the interpreter and the Fortran transpiler (utils/test-transpile.sh), which
+// must print the same thing.  Stdin is empty there, and reading it hits the end
+// of input once.  test-07 has the forms of readln() and eof() without an
+// argument
+//
+// The return value is the number of failed checks
+
+let status = 0;
+
+fn check(ok: bool): i32
+{
+	if (ok) return 0;
+	return 1;
+}
+
+// std::IN is a constant, not a variable that a read can update.  The read
+// still has to be seen by eof()
+println(eof(std::IN));
+status += check(not eof(std::IN));
+
+let s = readln(std::IN);
+println("[", s, "] ", eof(std::IN));
+status += check(s == "");
+status += check(eof(std::IN));
+
+// A copy of the handle is a value like any other
+let h = std::IN;
+println(h.name, " ", h.is_open);
+status += check(h.name == "stdin");
+status += check(h.is_open);
+
+println(status);
+return status;

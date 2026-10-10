@@ -31,6 +31,11 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - Two pre-existing interpreter bugs turned up while probing, both
+	!    reproduced on the old binary. They are not part of this PR; you may
+	!    want issues for them:
+	!    * pts = [pts, [p]] with an array of structs → Internal syntran error[I2]
+	!    * f(&h, &h) with & and &const params → SIGSEGV
 	!  - api documentation
 	!    * the readme does not mention the eval*() functions and how to call
 	!      them from a simple fortran program

@@ -1,0 +1,17 @@
+// E115: transpile-unsupported
+// A valid program, which the interpreter runs fine, but uses a construct that
+// `syntran --transpile` can't turn into Fortran, here the interpreter's own
+// call stack.  This is only an error when transpiling
+
+fn where_am_i(): str
+{
+	let n = 0;
+	let c = std::caller();
+	std::print_trace();
+	let t = std::stack_trace();
+	let d = std::caller();
+	return c + t + d;
+}
+
+println(where_am_i());
+return 0;

@@ -1,0 +1,192 @@
+// `switch` statements.  These programs are run by both the interpreter and the
+// Fortran transpiler (utils/test-transpile.sh), which must print the same
+// thing.  The return value is the number of failed checks
+
+let status = 0;
+
+fn check(ok: bool): i32
+{
+	if (ok) return 0;
+	return 1;
+}
+
+// Values, ranges, guards, and a default.  A range is half-open, a guard that is
+// false falls through to the next arm instead of to the default, and the
+// position of the default doesn't matter
+fn classify(x: i32): str
+{
+	let r = "";
+	switch x
+	{
+		case 0 { r = "zero"; }
+		default { r = "other"; }
+		case 1, 2, 3 { r = "small"; }
+		case 10:20 when x % 2 == 0 { r = "even teen"; }
+		case 10:20 { r = "odd teen"; }
+		case when x < 0 { r = "neg"; }
+	}
+	return r;
+}
+
+for i in [-1, 0, 2, 3, 4, 10, 11, 19, 20, 99]
+{
+	println(i, " ", classify(i));
+}
+status += check(classify(3) == "small");
+status += check(classify(4) == "other");
+status += check(classify(10) == "even teen");
+status += check(classify(11) == "odd teen");
+status += check(classify(20) == "other");
+status += check(classify(-5) == "neg");
+
+// Strings compare without regard to trailing blanks in Fortran, but not in
+// syntran
+fn greet(s: str): i32
+{
+	switch s
+	{
+		case "a" { return 1; }
+		case "a ", "b" { return 2; }
+		case "c":"f" { return 3; }
+		default { return 0; }
+	}
+	return -1;
+}
+println(greet("a"), greet("a "), greet("b"), greet("d"), greet("f"), greet(""));
+status += check(greet("a") == 1);
+status += check(greet("a ") == 2);
+status += check(greet("d") == 3);
+status += check(greet("f") == 0);
+
+let hit = "";
+
+// A value with side effects is only evaluated if the earlier values of its arm
+// didn't match, and not at all after a match
+let calls = 0;
+fn bump(n: i32): i32
+{
+	calls += 1;
+	return n;
+}
+switch 5
+{
+	case 5, bump(5), bump(6) { hit = "first"; }
+	case bump(7) { hit = "second"; }
+}
+println(hit, " ", calls);
+status += check(hit == "first");
+status += check(calls == 0);
+
+switch 6
+{
+	case bump(5), bump(6), bump(7) { hit = "later"; }
+	case bump(8):bump(10) { hit = "range"; }
+}
+println(hit, " ", calls);
+status += check(hit == "later");
+status += check(calls == 2);
+
+// The subject is evaluated once
+calls = 0;
+switch bump(3)
+{
+	case 1 { hit = "1"; }
+	case 2 { hit = "2"; }
+	case 3 { hit = "3"; }
+}
+println(hit, " ", calls);
+status += check(calls == 1);
+
+// The subject is stored before the arms run
+let v = 1;
+switch v
+{
+	case 1 when v == 1 { v = 2; hit = "v was 1"; }
+	case 2 { hit = "v is 2"; }
+}
+println(hit, " ", v);
+status += check(hit == "v was 1");
+
+// Whole-array subjects
+fn arr_kind(a: [i32; :]): str
+{
+	switch a
+	{
+		case [1, 2, 3] { return "123"; }
+		case [1, 2] { return "12"; }
+		case [0; 0] { return "empty"; }
+		default { return "other"; }
+	}
+	return "";
+}
+println(arr_kind([1, 2, 3]), " ", arr_kind([1, 2]), " ", arr_kind([0; 0]), " ", arr_kind([4]));
+status += check(arr_kind([1, 2, 3]) == "123");
+status += check(arr_kind([1, 2, 3, 4]) == "other");
+
+// An empty array which is printed as an expression
+println([0; 0]);
+println([1.0; 0, 3]);
+
+let names = ["a", "bb"];
+switch names
+{
+	case ["a", "b"] { hit = "BAD"; }
+	case ["a", "bb"] { hit = "names"; }
+}
+println(hit);
+status += check(hit == "names");
+
+// `break` and `continue` in an arm are the enclosing loop's
+let sum = 0;
+for i in [0: 10]
+{
+	switch i
+	{
+		case 2 { continue; }
+		case 6 { break; }
+		case 0:10 { sum += i; }
+	}
+	sum += 100;
+}
+println(sum);
+status += check(sum == 0 + 1 + 3 + 4 + 5 + 500);
+
+// ... and a `break` outside of a loop leaves the outermost block
+{
+	let n = 0;
+	switch n
+	{
+		case 0 { n = 1; break; n = 2; }
+	}
+	n += 10;
+	println("not reached ", n);
+}
+
+// Nested switches and fns that return from within an arm
+fn nested(a: i32, b: i32): i32
+{
+	switch a
+	{
+		case 1
+		{
+			switch b
+			{
+				case 1 { return 11; }
+				case 2 { return 12; }
+			}
+			return 10;
+		}
+		case 2 { return 20; }
+	}
+	return 0;
+}
+println(nested(1, 1), " ", nested(1, 2), " ", nested(1, 3), " ", nested(2, 1), " ", nested(3, 1));
+status += check(nested(1, 2) == 12);
+status += check(nested(1, 3) == 10);
+
+// The value of the arm that ran is the program's result, as for an `if`
+switch status
+{
+	case 0 { status = 0; }
+	default { status = status; }
+}

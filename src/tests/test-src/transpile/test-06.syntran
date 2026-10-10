@@ -1,0 +1,217 @@
+// Structs and methods.  These programs are run by both the interpreter and the
+// Fortran transpiler (utils/test-transpile.sh), which must print the same
+// thing.  The return value is the number of failed checks
+
+let status = 0;
+
+fn check(ok: bool): i32
+{
+	if (ok) return 0;
+	return 1;
+}
+
+enum Color
+{
+	Red,
+	Green,
+	Blue,
+}
+
+struct Point
+{
+	x: i32,
+	y: i32,
+}
+
+struct Shape
+{
+	name: str,
+	origin: Point,
+	corners: [Point; :],
+	color: Color,
+	weights: [f32; :],
+	ids: [i64; :],
+	tags: [str; :],
+	visible: bool,
+	scale: f64,
+	big: i64,
+	ratio: f32,
+	grid: [i32; :, :],
+}
+
+// Printing: strings are quoted, i64 and f32 get a suffix, arrays and nested
+// structs are printed in full
+let o = Point{x = 1, y = -2};
+println(o);
+println([o, Point{x = 3, y = 4}]);
+
+let s = Shape{
+	name = "tri""angle",
+	origin = o,
+	corners = [Point{x = 0, y = 0}, Point{x = 1, y = 0}, Point{x = 0, y = 1}],
+	color = Color.Green,
+	weights = [0.5f, 1.5f],
+	ids = [7'i64, 8'i64],
+	tags = ["a", "b c"],
+	visible = true,
+	scale = 2.5,
+	big = 123456789012'i64,
+	ratio = 0.25f,
+	grid = [1, 2, 3, 4; 2, 2],
+};
+println(s);
+println(s.name, " ", s.origin, " ", s.color, " ", s.corners[1], " ", s.tags[1]);
+status += check(s.origin.x == 1);
+status += check(s.corners[2].y == 1);
+status += check(s.grid[1, 0] == 2);
+status += check(s.name[0] == "t");
+
+// Assignment is a copy
+let t = s;
+t.origin.x = 99;
+t.corners[0].y = 5;
+t.tags[0] = "changed";
+t.name = "other";
+println(s.origin.x, " ", s.corners[0].y, " ", s.tags[0], " ", s.name);
+println(t.origin.x, " ", t.corners[0].y, " ", t.tags[0], " ", t.name);
+status += check(s.origin.x == 1);
+status += check(t.origin.x == 99);
+status += check(s.name == "tri""angle");
+
+// Compound assignment, to a member and to an element of an array member
+t.origin.x += 1;
+t.origin.y *= 3;
+t.weights[1] += 1.0f;
+t.big += 1'i64;
+t.scale /= 2.0;
+t.name += "!";
+t.visible = not t.visible;
+t.corners[2].x -= 4;
+println(t.origin, " ", t.weights, " ", t.big, " ", t.scale, " ", t.name, " ", t.visible);
+status += check(t.origin.x == 100);
+status += check(t.corners[2].x == -4);
+
+// A slice of an array member
+t.weights[0:2] = [9.0f, 8.0f];
+println(t.weights);
+
+// Arrays of structs
+let pts = [Point{x = 1, y = 2}, Point{x = 3, y = 4}];
+pts[1].x = 30;
+pts[0] = Point{x = -1, y = -2};
+println(pts, " ", size(pts));
+status += check(pts[1].x == 30);
+status += check(pts[0].y == -2);
+
+let sum = 0;
+for p in pts
+{
+	sum += p.x + p.y;
+}
+println(sum);
+status += check(sum == -1 - 2 + 30 + 4);
+
+let many = [Point{x = 7, y = 7}; 3];
+many[1].x = 8;
+println(many);
+status += check(many[0].x == 7);
+
+// By value, by reference, and returned
+fn shift(p: Point, dx: i32): Point
+{
+	p.x += dx;
+	return p;
+}
+
+fn shift_ref(p: &Point, dx: i32)
+{
+	p.x += dx;
+}
+
+fn norm1(p: &const Point): i32
+{
+	return abs(p.x) + abs(p.y);
+}
+
+let a = Point{x = 1, y = 1};
+let b = shift(a, 10);
+println(a, " ", b);
+shift_ref(&a, 5);
+println(a, " ", norm1(a));
+let org = s.origin;
+shift_ref(&org, 100);
+println(org, " ", s.origin);
+status += check(a.x == 6);
+status += check(b.x == 11);
+status += check(norm1(a) == 7);
+status += check(shift(Point{x = 1, y = 2}, 1).x == 2);
+
+// A member of a fn result
+fn make(n: i32): Point
+{
+	return Point{x = n, y = n * 2};
+}
+println(make(4).y, " ", make(5));
+status += check(make(3).y == 6);
+
+// Methods, with implicit and explicit use of the members
+struct Counter
+{
+	count: i32,
+	step: i32,
+	log: [i32; :],
+
+	fn bump()
+	{
+		count += step;
+	}
+
+	fn bump_by(n: i32)
+	{
+		count += n;
+		bump();
+	}
+
+	const fn total(): i32
+	{
+		return count * 2;
+	}
+
+	fn grow()
+	{
+		log = [0: count];
+	}
+}
+
+let c = Counter{count = 0, step = 2, log = [0; 0]};
+c.bump();
+c.bump();
+c.bump_by(10);
+c.grow();
+println(size(c.log));
+status += check(size(c.log) == 16);
+println(c.count, " ", c.total(), " ", c);
+status += check(c.count == 16);
+status += check(c.total() == 32);
+
+// A method on a member of a struct, and on an element of an array
+struct Pair
+{
+	a: Counter,
+	b: Counter,
+}
+
+let pr = Pair{a = c, b = Counter{count = 100, step = 1, log = [0; 0]}};
+pr.b.bump();
+pr.a.bump_by(1);
+println(pr.a.count, " ", pr.b.count, " ", c.count);
+status += check(pr.b.count == 101);
+status += check(c.count == 16);
+
+let cs = [Counter{count = 1, step = 1, log = [0; 0]}, Counter{count = 2, step = 2, log = [0; 0]}];
+cs[1].bump();
+println(cs[0].count, " ", cs[1].count);
+status += check(cs[1].count == 4);
+
+println(status);
+return status;

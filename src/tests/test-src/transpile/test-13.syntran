@@ -1,0 +1,14 @@
+// Subnormal literals must not be flushed to zero by the Fortran compiler.
+//
+// This is only run by utils/test-transpile.sh, which compares the interpreter's
+// output with the compiled program's, and not by test.f90.  A build of syntran
+// with fast-math (-Ofast) flushes subnormals itself, so the interpreter can't be
+// the reference for them there
+
+let tiny32 = 1.0e-45'f32;
+let tiny64 = 1.0e-320;
+
+println(tiny32 > 0.0'f32);
+println(tiny64 > 0.0);
+println(tiny32 * 2.0'f32 > tiny32);
+println(tiny32, " ", tiny64);

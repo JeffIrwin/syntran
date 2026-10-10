@@ -1,0 +1,90 @@
+// Conditions that need statements run first, because they have an assignment or
+// a `let` used as a value in them.  These programs are run by both the
+// interpreter and the Fortran transpiler (utils/test-transpile.sh), which must
+// print the same thing.  The return value is the number of failed checks
+
+let status = 0;
+
+fn check(ok: bool): i32
+{
+	if (ok) return 0;
+	return 1;
+}
+
+// A while loop that assigns in its condition, evaluated on each pass
+let n = 0;
+let steps = 0;
+while ((n = n + 3) < 20)
+{
+	steps += 1;
+	if (steps == 2) continue;
+	if (steps > 100) break;
+}
+println(n, " ", steps);
+status += check(n == 21);
+status += check(steps == 6);
+
+// An else-if that assigns, which is only evaluated if the `if` before it fails
+let calls = 0;
+fn bump(): i32
+{
+	calls += 1;
+	return calls;
+}
+
+let x = 5;
+let r = "";
+let t = 0;
+if (x == 5)
+{
+	r = "first";
+}
+else if ((t = bump()) > 0)
+{
+	r = "second";
+}
+else
+{
+	r = "third";
+}
+println(r, " ", t, " ", calls);
+status += check(r == "first");
+status += check(calls == 0);
+
+x = 6;
+if (x == 5)
+{
+	r = "first";
+}
+else if ((t = bump()) > 5)
+{
+	r = "second";
+}
+else if ((t = bump()) > 1)
+{
+	r = "third";
+}
+else
+{
+	r = "fourth";
+}
+println(r, " ", t, " ", calls);
+status += check(r == "third");
+status += check(calls == 2);
+
+// A call that is subscripted in a loop condition
+fn firsts(): [i32; :]
+{
+	return [3, 2, 1, 0];
+}
+
+let i = 0;
+while (firsts()[i] > 0)
+{
+	i += 1;
+}
+println(i);
+status += check(i == 3);
+
+println(status);
+return status;
