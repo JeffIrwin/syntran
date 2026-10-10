@@ -9727,6 +9727,7 @@ subroutine unit_test_transpile(npass, nfail)
 			interpret_file(T//'transpile/test-05.syntran', .true.) == '0', &
 			interpret_file(T//'transpile/test-06.syntran', .true.) == '0', &
 			interpret_file(T//'transpile/test-08.syntran', .true.) == '0', &
+			interpret_file(T//'transpile/test-09.syntran', .true.) == '0', &
 			transpiles_ok(T//'transpile/test-01.syntran'), &
 			transpiles_ok(T//'transpile/test-02.syntran'), &
 			transpiles_ok(T//'transpile/test-03.syntran'), &
@@ -9735,6 +9736,7 @@ subroutine unit_test_transpile(npass, nfail)
 			transpiles_ok(T//'transpile/test-06.syntran'), &
 			transpiles_ok(T//'transpile/test-07.syntran'), &
 			transpiles_ok(T//'transpile/test-08.syntran'), &
+			transpiles_ok(T//'transpile/test-09.syntran'), &
 
 			! Most of the tests programs are supported
 			transpiles_ok(T//'fns/test-01.syntran'), &

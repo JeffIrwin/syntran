@@ -301,6 +301,7 @@ src/tests/test-src/transpile/test-05.syntran
 src/tests/test-src/transpile/test-06.syntran
 src/tests/test-src/transpile/test-07.syntran
 src/tests/test-src/transpile/test-08.syntran
+src/tests/test-src/transpile/test-09.syntran
 src/tests/test-src/var-scopes/test-01.syntran
 src/tests/test-src/var-scopes/test-02.syntran
 src/tests/test-src/var-scopes/test-03.syntran
