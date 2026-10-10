@@ -142,7 +142,7 @@ recursive module subroutine parse_use_statement(parser, statement)
 	character(len = :), allocatable :: mod_filename, mod_text, src_dir, fn_name
 	character(len = :), allocatable :: insert_name, var_name, struct_name
 	character(len = :), allocatable :: enum_name
-	character(len = :), allocatable :: alias_name
+	character(len = :), allocatable :: alias_name, method_alias
 	type(syntax_token_t) :: use_token, mod_identifier, double_colon, &
 		name_identifier, semi, star, dummy, as_identifier, alias_identifier
 	type(text_span_t) :: span
@@ -508,6 +508,20 @@ recursive module subroutine parse_use_statement(parser, statement)
 
 		! Only push to fn_names in the first pass (like parse_fn_declaration)
 		if (parser%ipass == 0) call parser%fn_names%push(insert_name)
+
+		! A module imported twice (directly and through another module) is
+		! parsed twice, so its methods have two ids under one unqualified key
+		! "0Struct::method", and the second insert above overwrites the first.
+		! The flat fn array is filled by name (syntax_parse() in core.f90), so
+		! also insert each method under a key that is unique to its id, to
+		! keep both copies alive.  The leading "0" keeps it out of spelling
+		! suggestions, and nothing looks it up by name.  A "#" means that this
+		! is already an alias, re-exported from a nested import
+		if (fn%is_method .and. index(fn_name, "#") == 0) then
+			method_alias = fn_name // "#" // str(id_index)
+			call parser%fns%insert(method_alias, fn, id_index)
+			if (parser%ipass == 0) call parser%fn_names%push(method_alias)
+		end if
 	end do
 
 	! Copy parsed module variables to current parser.

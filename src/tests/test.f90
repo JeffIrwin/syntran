@@ -7031,6 +7031,7 @@ subroutine unit_test_modules(npass, nfail)
 			interpret_file(path//'test-struct-collision.syntran', quiet) == 'true', &
 			interpret_file(path//'test-struct-collision-rev.syntran', quiet) == 'true', &
 			interpret_file(path//'test-struct-transitive.syntran', quiet) == 'true', &
+			interpret_file(path//'test-method-diamond.syntran', quiet) == 'true', &
 			interpret_file(path//'test-enum-mod.syntran', quiet) == 'true', &
 			interpret_file(path//'test-enum-mod-qualified.syntran', quiet) == 'true', &
 			interpret_file(path//'test-qual-assign-ok.syntran', quiet) == 'true', &
@@ -9790,6 +9791,10 @@ subroutine unit_test_transpile(npass, nfail)
 			transpiles_ok(T//'modules/test-modvar-01.syntran'), &
 			transpiles_ok(T//'modules/test-alias-01.syntran'), &
 			transpiles_ok(T//'modules/subdir/deep/test-grandparent.syntran'), &
+
+			! A module with struct methods that is imported twice, directly and through
+			! another module, has its methods parsed twice under one name
+			transpiles_ok(T//'modules/test-method-diamond.syntran'), &
 
 			! A switch is a named block that each arm leaves once it has run, with
 			! the subject stored once.  An array subject compares the shape and the

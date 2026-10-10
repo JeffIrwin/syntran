@@ -209,6 +209,8 @@ src/tests/test-src/modules/counter.syntran
 src/tests/test-src/modules/enum_mod.syntran
 src/tests/test-src/modules/geometry.syntran
 src/tests/test-src/modules/math/vectors.syntran
+src/tests/test-src/modules/methmod.syntran
+src/tests/test-src/modules/methuser.syntran
 src/tests/test-src/modules/mymath.syntran
 src/tests/test-src/modules/pointmod.syntran
 src/tests/test-src/modules/qual_assign_mod.syntran
@@ -233,6 +235,7 @@ src/tests/test-src/modules/test-cwd-qualified.syntran
 src/tests/test-src/modules/test-cwd.syntran
 src/tests/test-src/modules/test-enum-mod-qualified.syntran
 src/tests/test-src/modules/test-enum-mod.syntran
+src/tests/test-src/modules/test-method-diamond.syntran
 src/tests/test-src/modules/test-modvar-01.syntran
 src/tests/test-src/modules/test-modvar-02.syntran
 src/tests/test-src/modules/test-modvar-array-qualified.syntran
