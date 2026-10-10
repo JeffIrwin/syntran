@@ -108,6 +108,10 @@ module syntran__core_m
 	!    avoid a copy in many cases, e.g. dynamic vector example
 	!    src/tests/test-src/struct/test-03.syntran
 	!  - matrix inverse? link gfortran to mkl?
+	!    * related and maybe more cheaply, blas/accelerate or equivalent to
+	!      replace existing matmul
+	!    * numpy beats us on matmul. linking to apple accelerate framework is
+	!      trivial. for cross-platform, may need openblas or mkl
 	!  - generics? longshot, lots of design decisions
 	!  - log a known issue that syntran is not threadsafe
 	!    * did some work on feature/parallel branch to try running long tests in
