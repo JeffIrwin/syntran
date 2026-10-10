@@ -12,10 +12,10 @@ test.exe
 *.gv
 
 /scratch
+/build
 
 # Written by src/tests/test-src/transpile/test-07.syntran
 test-07-scratch.tmp
-/build
 
 /docker/artifact-download/
 /docker/artifact-download-*/

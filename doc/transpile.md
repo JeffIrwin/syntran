@@ -15,7 +15,9 @@ standard output.  The input is a file, or a command string with `-c`.
 The generated file is self-contained.  It embeds the small runtime that it needs
 (formatting numbers like `println()` does, array ranges, etc.), so there is
 nothing to link against.  It needs a compiler which supports Fortran 2018, for
-assumed-rank arrays: gfortran 10 or later, ifx, nvfortran, and flang all do.
+assumed-rank arrays.  CI compiles and runs every test program and sample with
+gfortran 14.  Other compilers that implement Fortran 2018 should work too, but
+aren't tested regularly.
 The degree trigonometric functions (`sind()`, `cosd()`, etc.) are Fortran 2023
 intrinsics, so they need a recent compiler, or one with them as an extension.
 

@@ -286,6 +286,13 @@ function parse_args() result(args)
 		error = .true.
 	end if
 
+	! Both of them mean not running the program, so one would silently win
+	if (args%transpile .and. args%syntax_only .and. .not. args%help .and. &
+		.not. args%version) then
+		write(*,*) err_prefix//"--transpile and --syntax-only cannot be used together"
+		error = .true.
+	end if
+
 	url = 'https://github.com/JeffIrwin/syntran'
 
 	version = &
