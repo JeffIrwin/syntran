@@ -32,6 +32,33 @@ if grep -q $'\t' "$in"; then
 	exit 1
 fi
 
+# The block between these markers is for syntran developers, so it's left out
+# of the runtime that ends up in users' programs.  Check that there is exactly
+# one, so that a typo can't leak the notes or drop the rest of the file
+n_begin=$(grep -c '^! BEGIN INTERNAL' "$in" || true)
+n_end=$(grep -c '^! END INTERNAL' "$in" || true)
+if [ "$n_begin" -ne 1 ] || [ "$n_end" -ne 1 ]; then
+	echo "error: $in must have exactly one '! BEGIN INTERNAL' and one" \
+		"'! END INTERNAL' line" >&2
+	exit 1
+fi
+if [ "$(grep -n '^! BEGIN INTERNAL' "$in" | cut -d: -f1)" -gt \
+     "$(grep -n '^! END INTERNAL'   "$in" | cut -d: -f1)" ]; then
+	echo "error: $in has '! END INTERNAL' before '! BEGIN INTERNAL'" >&2
+	exit 1
+fi
+
+# The runtime without the internal block, nor the blank lines that follow it
+public_rt() {
+	awk '
+		/^! BEGIN INTERNAL/ { skip = 1; next }
+		/^! END INTERNAL/   { skip = 0; after = 1; next }
+		skip                { next }
+		after && /^[[:space:]]*$/ { next }
+		{ after = 0; print }
+	' "$in"
+}
+
 {
 	cat <<'EOF'
 
@@ -60,7 +87,7 @@ function transpile_rt_src() result(v)
 EOF
 
 	# Strip trailing whitespace, double any single quotes, wrap in a push call
-	sed -e 's/[[:space:]]*$//' -e "s/'/''/g" -e "s/^\(.*\)\$/\tcall v%push('\1')/" "$in"
+	public_rt | sed -e 's/[[:space:]]*$//' -e "s/'/''/g" -e "s/^\(.*\)\$/\tcall v%push('\1')/"
 
 	cat <<'EOF'
 

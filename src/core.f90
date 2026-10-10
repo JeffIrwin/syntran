@@ -31,6 +31,9 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - long syntran rt comment should be stripped out of top of generated
+	!    fortran. it's ok to stay somewhere but it shouldn't be the first thing
+	!    users see generated
 	!  - "note syntran's ** is left-associative: 64, unlike Fortran's 512, so
 	!    those parentheses must stay"
 	!    * is claude saying i did math wrong? op precedence should probably be

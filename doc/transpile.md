@@ -144,7 +144,9 @@ The runtime is in [`src/rt/syntran_rt.f90`](../src/rt/syntran_rt.f90).  It is
 embedded in `src/transpile_rt.f90` by `src/gen_transpile_rt.sh`.  Only the
 procedures that the program names are in the generated file, and those that they
 name in turn, as are the helpers of the structs and enums that it uses.  That
-relies on the layout that the header of the runtime describes.
+relies on the layout that the header of the runtime describes.  The notes in
+that header, which are between its `BEGIN INTERNAL` and `END INTERNAL` lines,
+are for syntran developers and aren't embedded in generated programs.
 
 The program's own fns are left out in the same way when nothing calls them or
 names them, which matters for a module that is imported from more than one
