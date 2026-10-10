@@ -11,7 +11,8 @@ submodule (syntran__transpile_m) syntran__transpile_expr
 	! takes the parentheses off of an operand that Fortran's own precedence
 	! would group the same way anyway, like the `a * b` of `a * b + c`, and
 	! those of a call's argument.  See operand() and emitter_t%prec.  A unary
-	! operation always keeps its parentheses
+	! operation always keeps its own parentheses, but takes them off of a power
+	! operand, because `-a ** b` is `-(a ** b)` in both languages
 	!
 	! Types are made explicit.  Wherever syntran implicitly widens an operand
 	! (e.g. i32 + f64), the emitted code converts it to the type of the whole
@@ -1416,16 +1417,22 @@ end function emit_str_binary
 
 !===============================================================================
 
-function emit_pow(l, r, lt, rt, restype, lvl) result(s)
+function emit_pow(l, r, lp, rp, lt, rt, restype, lvl) result(s)
 
 	! `l ** r`.  The operands are not both converted to the result type, because
 	! a real to an integer power is not the same operation as a real to a real
 	! power.  This is what the interpreter does, which relies on Fortran's own
 	! mixed-type rules, with one exception: an i64 next to a real is first
 	! converted to that real's kind
+	!
+	! Syntran's `**` groups like Fortran's, so `a ** (b ** c)` is `a ** b ** c`
+	! with no parentheses.  The left operand keeps its own, since `**` is
+	! right-associative, and so does a unary operand, which Fortran doesn't allow
+	! next to an operator.  `lp` and `rp` are the precedence levels of `l` and `r`
+	! (see emitter_t%prec)
 
 	character(len = *), intent(in) :: l, r
-	integer, intent(in) :: lt, rt, restype
+	integer, intent(in) :: lp, rp, lt, rt, restype
 	integer, intent(out) :: lvl
 	character(len = :), allocatable :: s
 
@@ -1434,13 +1441,13 @@ function emit_pow(l, r, lt, rt, restype, lvl) result(s)
 	integer :: nt
 
 	l2 = l
-	r2 = r
+	r2 = operand(r, rp, 10, .true.)
 
 	if (rt == i64_type .and. (lt == f32_type .or. lt == f64_type)) then
-		r2 = convert(r, i64_type, lt)
+		r2 = convert(unparen(r), i64_type, lt)
 	end if
 	if (lt == i64_type .and. (rt == f32_type .or. rt == f64_type)) then
-		l2 = convert(l, i64_type, rt)
+		l2 = convert(unparen(l), i64_type, rt)
 	end if
 
 	! The type that Fortran gives the power
@@ -1566,7 +1573,9 @@ recursive function emit_binary_lvl(em, node, lvl) result(s)
 
 	! The levels of the operators, from the lowest.  Fortran's unary minus has the
 	! level of the binary one, but a unary operation always keeps its own
-	! parentheses, because Fortran doesn't allow `a * -b`
+	! parentheses, because Fortran doesn't allow `a * -b`.  Syntran's `**` is
+	! right-associative and binds tighter than unary minus, like Fortran's, so
+	! its operands only need parentheses where Fortran would also need them
 	!
 	!   1  .eqv. .neqv.        5  < <= > >= == /=      9  * /
 	!   2  .or.                6  //                   10 **
@@ -1640,7 +1649,7 @@ recursive function emit_binary_lvl(em, node, lvl) result(s)
 		end if
 
 		if (node%op%kind == sstar_token) then
-			s = emit_pow(l, r, lt, rt, restype, lvl)
+			s = emit_pow(l, r, lp, rp, lt, rt, restype, lvl)
 			return
 		end if
 
@@ -1826,6 +1835,11 @@ recursive function emit_unary(em, node) result(s)
 	character(len = :), allocatable :: r
 
 	r = emit_expr(em, node%right)
+
+	! Fortran's `-a ** b` is `-(a ** b)`, like syntran's, so a power doesn't need
+	! its parentheses.  Anything else of a higher level than the unary operator
+	! can't be an operand, since unary ops bind tighter than all of them
+	if (em%prec == 10) r = unparen(r)
 
 	select case (node%op%kind)
 	case (minus_token)

@@ -433,6 +433,14 @@ subroutine unit_test_bin_arith(npass, nfail)
 			eval_i32('24 / 6 / 2;') == 24 / 6 / 2, &
 			eval_i32('2 ** 5;') == 2 ** 5, &
 			eval_i32('3 ** 4;') == 3 ** 4, &
+			eval_i32('2 ** 3 ** 2;') == 2 ** 3 ** 2, &
+			eval_i32('2 ** 3 ** 2;') == 512, &
+			eval_i32('(2 ** 3) ** 2;') == (2 ** 3) ** 2, &
+			eval_i32('2 ** (3 ** 2);') == 2 ** (3 ** 2), &
+			eval_i32('2 ** 2 ** 2 ** 2;') == 2 ** 2 ** 2 ** 2, &
+			eval_i32('2 * 3 ** 2;') == 2 * 3 ** 2, &
+			eval_i32('3 ** 2 * 2;') == 3 ** 2 * 2, &
+			eval_i32('2 ** 3 ** 2 - 1;') == 2 ** 3 ** 2 - 1, &
 			eval_i32('13 % 4;') == mod(13, 4), &
 			eval_i32('14 % 4;') == mod(14, 4), &
 			eval_i32('15 % 4;') == mod(15, 4), &
@@ -537,6 +545,21 @@ subroutine unit_test_unary_arith(npass, nfail)
 			eval_i32('(1 + 2) * -3;') == (1 + 2) * -3, &
 			eval_i32('-1 * (2 * -3 * -4);') == -1 * (2 * -3 * -4), &
 			eval_i32('-73 - (+48);') == -73 - (+48), &
+			! Like Fortran, `**` binds tighter than a unary operator, but a
+			! unary operator still binds tighter than `*`
+			eval_i32('-2 ** 2;') == -2 ** 2, &
+			eval_i32('-2 ** 2;') == -4, &
+			eval_i32('(-2) ** 2;') == (-2) ** 2, &
+			eval_i32('-(2 ** 2);') == -(2 ** 2), &
+			eval_i32('+2 ** 2;') == +2 ** 2, &
+			eval_i32('-2 ** 3 ** 2;') == -2 ** 3 ** 2, &
+			eval_i32('3 * -2 ** 2;') == 3 * (-2 ** 2), &
+			eval_i32('-2 ** 2 * 3;') == (-2 ** 2) * 3, &
+			eval_i32('-2 * 3 ** 2;') == (-2) * 3 ** 2, &
+			eval_i32('2 ** -(-3);') == 2 ** (-(-3)), &
+			eval_f64('2.0 ** -1;') == 2.0d0 ** (-1), &
+			eval_f64('2.0 ** -1 ** 2;') == 0.5d0, &
+			eval_f64('-2.0 ** 2;') == -4.0d0, &
 			eval_i32('24 / (-6 / 2);') == 24 / (-6 / 2), &
 			eval_i32('343 - (-87654345 / 27 + -76 * (+234 - 65432)) / -63;') &
 			       == 343 - (-87654345 / 27 + -76 * (+234 - 65432)) / (-63)  &
@@ -9868,6 +9891,17 @@ subroutine unit_test_transpile(npass, nfail)
 				'rt_str(a * b ** c)') > 0, &
 			index(transpile_src('let a=1;let b=2;let c=3; return (a * b) ** c;'), &
 				'rt_str((a * b) ** c)') > 0, &
+			index(transpile_src('let a=1;let b=2;let c=3; return a ** b ** c;'), &
+				'rt_str(a ** b ** c)') > 0, &
+			index(transpile_src('let a=1;let b=2;let c=3; return a ** (b ** c);'), &
+				'rt_str(a ** b ** c)') > 0, &
+			index(transpile_src('let a=1;let b=2;let c=3; return (a ** b) ** c;'), &
+				'rt_str((a ** b) ** c)') > 0, &
+			index(transpile_src('let a=1;let b=2;let c=3; return a ** (b * c);'), &
+				'rt_str(a ** (b * c))') > 0, &
+			index(transpile_src('let a=1;let b=2; return -a ** b;'), '-a ** b') > 0, &
+			index(transpile_src('let a=1;let b=2; return (-a) ** b;'), '(-a) ** b') > 0, &
+			index(transpile_src('let a=1;let b=2; return a ** -b;'), 'a ** (-b)') > 0, &
 			index(transpile_src('let a=1;let b=2;let c=3; return (a + b) % c;'), &
 				'mod(a + b, c)') > 0, &
 			index(transpile_src('let a=1;let b=2;let c=3; return a + b == c;'), &

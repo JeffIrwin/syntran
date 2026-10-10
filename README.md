@@ -174,6 +174,30 @@ Use two asterisks for exponent powers, like Fortran and Scilab:
 
 There's no need to [import `math.h`](https://en.cppreference.com/w/c/numeric/math/pow) and call the `pow()` function!
 
+Powers group the same way as in Fortran, Python, and math notation.  They are right-associative, and they bind tighter than a unary minus:
+
+<!-- syntran-begin mode=repl group=intro-arith -->
+```cpp
+2 ** 3 ** 2;
+// 512
+
+(2 ** 3) ** 2;
+// 64
+
+-2 ** 2;
+// -4
+
+(-2) ** 2;
+// 4
+```
+<!-- syntran-expect
+512
+64
+-4
+4
+-->
+<!-- syntran-end -->
+
 ## Variables, Booleans, and type checking
 
 Variable declarations use the [`let` keyword](https://doc.rust-lang.org/std/keyword.let.html) as in Rust.  This is also similar to JavaScript, except there is no `var` keyword.  Variables are mutable.

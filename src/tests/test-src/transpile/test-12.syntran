@@ -173,6 +173,22 @@ status += check(p << 1 + q == 160);
 status += check((p | q) & r == 0 + (11 & 4));
 println(2 ** 3 ** 2, " ", (2 ** 3) ** 2, " ", 2 ** (3 ** 2));
 
+// `**` is right-associative and binds tighter than a unary operator, like
+// Fortran.  The transpiled program leaves out the parentheses that this makes
+// redundant, and has to keep the rest
+status += check(2 ** 3 ** 2 == 512);
+status += check((2 ** 3) ** 2 == 64);
+status += check(2 ** (3 ** 2) == 512);
+status += check(-p ** 2 == -100);
+status += check((-p) ** 2 == 100);
+status += check(-(p ** 2) == -100);
+status += check(-q ** 2 * r == -36);
+status += check(r * -q ** 2 == -36);
+status += check(p ** -(-2) == 100);
+status += check(w ** q ** w == 512);
+status += check((w ** q) ** w == 64);
+status += check(-w ** q ** w == -512);
+
 let x = 0.1;
 let y = 0.2;
 let z = 0.3;

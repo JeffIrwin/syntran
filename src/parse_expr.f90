@@ -680,7 +680,15 @@ recursive module subroutine parse_expr(parser, parent_prec, expr)
 		if (prec == 0 .or. prec <= parent_precl) exit
 
 		call parser%next(op)
-		call parser%parse_expr(prec, right)
+		if (op%kind == sstar_token) then
+			! `**` is right-associative, like Fortran:  `a ** b ** c` is
+			! `a ** (b ** c)`.  Parsing the right operand with a parent
+			! precedence one lower lets another `**` nest into it.  That is
+			! also the precedence of the unary ops, so `a ** -b` still works
+			call parser%parse_expr(prec - 1, right)
+		else
+			call parser%parse_expr(prec, right)
+		end if
 		call new_binary_expr(expr, op, right, bin_tmp)
 		call syntax_node_move_into(bin_tmp, expr)
 
