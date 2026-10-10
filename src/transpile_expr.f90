@@ -1697,11 +1697,6 @@ recursive function emit_dot_ref(em, node, do_hoist, str_hoist) result(s)
 	if (node%root_kind /= 0) then
 
 		! `f().x` is the member of a temporary
-		if (em%in_cond) then
-			call em_unsupported(em, 'a member of a fn result in a loop condition or `else if`')
-			return
-		end if
-
 		if (node%root_kind /= fn_call_expr .and. node%root_kind /= method_call_expr .and. &
 				node%root_kind /= fn_call_ptr_expr) then
 			call em_unsupported(em, 'a member of the result of a `'// &
@@ -2208,7 +2203,7 @@ function file_var(em, arg, s) result(r)
 	character(len = *), intent(in) :: s
 	character(len = :), allocatable :: r
 
-	if (arg%kind == name_expr .and. .not. allocated(arg%lsubscripts)) then
+	if (is_file_var(arg)) then
 		r = s
 	else
 		r = new_tmp(em, 'type(rt_file_t)', 'fh')
@@ -2501,11 +2496,6 @@ recursive function emit_subscripted_call(em, node) result(s)
 
 	s = '0'
 
-	if (em%in_cond) then
-		call em_unsupported(em, 'a subscripted fn call in a loop condition or `else if`')
-		return
-	end if
-
 	rv = shallow_val(em%fns%fns(node%id_index)%type)
 
 	em%tmp_count = em%tmp_count + 1
@@ -2554,11 +2544,6 @@ recursive function emit_subscripted_intr(em, node) result(s)
 
 	s = '0'
 
-	if (em%in_cond) then
-		call em_unsupported(em, 'a subscripted fn call in a loop condition or `else if`')
-		return
-	end if
-
 	rv%type = array_type
 	allocate(rv%array)
 	rv%array%type = elem_type(node%val)
@@ -2598,11 +2583,6 @@ recursive function emit_let_expr(em, node) result(s)
 	character(len = :), allocatable :: rhs
 
 	s = '0'
-
-	if (em%in_cond) then
-		call em_unsupported(em, 'a `let` in a loop condition or `else if`')
-		return
-	end if
 
 	rhs = emit_expr(em, node%right)
 	call declare_var(em, node, node%val)
@@ -2714,7 +2694,7 @@ recursive function emit_ptr_call(em, node) result(s)
 			end if
 		end if
 
-		if (em%in_cond .or. rv%type /= array_type) then
+		if (rv%type /= array_type) then
 			call em_unsupported(em, 'a subscripted fn call')
 			return
 		end if
@@ -2891,11 +2871,6 @@ recursive function emit_assign_expr(em, node) result(s)
 	integer :: i
 
 	s = '0'
-
-	if (em%in_cond) then
-		call em_unsupported(em, 'an assignment in a loop condition or `else if`')
-		return
-	end if
 
 	if (allocated(node%member)) then
 		call em_unsupported(em, 'an assignment to a struct member as a value')

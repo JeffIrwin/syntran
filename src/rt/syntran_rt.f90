@@ -1006,6 +1006,9 @@ end function rt_open
 subroutine rt_close(f)
     type(rt_file_t), intent(inout) :: f
     integer :: io
+    if (f%is_std) then
+        call rt_fatal('close() cannot be called on standard file handle "' // f%name // '"')
+    end if
     if (.not. f%is_open) then
         call rt_fatal('close() was called for file "' // f%name // '" which is not open')
     end if

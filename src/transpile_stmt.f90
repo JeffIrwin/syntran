@@ -161,7 +161,7 @@ recursive subroutine emit_call_stmt(em, node)
 
 		case ('close')
 			f = emit_expr(em, node%args(1))
-			if (node%args(1)%kind /= name_expr .or. allocated(node%args(1)%lsubscripts)) then
+			if (.not. is_file_var(node%args(1))) then
 				! Not a variable to update, so there is nothing for the closed handle
 				! to be seen by.  It is still closed
 				tmp = new_tmp(em, 'type(rt_file_t)', 'fh')

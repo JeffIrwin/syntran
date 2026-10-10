@@ -152,11 +152,6 @@ module syntran__transpile_m
 		! Error messages
 		type(string_vector_t) :: diags
 
-		! Are we emitting a condition that is evaluated more than once per time that
-		! its statement is reached, i.e. of a loop or of an `else if`?  Statements
-		! can't be hoisted out of an expression there
-		logical :: in_cond = .false.
-
 		! Number of syntran loops enclosing the statement being emitted.  A
 		! `break` or `continue` is Fortran's `exit` or `cycle` in a loop
 		integer :: loop_depth = 0
@@ -532,6 +527,27 @@ function is_simple(node) result(simple)
 	if (node%kind == name_expr) simple = .not. allocated(node%lsubscripts)
 
 end function is_simple
+
+!===============================================================================
+
+function is_file_var(node) result(is_var)
+
+	! Is this a plain variable that a file handle is updated through, as an
+	! argument that the callee may define?  The constants std::IN, std::OUT, and
+	! std::ERR are slots 1 to 4 of the global scope (see emit_name_ref()), but they
+	! are emitted as fn results.  So are subscripted names and other expressions
+
+	type(syntax_node_t), intent(in) :: node
+	logical :: is_var
+
+	is_var = node%kind == name_expr
+	if (.not. is_var) return
+
+	if (allocated(node%lsubscripts)) is_var = .false.
+	if (.not. node%is_loc .and. node%id_index >= 1 .and. node%id_index <= 4) &
+		is_var = .false.
+
+end function is_file_var
 
 !===============================================================================
 

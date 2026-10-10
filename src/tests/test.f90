@@ -9752,6 +9752,7 @@ subroutine unit_test_transpile(npass, nfail)
 			transpiles_ok(T//'transpile/test-07.syntran'), &
 			transpiles_ok(T//'transpile/test-08.syntran'), &
 			transpiles_ok(T//'transpile/test-09.syntran'), &
+			transpiles_ok(T//'transpile/test-10.syntran'), &
 
 			! Most of the tests programs are supported
 			transpiles_ok(T//'fns/test-01.syntran'), &
