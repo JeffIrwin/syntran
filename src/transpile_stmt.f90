@@ -203,7 +203,7 @@ recursive subroutine emit_let(em, node)
 
 	rhs = emit_expr(em, node%right)
 	call declare_var(em, node, node%val)
-	call em_line(em, var_name(node)//' = '// &
+	call em_line(em, var_name(em, node)//' = '// &
 		unparen(convert(rhs, elem_type(node%right%val), elem_type(node%val))))
 
 end subroutine emit_let
@@ -971,7 +971,7 @@ recursive subroutine emit_for(em, node)
 	em%loop_depth = em%loop_depth + 1
 
 	! Substitute the counter into the element designator
-	call em_line(em, var_name(node)//' = '//replace_kk(elem_str, it))
+	call em_line(em, var_name(em, node)//' = '//replace_kk(elem_str, it))
 	call emit_stmt(em, node%body)
 
 	em%loop_depth = em%loop_depth - 1
@@ -1059,7 +1059,7 @@ recursive subroutine emit_for_range(em, node)
 
 	em%indent = em%indent + 1
 	em%loop_depth = em%loop_depth + 1
-	call em_line(em, var_name(node)//' = '//it)
+	call em_line(em, var_name(em, node)//' = '//it)
 	call emit_stmt(em, node%body)
 	em%loop_depth = em%loop_depth - 1
 	em%indent = em%indent - 1
@@ -1166,7 +1166,7 @@ recursive subroutine emit_result_stmt(em, node)
 
 	case (let_expr)
 		call emit_stmt(em, node)
-		call emit_result_str(em, str_of(em, node%val, var_name(node)))
+		call emit_result_str(em, str_of(em, node%val, var_name(em, node)))
 
 	case (assignment_expr)
 		call emit_stmt(em, node)
@@ -1710,12 +1710,236 @@ function elem_spec(em, val) result(s)
 			s = 'integer(int32)'
 		end if
 	else if (t == fn_type) then
-		s = 'type(fp'//str(fptr_slot(em, val))//'_t)'
+		s = 'type(fnptr_t'//str(fptr_slot(em, val))//')'
 	else
 		s = type_spec(t)
 	end if
 
 end function elem_spec
+
+!===============================================================================
+
+subroutine add_cand(kind_, id, base, kinds, ids, names)
+
+	! A variable (kind 0) or fn (kind 1) which might be named as is.  Only once
+	! for each, since a module that is imported twice is found twice
+
+	integer, intent(in) :: kind_, id
+	character(len = *), intent(in) :: base
+	type(integer_vector_t), intent(inout) :: kinds, ids
+	type(string_vector_t), intent(inout) :: names
+
+	integer :: j
+
+	do j = 1, ids%len_
+		if (kinds%v(j) == kind_ .and. ids%v(j) == id) return
+	end do
+
+	call kinds%push(kind_)
+	call ids%push(id)
+	call names%push(base)
+
+end subroutine add_cand
+
+!===============================================================================
+
+recursive subroutine walk_binders(em, node, want_loc, kinds, ids, names)
+
+	! The names of the variables bound in a tree, either of those which are
+	! local to a fn or of those which are global, and of the fns declared in
+	! it.  `names` has the starts of their Fortran names
+
+	type(emitter_t), intent(in) :: em
+	type(syntax_node_t), intent(in), target :: node
+	logical, intent(in) :: want_loc
+	type(integer_vector_t), intent(inout) :: kinds, ids
+	type(string_vector_t), intent(inout) :: names
+
+	!********
+
+	integer :: i, n
+	type(node_ptr_t), allocatable :: kids(:)
+
+	select case (node%kind)
+
+	case (let_expr, for_statement)
+		if ((node%is_loc .eqv. want_loc) .and. node%id_index > 0 .and. &
+				allocated(node%identifier%text)) then
+			call add_cand(0, node%id_index, name_base(node%identifier%text, .false.), &
+				kinds, ids, names)
+		end if
+
+	case (fn_declaration)
+		if (.not. want_loc .and. node%id_index > 0 .and. &
+				allocated(node%identifier%text)) then
+			call add_cand(1, node%id_index, &
+				fn_base(em, node%identifier%text, node%id_index), kinds, ids, names)
+		end if
+
+	end select
+
+	call get_children(node, kids, n)
+	do i = 1, n
+		call walk_binders(em, kids(i)%p, want_loc, kinds, ids, names)
+	end do
+
+end subroutine walk_binders
+
+!===============================================================================
+
+function has_name(v, low) result(found)
+
+	type(string_vector_t), intent(in) :: v
+	character(len = *), intent(in) :: low
+	logical :: found
+
+	integer :: i
+
+	found = .false.
+	do i = 1, v%len_
+		if (v%v(i)%s == low) then
+			found = .true.
+			return
+		end if
+	end do
+
+end function has_name
+
+!===============================================================================
+
+subroutine collect_names(em, tree)
+
+	! Choose the globals and fns that are named as they are in the syntran
+	! source, with no suffix.  Fortran treats the case of a name as the same, so
+	! `X` and `x` are one name, and a variable can't have the name of a fn,
+	! because they're all in the one module.  The first of a name keeps it, with
+	! the globals before the fns, and the rest have the suffix with their slot id
+	! like they all had before.  So does everything which `bare_ok()` doesn't
+	! allow, and anything that isn't found here, which is why a gap in this walk
+	! can only make a name uglier and never a clash
+	!
+	! This also keeps a shadowing variable from clashing with the variable that
+	! it shadows
+
+	type(emitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: tree
+
+	!********
+
+	character(len = :), allocatable :: low
+
+	integer :: j, pass, ng, nf
+
+	type(integer_vector_t) :: kinds, ids
+	type(string_vector_t) :: names
+
+	kinds = new_integer_vector()
+	ids   = new_integer_vector()
+	names = new_string_vector()
+	em%bare_names = new_string_vector()
+
+	call walk_binders(em, tree, .false., kinds, ids, names)
+
+	ng = 0
+	nf = 0
+	do j = 1, ids%len_
+		if (kinds%v(j) == 0) ng = max(ng, ids%v(j))
+		if (kinds%v(j) == 1) nf = max(nf, ids%v(j))
+	end do
+
+	if (allocated(em%bare_global)) deallocate(em%bare_global)
+	if (allocated(em%bare_fn)) deallocate(em%bare_fn)
+	allocate(em%bare_global(ng), em%bare_fn(nf))
+	em%bare_global = .false.
+	em%bare_fn = .false.
+
+	do pass = 0, 1
+		do j = 1, ids%len_
+			if (kinds%v(j) /= pass) cycle
+			if (.not. bare_ok(names%v(j)%s, .true.)) cycle
+
+			low = to_lower(names%v(j)%s)
+			if (has_name(em%bare_names, low)) cycle
+			call em%bare_names%push(low)
+
+			if (pass == 0) then
+				em%bare_global(ids%v(j)) = .true.
+			else
+				em%bare_fn(ids%v(j)) = .true.
+			end if
+		end do
+	end do
+
+end subroutine collect_names
+
+!===============================================================================
+
+subroutine collect_locals(em, decl, is_method)
+
+	! The same as collect_names() for the locals of a fn, which are its
+	! parameters and the variables in its body.  A local also can't have the
+	! name of a global or a fn that is named as is, because that would hide it
+	! for the whole of the fn, though syntran only does that after the `let`
+
+	type(emitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: decl
+	logical, intent(in) :: is_method
+
+	!********
+
+	character(len = :), allocatable :: low, pname
+
+	integer :: i, j, k, nl
+
+	type(fn_t), pointer :: fn
+	type(integer_vector_t) :: kinds, ids
+	type(string_vector_t) :: names, taken
+
+	kinds = new_integer_vector()
+	ids   = new_integer_vector()
+	names = new_string_vector()
+	taken = new_string_vector()
+
+	if (allocated(em%bare_local)) deallocate(em%bare_local)
+
+	fn => em%fns%fns(decl%id_index)
+
+	if (allocated(decl%params)) then
+		do i = 1, size(decl%params)
+			if (is_method .and. i == 1) then
+				pname = '0self'
+			else
+				k = i
+				if (is_method) k = i - 1
+				pname = fn%param_names%v(k)%s
+			end if
+			call add_cand(0, decl%params(i), name_base(pname, .false.), kinds, ids, names)
+		end do
+	end if
+
+	if (allocated(decl%body)) then
+		call walk_binders(em, decl%body, .true., kinds, ids, names)
+	end if
+
+	nl = 0
+	do j = 1, ids%len_
+		nl = max(nl, ids%v(j))
+	end do
+	allocate(em%bare_local(nl))
+	em%bare_local = .false.
+
+	do j = 1, ids%len_
+		if (.not. bare_ok(names%v(j)%s, .false.)) cycle
+
+		low = to_lower(names%v(j)%s)
+		if (has_name(em%bare_names, low)) cycle
+		if (has_name(taken, low)) cycle
+		call taken%push(low)
+
+		em%bare_local(ids%v(j)) = .true.
+	end do
+
+end subroutine collect_locals
 
 !===============================================================================
 
@@ -1777,7 +2001,9 @@ recursive subroutine emit_fn(em, decl, self_sk)
 
 	is_method = present(self_sk)
 
-	name = fn_name(decl%identifier%text, decl%id_index)
+	call collect_locals(em, decl, is_method)
+
+	name = fn_name(em, decl%identifier%text, decl%id_index)
 
 	! Slots of the parameters passed by reference, which the body can assign to
 	allocate(ref_slots(0))
@@ -1809,7 +2035,7 @@ recursive subroutine emit_fn(em, decl, self_sk)
 			pnode%id_index = slot
 			pnode%identifier%text = pname
 
-			local = var_name(pnode)
+			local = var_name(em, pnode)
 
 			dims = ''
 			if (is_arr(pval)) dims = dims_of(pval%array%rank)
@@ -1909,6 +2135,7 @@ recursive subroutine emit_fn(em, decl, self_sk)
 	end if
 
 	em%top_level = .true.
+	if (allocated(em%bare_local)) deallocate(em%bare_local)
 
 	call value_destroy(pval)
 
@@ -2135,7 +2362,7 @@ subroutine emit_type_decls(em, order)
 
 	!********
 
-	character(len = :), allocatable :: line, mname, id, tn, sn
+	character(len = :), allocatable :: line, mname, fname, id, tn, sn
 
 	integer :: i, j, k1, k2, k3, m, n, s, nsig
 	integer, allocatable :: kind_(:), idx(:), lev(:)
@@ -2190,9 +2417,14 @@ subroutine emit_type_decls(em, order)
 			do j = 1, em%structs%table(m)%val%num_vars
 				call struct_member(em, m, j, mval, mname, ok)
 				if (.not. ok) cycle
-				line = decl_line(em, mval, 'm'//str(j), ok)
-				if (.not. ok) line = 'integer(int32) :: m'//str(j)
-				call em%tdecls%push('        '//line//'  ! '//mname)
+				fname = member_fname(em, m, j)
+				line = decl_line(em, mval, fname, ok)
+				if (.not. ok) line = 'integer(int32) :: '//fname
+				if (fname == mname) then
+					call em%tdecls%push('        '//line)
+				else
+					call em%tdecls%push('        '//line//'  ! '//mname)
+				end if
 			end do
 			call em%tdecls%push('    end type '//tn)
 			call em%tdecls%push('')
@@ -2201,7 +2433,7 @@ subroutine emit_type_decls(em, order)
 
 			s = idx(i)
 			id = str(s)
-			sn = 'fi'//id
+			sn = 'fnptr_i'//id
 			sig = em%sigs%v(s)
 
 			line = ''
@@ -2245,9 +2477,9 @@ subroutine emit_type_decls(em, order)
 				end if
 			end if
 			call em%tdecls%push('    end interface')
-			call em%tdecls%push('    type :: fp'//id//'_t')
+			call em%tdecls%push('    type :: fnptr_t'//id)
 			call em%tdecls%push('        procedure('//sn//'), pointer, nopass :: p => null()')
-			call em%tdecls%push('    end type fp'//id//'_t')
+			call em%tdecls%push('    end type fnptr_t'//id)
 			call em%tdecls%push('')
 
 		end if
@@ -2355,7 +2587,7 @@ subroutine emit_struct_procs(em)
 		associate (st => em%structs%table(k)%val)
 
 			! The string of one struct
-			call em%procs%push('    function st'//id//'_str(x) result(s)')
+			call em%procs%push('    function '//tn//'_str(x) result(s)')
 			call em%procs%push('        type('//tn//'), intent(in) :: x')
 			call em%procs%push('        character(len = :), allocatable :: s')
 			call em%procs%push("        s = '"//em%structs%table(k)%key//"{'")
@@ -2364,27 +2596,27 @@ subroutine emit_struct_procs(em)
 				if (.not. ok) cycle
 				if (m > 1) call em%procs%push("        s = s // ', '")
 				call em%procs%push("        s = s // '"//mname//" = '")
-				call em%procs%push('        s = s // '//member_str(em, mval, 'x%m'//str(m)))
+				call em%procs%push('        s = s // '//member_str(em, mval, 'x%'//member_fname(em, k, m)))
 			end do
 			call em%procs%push("        s = s // '}'")
-			call em%procs%push('    end function st'//id//'_str')
+			call em%procs%push('    end function '//tn//'_str')
 			call em%procs%push('')
 
 			! The strings of an array
-			call em%procs%push('    function st'//id//'_join(a) result(s)')
+			call em%procs%push('    function '//tn//'_join(a) result(s)')
 			call em%procs%push('        type('//tn//'), intent(in) :: a(:)')
 			call em%procs%push('        character(len = :), allocatable :: s')
 			call em%procs%push('        integer :: i')
 			call em%procs%push("        s = ''")
 			call em%procs%push('        do i = 1, size(a)')
 			call em%procs%push("            if (i > 1) s = s // ', '")
-			call em%procs%push('            s = s // st'//id//'_str(a(i))')
+			call em%procs%push('            s = s // '//tn//'_str(a(i))')
 			call em%procs%push('        end do')
-			call em%procs%push('    end function st'//id//'_join')
+			call em%procs%push('    end function '//tn//'_join')
 			call em%procs%push('')
 
 			! n copies
-			call em%procs%push('    function st'//id//'_fill(v, n) result(r)')
+			call em%procs%push('    function '//tn//'_fill(v, n) result(r)')
 			call em%procs%push('        type('//tn//'), intent(in) :: v')
 			call em%procs%push('        integer(int64), intent(in) :: n')
 			call em%procs%push('        type('//tn//'), allocatable :: r(:)')
@@ -2393,7 +2625,7 @@ subroutine emit_struct_procs(em)
 			call em%procs%push('        do i = 1, n')
 			call em%procs%push('            r(i) = v')
 			call em%procs%push('        end do')
-			call em%procs%push('    end function st'//id//'_fill')
+			call em%procs%push('    end function '//tn//'_fill')
 			call em%procs%push('')
 
 		end associate
@@ -2479,7 +2711,7 @@ subroutine emit_enum_procs(em)
 		end do
 		if (dup) cycle
 
-		id = 'enum'//str(em%enums%table(k)%id_index)
+		id = enum_tname(em, k)
 		nm = em%enums%table(k)%key
 
 		associate (e => em%enums%table(k)%val)
@@ -2489,7 +2721,7 @@ subroutine emit_enum_procs(em)
 			call em%procs%push('        type(rt_str_t) :: r')
 			call em%procs%push('        select case (v)')
 			do i = 1, e%num_vars
-				call em%procs%push('        case ('//str(i - 1)//'_int32)')
+				call em%procs%push('        case ('//str(i - 1)//')')
 				call em%procs%push("            r%s = '"//nm//'.'//e%variant_names%v(i)%s//"'")
 			end do
 			call em%procs%push('        case default')
@@ -2503,7 +2735,7 @@ subroutine emit_enum_procs(em)
 			call em%procs%push('        character(len = :), allocatable :: r')
 			call em%procs%push('        select case (v)')
 			do i = 1, e%num_vars
-				call em%procs%push('        case ('//str(i - 1)//'_int32)')
+				call em%procs%push('        case ('//str(i - 1)//')')
 				call em%procs%push("            r = '"//nm//'.'//e%variant_names%v(i)%s//"'")
 			end do
 			call em%procs%push('        case default')
@@ -2517,11 +2749,11 @@ subroutine emit_enum_procs(em)
 			call em%procs%push('        integer(int32) :: r')
 			call em%procs%push('        select case (v)')
 			do i = 1, e%num_vars
-				call em%procs%push('        case ('//str(i - 1)//'_int32)')
-				call em%procs%push('            r = '//str(e%variant_values(i))//'_int32')
+				call em%procs%push('        case ('//str(i - 1)//')')
+				call em%procs%push('            r = '//str(e%variant_values(i)))
 			end do
 			call em%procs%push('        case default')
-			call em%procs%push('            r = -1_int32')
+			call em%procs%push('            r = -1')
 			call em%procs%push('        end select')
 			call em%procs%push('    end function '//id//'_val')
 			call em%procs%push('')
@@ -2537,11 +2769,11 @@ subroutine emit_enum_procs(em)
 					if (e%variant_values(j) == e%variant_values(i)) first = .false.
 				end do
 				if (.not. first) cycle
-				call em%procs%push('        case ('//str(e%variant_values(i))//'_int32)')
-				call em%procs%push('            r = '//str(i - 1)//'_int32')
+				call em%procs%push('        case ('//str(e%variant_values(i))//')')
+				call em%procs%push('            r = '//str(i - 1))
 			end do
 			call em%procs%push('        case default')
-			call em%procs%push('            r = -1_int32')
+			call em%procs%push('            r = -1')
 			call em%procs%push('        end select')
 			call em%procs%push('    end function '//id//'_of')
 			call em%procs%push('')
@@ -2612,6 +2844,8 @@ module subroutine transpile_tree(tree, state, t, diags)
 	if (tree%kind /= translation_unit .or. .not. allocated(tree%members)) then
 		call em_unsupported(em, 'this kind of input')
 	end if
+
+	call collect_names(em, tree)
 
 	! Top-level statements go in the main procedure.  The value of the last one is
 	! the program's result.  This comes before the fns so that the types of the

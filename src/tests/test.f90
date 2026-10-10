@@ -9698,14 +9698,50 @@ subroutine unit_test_transpile(npass, nfail)
 			index(transpile_src('let x = 1;'), 'subroutine syntran_main()') > 0, &
 			index(transpile_src('let x = 1;'), 'program syntran_program') > 0, &
 
-			! Variables are named by their slot, so shadowing can't clash even
-			! across types
+			! A variable has its own name, unless it's shadowed, in which case the
+			! one that shadows it is named by its slot so that it can't clash,
+			! even across types
 			index(transpile_src('let x = 1; { let x = "s"; println(x); } return x;'), &
-				'integer(int32) :: x_g5') > 0, &
+				'integer(int32) :: x'//line_feed) > 0, &
 			index(transpile_src('let x = 1; { let x = "s"; println(x); } return x;'), &
 				'character(len = :), allocatable :: x_g6') > 0, &
 			index(transpile_src('let x = 1; { let x = 2.0; } return x;'), &
 				'real(real64) :: x_g6') > 0, &
+			index(transpile_src('let x = 1; { let x = 2.0; } return x;'), 'x_g5') == 0, &
+
+			! Names that are reserved in Fortran, which are intrinsic fns that the
+			! generated code uses, or that could be taken for a name that the
+			! emitter makes up
+			index(transpile_src('let size = 1; return size;'), ':: size_g5') > 0, &
+			index(transpile_src('let int32 = 1; return int32;'), ':: int32_g5') > 0, &
+			index(transpile_src('let it_t1 = 1; return it_t1;'), ':: it_t1_g5') > 0, &
+			index(transpile_src('let p_a = 1; return p_a;'), ':: p_a_g5') > 0, &
+			index(transpile_src('let r = 1; return r;'), ':: r_g5') > 0, &
+			index(transpile_src('let x1 = 1; return x1;'), ':: x1'//line_feed) > 0, &
+			index(transpile_src('let point_2d = 1; return point_2d;'), &
+				':: point_2d'//line_feed) > 0, &
+
+			! Fortran is case insensitive
+			index(transpile_src('let x = 1; let X = 2; return x + X;'), &
+				':: x'//line_feed) > 0, &
+			index(transpile_src('let x = 1; let X = 2; return x + X;'), ':: X_g6') > 0, &
+
+			! A local doesn't have the name of a global that is hidden by it, and a
+			! fn doesn't have the name of a global
+			index(transpile_src('let n = 1; fn f(n: i32): i32 { return n; } return f(n);'), &
+				':: n_l1_a') > 0, &
+			index(transpile_src('let f = 1; fn f(a: i32): i32 { return a; } return f;'), &
+				'function f_f') > 0, &
+
+			! The literals are as they are in the source, and of the default kind
+			! if it's int32
+			index(transpile_src('let x = 1.5e-3; return x;'), '1.5e-3_real64') > 0, &
+			index(transpile_src("let x = 3'f64; return x;"), '3.0_real64') > 0, &
+			index(transpile_src('let x = 1_000.5; return x;'), '1000.5_real64') > 0, &
+			index(transpile_src('let x = 2d3; return x;'), '2e3_real64') > 0, &
+			index(transpile_src('let x = 1.5f; return x;'), '1.5_real32') > 0, &
+			index(transpile_src('let x = 7; return x;'), '= 7'//line_feed) > 0, &
+			index(transpile_src("let x = 7'i64; return x;"), '7_int64') > 0, &
 
 			! The result of the program is printed like the CLI does, unless it
 			! is told not to
@@ -9721,16 +9757,16 @@ subroutine unit_test_transpile(npass, nfail)
 
 			! A user fn is a recursive procedure, with its parameter copied
 			index(transpile_src('fn f(a: i32): i32 { return a; } return f(1);'), &
-				'recursive function f_f') > 0, &
+				'recursive function f(') > 0, &
 
 			! A user's name can't clash with the runtime's names, whatever its case
 			index(transpile_src('fn rt_str(x: i32): i32 { return x; } return rt_str(1);'), &
-				'urt_str_f') > 0, &
-			index(transpile_src('let RT_print = 1; return RT_print;'), 'uRT_print_g') > 0, &
+				'urt_str(') > 0, &
+			index(transpile_src('let RT_print = 1; return RT_print;'), ':: uRT_print'//line_feed) > 0, &
 
 			! Arrays are 1-based in Fortran, but 0-based in syntran
-			index(transpile_src('let a = [1, 2, 3]; return a[0];'), '(1_int32)') > 0, &
-			index(transpile_src('let a = [1, 2, 3]; return a[1:3];'), '(2_int32:3_int32)') > 0, &
+			index(transpile_src('let a = [1, 2, 3]; return a[0];'), '(1)') > 0, &
+			index(transpile_src('let a = [1, 2, 3]; return a[1:3];'), '(2:3)') > 0, &
 
 			! The programs which the transpiler tests compare between backends
 			! still need to work as programs in the interpreter, with no failed
@@ -9744,6 +9780,7 @@ subroutine unit_test_transpile(npass, nfail)
 			interpret_file(T//'transpile/test-06.syntran', .true.) == '0', &
 			interpret_file(T//'transpile/test-08.syntran', .true.) == '0', &
 			interpret_file(T//'transpile/test-09.syntran', .true.) == '0', &
+			interpret_file(T//'transpile/test-11.syntran', .true.) == '0', &
 			transpiles_ok(T//'transpile/test-01.syntran'), &
 			transpiles_ok(T//'transpile/test-02.syntran'), &
 			transpiles_ok(T//'transpile/test-03.syntran'), &
@@ -9754,6 +9791,7 @@ subroutine unit_test_transpile(npass, nfail)
 			transpiles_ok(T//'transpile/test-08.syntran'), &
 			transpiles_ok(T//'transpile/test-09.syntran'), &
 			transpiles_ok(T//'transpile/test-10.syntran'), &
+			transpiles_ok(T//'transpile/test-11.syntran'), &
 
 			! Most of the tests programs are supported
 			transpiles_ok(T//'fns/test-01.syntran'), &
@@ -9767,18 +9805,20 @@ subroutine unit_test_transpile(npass, nfail)
 			! An enum value is the index of its variant, with helper fns for its name
 			! and its backing value
 			index(transpile_src('enum Dir { N, S = 5 } let d = Dir.S; println(d);'), &
-				'enum') > 0, &
+				'function Dir_en') > 0, &
 			index(transpile_src('enum Dir { N, S = 5 } let d = Dir.S; println(i32(d));'), &
 				'_val(') > 0, &
 
 			! A struct is a derived type with a component for each member, named by
 			! its index, and fns for its string
 			index(transpile_src('struct P{x:i32, s:str} let p = P{x = 1, s = "a"}; ' &
-				//'println(p.x);'), 'type :: st1_t') > 0, &
+				//'println(p.x);'), 'type :: P_st1') > 0, &
 			index(transpile_src('struct P{x:i32, s:str} let p = P{x = 1, s = "a"}; ' &
-				//'println(p.s);'), 'p_g') > 0, &
+				//'println(p.s);'), ':: p'//line_feed) > 0, &
 			index(transpile_src('struct P{x:i32} let p = P{x = 1}; p.x = 2;'), &
-				'%m1 = 2_int32') > 0, &
+				'%x = 2') > 0, &
+			index(transpile_src('struct P{a:i32, A:i32} let p = P{a = 1, A = 2}; p.a = 2;'), &
+				'%m1 = 2') > 0, &
 
 			! The loop variable of a `for` over an array of structs is a struct, which
 			! its members can be read from

@@ -15,9 +15,11 @@
 ! After editing, regenerate src/transpile_rt.f90 with src/gen_transpile_rt.sh.
 ! Keep lines under 100 characters.
 !
-! Naming: every public name starts with `rt_` and must NOT end in `_g<digits>`,
-! `_l<digits>`, or `_f<digits>`, which is the shape of every name generated for
-! a syntran variable or function.  That guarantees no clashes.
+! Naming: every public name starts with `rt_`.  A name from a syntran program
+! that starts the same way gets a `u` in front of it by the transpiler (see
+! avoid_runtime_prefix() in transpile_expr.f90), so there are no clashes.  The
+! exception is what this module re-exports from iso_fortran_env, which the
+! transpiler doesn't let a program's names have either (see reserved_name()).
 
 module syntran_rt
 

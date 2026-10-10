@@ -19,9 +19,15 @@ module syntran__transpile_m
 	! Name resolution is already done by the parser.  Every binding (let, for
 	! loop variable, fn parameter) gets a slot (node%is_loc, node%id_index) that
 	! is unique within its fn, or within the top level for globals, even when
-	! syntran scopes shadow a name.  The emitter exploits that: a variable is
-	! always emitted as <name>_g<id> (global) or <name>_l<id> (local), so syntran
-	! scopes and Fortran's lack of block-local declarations never interact.
+	! syntran scopes shadow a name.  The emitter exploits that to name variables
+	! <name>_g<id> (global) or <name>_l<id> (local), so syntran scopes and
+	! Fortran's lack of block-local declarations never interact.
+	!
+	! That suffix is only added where it's needed.  Before emitting anything, a
+	! pre-pass (collect_names()) gives the first variable or fn of each name
+	! just its own name, unless that could clash with a Fortran intrinsic or
+	! with a name that the emitter makes up (see bare_ok()).  Shadowed names and
+	! the rest keep the suffix.
 
 	use syntran__consts_m
 	use syntran__errors_m
@@ -153,6 +159,15 @@ module syntran__transpile_m
 		! 2 * id_index + (1 if local else 0)
 		type(integer_vector_t) :: seen_local, seen_global
 
+		! Which globals (by slot id), locals of the current fn (by slot id), and
+		! fns (by id) are named as they are in the syntran source, without a
+		! suffix.  Anything out of range of these is not
+		logical, allocatable :: bare_global(:), bare_local(:), bare_fn(:)
+
+		! The lowercase names of the globals and fns that are, which a local of
+		! the same name would hide inside its fn
+		type(string_vector_t) :: bare_names
+
 		! The type of each declared variable, indexed by slot id
 		type(slot_info_t), allocatable :: local_slots(:), global_slots(:)
 
@@ -210,7 +225,8 @@ module syntran__transpile_m
 
 		! Fortran name of the variable in slot `id` of a fn (or of the global
 		! scope), whose name in the syntran source is `name`
-		module function slot_name(name, is_loc, id) result(s)
+		module function slot_name(em, name, is_loc, id) result(s)
+			type(emitter_t), intent(in) :: em
 			character(len = *), intent(in) :: name
 			logical, intent(in) :: is_loc
 			integer, intent(in) :: id
@@ -219,17 +235,55 @@ module syntran__transpile_m
 
 		! Fortran name of the variable that a name_expr, let_expr, for_statement,
 		! etc. refers to
-		module function var_name(node) result(s)
+		module function var_name(em, node) result(s)
+			type(emitter_t), intent(in) :: em
 			type(syntax_node_t), intent(in) :: node
 			character(len = :), allocatable :: s
 		end function var_name
 
 		! Fortran name of a user fn, from its declaration or a call to it
-		module function fn_name(name, id) result(s)
+		module function fn_name(em, name, id) result(s)
+			type(emitter_t), intent(in) :: em
 			character(len = *), intent(in) :: name
 			integer, intent(in) :: id
 			character(len = :), allocatable :: s
 		end function fn_name
+
+		! The name of a fn without its suffix, as a Fortran name.  It's taken from
+		! the fn's declaration, not from `name` of a call, so that every use of a
+		! fn agrees
+		module function fn_base(em, name, id) result(s)
+			type(emitter_t), intent(in) :: em
+			character(len = *), intent(in) :: name
+			integer, intent(in) :: id
+			character(len = :), allocatable :: s
+		end function fn_base
+
+		! A syntran name made into a Fortran one: only name characters, starting
+		! with a letter, and not too long.  There's no suffix yet
+		module function name_base(name, is_fn) result(s)
+			character(len = *), intent(in) :: name
+			logical, intent(in) :: is_fn
+			character(len = :), allocatable :: s
+		end function name_base
+
+		! Can a name made by name_base() be used as is, with no suffix?  It can't
+		! if it could be taken for a name that the emitter makes up, or if it
+		! hides a Fortran intrinsic or the runtime's names.  `module_scope` is
+		! for a global or a fn, which are also seen by the interfaces of fn pointers
+		module function bare_ok(base, module_scope) result(ok)
+			character(len = *), intent(in) :: base
+			logical, intent(in) :: module_scope
+			logical :: ok
+		end function bare_ok
+
+		! Fortran name of the component for member `id` of the struct at position
+		! `k` of the table
+		module function member_fname(em, k, id) result(s)
+			type(emitter_t), intent(in) :: em
+			integer, intent(in) :: k, id
+			character(len = :), allocatable :: s
+		end function member_fname
 
 		! A whole Fortran declaration of a variable called `name` with the type of
 		! `val`, e.g. `integer(int32) :: x` or `real(real64), allocatable :: x(:,:)`.
@@ -349,6 +403,14 @@ module syntran__transpile_m
 			type(syntax_node_t), intent(in) :: node
 			logical, intent(out) :: done
 		end subroutine emit_str_slice_assign
+
+		! Name of the derived type of the enum at position `k` of the table, which
+		! its helper fns are named after
+		module function enum_tname(em, k) result(s)
+			type(emitter_t), intent(in) :: em
+			integer, intent(in) :: k
+			character(len = :), allocatable :: s
+		end function enum_tname
 
 		! Name of the derived type of the struct at position `k` of the table
 		module function struct_tname(em, k) result(s)

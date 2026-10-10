@@ -51,14 +51,216 @@ end function avoid_runtime_prefix
 
 !===============================================================================
 
-module function slot_name(name, is_loc, id) result(s)
+module function name_base(name, is_fn) result(s)
+
+	! `0self` is what the parser calls the receiver of a method, which would
+	! otherwise be the `u0self`, the `u` being to start with a letter
+
+	character(len = *), intent(in) :: name
+	logical, intent(in) :: is_fn
+	character(len = :), allocatable :: s
+
+	!********
+
+	integer :: i
+
+	if (name == '0self' .and. .not. is_fn) then
+		s = 'self'
+		return
+	end if
+
+	s = ''
+	do i = 1, len(name)
+		if (is_name_char(name(i:i))) then
+			s = s//name(i:i)
+		else
+			s = s//'_'
+		end if
+	end do
+
+	! Fortran names start with a letter and are at most 63 chars long
+	if (len(s) == 0) then
+		if (is_fn) then
+			s = 'fn'
+		else
+			s = 'v'
+		end if
+	else if (.not. ((s(1:1) >= 'a' .and. s(1:1) <= 'z') .or. &
+	                (s(1:1) >= 'A' .and. s(1:1) <= 'Z'))) then
+		s = 'u'//s
+	end if
+	s = avoid_runtime_prefix(s)
+	if (len(s) > 40) s = s(1: 40)
+
+end function name_base
+
+!===============================================================================
+
+function is_gen_segment(seg) result(is_gen)
+
+	! Does an underscore-separated piece of a name look like what the emitter
+	! appends to make one, like `g5`, `l2`, `f10`, `t3`, `st1` or `i2`?  That's
+	! letters and then digits
+
+	character(len = *), intent(in) :: seg
+	logical :: is_gen
+
+	integer :: i, nl
+
+	is_gen = .false.
+
+	nl = 0
+	do i = 1, len(seg)
+		if (.not. ((seg(i:i) >= 'a' .and. seg(i:i) <= 'z') .or. &
+		           (seg(i:i) >= 'A' .and. seg(i:i) <= 'Z'))) exit
+		nl = nl + 1
+	end do
+	if (nl == 0 .or. nl == len(seg)) return
+
+	is_gen = verify(seg(nl+1:), '0123456789') == 0
+
+end function is_gen_segment
+
+!===============================================================================
+
+function reserved_name(low) result(res)
+
+	! Names that a variable or fn can't have in Fortran, or not here: the
+	! intrinsic procedures, which the generated code calls, and the statement
+	! keywords, which aren't reserved words but are asking for trouble.  And
+	! the names that the runtime module exports, which are not `rt_` ones
+	! because it re-exports what it uses from iso_fortran_env
+
+	character(len = *), intent(in) :: low
+	logical :: res
+
+	character(len = *), parameter :: words = ' '// &
+		'abs achar acos acosh adjustl adjustr aimag aint all allocated anint any asin asinh '// &
+		'associated atan atan2 atanh bessel_j0 bessel_j1 bessel_jn bessel_y0 bessel_y1 '// &
+		'bessel_yn bge bgt bit_size ble blt btest ceiling char cmplx command_argument_count '// &
+		'conjg cos cosh count cpu_time cshift date_and_time dble digits dim dot_product '// &
+		'dprod dshiftl dshiftr eoshift epsilon erf erfc erfc_scaled execute_command_line '// &
+		'exp exponent extends_type_of findloc floor fraction gamma get_command '// &
+		'get_command_argument get_environment_variable huge hypot iachar iall iand iany '// &
+		'ibclr ibits ibset ichar ieor image_index index int ior iparity is_contiguous '// &
+		'is_iostat_end is_iostat_eor ishft ishftc kind lbound lcobound leadz len len_trim '// &
+		'lge lgt lle llt log log10 log_gamma logical maskl maskr matmul max maxexponent '// &
+		'maxloc maxval merge merge_bits min minexponent minloc minval mod modulo move_alloc '// &
+		'mvbits nearest new_line nint norm2 not null num_images out_of_range pack parity '// &
+		'popcnt poppar precision present product radix random_init random_number '// &
+		'random_seed range rank real reduce repeat reshape rrspacing same_type_as scale '// &
+		'scan selected_char_kind selected_int_kind selected_real_kind set_exponent shape '// &
+		'shifta shiftl shiftr sign sin sinh size spacing spread sqrt storage_size sum '// &
+		'system_clock tan tanh this_image tiny trailz transfer transpose trim ubound '// &
+		'ucobound unpack verify '// &
+		'allocatable allocate assign associate block call case character class close '// &
+		'codimension common complex concurrent contains contiguous continue critical cycle '// &
+		'data deallocate default deferred dimension do double else elseif elsewhere '// &
+		'elemental end endif enddo entry enum enumerator equivalence exit external final '// &
+		'forall format function generic goto if impure implicit import in include inout '// &
+		'inquire integer intent interface intrinsic lock module namelist nopass nullify '// &
+		'only open operator optional out parameter pass pause pointer print private '// &
+		'procedure program protected public pure read recursive result return rewind save '// &
+		'select sequence stop subroutine target then type use value volatile wait where '// &
+		'while write '// &
+		'int32 int64 real32 real64 output_unit error_unit input_unit iostat_end iostat_eor '// &
+		'syntran_main syntran_prog syntran_program syntran_rt '
+
+	res = index(words, ' '//low//' ') > 0
+
+end function reserved_name
+
+!===============================================================================
+
+module function bare_ok(base, module_scope) result(ok)
+
+	! The names that the emitter makes up are: `<x>_g<n>`, `<x>_l<n>`, `<x>_f<n>`
+	! for the variables and fns, `<x>_t<n>` for temporaries, `<x>_st<n>`,
+	! `<x>_en<n>`, `fnptr_i<n>` and `fnptr_t<n>` for the types, `<x>_a` for the
+	! copy of a parameter that is assigned to, `res_` for the result of a fn, and
+	! the runtime's `rt_*`.  A name which doesn't end in one of those, nor
+	! contains an underscore-separated piece of the same shape, can't be one of
+	! them.  Because they all have an `_<letters><digits>` piece after the first
+	! piece, a name like `x1` or `point_2d` is fine
+	!
+	! `r` and `a<n>` are the result and dummy arguments of the interfaces of fn
+	! pointers, which see everything that's in the module's scope
+
+	character(len = *), intent(in) :: base
+	logical, intent(in) :: module_scope
+	logical :: ok
+
+	!********
+
+	character(len = :), allocatable :: low
+
+	integer :: i, j, n
+
+	ok = .false.
+	n = len(base)
+	if (n == 0) return
+
+	low = to_lower(base)
+
+	if (low(n:n) == '_') return
+	if (reserved_name(low)) return
+
+	if (module_scope) then
+		if (low == 'r') return
+		if (low(1:1) == 'a' .and. n > 1) then
+			if (verify(low(2:), '0123456789') == 0) return
+		end if
+	end if
+
+	! Each piece after the first one
+	i = index(low, '_')
+	do while (i > 0 .and. i < n)
+		j = index(low(i+1:), '_')
+		if (j == 0) then
+			j = n + 1
+		else
+			j = i + j
+		end if
+
+		if (is_gen_segment(low(i+1: j-1))) return
+		if (j == n + 1 .and. low(i+1: j-1) == 'a') return
+
+		i = j
+	end do
+
+	ok = .true.
+
+end function bare_ok
+
+!===============================================================================
+
+function is_bare(flags, id) result(bare)
+
+	logical, allocatable, intent(in) :: flags(:)
+	integer, intent(in) :: id
+	logical :: bare
+
+	bare = .false.
+	if (.not. allocated(flags)) return
+	if (id < 1 .or. id > size(flags)) return
+	bare = flags(id)
+
+end function is_bare
+
+!===============================================================================
+
+module function slot_name(em, name, is_loc, id) result(s)
 
 	! The name is made unique by its slot id, which is already unique among a
 	! fn's bindings (or the globals) even when a block re-declares the same name
 	! with a different type.  That also means that Fortran's case insensitivity
 	! and its keywords can never clash.  None of the runtime's names (rt_*) nor
 	! temporaries' (*_t<n>) match the `_g<n>`/`_l<n>` suffix
+	!
+	! The suffix is left off of the first variable of a name in its scope, if
+	! it's not a name that could be taken for another (c.f. collect_names())
 
+	type(emitter_t), intent(in) :: em
 	character(len = *), intent(in) :: name
 	logical, intent(in) :: is_loc
 	integer, intent(in) :: id
@@ -66,75 +268,67 @@ module function slot_name(name, is_loc, id) result(s)
 
 	!********
 
-	character(len = :), allocatable :: base
+	logical :: bare
 
-	integer :: i
+	s = name_base(name, .false.)
 
-	base = ''
-	do i = 1, len(name)
-		if (is_name_char(name(i:i))) then
-			base = base//name(i:i)
-		else
-			base = base//'_'
-		end if
-	end do
-
-	! Fortran names start with a letter and are at most 63 chars long
-	if (len(base) == 0) then
-		base = 'v'
-	else if (.not. ((base(1:1) >= 'a' .and. base(1:1) <= 'z') .or. &
-	                (base(1:1) >= 'A' .and. base(1:1) <= 'Z'))) then
-		base = 'u'//base
+	if (is_loc) then
+		bare = is_bare(em%bare_local, id)
+	else
+		bare = is_bare(em%bare_global, id)
 	end if
-	base = avoid_runtime_prefix(base)
-	if (len(base) > 40) base = base(1: 40)
+	if (bare) return
 
-	s = base//merge('_l', '_g', is_loc)//str(id)
+	s = s//merge('_l', '_g', is_loc)//str(id)
 
 end function slot_name
 
 !===============================================================================
 
-module function var_name(node) result(s)
+module function var_name(em, node) result(s)
 
+	type(emitter_t), intent(in) :: em
 	type(syntax_node_t), intent(in) :: node
 	character(len = :), allocatable :: s
 
-	s = slot_name(node%identifier%text, node%is_loc, node%id_index)
+	s = slot_name(em, node%identifier%text, node%is_loc, node%id_index)
 
 end function var_name
 
 !===============================================================================
 
-module function fn_name(name, id) result(s)
+module function fn_base(em, name, id) result(s)
 
+	type(emitter_t), intent(in) :: em
 	character(len = *), intent(in) :: name
 	integer, intent(in) :: id
 	character(len = :), allocatable :: s
 
-	character(len = :), allocatable :: base
+	s = name_base(name, .true.)
 
-	integer :: i
+	if (.not. associated(em%fns)) return
+	if (.not. allocated(em%fns%fns)) return
+	if (id < 1 .or. id > size(em%fns%fns)) return
+	if (.not. allocated(em%fns%fns(id)%node)) return
+	if (.not. allocated(em%fns%fns(id)%node%identifier%text)) return
 
-	base = ''
-	do i = 1, len(name)
-		if (is_name_char(name(i:i))) then
-			base = base//name(i:i)
-		else
-			base = base//'_'
-		end if
-	end do
+	s = name_base(em%fns%fns(id)%node%identifier%text, .true.)
 
-	if (len(base) == 0) then
-		base = 'fn'
-	else if (.not. ((base(1:1) >= 'a' .and. base(1:1) <= 'z') .or. &
-	                (base(1:1) >= 'A' .and. base(1:1) <= 'Z'))) then
-		base = 'u'//base
-	end if
-	base = avoid_runtime_prefix(base)
-	if (len(base) > 40) base = base(1: 40)
+end function fn_base
 
-	s = base//'_f'//str(id)
+!===============================================================================
+
+module function fn_name(em, name, id) result(s)
+
+	type(emitter_t), intent(in) :: em
+	character(len = *), intent(in) :: name
+	integer, intent(in) :: id
+	character(len = :), allocatable :: s
+
+	s = fn_base(em, name, id)
+	if (is_bare(em%bare_fn, id)) return
+
+	s = s//'_f'//str(id)
 
 end function fn_name
 
@@ -221,7 +415,7 @@ module function decl_line(em, val, name, ok) result(s)
 			return
 		end if
 		k = fptr_slot(em, val)
-		spec = 'type(fp'//str(k)//'_t)'
+		spec = 'type(fnptr_t'//str(k)//')'
 	case (str_type)
 		if (val%type == array_type) then
 			spec = 'type(rt_str_t)'
@@ -275,7 +469,7 @@ module subroutine declare_var(em, node, val)
 
 	call record_slot(em, node%is_loc, node%id_index, val)
 
-	line = decl_line(em, val, var_name(node), ok)
+	line = decl_line(em, val, var_name(em, node), ok)
 	if (.not. ok) then
 		call em_unsupported(em, 'a variable of type `'//kind_name(val%type)//'`')
 		return
@@ -378,7 +572,7 @@ module function enum_fn(em, k, suffix) result(s)
 	character(len = *), intent(in) :: suffix
 	character(len = :), allocatable :: s
 
-	s = 'enum'//str(em%enums%table(k)%id_index)//'_'//suffix
+	s = enum_tname(em, k)//'_'//suffix
 
 end function enum_fn
 
@@ -583,7 +777,7 @@ module subroutine emit_str_slice_assign(em, node, done)
 				node%lsubscripts(2)%sub_kind /= step_sub) return
 	end associate
 
-	base = var_name(node)
+	base = var_name(em, node)
 	if (allocated(info%fname)) base = info%fname
 
 	rhs = emit_expr(em, node%right)
@@ -681,9 +875,102 @@ module function struct_tname(em, k) result(s)
 	integer, intent(in) :: k
 	character(len = :), allocatable :: s
 
-	s = 'st'//str(em%structs%table(k)%id_index)//'_t'
+	! The name of the struct comes first, to be read in the generated program,
+	! and its id after it, since two modules can have a struct of the same name.
+	! The `_st<n>` piece is what keeps the name from being a user's own, c.f.
+	! bare_ok()
+
+	s = type_prefix(em%structs%table(k)%key)//'_st'//str(em%structs%table(k)%id_index)
 
 end function struct_tname
+
+!===============================================================================
+
+module function enum_tname(em, k) result(s)
+
+	type(emitter_t), intent(in) :: em
+	integer, intent(in) :: k
+	character(len = :), allocatable :: s
+
+	s = type_prefix(em%enums%table(k)%key)//'_en'//str(em%enums%table(k)%id_index)
+
+end function enum_tname
+
+!===============================================================================
+
+function type_prefix(key) result(s)
+
+	! The name of a struct or enum in the syntran source, which is `mod::Point`
+	! if it is imported from a module, as a start of the Fortran name of its type
+
+	character(len = *), intent(in) :: key
+	character(len = :), allocatable :: s
+
+	integer :: i
+
+	i = index(key, '::', back = .true.)
+	if (i > 0) then
+		s = name_base(key(i+2:), .true.)
+	else
+		s = name_base(key, .true.)
+	end if
+
+end function type_prefix
+
+!===============================================================================
+
+module function member_fname(em, k, id) result(s)
+
+	! The member's own name if that's a name which is unique in its struct,
+	! ignoring case, which Fortran does.  Else `m<id>`.  Component names are in
+	! the namespace of their type, so they can't clash with anything else.  But
+	! those of two members must not: `m<id>` could be the other's own name,
+	! which is why those names aren't allowed
+
+	type(emitter_t), intent(in) :: em
+	integer, intent(in) :: k, id
+	character(len = :), allocatable :: s
+
+	!********
+
+	character(len = :), allocatable :: mname, base, low
+
+	integer :: i, n
+
+	logical :: ok
+
+	type(value_t) :: mval
+
+	s = 'm'//str(id)
+
+	call struct_member(em, k, id, mval, mname, ok)
+	call value_destroy(mval)
+	if (.not. ok) return
+
+	base = name_base(mname, .false.)
+	low = to_lower(base)
+
+	! `name_base()` made it something else, so it's not the member's name
+	if (base /= mname) return
+
+	! Like `m12`
+	if (low(1:1) == 'm' .and. len(low) > 1) then
+		if (verify(low(2:), '0123456789') == 0) return
+	end if
+	if (low == 'kind' .or. low == 'len') return
+
+	n = 0
+	associate (st => em%structs%table(k)%val)
+		if (.not. allocated(st%member_names%v)) return
+		do i = 1, size(st%member_names%v)
+			if (to_lower(name_base(st%member_names%v(i)%s, .false.)) == low) n = n + 1
+		end do
+	end associate
+	if (n /= 1) return
+
+	s = base
+
+end function member_fname
 
 !===============================================================================
 
@@ -698,7 +985,7 @@ function struct_fn(em, k, suffix) result(s)
 	character(len = *), intent(in) :: suffix
 	character(len = :), allocatable :: s
 
-	s = 'st'//str(em%structs%table(k)%id_index)//'_'//suffix
+	s = struct_tname(em, k)//'_'//suffix
 
 end function struct_fn
 
@@ -804,15 +1091,128 @@ end function str_literal
 
 !===============================================================================
 
-function emit_literal(em, node) result(s)
+function float_lit(node) result(s)
 
-	type(emitter_t), intent(inout) :: em
+	! The digits of a float literal, without a kind suffix.  This is the text of
+	! the literal in the source (the parser keeps it in the node's `identifier`)
+	! so that the output looks like the input, as long as Fortran reads it back
+	! as the same value.  Otherwise it's the shortest text that round-trips
+
 	type(syntax_node_t), intent(in) :: node
 	character(len = :), allocatable :: s
 
 	!********
 
-	character(len = 32) :: buf
+	character(len = 40) :: buf
+	character(len = :), allocatable :: t
+
+	integer :: d, e, ex, io, ndig
+
+	logical :: is32
+
+	real(kind = 4) :: r32
+	real(kind = 8) :: r64
+
+	is32 = node%val%type == f32_type
+
+	if (allocated(node%identifier%text)) then
+		t = float_src_text(node%identifier%text)
+		if (len(t) > 0) then
+			if (is32) then
+				read(t, *, iostat = io) r32
+				if (io == 0 .and. r32 == node%val%sca%f32) then
+					s = t
+					return
+				end if
+			else
+				read(t, *, iostat = io) r64
+				if (io == 0 .and. r64 == node%val%sca%f64) then
+					s = t
+					return
+				end if
+			end if
+		end if
+	end if
+
+	! Fallback: increase the digits until the value reads back the same
+	ndig = 17
+	if (is32) ndig = 9
+	do d = 0, ndig - 1
+		if (is32) then
+			write(buf, '(es25.'//str(d)//'e3)') node%val%sca%f32
+			read(buf, *) r32
+			if (r32 == node%val%sca%f32) exit
+		else
+			write(buf, '(es25.'//str(d)//'e3)') node%val%sca%f64
+			read(buf, *) r64
+			if (r64 == node%val%sca%f64) exit
+		end if
+	end do
+
+	! `1.50E-003` -> `1.5e-3`, `1.E+000` -> `1.0`.  Zeros after the point are
+	! all dropped unless that leaves nothing
+	buf = adjustl(buf)
+	e = index(buf, 'E')
+	if (e == 0) then
+		! Infinity or NaN, which has no literal
+		s = trim(buf)
+		return
+	end if
+	t = buf(1: e - 1)
+	read(buf(e + 1:), *) ex
+	do while (len(t) > 1)
+		if (t(len(t):len(t)) /= '0') exit
+		if (index(t, '.') == 0) exit
+		t = t(1: len(t) - 1)
+	end do
+	if (t(len(t):len(t)) == '.') t = t//'0'
+	s = t
+	if (ex /= 0) s = s//'e'//str(ex)
+
+end function float_lit
+
+!===============================================================================
+
+function float_src_text(text) result(t)
+
+	! Fortran's way of writing the text of a syntran float literal: no `_`
+	! separators, `e` for the exponent letter, and a `.` if there's nothing
+	! else that makes it a real, because `3_real64` is an integer
+
+	character(len = *), intent(in) :: text
+	character(len = :), allocatable :: t
+
+	integer :: i
+
+	logical :: real_
+
+	t = ''
+	real_ = .false.
+	do i = 1, len(text)
+		select case (text(i:i))
+		case ('_')
+			cycle
+		case ('d', 'D', 'e', 'E')
+			t = t//'e'
+			real_ = .true.
+		case ('.')
+			t = t//'.'
+			real_ = .true.
+		case default
+			t = t//text(i:i)
+		end select
+	end do
+	if (.not. real_ .and. len(t) > 0) t = t//'.0'
+
+end function float_src_text
+
+!===============================================================================
+
+function emit_literal(em, node) result(s)
+
+	type(emitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	character(len = :), allocatable :: s
 
 	associate (val => node%val)
 		select case (val%type)
@@ -821,9 +1221,10 @@ function emit_literal(em, node) result(s)
 			if (val%sca%i32 == -huge(val%sca%i32) - 1) then
 				! The magnitude of the smallest value doesn't fit in the type, so a
 				! literal for it is out of range in Fortran
-				s = '(-'//str(huge(val%sca%i32))//'_int32 - 1_int32)'
+				s = '(-'//str(huge(val%sca%i32))//' - 1)'
 			else
-				s = str(val%sca%i32)//'_int32'
+				! No kind suffix because int32 is Fortran's default integer
+				s = str(val%sca%i32)
 			end if
 
 		case (i64_type)
@@ -834,14 +1235,10 @@ function emit_literal(em, node) result(s)
 			end if
 
 		case (f32_type)
-			! Round-trip precision.  Three exponent digits so that the same
-			! format would also work for f64
-			write(buf, '(es17.8e3)') val%sca%f32
-			s = trim(adjustl(buf))//'_real32'
+			s = float_lit(node)//'_real32'
 
 		case (f64_type)
-			write(buf, '(es26.16e3)') val%sca%f64
-			s = trim(adjustl(buf))//'_real64'
+			s = float_lit(node)//'_real64'
 
 		case (bool_type)
 			if (val%sca%bool) then
@@ -1330,8 +1727,8 @@ recursive function plus_one(em, node) result(s)
 	s = ''
 
 	if (node%kind == literal_expr) then
-		if (node%val%type == i32_type) then
-			s = str(node%val%sca%i32 + 1)//'_int32'
+		if (node%val%type == i32_type .and. node%val%sca%i32 < huge(node%val%sca%i32)) then
+			s = str(node%val%sca%i32 + 1)
 		else if (node%val%type == i64_type) then
 			s = str(node%val%sca%i64 + 1_8)//'_int64'
 		end if
@@ -1413,19 +1810,19 @@ recursive function emit_dim_sub(em, node, i, base) result(s)
 				size_str = 'size('//base//', '//str(i)//', kind = int32)'
 
 				if (sub%lsub_omit) then
-					lb = 'merge('//size_str//' - 1_int32, 0_int32, '//st//' < 0_int32)'
+					lb = 'merge('//size_str//' - 1, 0, '//st//' < 0)'
 				else
 					lb = convert(emit_expr(em, sub), elem_type(sub%val), i32_type)
 				end if
 
 				if (sub%usub_omit) then
-					ub = 'merge(-1_int32, '//size_str//', '//st//' < 0_int32)'
+					ub = 'merge(-1, '//size_str//', '//st//' < 0)'
 				else
 					ub = convert(emit_expr(em, node%usubscripts(i)), &
 						elem_type(node%usubscripts(i)%val), i32_type)
 				end if
 
-				s = '(rt_step_i32('//lb//', '//st//', '//ub//') + 1_int32)'
+				s = '(rt_step_i32('//lb//', '//st//', '//ub//') + 1)'
 
 			end associate
 
@@ -1642,7 +2039,7 @@ recursive module function emit_name_ref(em, node, hoist, target) result(s)
 		return
 	end if
 
-	base = var_name(node)
+	base = var_name(em, node)
 	s = base
 
 	if (.not. allocated(node%lsubscripts)) return
@@ -1862,7 +2259,7 @@ recursive function emit_dot_ref(em, node, do_hoist, str_hoist) result(s)
 
 	else
 
-		s = var_name(node)
+		s = var_name(em, node)
 
 		info = lookup_slot(em, node%is_loc, node%id_index)
 		if (.not. info%known) then
@@ -1931,7 +2328,7 @@ recursive function emit_member_chain(em, m, base, sk, do_hoist, str_hoist) resul
 		return
 	end if
 
-	s = base//'%m'//str(m%id_index)
+	s = base//'%'//member_fname(em, sk, m%id_index)
 
 	minfo%known = .true.
 	minfo%type = mval%type
@@ -2172,7 +2569,7 @@ recursive function emit_user_call(em, node) result(s)
 
 	integer :: i, ptype, pi
 
-	s = fn_name(node%identifier%text, node%id_index)//'('
+	s = fn_name(em, node%identifier%text, node%id_index)//'('
 
 	if (allocated(node%args)) then
 		do i = 1, size(node%args)
@@ -2198,7 +2595,7 @@ recursive function emit_user_call(em, node) result(s)
 					call em_unsupported(em, 'a by-reference argument that is not a plain variable')
 					arg = '0'
 				else
-					arg = var_name(node%args(i))
+					arg = var_name(em, node%args(i))
 				end if
 
 			else
@@ -2707,10 +3104,10 @@ recursive function emit_let_expr(em, node) result(s)
 
 	rhs = emit_expr(em, node%right)
 	call declare_var(em, node, node%val)
-	call em_line(em, var_name(node)//' = '// &
+	call em_line(em, var_name(em, node)//' = '// &
 		unparen(convert(rhs, elem_type(node%right%val), elem_type(node%val))))
 
-	s = var_name(node)
+	s = var_name(em, node)
 
 end function emit_let_expr
 
@@ -2735,7 +3132,7 @@ function fn_ref_name(em, node) result(s)
 		end if
 	end if
 
-	s = fn_name(name, node%id_index)
+	s = fn_name(em, name, node%id_index)
 
 end function fn_ref_name
 
@@ -2749,7 +3146,7 @@ function emit_fn_ref(em, node) result(s)
 	type(syntax_node_t), intent(in) :: node
 	character(len = :), allocatable :: s
 
-	s = 'fp'//str(fptr_slot(em, node%val))//'_t('//fn_ref_name(em, node)//')'
+	s = 'fnptr_t'//str(fptr_slot(em, node%val))//'('//fn_ref_name(em, node)//')'
 
 end function emit_fn_ref
 
@@ -2781,12 +3178,12 @@ recursive function emit_ptr_call(em, node) result(s)
 
 		! Fortran can't take a component of a fn result
 		if (node%left%kind /= dot_expr .and. node%left%kind /= name_expr) then
-			tmp = new_tmp(em, 'type(fp'//str(fptr_slot(em, node%left%val))//'_t)', 'fpv')
+			tmp = new_tmp(em, 'type(fnptr_t'//str(fptr_slot(em, node%left%val))//')', 'fpv')
 			call em_line(em, tmp//' = '//callee)
 			callee = tmp
 		end if
 	else
-		callee = var_name(node)
+		callee = var_name(em, node)
 		info = lookup_slot(em, node%is_loc, node%id_index)
 		if (allocated(info%fname)) callee = info%fname
 	end if
@@ -2852,7 +3249,7 @@ function emit_enum_access(em, node) result(s)
 
 	integer :: i, k
 
-	s = '0_int32'
+	s = '0'
 
 	k = enum_slot_of(em, node%val)
 	if (k == 0 .or. .not. allocated(node%val%enum_variant)) then
@@ -2863,7 +3260,7 @@ function emit_enum_access(em, node) result(s)
 	associate (e => em%enums%table(k)%val)
 		do i = 1, e%num_vars
 			if (e%variant_names%v(i)%s == node%val%enum_variant) then
-				s = str(i - 1)//'_int32'
+				s = str(i - 1)
 				return
 			end if
 		end do
@@ -2888,7 +3285,7 @@ recursive function emit_enum_cast(em, node) result(s)
 	k = enum_slot_of(em, node%val)
 	if (k == 0) then
 		call em_unsupported(em, 'an enum of unknown type')
-		s = '0_int32'
+		s = '0'
 		return
 	end if
 

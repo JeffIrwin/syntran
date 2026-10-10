@@ -1,0 +1,214 @@
+// Names that are the same in Fortran as one another, or as a name which the
+// generated program already has, which the transpiler must keep apart.  These
+// programs are run by both the interpreter and the Fortran transpiler
+// (utils/test-transpile.sh), which must print the same thing.  The return
+// value is the number of failed checks
+
+let status = 0;
+
+fn check(ok: bool): i32
+{
+	if (ok) return 0;
+	return 1;
+}
+
+// Fortran's intrinsic fns, which the generated code calls, and the names that
+// it makes up for itself
+let size = 3;
+let int32 = 4;
+let shape = [1, 2, 3];
+let merge = 7;
+let it_t1 = 11;
+let p_a = 13;
+let res_ = 17;
+let r = 19;
+let a1 = 23;
+let rt_str = 29;
+let RT_Print = 31;
+let syntran_main = 37;
+let end = 41;
+let real = 43;
+println(size, " ", int32, " ", merge, " ", it_t1, " ", p_a, " ", res_);
+println(r, " ", a1, " ", rt_str, " ", RT_Print, " ", syntran_main, " ", end, " ", real);
+status += check(size + int32 + merge + it_t1 + p_a + res_ + r + a1 + rt_str + RT_Print +
+	syntran_main + end + real == 278);
+status += check(size(shape) == 3);
+
+// Fortran doesn't tell these apart
+let value = 1;
+let Value = 2;
+let VALUE = 3;
+println(value, " ", Value, " ", VALUE);
+status += check(value * 100 + Value * 10 + VALUE == 123);
+
+// Shadowing, even of another type
+let x = 1;
+{
+	let x = "two";
+	{
+		let x = 3.0;
+		println(x);
+		status += check(x == 3.0);
+	}
+	println(x);
+	status += check(x == "two");
+}
+println(x);
+status += check(x == 1);
+
+// A local named like a global, which must not hide it from the fns that use it
+let total = 100;
+
+fn add_total(n: i32): i32
+{
+	let total = n * 2;
+	return total + 1;
+}
+
+fn use_total(): i32
+{
+	return total + 1;
+}
+
+println(add_total(5), " ", use_total(), " ", total);
+status += check(add_total(5) == 11);
+status += check(use_total() == 101);
+status += check(total == 100);
+
+// A parameter named like a fn, and a loop variable like a global
+fn area(w: i32, h: i32): i32
+{
+	return w * h;
+}
+
+fn scaled(area: i32): i32
+{
+	return area * 2;
+}
+
+let i = 100;
+let sum = 0;
+for i in [0: 4]
+{
+	sum += scaled(i);
+}
+println(area(3, 4), " ", sum, " ", i);
+status += check(area(3, 4) == 12);
+status += check(sum == 12);
+status += check(i == 100);
+
+// A fn which is passed, and called through a pointer.  The interface of that
+// has the names `r` and `a1`, which are variables above
+fn twice(n: i32): i32
+{
+	return 2 * n;
+}
+
+fn apply(f: fn(i32): i32, v: i32): i32
+{
+	return f(v);
+}
+
+let fnptr_t1 = 3;
+let f = twice;
+println(apply(f, 4), " ", fnptr_t1);
+status += check(apply(f, 4) == 8);
+status += check(apply(twice, fnptr_t1) == 6);
+
+// A struct with members which can't all be their own names in Fortran
+struct Vec
+{
+	x: i32,
+	X: i32,
+	len: i32,
+	kind: i32,
+	m1: i32,
+	y: i32,
+}
+
+let Vec_st1 = 9;
+let v = Vec{x = 1, X = 2, len = 3, kind = 4, m1 = 5, y = 6};
+v.X = v.x + 20;
+v.m1 += 1;
+println(v, " ", Vec_st1);
+status += check(v.x == 1);
+status += check(v.X == 21);
+status += check(v.len + v.kind == 7);
+status += check(v.m1 == 6);
+status += check(v.y == 6);
+
+// Methods of the same name, which are also the names of a fn and a variable
+fn add(a: i32, b: i32): i32
+{
+	return a + b;
+}
+
+struct Acc
+{
+	n: i32,
+
+	fn add(k: i32)
+	{
+		n += k;
+	}
+
+	const fn show(): i32
+	{
+		return n;
+	}
+}
+
+struct Acc2
+{
+	n: i32,
+
+	const fn show(): i32
+	{
+		return n + 1;
+	}
+}
+
+let show = 50;
+let acc = Acc{n = 1};
+acc.add(4);
+let acc2 = Acc2{n = 10};
+println(add(1, 2), " ", acc.show(), " ", acc2.show(), " ", show);
+status += check(add(1, 2) == 3);
+status += check(acc.show() == 5);
+status += check(acc2.show() == 11);
+status += check(show == 50);
+
+// An enum, whose helper fns are named after it
+enum Dir
+{
+	North,
+	South = 5,
+}
+
+let Dir_en1 = 1;
+let dir = Dir.South;
+println(dir, " ", i32(dir), " ", Dir_en1);
+status += check(i32(dir) == 5);
+
+// Float literals are written as they were, and not as the digits of their value
+let f1 = 1.5e-3;
+let f2 = 3'f64;
+let f3 = 1_000.5;
+let f4 = 2.0e3;
+let f5 = 0.1;
+println(f1, " ", f2, " ", f3, " ", f4, " ", f5);
+status += check(abs(f1 * 1000.0 - 1.5) < 1.0e-9);
+status += check(f2 == 3.0);
+status += check(f3 == 1000.5);
+status += check(f4 == 2000.0);
+status += check(abs(f5 * 10.0 - 1.0) < 1.0e-9);
+
+// Integers, which have no kind suffix when they're 32 bit
+let big = 3000000000;
+let small = -2147483647 - 1;
+println(big, " ", small, " ", 7'i64 * 3);
+status += check(big == 3000000000);
+status += check(small < 0);
+
+println(status);
+return status;

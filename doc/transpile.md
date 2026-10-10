@@ -107,13 +107,25 @@ things are different:
 
 ## How it works
 
-Each variable is emitted as `<name>_g<n>` for a global or `<name>_l<n>` for a
-local, where `n` is the unique slot that the parser gave it.  Syntran has block
-scopes and shadowing, while Fortran declares everything at the top of a
-procedure.  Distinct names sidestep that.  An array is a Fortran allocatable
-array with the same rank, indexed from 1 internally, and an array of strings is
-an array of a small wrapper type.  Functions are `recursive` procedures of a
-module, and the top-level statements are a subroutine.
+Syntran has block scopes and shadowing, while Fortran declares everything at
+the top of a procedure.  So the first variable or fn of a name keeps its name,
+and a variable that shadows it is emitted as `<name>_g<n>` for a global or
+`<name>_l<n>` for a local, where `n` is the unique slot that the parser gave
+it.  A name is also given that suffix if it's the name of a Fortran intrinsic
+(like `size`), if it differs from another name only by case, or if it could
+be taken for a name that the transpiler makes up itself (like `x_g5`, `it_t1`,
+or `p_a`).  A struct `Point` is the derived type `Point_st<n>`, and an enum
+`Dir` is helper fns named `Dir_en<n>_*`.  The members of a struct are
+components with their own names, except those that clash.
+
+Integers of 32 bits are written without a kind, so the generated program
+assumes that the default integer is 32 bits, i.e. no `-fdefault-integer-8` or
+`-i8`.  Floats are written as in the source.
+
+An array is a Fortran allocatable array with the same rank, indexed from 1
+internally, and an array of strings is an array of a small wrapper type.
+Functions are `recursive` procedures of a module, and the top-level statements
+are a subroutine.
 
 By-value array and string parameters are copied on entry, unless the compiler
 can see that nothing could change the caller's variable during the call.

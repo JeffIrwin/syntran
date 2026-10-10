@@ -901,10 +901,18 @@ recursive module subroutine parse_primary_expr(parser, expr)
 			call parser%match(f32_token, token)
 			call new_f32(token%val%sca%f32, expr)
 
+			! Keep the source text, which the Fortran backend writes out as is
+			! instead of the rounded value
+			expr%identifier = token
+
 		case (f64_token)
 
 			call parser%match(f64_token, token)
 			call new_f64(token%val%sca%f64, expr)
+
+			! Keep the source text, which the Fortran backend writes out as is
+			! instead of the rounded value
+			expr%identifier = token
 
 		case (str_token)
 
