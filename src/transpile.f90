@@ -68,6 +68,15 @@ module syntran__transpile_m
 		! The variable's own type, and for an array its element type and rank
 		integer :: type = unknown_type, elem = unknown_type, rank = 0
 
+		! Position in the struct table of the struct that the variable, or the
+		! elements of an array, is.  0 for anything else
+		integer :: sk = 0
+
+		! The variable's Fortran name, if it isn't the one that its references
+		! give.  That's `self` of a method, which the parser makes the root of the
+		! reference `field` for the implicit `self.field`
+		character(len = :), allocatable :: fname
+
 	end type slot_info_t
 
 	!********
@@ -99,6 +108,14 @@ module syntran__transpile_m
 		! the zero-based index of its variant, and the enum's helper fns (see
 		! emit_enum_procs()) map that to the variant's name and backing value
 		type(enums_t), pointer :: enums => null()
+
+		! Struct table.  A struct is a Fortran derived type, whose members are
+		! components named by the index that the parser gave each of them
+		type(structs_t), pointer :: structs => null()
+
+		! Definitions of the derived types, which come before the module's
+		! variables
+		type(string_vector_t) :: tdecls
 
 		! Fortran source of the current procedure's body and of its local
 		! declarations.  Locals get declared lazily as they are encountered, so
@@ -204,7 +221,8 @@ module syntran__transpile_m
 		! `val`, e.g. `integer(int32) :: x` or `real(real64), allocatable :: x(:,:)`.
 		! Sets `ok` to false (and returns garbage) if the type can't be
 		! transpiled yet
-		module function decl_line(val, name, ok) result(s)
+		module function decl_line(em, val, name, ok) result(s)
+			type(emitter_t), intent(in) :: em
 			type(value_t), intent(in) :: val
 			character(len = *), intent(in) :: name
 			logical, intent(out) :: ok
@@ -293,6 +311,31 @@ module syntran__transpile_m
 			character(len = *), intent(in) :: l, r
 			character(len = :), allocatable :: s
 		end function enum_cmp
+
+		! Position in the struct table of the struct that `val` is a value or an
+		! array of, or 0 if it is unknown
+		module function struct_slot_of(em, val) result(k)
+			type(emitter_t), intent(in) :: em
+			type(value_t), intent(in) :: val
+			integer :: k
+		end function struct_slot_of
+
+		! Name of the derived type of the struct at position `k` of the table
+		module function struct_tname(em, k) result(s)
+			type(emitter_t), intent(in) :: em
+			integer, intent(in) :: k
+			character(len = :), allocatable :: s
+		end function struct_tname
+
+		! The type and the name of the member of struct `k` which the parser gave
+		! the index `id`.  `ok` is false if there is no such member
+		module subroutine struct_member(em, k, id, val, name, ok)
+			type(emitter_t), intent(in) :: em
+			integer, intent(in) :: k, id
+			type(value_t), intent(out) :: val
+			character(len = :), allocatable, intent(out) :: name
+			logical, intent(out) :: ok
+		end subroutine struct_member
 
 	end interface
 
@@ -492,6 +535,9 @@ subroutine record_slot(em, is_loc, id, val)
 	if (val%type == array_type .and. allocated(val%array)) then
 		info%elem = val%array%type
 		info%rank = val%array%rank
+	end if
+	if (val%type == struct_type .or. info%elem == struct_type) then
+		info%sk = struct_slot_of(em, val)
 	end if
 
 	if (is_loc) then

@@ -51,6 +51,12 @@ module syntran_rt
             rt_str_a_str_4
     end interface rt_str_a
 
+    ! Convert an array that is a member of a struct to a string, which also
+    ! writes how the type of its elements is given, like `[1'i64, 2'i64]`
+    interface rt_str_a_rt
+        module procedure rt_str_a_rt_i64, rt_str_a_rt_f32, rt_str_a_rt_str
+    end interface rt_str_a_rt
+
     ! Whole-array equality of two arrays of the same rank, given as shapes and
     ! flattened elements: one bool, false if the shapes differ
     interface rt_arr_eq
@@ -832,6 +838,122 @@ elemental function rt_str_t_of(s) result(r)
     type(rt_str_t) :: r
     r%s = s
 end function rt_str_t_of
+
+!===============================================================================
+
+function rt_str_a_rt_i64(x) result(s)
+    integer(int64), intent(in) :: x(..)
+    character(len = :), allocatable :: s
+    select rank (x)
+    rank (1)
+        s = rt_join(items(x), shape(x))
+    rank (2)
+        s = rt_join(items(reshape(x, [size(x)])), shape(x))
+    rank (3)
+        s = rt_join(items(reshape(x, [size(x)])), shape(x))
+    rank (4)
+        s = rt_join(items(reshape(x, [size(x)])), shape(x))
+    rank default
+        call rt_fatal('arrays of rank > 4 are not supported by rt_str_a_rt()')
+    end select
+contains
+    function items(a) result(r)
+        integer(int64), intent(in) :: a(:)
+        type(rt_str_t), allocatable :: r(:)
+        integer :: i
+        allocate(r(size(a)))
+        do i = 1, size(a)
+            r(i)%s = rt_str_i64(a(i)) // "'i64"
+        end do
+    end function items
+end function rt_str_a_rt_i64
+
+function rt_str_a_rt_f32(x) result(s)
+    real(real32), intent(in) :: x(..)
+    character(len = :), allocatable :: s
+    select rank (x)
+    rank (1)
+        s = rt_join(items(x), shape(x))
+    rank (2)
+        s = rt_join(items(reshape(x, [size(x)])), shape(x))
+    rank (3)
+        s = rt_join(items(reshape(x, [size(x)])), shape(x))
+    rank (4)
+        s = rt_join(items(reshape(x, [size(x)])), shape(x))
+    rank default
+        call rt_fatal('arrays of rank > 4 are not supported by rt_str_a_rt()')
+    end select
+contains
+    function items(a) result(r)
+        real(real32), intent(in) :: a(:)
+        type(rt_str_t), allocatable :: r(:)
+        integer :: i
+        allocate(r(size(a)))
+        do i = 1, size(a)
+            r(i)%s = trim(adjustl(rt_str_f32(a(i)))) // "'f32"
+        end do
+    end function items
+end function rt_str_a_rt_f32
+
+function rt_str_a_rt_str(x) result(s)
+    type(rt_str_t), intent(in) :: x(..)
+    character(len = :), allocatable :: s
+    select rank (x)
+    rank (1)
+        s = rt_join(items(x), shape(x))
+    rank (2)
+        s = rt_join(items(reshape(x, [size(x)])), shape(x))
+    rank (3)
+        s = rt_join(items(reshape(x, [size(x)])), shape(x))
+    rank (4)
+        s = rt_join(items(reshape(x, [size(x)])), shape(x))
+    rank default
+        call rt_fatal('arrays of rank > 4 are not supported by rt_str_a_rt()')
+    end select
+contains
+    function items(a) result(r)
+        type(rt_str_t), intent(in) :: a(:)
+        type(rt_str_t), allocatable :: r(:)
+        integer :: i
+        allocate(r(size(a)))
+        do i = 1, size(a)
+            r(i)%s = rt_quote(a(i)%s)
+        end do
+    end function items
+end function rt_str_a_rt_str
+
+!===============================================================================
+
+! A string as a struct prints it, in double quotes with any quote doubled
+
+function rt_quote(s) result(r)
+    character(len = *), intent(in) :: s
+    character(len = :), allocatable :: r
+    integer :: i
+    r = '"'
+    do i = 1, len(s)
+        if (s(i:i) == '"') r = r // '"'
+        r = r // s(i:i)
+    end do
+    r = r // '"'
+end function rt_quote
+
+!===============================================================================
+
+! The elements of an array of structs, which are already joined, in brackets.
+! An array of rank > 1 has a line feed after the opening and before the closing
+! bracket, but not between its rows
+
+function rt_arr_wrap(joined, rank_) result(r)
+    character(len = *), intent(in) :: joined
+    integer, intent(in) :: rank_
+    character(len = :), allocatable :: r
+    if (rank_ > 1) then
+        r = '[' // new_line('a') // joined // new_line('a') // ']'
+    else
+        r = '[' // joined // ']'
+    end if
+end function rt_arr_wrap
 
 !===============================================================================
 

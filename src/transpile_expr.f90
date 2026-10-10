@@ -148,8 +148,9 @@ end function fn_name
 
 !===============================================================================
 
-module function decl_line(val, name, ok) result(s)
+module function decl_line(em, val, name, ok) result(s)
 
+	type(emitter_t), intent(in) :: em
 	type(value_t), intent(in) :: val
 	character(len = *), intent(in) :: name
 	logical, intent(out) :: ok
@@ -159,7 +160,7 @@ module function decl_line(val, name, ok) result(s)
 
 	character(len = :), allocatable :: dims, spec
 
-	integer :: i, t
+	integer :: i, k, t
 
 	ok = .true.
 	dims = ''
@@ -202,6 +203,14 @@ module function decl_line(val, name, ok) result(s)
 		spec = 'logical'
 	case (enum_type)
 		spec = 'integer(int32)'
+	case (struct_type)
+		k = struct_slot_of(em, val)
+		if (k == 0) then
+			ok = .false.
+			s = ''
+			return
+		end if
+		spec = 'type('//struct_tname(em, k)//')'
 	case (str_type)
 		if (val%type == array_type) then
 			spec = 'type(rt_str_t)'
@@ -255,7 +264,7 @@ module subroutine declare_var(em, node, val)
 
 	call record_slot(em, node%is_loc, node%id_index, val)
 
-	line = decl_line(val, var_name(node), ok)
+	line = decl_line(em, val, var_name(node), ok)
 	if (.not. ok) then
 		call em_unsupported(em, 'a variable of type `'//kind_name(val%type)//'`')
 		return
@@ -430,7 +439,13 @@ module function str_of(em, val, s) result(r)
 	character(len = *), intent(in) :: s
 	character(len = :), allocatable :: r
 
-	integer :: k
+	integer :: k, sk
+
+	sk = 0
+	if (elem_type(val) == struct_type) then
+		sk = struct_slot_of(em, val)
+		if (sk == 0) call em_unsupported(em, 'a struct of unknown type')
+	end if
 
 	k = 0
 	if (elem_type(val) == enum_type) then
@@ -438,7 +453,16 @@ module function str_of(em, val, s) result(r)
 		if (k == 0) call em_unsupported(em, 'an enum of unknown type')
 	end if
 
-	if (k > 0) then
+	if (sk > 0) then
+		if (.not. is_arr(val)) then
+			r = struct_fn(em, sk, 'str')//'('//s//')'
+		else if (val%array%rank == 1) then
+			r = 'rt_arr_wrap('//struct_fn(em, sk, 'join')//'('//s//'), 1)'
+		else
+			r = 'rt_arr_wrap('//struct_fn(em, sk, 'join')//'(reshape('//s//', [size('//s// &
+				')])), '//str(val%array%rank)//')'
+		end if
+	else if (k > 0) then
 		if (is_arr(val)) then
 			r = 'rt_str_a('//enum_fn(em, k, 'strs')//'('//s//'))'
 		else
@@ -453,6 +477,124 @@ module function str_of(em, val, s) result(r)
 	end if
 
 end function str_of
+
+!===============================================================================
+
+module function struct_slot_of(em, val) result(k)
+
+	type(emitter_t), intent(in) :: em
+	type(value_t), intent(in) :: val
+	integer :: k
+
+	integer :: i
+
+	k = 0
+	if (.not. associated(em%structs)) return
+	if (.not. allocated(em%structs%table)) return
+
+	do i = 1, size(em%structs%table)
+		if (.not. allocated(em%structs%table(i)%key)) cycle
+		if (.not. allocated(em%structs%table(i)%val)) cycle
+
+		if (allocated(val%struct_cookie) .and. allocated(em%structs%table(i)%val%cookie)) then
+			if (em%structs%table(i)%val%cookie == val%struct_cookie) then
+				k = i
+				return
+			end if
+		else if (allocated(val%struct_name)) then
+			if (same_struct_name(em%structs%table(i)%key, val%struct_name)) then
+				k = i
+				return
+			end if
+		end if
+	end do
+
+end function struct_slot_of
+
+!===============================================================================
+
+function same_struct_name(a, b) result(same)
+
+	! Is `a` the name of the struct that `b` is, which differ by a module
+	! prefix like `mod::Point` if one is imported with a qualified name?
+
+	character(len = *), intent(in) :: a, b
+	logical :: same
+
+	integer :: n
+
+	same = a == b
+	if (same) return
+
+	if (len(a) > len(b)) then
+		n = len(a) - len(b)
+		if (n >= 2) same = a(n+1:) == b .and. a(n-1:n) == '::'
+	else if (len(b) > len(a)) then
+		n = len(b) - len(a)
+		if (n >= 2) same = b(n+1:) == a .and. b(n-1:n) == '::'
+	end if
+
+end function same_struct_name
+
+!===============================================================================
+
+module function struct_tname(em, k) result(s)
+
+	type(emitter_t), intent(in) :: em
+	integer, intent(in) :: k
+	character(len = :), allocatable :: s
+
+	s = 'st'//str(em%structs%table(k)%id_index)//'_t'
+
+end function struct_tname
+
+!===============================================================================
+
+function struct_fn(em, k, suffix) result(s)
+
+	! Name of a helper fn of the struct at position `k` of the table: `str` for
+	! the string of a struct, and `join` for the strings of a rank 1 array of
+	! them, separated by commas
+
+	type(emitter_t), intent(in) :: em
+	integer, intent(in) :: k
+	character(len = *), intent(in) :: suffix
+	character(len = :), allocatable :: s
+
+	s = 'st'//str(em%structs%table(k)%id_index)//'_'//suffix
+
+end function struct_fn
+
+!===============================================================================
+
+module subroutine struct_member(em, k, id, val, name, ok)
+
+	type(emitter_t), intent(in) :: em
+	integer, intent(in) :: k, id
+	type(value_t), intent(out) :: val
+	character(len = :), allocatable, intent(out) :: name
+	logical, intent(out) :: ok
+
+	integer :: i, mid, io
+
+	ok = .false.
+	name = ''
+	if (k < 1) return
+
+	associate (st => em%structs%table(k)%val)
+		if (.not. allocated(st%member_names%v)) return
+		do i = 1, size(st%member_names%v)
+			call st%vars%search(st%member_names%v(i)%s, mid, io, val)
+			if (io /= 0) cycle
+			if (mid == id) then
+				name = st%member_names%v(i)%s
+				ok = .true.
+				return
+			end if
+		end do
+	end associate
+
+end subroutine struct_member
 
 !===============================================================================
 
@@ -1215,17 +1357,11 @@ recursive module function emit_name_ref(em, node, hoist, target) result(s)
 
 	!********
 
-	character(len = :), allocatable :: base, subs, tmp
+	character(len = :), allocatable :: base
 
-	integer :: i, nsub, rank_
-	logical :: do_hoist, str_hoist, all_scalar
+	logical :: do_hoist, str_hoist
 
 	type(slot_info_t) :: info
-
-	base = var_name(node)
-	s = base
-
-	if (.not. allocated(node%lsubscripts)) return
 
 	do_hoist = .false.
 	if (present(hoist)) do_hoist = hoist
@@ -1235,13 +1371,51 @@ recursive module function emit_name_ref(em, node, hoist, target) result(s)
 	str_hoist = do_hoist
 	if (present(target)) str_hoist = str_hoist .or. target
 
-	nsub = size(node%lsubscripts)
+	if (allocated(node%member) .or. node%root_kind /= 0) then
+		! A member of a struct, or of several nested ones
+		s = emit_dot_ref(em, node, do_hoist, str_hoist)
+		return
+	end if
+
+	base = var_name(node)
+	s = base
+
+	if (.not. allocated(node%lsubscripts)) return
 
 	info = lookup_slot(em, node%is_loc, node%id_index)
 	if (.not. info%known) then
 		call em_unsupported(em, 'a subscript of a variable whose type is unknown')
 		return
 	end if
+
+	s = subscripted(em, node, base, info, do_hoist, str_hoist)
+
+end function emit_name_ref
+
+!===============================================================================
+
+recursive function subscripted(em, node, base, info, do_hoist, str_hoist) result(s)
+
+	! `base` with the subscripts of `node`, which is a variable or a member of a
+	! struct.  `info` has the type of `base`
+
+	type(emitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	character(len = *), intent(in) :: base
+	type(slot_info_t), intent(in) :: info
+	logical, intent(in) :: do_hoist, str_hoist
+	character(len = :), allocatable :: s
+
+	!********
+
+	character(len = :), allocatable :: subs, tmp
+
+	integer :: i, nsub, rank_
+	logical :: all_scalar
+
+	s = base
+
+	nsub = size(node%lsubscripts)
 
 	if (info%type == str_type) then
 		! A character or substring
@@ -1324,7 +1498,158 @@ recursive module function emit_name_ref(em, node, hoist, target) result(s)
 	! An element of a string array is the string inside of the wrapper
 	if (info%elem == str_type .and. all_scalar) s = s//'%s'
 
-end function emit_name_ref
+end function subscripted
+
+!===============================================================================
+
+recursive function emit_dot_ref(em, node, do_hoist, str_hoist) result(s)
+
+	! A reference to a member of a struct, like `a.b[1].c`, as a Fortran
+	! designator `a%m1(2)%m3`.  The members of a derived type are named by the
+	! index that the parser gave them.  The root is a variable, possibly
+	! subscripted, or a call to a fn, whose result is stored in a temporary since
+	! Fortran can't take a component of a fn result
+
+	type(emitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	logical, intent(in) :: do_hoist, str_hoist
+	character(len = :), allocatable :: s
+
+	!********
+
+	character(len = :), allocatable :: line, tmp
+
+	integer :: sk
+
+	logical :: ok
+
+	type(slot_info_t) :: info
+
+	type(syntax_node_t) :: root
+
+	type(value_t) :: rv
+
+	s = '0'
+
+	if (.not. allocated(node%member)) then
+		call em_unsupported(em, 'a member of a struct')
+		return
+	end if
+
+	if (node%root_kind /= 0) then
+
+		! `f().x` is the member of a temporary
+		if (em%in_cond) then
+			call em_unsupported(em, 'a member of a fn result in a loop condition or `else if`')
+			return
+		end if
+
+		if (node%root_kind /= fn_call_expr .and. node%root_kind /= method_call_expr) then
+			call em_unsupported(em, 'a member of the result of a `'// &
+				kind_name(node%root_kind)//'`')
+			return
+		end if
+
+		if (allocated(node%lsubscripts)) then
+			call em_unsupported(em, 'a subscripted fn call')
+			return
+		end if
+
+		root = node
+		root%kind = node%root_kind
+		root%root_kind = 0
+		deallocate(root%member)
+
+		rv = em%fns%fns(node%id_index)%type
+
+		em%tmp_count = em%tmp_count + 1
+		tmp = 'sr_t'//str(em%tmp_count)
+		line = decl_line(em, rv, tmp, ok)
+		if (.not. ok) then
+			call em_unsupported(em, 'a fn result of type `'//kind_name(rv%type)//'`')
+			return
+		end if
+		call em%decls%push(line)
+		call em_line(em, tmp//' = '//emit_expr(em, root))
+
+		s = tmp
+		sk = struct_slot_of(em, rv)
+
+	else
+
+		s = var_name(node)
+
+		info = lookup_slot(em, node%is_loc, node%id_index)
+		if (.not. info%known) then
+			call em_unsupported(em, 'a member of a variable whose type is unknown')
+			return
+		end if
+		sk = info%sk
+		if (allocated(info%fname)) s = info%fname
+
+		if (allocated(node%lsubscripts)) then
+			s = subscripted(em, node, s, info, do_hoist, str_hoist)
+		end if
+
+	end if
+
+	s = emit_member_chain(em, node%member, s, sk, do_hoist, str_hoist)
+
+end function emit_dot_ref
+
+!===============================================================================
+
+recursive function emit_member_chain(em, m, base, sk, do_hoist, str_hoist) result(s)
+
+	! `base` followed by the member `m` of the struct at position `sk` of the
+	! table, and by the rest of the chain after it
+
+	type(emitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: m
+	character(len = *), intent(in) :: base
+	integer, intent(in) :: sk
+	logical, intent(in) :: do_hoist, str_hoist
+	character(len = :), allocatable :: s
+
+	!********
+
+	character(len = :), allocatable :: mname
+
+	logical :: ok
+
+	type(slot_info_t) :: minfo
+
+	type(value_t) :: mval
+
+	s = base
+
+	call struct_member(em, sk, m%id_index, mval, mname, ok)
+	if (.not. ok) then
+		call em_unsupported(em, 'a member of a struct whose type is unknown')
+		return
+	end if
+
+	s = base//'%m'//str(m%id_index)
+
+	minfo%known = .true.
+	minfo%type = mval%type
+	if (mval%type == array_type .and. allocated(mval%array)) then
+		minfo%elem = mval%array%type
+		minfo%rank = mval%array%rank
+	end if
+	if (mval%type == struct_type .or. minfo%elem == struct_type) then
+		minfo%sk = struct_slot_of(em, mval)
+	end if
+
+	if (allocated(m%lsubscripts)) then
+		s = subscripted(em, m, s, minfo, do_hoist, str_hoist)
+	end if
+
+	if (allocated(m%member)) then
+		s = emit_member_chain(em, m%member, s, minfo%sk, do_hoist, str_hoist)
+	end if
+
+end function emit_member_chain
 
 !===============================================================================
 
@@ -1363,7 +1688,7 @@ recursive function emit_array_expr(em, node) result(s)
 	character(len = :), allocatable :: v, n_str, shape_str, elems, spec
 	character(len = :), allocatable :: lb, ub, st, sfx
 
-	integer :: i, t, kind_
+	integer :: i, k, t, kind_
 
 	t = node%val%array%type
 	kind_ = node%val%array%kind
@@ -1416,7 +1741,7 @@ recursive function emit_array_expr(em, node) result(s)
 	case (unif_array)
 		! [v; n, m] is v repeated n * m times, in the shape [n, m]
 		v = emit_expr(em, node%lbound_)
-		if (t /= str_type) v = convert(v, elem_type(node%lbound_%val), t)
+		if (t /= str_type .and. t /= struct_type) v = convert(v, elem_type(node%lbound_%val), t)
 
 		n_str = ''
 		shape_str = ''
@@ -1431,7 +1756,16 @@ recursive function emit_array_expr(em, node) result(s)
 				elem_type(node%size_(i)%val), i64_type)
 		end do
 
-		if (t == str_type) then
+		if (t == struct_type) then
+			! Nor does spread() copy the allocatable components of a struct
+			k = struct_slot_of(em, node%lbound_%val)
+			if (k == 0 .or. size(node%size_) > 1) then
+				call em_unsupported(em, 'an array of structs of rank above 1')
+				s = '[0]'
+				return
+			end if
+			s = struct_fn(em, k, 'fill')//'('//v//', '//n_str//')'
+		else if (t == str_type) then
 			! spread() and reshape() don't copy strings properly
 			s = 'rt_fill_str('//v//', '//n_str//')'
 			if (size(node%size_) > 1) s = reshape_str(em, s, size(node%size_), shape_str)
@@ -1457,6 +1791,15 @@ recursive function emit_array_expr(em, node) result(s)
 			spec = 'logical'
 		case (enum_type)
 			spec = 'integer(int32)'
+		case (struct_type)
+			k = struct_slot_of(em, node%val)
+			if (k == 0 .and. size(node%elems) > 0) k = struct_slot_of(em, node%elems(1)%val)
+			if (k == 0) then
+				call em_unsupported(em, 'an array of structs of unknown type')
+				s = '[0]'
+				return
+			end if
+			spec = struct_tname(em, k)
 		case (str_type)
 			! A derived type in a type-spec is just its name
 			spec = 'rt_str_t'
@@ -1478,6 +1821,12 @@ recursive function emit_array_expr(em, node) result(s)
 		end do
 
 		s = '['//spec//' :: '//elems//']'
+
+		if (kind_ == size_array .and. t == struct_type) then
+			call em_unsupported(em, 'an array of structs of rank above 1')
+			s = '[0]'
+			return
+		end if
 
 		if (kind_ == size_array) then
 			shape_str = ''
@@ -1517,15 +1866,26 @@ recursive function emit_user_call(em, node) result(s)
 
 	character(len = :), allocatable :: arg
 
-	integer :: i, ptype
+	integer :: i, ptype, pi
 
 	s = fn_name(node%identifier%text, node%id_index)//'('
 
 	if (allocated(node%args)) then
 		do i = 1, size(node%args)
 
+			! The first argument of a method call is the receiver, which is the
+			! method's `self` and not one of the fn's declared parameters
+			pi = i
+			if (node%kind == method_call_expr) pi = i - 1
+
 			if (node_is_ref(node, i) .and. .not. param_is_const_ref(em, node%id_index, i)) then
-				if (node%args(i)%kind /= name_expr .or. &
+				if (node%args(i)%kind == dot_expr .or. &
+						(node%kind == method_call_expr .and. i == 1 .and. &
+						node%args(i)%kind == name_expr)) then
+					! A member of a struct is a variable too, and so is an element of
+					! an array that a method is called on
+					arg = emit_name_ref(em, node%args(i), target = .true.)
+				else if (node%args(i)%kind /= name_expr .or. &
 						allocated(node%args(i)%lsubscripts)) then
 					call em_unsupported(em, 'a by-reference argument that is not a plain variable')
 					arg = '0'
@@ -1537,8 +1897,8 @@ recursive function emit_user_call(em, node) result(s)
 				arg = emit_expr(em, node%args(i))
 
 				! Convert by-value args to the declared parameter type
-				if (associated(em%fns)) then
-					ptype = elem_type(em%fns%fns(node%id_index)%params(i))
+				if (associated(em%fns) .and. pi >= 1) then
+					ptype = elem_type(em%fns%fns(node%id_index)%params(pi))
 					if (is_numeric_type(ptype) .and. &
 							is_numeric_type(elem_type(node%args(i)%val))) then
 						arg = convert(arg, elem_type(node%args(i)%val), ptype)
@@ -1761,6 +2121,53 @@ end function emit_intr_call
 
 !===============================================================================
 
+recursive function emit_struct_instance(em, node) result(s)
+
+	! `Point{x = 1, y = 2}` is a structure constructor.  The arguments are in the
+	! order of the members' indices, which is also the order of the components
+
+	type(emitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	character(len = :), allocatable :: s
+
+	!********
+
+	character(len = :), allocatable :: args, mname
+
+	integer :: i, k
+
+	logical :: ok
+
+	type(value_t) :: mval
+
+	k = struct_slot_of(em, node%val)
+	if (k == 0) then
+		call em_unsupported(em, 'a struct of unknown type')
+		s = '0'
+		return
+	end if
+
+	args = ''
+	if (allocated(node%members)) then
+		do i = 1, size(node%members)
+			call struct_member(em, k, i, mval, mname, ok)
+			if (.not. ok) then
+				call em_unsupported(em, 'a struct of unknown type')
+				s = '0'
+				return
+			end if
+			if (i > 1) args = args//', '
+			args = args//convert(emit_expr(em, node%members(i)), &
+				elem_type(node%members(i)%val), elem_type(mval))
+		end do
+	end if
+
+	s = struct_tname(em, k)//'('//args//')'
+
+end function emit_struct_instance
+
+!===============================================================================
+
 function emit_enum_access(em, node) result(s)
 
 	! `Suit.Clubs` is the index of the variant, which is not necessarily its
@@ -1841,6 +2248,15 @@ recursive module function emit_expr(em, node) result(s)
 
 	case (enum_cast_expr)
 		s = emit_enum_cast(em, node)
+
+	case (dot_expr)
+		s = emit_name_ref(em, node)
+
+	case (struct_instance_expr)
+		s = emit_struct_instance(em, node)
+
+	case (method_call_expr)
+		s = emit_user_call(em, node)
 
 	case (binary_expr)
 		s = emit_binary(em, node)

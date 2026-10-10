@@ -41,7 +41,7 @@ function new_tmp_of(em, val, prefix) result(name)
 	em%tmp_count = em%tmp_count + 1
 	name = prefix//'_t'//str(em%tmp_count)
 
-	call em%decls%push(decl_line(val, name, ok))
+	call em%decls%push(decl_line(em, val, name, ok))
 	if (.not. ok) call em_unsupported(em, 'a temporary of type `'//kind_name(val%type)//'`')
 
 end function new_tmp_of
@@ -128,7 +128,7 @@ recursive subroutine emit_call_stmt(em, node)
 	end if
 
 	if (node%val%type == void_type) then
-		if (node%kind == fn_call_expr) then
+		if (node%kind == fn_call_expr .or. node%kind == method_call_expr) then
 			call em_line(em, 'call '//emit_expr(em, node))
 		else
 			call em_unsupported(em, 'the intrinsic fn `'// &
@@ -177,11 +177,6 @@ recursive module subroutine emit_assign(em, node)
 	integer :: ct, lt, rt
 
 	logical :: compound, lhs_arr, rhs_arr
-
-	if (allocated(node%member)) then
-		call em_unsupported(em, 'assignment to a struct member')
-		return
-	end if
 
 	lt = elem_type(node%val)
 	rt = elem_type(node%right%val)
@@ -833,7 +828,9 @@ recursive subroutine emit_for(em, node)
 		tmp = new_tmp_of(em, node%array%val, 'arr')
 		call em_line(em, tmp//' = '//emit_expr(em, node%array))
 
+		var_val = node%array%val
 		var_val%type = node%array%val%array%type
+		if (allocated(var_val%array)) deallocate(var_val%array)
 		len_str = 'size('//tmp//')'
 		if (var_val%type == str_type) then
 			elem_str = tmp//'(KK)%s'
@@ -999,7 +996,7 @@ recursive subroutine emit_discard(em, node)
 	type(syntax_node_t), intent(in) :: node
 
 	select case (node%kind)
-	case (fn_call_expr, fn_call_intr_expr)
+	case (fn_call_expr, fn_call_intr_expr, method_call_expr)
 		call emit_call_stmt(em, node)
 	case default
 		! A pure expression has no side effects
@@ -1056,14 +1053,10 @@ recursive subroutine emit_result_stmt(em, node)
 
 	case (assignment_expr)
 		call emit_stmt(em, node)
-		if (allocated(node%member)) then
-			! Already reported as unsupported by emit_stmt()
-		else
-			! The target, e.g. a whole array or just the element that was assigned
-			call emit_result_str(em, str_of(em, node%val, emit_name_ref(em, node)))
-		end if
+		! The target, e.g. a whole array or just the element that was assigned
+		call emit_result_str(em, str_of(em, node%val, emit_name_ref(em, node)))
 
-	case (fn_call_expr, fn_call_intr_expr)
+	case (fn_call_expr, fn_call_intr_expr, method_call_expr)
 		if (node%val%type == void_type) then
 			call emit_call_stmt(em, node)
 			! println() has an empty result while other void fns have none.  exit()
@@ -1149,6 +1142,10 @@ recursive subroutine emit_module_fns(em, unit, done)
 	end do
 
 	do i = 1, size(unit%members)
+		if (unit%members(i)%kind == struct_declaration) then
+			call emit_struct_methods(em, unit%members(i), done)
+			cycle
+		end if
 		if (unit%members(i)%kind /= fn_declaration) cycle
 
 		found = .false.
@@ -1213,14 +1210,16 @@ recursive module subroutine emit_stmt(em, node)
 	case (return_statement)
 		call emit_return(em, node)
 
-	case (fn_call_expr, fn_call_intr_expr)
+	case (fn_call_expr, fn_call_intr_expr, method_call_expr)
 		call emit_call_stmt(em, node)
 
 	case (fn_declaration)
 		! Emitted separately, since a fn is its own Fortran procedure
 
 	case (struct_declaration)
-		call em_unsupported(em, 'a struct declaration')
+		! The derived type is emitted with the program (c.f. emit_struct_types()).
+		! A member that has no Fortran type yet is reported here
+		call check_struct_members(em, node)
 
 	case (enum_declaration)
 		! Nothing runs.  The enum's helper fns are emitted with the program (c.f.
@@ -1452,7 +1451,8 @@ recursive function modifies_slot(node, slot) result(found)
 			do i = 1, size(node%args)
 				if (.not. node%is_ref(i)) cycle
 				if (node%args(i)%is_loc .and. node%args(i)%id_index == slot .and. &
-						node%args(i)%kind == name_expr) then
+						(node%args(i)%kind == name_expr .or. &
+						node%args(i)%kind == dot_expr)) then
 					found = .true.
 					return
 				end if
@@ -1518,7 +1518,8 @@ recursive function alias_hazard(node, fn_id, ref_slots) result(found)
 		if (allocated(node%is_ref) .and. allocated(node%args)) then
 			do i = 1, size(node%args)
 				if (.not. node%is_ref(i)) cycle
-				if (node%args(i)%kind /= name_expr) cycle
+				if (node%args(i)%kind /= name_expr .and. &
+						node%args(i)%kind /= dot_expr) cycle
 				if (.not. node%args(i)%is_loc .or. &
 						any(ref_slots == node%args(i)%id_index)) then
 					found = .true.
@@ -1561,15 +1562,16 @@ end function dims_of
 
 !===============================================================================
 
-function elem_spec(val) result(s)
+function elem_spec(em, val) result(s)
 
 	! Type spec of a scalar's type, or of an array's elements, for a dummy
 	! argument
 
+	type(emitter_t), intent(in) :: em
 	type(value_t), intent(in) :: val
 	character(len = :), allocatable :: s
 
-	integer :: t
+	integer :: k, t
 
 	t = elem_type(val)
 	if (t == str_type) then
@@ -1577,6 +1579,13 @@ function elem_spec(val) result(s)
 			s = 'type(rt_str_t)'
 		else
 			s = 'character(len = *)'
+		end if
+	else if (t == struct_type) then
+		k = struct_slot_of(em, val)
+		if (k > 0) then
+			s = 'type('//struct_tname(em, k)//')'
+		else
+			s = 'integer(int32)'
 		end if
 	else
 		s = type_spec(t)
@@ -1586,7 +1595,7 @@ end function elem_spec
 
 !===============================================================================
 
-recursive subroutine emit_fn(em, decl)
+recursive subroutine emit_fn(em, decl, self_sk)
 
 	! Emit a user fn as a Fortran procedure.  It is always `recursive`, which
 	! also makes all of its local variables automatic (not `save`)
@@ -1595,14 +1604,22 @@ recursive subroutine emit_fn(em, decl)
 	! free to assign to them.  By-reference parameters are `intent(inout)`, and
 	! allocatable if they are arrays or strings so that they can be resized
 
+	! A method has a struct as the first parameter, which is its `self`.  Pass
+	! `self_sk`, the position of the struct in the table, for a method
+
 	type(emitter_t), intent(inout) :: em
 	type(syntax_node_t), intent(in) :: decl
+	integer, intent(in), optional :: self_sk
 
 	!********
 
 	character(len = :), allocatable :: name, header, dummy_names, pname, local, dims, line
 
-	integer :: i, slot
+	integer :: i, k, slot
+
+	logical :: is_method
+
+	type(value_t) :: pval
 
 	integer, allocatable :: ref_slots(:)
 
@@ -1634,6 +1651,8 @@ recursive subroutine emit_fn(em, decl)
 
 	is_void = fn%type%type == void_type
 
+	is_method = present(self_sk)
+
 	name = fn_name(decl%identifier%text, decl%id_index)
 
 	! Slots of the parameters passed by reference, which the body can assign to
@@ -1648,7 +1667,18 @@ recursive subroutine emit_fn(em, decl)
 	if (allocated(decl%params)) then
 		do i = 1, size(decl%params)
 			slot  = decl%params(i)
-			pname = fn%param_names%v(i)%s
+
+			if (is_method .and. i == 1) then
+				pname = '0self'
+				pval%type = struct_type
+				pval%struct_cookie = em%structs%table(self_sk)%val%cookie
+				pval%struct_name = em%structs%table(self_sk)%key
+			else
+				k = i
+				if (is_method) k = i - 1
+				pname = fn%param_names%v(k)%s
+				pval = fn%params(k)
+			end if
 
 			! A node that stands for the parameter, to name and declare it
 			pnode%is_loc = .true.
@@ -1658,7 +1688,7 @@ recursive subroutine emit_fn(em, decl)
 			local = var_name(pnode)
 
 			dims = ''
-			if (is_arr(fn%params(i))) dims = dims_of(fn%params(i)%array%rank)
+			if (is_arr(pval)) dims = dims_of(pval%array%rank)
 
 			if (len(dummy_names) > 0) dummy_names = dummy_names//', '
 
@@ -1669,10 +1699,11 @@ recursive subroutine emit_fn(em, decl)
 				! `&const`: passed by reference but read-only.  The dummy argument
 				! is the variable itself, with no copy of it needed
 				dummy_names = dummy_names//local
-				call ret_decls%push(elem_spec(fn%params(i))//', intent(in) :: '// &
+				call ret_decls%push(elem_spec(em, pval)//', intent(in) :: '// &
 					local//dims)
 				call em%seen_local%push(2 * slot + 1)
-				call record_slot(em, .true., slot, fn%params(i))
+				call record_slot(em, .true., slot, pval)
+					if (is_method .and. i == 1) em%local_slots(slot)%fname = local
 				cycle
 			end if
 
@@ -1680,10 +1711,10 @@ recursive subroutine emit_fn(em, decl)
 				if (decl%is_ref(i)) then
 					! Passed by reference: the dummy argument is the variable
 					dummy_names = dummy_names//local
-					line = decl_line(fn%params(i), local, ok)
+					line = decl_line(em, pval, local, ok)
 					if (.not. ok) then
 						call em_unsupported(em, 'a parameter of type `'// &
-							kind_name(fn%params(i)%type)//'`')
+							kind_name(pval%type)//'`')
 					else
 						! Declare as an intent(inout) dummy: insert the intent
 						! after the type spec
@@ -1691,13 +1722,14 @@ recursive subroutine emit_fn(em, decl)
 						call ret_decls%push(line)
 					end if
 					call em%seen_local%push(2 * slot + 1)
-					call record_slot(em, .true., slot, fn%params(i))
+					call record_slot(em, .true., slot, pval)
+					if (is_method .and. i == 1) em%local_slots(slot)%fname = local
 					cycle
 				end if
 			end if
 
 			use_direct = .false.
-			if (is_arr(fn%params(i)) .or. fn%params(i)%type == str_type) then
+			if (is_arr(pval) .or. pval%type == str_type) then
 				! Copying a scalar is free.  An array or string is only worth not
 				! copying if it can't be affected by anything else
 				use_direct = .not. modifies_slot(decl%body, slot)
@@ -1709,19 +1741,20 @@ recursive subroutine emit_fn(em, decl)
 				! Passed by value, and never assigned to, so the dummy argument can
 				! be used directly instead of copying it
 				dummy_names = dummy_names//local
-				call ret_decls%push(elem_spec(fn%params(i))//', intent(in) :: '// &
+				call ret_decls%push(elem_spec(em, pval)//', intent(in) :: '// &
 					local//dims)
 				call em%seen_local%push(2 * slot + 1)
-				call record_slot(em, .true., slot, fn%params(i))
+				call record_slot(em, .true., slot, pval)
+					if (is_method .and. i == 1) em%local_slots(slot)%fname = local
 				cycle
 			end if
 
 			! Passed by value, and assigned to: a read-only dummy argument, copied
 			! into the local
 			dummy_names = dummy_names//local//'_a'
-			call ret_decls%push(elem_spec(fn%params(i))//', intent(in) :: '// &
+			call ret_decls%push(elem_spec(em, pval)//', intent(in) :: '// &
 				local//'_a'//dims)
-			call declare_var(em, pnode, fn%params(i))
+			call declare_var(em, pnode, pval)
 			call entry_lines%push(local//' = '//local//'_a')
 		end do
 	end if
@@ -1735,7 +1768,7 @@ recursive subroutine emit_fn(em, decl)
 	else
 		header = 'recursive function '//name//'('//dummy_names//') result(res_)'
 
-		line = decl_line(fn%type, 'res_', ok)
+		line = decl_line(em, fn%type, 'res_', ok)
 		if (.not. ok) then
 			call em_unsupported(em, 'a fn that returns type `'//kind_name(fn%type%type)//'`')
 		else
@@ -1754,6 +1787,291 @@ recursive subroutine emit_fn(em, decl)
 	em%top_level = .true.
 
 end subroutine emit_fn
+
+!===============================================================================
+
+function struct_slot_by_id(em, id) result(k)
+
+	! Position in the struct table of the struct that the parser numbered `id`
+
+	type(emitter_t), intent(in) :: em
+	integer, intent(in) :: id
+	integer :: k
+
+	integer :: i
+
+	k = 0
+	if (.not. associated(em%structs)) return
+	if (.not. allocated(em%structs%table)) return
+
+	do i = 1, size(em%structs%table)
+		if (.not. allocated(em%structs%table(i)%key)) cycle
+		if (.not. allocated(em%structs%table(i)%val)) cycle
+		if (em%structs%table(i)%id_index == id) then
+			k = i
+			return
+		end if
+	end do
+
+end function struct_slot_by_id
+
+!===============================================================================
+
+subroutine check_struct_members(em, node)
+
+	! Report a struct member whose type can't be a component of a derived type
+	! yet, at the declaration of the struct
+
+	type(emitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+
+	!********
+
+	character(len = :), allocatable :: mname, line
+
+	integer :: i, k
+
+	logical :: ok
+
+	type(value_t) :: mval
+
+	k = struct_slot_by_id(em, node%id_index)
+	if (k == 0) return
+
+	do i = 1, em%structs%table(k)%val%num_vars
+		call struct_member(em, k, i, mval, mname, ok)
+		if (.not. ok) cycle
+
+		line = decl_line(em, mval, 'm', ok)
+		if (.not. ok) then
+			call em_unsupported(em, 'a struct member of type `'//kind_name(mval%type)//'`')
+			return
+		end if
+	end do
+
+end subroutine check_struct_members
+
+!===============================================================================
+
+function member_str(em, v, x) result(r)
+
+	! Fortran expression for the string of the member of a struct whose type is
+	! `v` and designator is `x`.  A struct's members round trip, which is to say
+	! that strings are quoted and the types of i64 and f32 are written
+
+	type(emitter_t), intent(inout) :: em
+	type(value_t), intent(in) :: v
+	character(len = *), intent(in) :: x
+	character(len = :), allocatable :: r
+
+	integer :: k, t
+
+	t = elem_type(v)
+
+	if (is_arr(v)) then
+		select case (t)
+		case (i64_type, f32_type, str_type)
+			r = 'rt_str_a_rt('//x//')'
+
+		case (enum_type)
+			k = enum_slot_of(em, v)
+			if (k == 0) then
+				call em_unsupported(em, 'an enum of unknown type')
+				r = "''"
+			else
+				r = 'rt_str_a('//enum_fn(em, k, 'strs')//'('//x//'))'
+			end if
+
+		case (struct_type)
+			r = str_of(em, v, x)
+
+		case default
+			r = 'rt_str_a('//x//')'
+		end select
+		return
+	end if
+
+	select case (t)
+	case (i64_type)
+		r = 'rt_str('//x//') // "''i64"'
+	case (f32_type)
+		r = 'trim(adjustl(rt_str('//x//'))) // "''f32"'
+	case (f64_type)
+		r = 'trim(adjustl(rt_str('//x//')))'
+	case (str_type)
+		r = 'rt_quote('//x//')'
+	case (enum_type, struct_type)
+		r = str_of(em, v, x)
+	case default
+		r = 'rt_str('//x//')'
+	end select
+
+end function member_str
+
+!===============================================================================
+
+subroutine emit_struct_procs(em)
+
+	! The derived types of the structs, and fns that map a struct to its string.
+	! A struct is a derived type with a component `m<i>` for the member that the
+	! parser numbered i.  The fns are
+	!
+	!   stN_str(x)      the string of a struct, like `Point{x = 1, y = 2}`
+	!   stN_join(a)     the strings of a rank 1 array of structs, as a list
+	!   stN_fill(v, n)  a rank 1 array of n copies of v
+	!
+	! Allocatable components aren't copied right by spread(), so stN_fill()
+	! assigns each element instead
+	!
+	! The types are emitted in the order that the structs were declared in, which
+	! is the order that they depend on each other in
+
+	type(emitter_t), intent(inout) :: em
+
+	!********
+
+	character(len = :), allocatable :: id, tn, line, mname
+
+	integer :: i, j, k, m, n
+	integer, allocatable :: order(:)
+
+	logical :: dup, ok
+
+	type(value_t) :: mval
+
+	if (.not. associated(em%structs)) return
+	if (.not. allocated(em%structs%table)) return
+
+	! Table positions of the structs, without duplicates by cookie, by id
+	n = 0
+	allocate(order(size(em%structs%table)))
+	do k = 1, size(em%structs%table)
+		if (.not. allocated(em%structs%table(k)%key)) cycle
+		if (.not. allocated(em%structs%table(k)%val)) cycle
+		if (.not. allocated(em%structs%table(k)%val%cookie)) cycle
+
+		dup = .false.
+		do j = 1, k - 1
+			if (.not. allocated(em%structs%table(j)%val)) cycle
+			if (.not. allocated(em%structs%table(j)%val%cookie)) cycle
+			if (em%structs%table(j)%val%cookie == em%structs%table(k)%val%cookie) dup = .true.
+		end do
+		if (dup) cycle
+
+		n = n + 1
+		order(n) = k
+	end do
+
+	! Insertion sort by id
+	do i = 2, n
+		k = order(i)
+		j = i - 1
+		do while (j >= 1)
+			if (em%structs%table(order(j))%id_index <= em%structs%table(k)%id_index) exit
+			order(j + 1) = order(j)
+			j = j - 1
+		end do
+		order(j + 1) = k
+	end do
+
+	do i = 1, n
+		k = order(i)
+		id = str(em%structs%table(k)%id_index)
+		tn = struct_tname(em, k)
+
+		associate (st => em%structs%table(k)%val)
+
+			call em%tdecls%push('    type :: '//tn)
+			do m = 1, st%num_vars
+				call struct_member(em, k, m, mval, mname, ok)
+				if (.not. ok) cycle
+				line = decl_line(em, mval, 'm'//str(m), ok)
+				if (.not. ok) line = 'integer(int32) :: m'//str(m)
+				call em%tdecls%push('        '//line//'  ! '//mname)
+			end do
+			call em%tdecls%push('    end type '//tn)
+			call em%tdecls%push('')
+
+			! The string of one struct
+			call em%procs%push('    function st'//id//'_str(x) result(s)')
+			call em%procs%push('        type('//tn//'), intent(in) :: x')
+			call em%procs%push('        character(len = :), allocatable :: s')
+			call em%procs%push("        s = '"//em%structs%table(k)%key//"{'")
+			do m = 1, st%num_vars
+				call struct_member(em, k, m, mval, mname, ok)
+				if (.not. ok) cycle
+				if (m > 1) call em%procs%push("        s = s // ', '")
+				call em%procs%push("        s = s // '"//mname//" = '")
+				call em%procs%push('        s = s // '//member_str(em, mval, 'x%m'//str(m)))
+			end do
+			call em%procs%push("        s = s // '}'")
+			call em%procs%push('    end function st'//id//'_str')
+			call em%procs%push('')
+
+			! The strings of an array
+			call em%procs%push('    function st'//id//'_join(a) result(s)')
+			call em%procs%push('        type('//tn//'), intent(in) :: a(:)')
+			call em%procs%push('        character(len = :), allocatable :: s')
+			call em%procs%push('        integer :: i')
+			call em%procs%push("        s = ''")
+			call em%procs%push('        do i = 1, size(a)')
+			call em%procs%push("            if (i > 1) s = s // ', '")
+			call em%procs%push('            s = s // st'//id//'_str(a(i))')
+			call em%procs%push('        end do')
+			call em%procs%push('    end function st'//id//'_join')
+			call em%procs%push('')
+
+			! n copies
+			call em%procs%push('    function st'//id//'_fill(v, n) result(r)')
+			call em%procs%push('        type('//tn//'), intent(in) :: v')
+			call em%procs%push('        integer(int64), intent(in) :: n')
+			call em%procs%push('        type('//tn//'), allocatable :: r(:)')
+			call em%procs%push('        integer(int64) :: i')
+			call em%procs%push('        allocate(r(max(n, 0_int64)))')
+			call em%procs%push('        do i = 1, n')
+			call em%procs%push('            r(i) = v')
+			call em%procs%push('        end do')
+			call em%procs%push('    end function st'//id//'_fill')
+			call em%procs%push('')
+
+		end associate
+	end do
+
+end subroutine emit_struct_procs
+
+!===============================================================================
+
+recursive subroutine emit_struct_methods(em, decl, done)
+
+	! Emit the methods of a struct as procedures.  `done` is as for
+	! emit_module_fns()
+
+	type(emitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: decl
+	type(integer_vector_t), intent(inout) :: done
+
+	integer :: j, k, m
+	logical :: found
+
+	if (.not. allocated(decl%members)) return
+
+	k = struct_slot_by_id(em, decl%id_index)
+	if (k == 0) return
+
+	do j = 1, size(decl%members)
+		if (decl%members(j)%kind /= fn_declaration) cycle
+
+		found = .false.
+		do m = 1, done%len_
+			if (done%v(m) == decl%members(j)%id_index) found = .true.
+		end do
+		if (found) cycle
+
+		call done%push(decl%members(j)%id_index)
+		call emit_fn(em, decl%members(j), k)
+	end do
+
+end subroutine emit_struct_methods
 
 !===============================================================================
 
@@ -1911,6 +2229,8 @@ module subroutine transpile_tree(tree, state, t, diags)
 
 	em%fns => state%fns
 	em%enums => state%enums
+	em%structs => state%structs
+	em%tdecls = new_string_vector()
 	em%print_result = t%print_result
 	em%trim_result  = t%trim_result
 
@@ -1965,6 +2285,10 @@ module subroutine transpile_tree(tree, state, t, diags)
 	done = new_integer_vector()
 	if (allocated(tree%members)) then
 		do i = 1, size(tree%members)
+			if (tree%members(i)%kind == struct_declaration) then
+				call emit_struct_methods(em, tree%members(i), done)
+				cycle
+			end if
 			if (tree%members(i)%kind /= fn_declaration) cycle
 			call done%push(tree%members(i)%id_index)
 			call emit_fn(em, tree%members(i))
@@ -1977,6 +2301,7 @@ module subroutine transpile_tree(tree, state, t, diags)
 	end if
 
 	call emit_enum_procs(em)
+	call emit_struct_procs(em)
 
 	!********
 	! Assemble the program
@@ -2000,6 +2325,9 @@ module subroutine transpile_tree(tree, state, t, diags)
 	call src%push('    use syntran_rt')
 	call src%push('    implicit none')
 	call src%push('')
+	do i = 1, em%tdecls%len_
+		call push_wrapped(src, em%tdecls%v(i)%s)
+	end do
 	do i = 1, em%gdecls%len_
 		call push_wrapped(src, '    '//em%gdecls%v(i)%s)
 	end do

@@ -9725,11 +9725,13 @@ subroutine unit_test_transpile(npass, nfail)
 			interpret_file(T//'transpile/test-03.syntran', .true.) == '0', &
 			interpret_file(T//'transpile/test-04.syntran', .true.) == '0', &
 			interpret_file(T//'transpile/test-05.syntran', .true.) == '0', &
+			interpret_file(T//'transpile/test-06.syntran', .true.) == '0', &
 			transpiles_ok(T//'transpile/test-01.syntran'), &
 			transpiles_ok(T//'transpile/test-02.syntran'), &
 			transpiles_ok(T//'transpile/test-03.syntran'), &
 			transpiles_ok(T//'transpile/test-04.syntran'), &
 			transpiles_ok(T//'transpile/test-05.syntran'), &
+			transpiles_ok(T//'transpile/test-06.syntran'), &
 
 			! Most of the tests programs are supported
 			transpiles_ok(T//'fns/test-01.syntran'), &
@@ -9746,6 +9748,20 @@ subroutine unit_test_transpile(npass, nfail)
 				'enum') > 0, &
 			index(transpile_src('enum Dir { N, S = 5 } let d = Dir.S; println(i32(d));'), &
 				'_val(') > 0, &
+
+			! A struct is a derived type with a component for each member, named by
+			! its index, and fns for its string
+			index(transpile_src('struct P{x:i32, s:str} let p = P{x = 1, s = "a"}; ' &
+				//'println(p.x);'), 'type :: st1_t') > 0, &
+			index(transpile_src('struct P{x:i32, s:str} let p = P{x = 1, s = "a"}; ' &
+				//'println(p.s);'), 'p_g') > 0, &
+			index(transpile_src('struct P{x:i32} let p = P{x = 1}; p.x = 2;'), &
+				'%m1 = 2_int32') > 0, &
+
+			! The loop variable of a `for` over an array of structs is a struct, which
+			! its members can be read from
+			eval('struct P{n: i32} let ps = [P{n = 4}, P{n = 5}]; let t = 0; ' &
+				//'for p in ps { t += p.n; } return t;', .true.) == '9', &
 
 			! A module's fns, its variables, and its own imports.  Its init code runs
 			! where it is imported
@@ -9771,10 +9787,12 @@ subroutine unit_test_transpile(npass, nfail)
 				EC_TRANSPILE_UNSUPPORTED), &
 			diag_count_code(get_diags_transpile_file(P//'E115-transpile-unsupported.syntran'), &
 				EC_TRANSPILE_UNSUPPORTED) == 4, &
-			diag_has_code(get_diags_transpile_file(T//'struct/test-01.syntran'), &
+			diag_has_code(get_diags_transpile_file(T//'io/test-01.syntran'), &
 				EC_TRANSPILE_UNSUPPORTED), &
-			diag_has_code(get_diags_transpile_file(T//'modules/boxuser.syntran'), &
-				EC_TRANSPILE_UNSUPPORTED), &
+
+			! ... and structs and modules, which are supported, are not
+			transpiles_ok(T//'struct/test-01.syntran'), &
+			transpiles_ok(T//'modules/boxuser.syntran'), &
 
 			! ... but a transpile-only diagnostic isn't an error when evaluating
 			.not. diag_has_code(get_diags_file(P//'E115-transpile-unsupported.syntran'), &

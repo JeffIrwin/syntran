@@ -782,6 +782,13 @@ recursive module subroutine parse_for_statement(parser, statement)
 			! mismatch check, which requires enum_name/enum_cookie to be set
 			if (allocated(array%val%enum_name)) dummy%enum_name = array%val%enum_name
 			if (allocated(array%val%enum_cookie)) dummy%enum_cookie = array%val%enum_cookie
+		else if (dummy%type == struct_type) then
+			! Likewise for the identity of a struct, which the Fortran backend needs
+			! to know the type of the loop var
+			if (allocated(array%val%struct_name)) dummy%struct_name = array%val%struct_name
+			if (allocated(array%val%struct_cookie)) &
+				dummy%struct_cookie = array%val%struct_cookie
+			dummy%struct_reg_idx = array%val%struct_reg_idx
 		end if
 		if (parser%is_loc) then
 			call parser%locs%insert(identifier%text, dummy, statement%id_index)

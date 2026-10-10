@@ -46,6 +46,11 @@ This is a subset of the language so far:
 - Subscripts and slices, including steps, omitted bounds, and vector subscripts
 - Functions, including recursion, arrays as parameters and return values, and
   parameters passed by reference with `&` or `&const`
+- Structs: declarations, instances, members that are scalars, strings, arrays,
+  enums, or other structs, assignment of members and of elements of array
+  members (including compound assignment), arrays of structs, passing and
+  returning structs, and printing.  Methods, const methods, and implicit access
+  of the members of `self`
 - Enums: declarations (with explicit values and aliases), `Suit.Hearts`, the
   casts `i32(Suit.Hearts)` and `Suit(2)`, comparison, printing, arrays of
   enums, a bare enum name as in `for v in Suit`, and `switch` on an enum
@@ -65,7 +70,6 @@ Programs which use these are rejected with
 [E115](errors.md#e115----transpile-unsupported), pointing at each statement
 which isn't supported.  Run them with the interpreter instead.
 
-- Structs and methods, including in a module
 - Function pointers
 - File I/O: `open`, `readln`, `writeln`, `eof`, `close`
 - `std::` functions and variables, including `std::args()`
