@@ -158,7 +158,8 @@ module syntran__transpile_m
 		type(enums_t), pointer :: enums => null()
 
 		! Struct table.  A struct is a Fortran derived type, whose members are
-		! components named by the index that the parser gave each of them
+		! components with their own names, or `m<id>` (the index that the parser
+		! gave the member) for one whose name clashes.  See member_fname()
 		type(structs_t), pointer :: structs => null()
 
 		! Definitions of the derived types, which come before the module's

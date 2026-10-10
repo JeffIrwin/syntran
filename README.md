@@ -363,9 +363,11 @@ gfortran -O3 fib.f90 -o fib
 ```
 <!-- syntran-end -->
 
-Most programs which only use numbers, strings, arrays, and functions are
-supported so far.  See [doc/transpile.md](doc/transpile.md) for what is, and for
-how the generated program differs from interpreting.
+Most of the language is supported, including structs, enums, modules, `switch`,
+file I/O, and function pointers.  The interpreter's call stack
+(`std::caller()` and friends) is not.  See [doc/transpile.md](doc/transpile.md)
+for what is supported, and for how the generated program differs from
+interpreting.
 
 ### Other command-line arguments
 

@@ -290,6 +290,18 @@ function parse_args() result(args)
 		error = .true.
 	end if
 
+	! `syntran -t a.syntran a.syntran` would replace the program with its translation
+	if (args%transpile .and. args%syntran_file_arg .and. .not. args%help .and. &
+		.not. args%version) then
+		if (allocated(args%transpile_out) .and. allocated(args%syntran_file)) then
+			if (args%transpile_out == args%syntran_file) then
+				write(*,*) err_prefix//"--transpile output file `"//args%transpile_out// &
+					"` is also the input file"
+				error = .true.
+			end if
+		end if
+	end if
+
 	! Both of them mean not running the program, so one would silently win
 	if (args%transpile .and. args%syntax_only .and. .not. args%help .and. &
 		.not. args%version) then

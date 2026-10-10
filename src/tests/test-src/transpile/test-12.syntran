@@ -239,5 +239,14 @@ println("");
 println("it's ", "x");
 println(1, 2.5, true, [1, 2], "x" + "y");
 
+//==============================================================================
+// Subnormal literals must not be flushed to zero by the Fortran compiler
+
+let tiny32 = 1.0e-45'f32;
+let tiny64 = 1.0e-320;
+status += check(tiny32 > 0.0'f32);
+status += check(tiny64 > 0.0);
+status += check(tiny32 * 2.0'f32 > tiny32);
+
 println(status);
 return status;

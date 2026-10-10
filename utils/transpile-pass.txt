@@ -10,6 +10,7 @@ samples/arrays.syntran
 samples/base64.syntran
 samples/bin-search.syntran
 samples/blocks.syntran
+samples/bridge/bridge.syntran
 samples/bridge/utils.syntran
 samples/dict_i64_fn.syntran
 samples/else-if.syntran
@@ -99,6 +100,7 @@ src/tests/test-src/enum/test-05.syntran
 src/tests/test-src/enum/test-06.syntran
 src/tests/test-src/enum/test-07.syntran
 src/tests/test-src/enum/test-08.syntran
+src/tests/test-src/enum/test-09.syntran
 src/tests/test-src/explorer/arrays.syntran
 src/tests/test-src/explorer/fn.syntran
 src/tests/test-src/explorer/for.syntran
@@ -187,10 +189,18 @@ src/tests/test-src/include/test-03-inc.syntran
 src/tests/test-src/include/test-03-nest.syntran
 src/tests/test-src/include/test-03.syntran
 src/tests/test-src/include/test-04.syntran
+src/tests/test-src/io/test-01.syntran
+src/tests/test-src/io/test-02.syntran
+src/tests/test-src/io/test-03.syntran
+src/tests/test-src/io/test-04.syntran
+src/tests/test-src/io/test-05.syntran
+src/tests/test-src/io/test-06.syntran
 src/tests/test-src/io/test-07.syntran
 src/tests/test-src/io/test-08.syntran
 src/tests/test-src/io/test-09.syntran
 src/tests/test-src/io/test-10.syntran
+src/tests/test-src/io/test-11.syntran
+src/tests/test-src/io/test-12.syntran
 src/tests/test-src/linear-algebra/test-01.syntran
 src/tests/test-src/linear-algebra/test-02.syntran
 src/tests/test-src/linear-algebra/test-03.syntran

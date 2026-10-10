@@ -94,13 +94,21 @@ things are different:
   operands of `and` and `or` are, is up to the Fortran compiler.  It only
   matters if the operands are function calls with side effects, like printing.
 - Overflow of integers is whatever the compiler does, usually wrapping around.
+- Dividing by zero in a constant expression is an error when compiling, like
+  `1.0 / 0.0`, `1 / 0`, or `5 % 0`, where the interpreter gives infinity, 0, or
+  5.  gfortran accepts the real one if you compile with `-fno-range-check`, but
+  not the integer ones.  With a variable as the divisor it's up to the compiler
+  and the machine at run time.
 - Floating point results can differ in the last digits if you compile with
   options like `-Ofast` or `-ffast-math`.  So can calls of math functions with
   constant arguments, which a compiler may evaluate itself when compiling.
 - File I/O errors, like opening a file that doesn't exist, stop the program with
   a Fortran runtime error that has its own message.  `std::args()` is all of
   the command line arguments of the compiled program, while the interpreter's
-  are those after `--`.
+  are those after `--`.  Arguments after `--` given to `syntran --transpile` are
+  ignored, so pass them to the compiled program instead.  Likewise `--cd` has no
+  effect on the generated program, whose relative file paths are resolved
+  against the directory that it is run from.
 - A function that doesn't return a value on some path isn't detected at run
   time.
 - The `Exiting syntran with status` message of `exit()` is never colored.

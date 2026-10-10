@@ -31,14 +31,11 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
-	!  - long syntran rt comment should be stripped out of top of generated
-	!    fortran. it's ok to stay somewhere but it shouldn't be the first thing
-	!    users see generated
-	!  - "note syntran's ** is left-associative: 64, unlike Fortran's 512, so
-	!    those parentheses must stay"
-	!    * is claude saying i did math wrong? op precedence should probably be
-	!      the same as fortran unless this is genuinely non-standard across
-	!      languages
+	!  - Two pre-existing interpreter bugs turned up while probing, both
+	!    reproduced on the old binary. They are not part of this PR; you may
+	!    want issues for them:
+	!    * pts = [pts, [p]] with an array of structs → Internal syntran error[I2]
+	!    * f(&h, &h) with & and &const params → SIGSEGV
 	!  - api documentation
 	!    * the readme does not mention the eval*() functions and how to call
 	!      them from a simple fortran program

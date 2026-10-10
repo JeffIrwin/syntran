@@ -41,6 +41,11 @@
 # Defaults:
 #   syntran_binary   = build/v1/bin/syntran     (see: fpm install --prefix ./build/v1/)
 #   fortran_compiler = gfortran, honoring $FC
+#   $FFLAGS          = -fcheck=all -w, or -check all -w for ifx and ifort.  Set
+#                      it, even to empty, to use other options for compiling
+#
+# Tests run from the repo root, like test.f90 does.  One that can't open a file
+# there is run from its own directory, with `--cd`, instead
 #
 # Exit status is nonzero if anything FAILs or a required file doesn't PASS.
 
@@ -66,11 +71,11 @@ with_timeout() {
 #===============================================================================
 # Worker: test one file, and write the verdict to "$base.result".  This runs in
 # a subprocess of the driver below, several at once.  The environment has CUR,
-# REF, FC, and VERBOSE
+# REF, FC, FFLAGS, and VERBOSE
 
 run_one() {
 	local f="$1" base="$2"
-	local dir exp_status out_status
+	local dir exp_status out_status rundir
 	dir="$(dirname "$f")"
 
 	# Transpile.  Both unsupported constructs and an invalid program are
@@ -81,6 +86,13 @@ run_one() {
 			| sed -e 's/^E115\]: //' -e 's/ is not supported by.*$//' > "$base.reasons"
 		if [ -s "$base.reasons" ]; then
 			echo "SKIP unsupported" > "$base.result"
+		elif "$REF" --color off --cd -s "$f" > "$base.syn.log" 2>&1 < /dev/null; then
+			# The syntax check accepts it, so the transpiler should have too.
+			# This is a crash or a spurious diagnostic
+			{
+				echo "FAIL (transpiler rejected a valid program): $f"
+				[ "$VERBOSE" -eq 1 ] && head -20 "$base.tp.log" | cut -c1-200
+			} > "$base.result"
 		else
 			# Some other diagnostic, i.e. a program that's invalid.  That's
 			# expected for some tests
@@ -91,8 +103,19 @@ run_one() {
 
 	# The interpreter's result.  Its banner and "Interpreting file" line are
 	# the first 5 lines of stdout
-	with_timeout "$REF" --color off --cd "$f" > "$base.exp.raw" 2> "$base.exp.err" < /dev/null
+	#
+	# A test runs from the repo root, like test.f90 does it, because some of them
+	# write to paths like build/test-01.txt.  One that can't open a path from
+	# there is run again from its own directory with `--cd`, for those that read
+	# files next to themselves
+	rundir="$ROOT"
+	with_timeout "$REF" --color off "$f" > "$base.exp.raw" 2> "$base.exp.err" < /dev/null
 	exp_status=$?
+	if grep -q 'Runtime error\[R8\]' "$base.exp.raw" "$base.exp.err" 2> /dev/null; then
+		rundir="$dir"
+		with_timeout "$REF" --color off --cd "$f" > "$base.exp.raw" 2> "$base.exp.err" < /dev/null
+		exp_status=$?
+	fi
 	tail -n +6 "$base.exp.raw" > "$base.exp"
 
 	if grep -q 'Runtime error' "$base.exp.raw" "$base.exp.err" 2> /dev/null \
@@ -105,7 +128,8 @@ run_one() {
 	# directory, so each file gets its own for them to not clash when running
 	# several at once
 	mkdir -p "$base.d"
-	if ! (cd "$base.d" && "$FC" -fcheck=all -w -o "$base.exe" "$base.f90") > "$base.fc.log" 2>&1; then
+	# shellcheck disable=SC2086  # FFLAGS is several words
+	if ! (cd "$base.d" && "$FC" $FFLAGS -o "$base.exe" "$base.f90") > "$base.fc.log" 2>&1; then
 		{
 			echo "FAIL (does not compile): $f"
 			[ "$VERBOSE" -eq 1 ] && head -20 "$base.fc.log"
@@ -113,8 +137,8 @@ run_one() {
 		return
 	fi
 
-	# Run in the source's own directory, like `--cd` does for the interpreter
-	(cd "$dir" && with_timeout "$base.exe" > "$base.out" 2> "$base.err" < /dev/null)
+	# Run where the interpreter did
+	(cd "$rundir" && with_timeout "$base.exe" > "$base.out" 2> "$base.err" < /dev/null)
 	out_status=$?
 
 	if [ "$out_status" -ne "$exp_status" ] || ! cmp -s "$base.out" "$base.exp"; then
@@ -158,6 +182,11 @@ done
 
 CUR="${positional[0]:-build/v1/bin/syntran}"
 FC="${positional[1]:-${FC:-gfortran}}"
+case "$(basename "$FC")" in
+	ifx*|ifort*) default_fflags="-check all -w" ;;
+	*)           default_fflags="-fcheck=all -w" ;;
+esac
+FFLAGS="${FFLAGS-$default_fflags}"
 PASS_LIST="utils/transpile-pass.txt"
 REF="${ref:-$CUR}"
 
@@ -212,7 +241,7 @@ fi
 
 # Test each file in a subprocess, `jobs` at a time.  A file's working files are
 # all named "$TMP/t<index>.*"
-export CUR REF FC VERBOSE
+export CUR REF FC FFLAGS ROOT VERBOSE
 # (No path in the repo has a space in it)
 echo "$files" | awk -v tmp="$TMP" 'NF { print $0; print tmp "/t" NR }' \
 	| xargs -n 2 -P "$jobs" bash "${BASH_SOURCE[0]}" --worker

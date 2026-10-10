@@ -1294,10 +1294,20 @@ function emit_literal(em, node) result(s)
 			end if
 
 		case (f32_type)
-			s = float_lit(node)//'_real32'
+			if (val%sca%f32 /= 0 .and. abs(val%sca%f32) < tiny(val%sca%f32)) then
+				! A subnormal, which a compiler may flush to zero when it reads the
+				! decimal text, so write its exact bits
+				s = 'transfer('//str(transfer(val%sca%f32, 0_int32))//', 0.0_real32)'
+			else
+				s = float_lit(node)//'_real32'
+			end if
 
 		case (f64_type)
-			s = float_lit(node)//'_real64'
+			if (val%sca%f64 /= 0 .and. abs(val%sca%f64) < tiny(val%sca%f64)) then
+				s = 'transfer('//str(transfer(val%sca%f64, 0_int64))//'_int64, 0.0_real64)'
+			else
+				s = float_lit(node)//'_real64'
+			end if
 
 		case (bool_type)
 			if (val%sca%bool) then

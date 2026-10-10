@@ -203,10 +203,12 @@ compiles themselves.  User docs are in `doc/transpile.md`.
   because it ends up in users' programs, and keep lines under 100 chars
 - Diagnostic `E115` is reported for constructs that aren't supported yet
 
-Variables are emitted as `<name>_g<id>`/`<name>_l<id>` using the parser's unique
-slot ids, so syntran's block scopes and shadowing never need to be mirrored in
-Fortran.  The emitter reads types from `node%val`, and fn signatures from
-`state%fns`, since a `fn_declaration` node only has slots.
+A variable keeps its own name, unless it shadows another or could clash with a
+Fortran intrinsic or a name that the emitter makes up.  Those are emitted as
+`<name>_g<id>`/`<name>_l<id>` using the parser's unique slot ids, so syntran's
+block scopes and shadowing never need to be mirrored in Fortran (see
+`collect_names()` and `bare_ok()`).  The emitter reads types from `node%val`, and
+fn signatures from `state%fns`, since a `fn_declaration` node only has slots.
 
 ### Math Operations (auto-generated)
 Binary arithmetic operations are generated from `src/math_bin_template.f90` via `src/gen_math.sh`:
