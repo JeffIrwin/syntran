@@ -224,7 +224,7 @@ subroutine repl_help_fns(state, ou)
 	if (len(fn_line) > len(tab)) write(ou, "(a)") fn_line
 
 	write(ou, *)
-	write(ou, "(a)") "See doc/README.md for signatures."
+	write(ou, "(a)") "See doc/intrinsics.md for signatures."
 
 end subroutine repl_help_fns
 

@@ -937,9 +937,9 @@ Runtime error[R33]: subscript 5 is out of bounds for size 5
 ```
 
 To get the same call-chain info on demand, without throwing an error, call
-[`std::print_trace()`](README.md#print_trace) (prints to stdout) or
-[`std::stack_trace()`](README.md#stack_trace) (returns it as a `str`), or get
-just one frame's label with [`std::caller()`](README.md#caller).
+[`std::print_trace()`](intrinsics.md#print_trace) (prints to stdout) or
+[`std::stack_trace()`](intrinsics.md#stack_trace) (returns it as a `str`), or get
+just one frame's label with [`std::caller()`](intrinsics.md#caller).
 
 ### R1 -- matmul-dim
 

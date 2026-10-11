@@ -505,10 +505,12 @@ module syntran__core_m
 	!    * could have syntactic sugar like `dict["key"] = val`
 	!    * would perform better than syntran-implemented dicts
 	!    * how to handle many permutations of key/val types? templates?
-	!  - split doc into multiple README's, add TOC, cross-linking, etc.  Only
-	!    include quick-start and links in top-level README?
-	!    * github automatically includes a Table of Contents in a menu, so maybe
-	!      it's better as-is
+	!  - split doc into multiple README's, add TOC, cross-linking, etc.
+	!    * done: doc/README.md is a TOC for the pages in doc/, and the
+	!      intrinsic fns have their own page, doc/intrinsics.md
+	!    * open: only include quick-start and links in top-level README?
+	!      github automatically includes a Table of Contents in a menu, so
+	!      maybe it's better as-is
 	!  - switch/case follow-ups (mvp done):
 	!    * switch as an expression (like rust's match)
 	!    * beyond simple ranges:

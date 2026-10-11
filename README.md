@@ -288,7 +288,7 @@ Larger integer literals outside the `i32` range are automatically inferred as
 - the literal `-3000000000` is of type `i64`
 
 Small literals can be explicitly cast up to `i64` either by using a type suffix
-or by using the [`i64()` function](doc/README.md#i64):
+or by using the [`i64()` function](doc/intrinsics.md#i64):
 - `42'i64` is of type `i64`
 - `i64(42)` is a function call with a literal argument `42` of type `i32`, and
   the function returns type `i64`
@@ -1220,6 +1220,40 @@ v1[size(v1,0)-1: -1: -1];
 ```
 <!-- syntran-end -->
 
+Either bound of a range may be omitted.  With a single colon, an omitted lower
+bound defaults to `0` and an omitted upper bound defaults to the size of the
+array:
+<!-- syntran-begin mode=repl group=array-slice -->
+```rust
+v1[2:];
+// [4, 6, 8]
+v1[:3];
+// [0, 2, 4]
+```
+<!-- syntran-end -->
+
+With a step, the default for an omitted bound depends on the **sign of the
+step**:
+
+| Omitted bound | Step > 0 | Step < 0   |
+|---------------|----------|------------|
+| `lower`       | `0`      | `size - 1` |
+| `upper`       | `size`   | `-1`       |
+
+<!-- syntran-begin mode=repl group=array-slice -->
+```rust
+v1[:-1:];
+// [8, 6, 4, 2, 0]
+v1[3:-1:];
+// [6, 4, 2, 0]
+```
+<!-- syntran-end -->
+
+Note that the step comes **second**, between the two colons, unlike Python's
+`lower:upper:step`.  The step cannot be omitted when there are two colons, so
+`v1[1::4]` is a parse error.  Negative indices counting from the end of an
+array, like Python's `v1[-1]`, are deliberately not supported.
+
 Arbitrary elements of an array with non-uniform steps can be extracted by using
 another rank-1 array (i.e. vector) as a subscript:
 <!-- syntran-begin mode=repl group=array-slice -->
@@ -1248,6 +1282,10 @@ v1[indices];
 [0, 2, 4, 6, 8]
 [0, 4, 8]
 [8, 6, 4, 2, 0]
+[4, 6, 8]
+[0, 2, 4]
+[8, 6, 4, 2, 0]
+[6, 4, 2, 0]
 [0, 2, 6]
 [0, 1, 3]
 [0, 2, 6]
@@ -1408,7 +1446,7 @@ mat_slice = [
 
 ## Functions
 
-This section is about user-defined functions.  [See this page](doc/) for a list of intrinsic syntran functions.
+This section is about user-defined functions.  [See this page](doc/intrinsics.md) for a list of intrinsic syntran functions.
 
 Use the `fn` keyword to declare a function, as in Rust.  Unlike Rust, use a colon `:` before the return type instead of `->`:
 
@@ -1887,9 +1925,7 @@ l
 -->
 <!-- syntran-end -->
 
-<!-- TODO: not TBD anymore! -->
-Slice indexing for substrings of length > 1 is TBD.
-To slice a substring, use a range:
+To slice a substring, use a range, as with an array slice:
 <!-- syntran-begin mode=repl group=str-slice -->
 ```rust
 let string4 = "01234567";
@@ -1905,7 +1941,45 @@ string4[3:6];
 -->
 <!-- syntran-end -->
 
-The intrinsic function [`str()`](doc/README.md#str) converts other types to `str` and concatenates them:
+As with arrays, either bound of a string slice may be omitted:
+<!-- syntran-begin mode=repl group=str-slice-omit -->
+```rust
+let string5 = "hello";
+string5[3:];
+// lo
+string5[:3];
+// hel
+```
+<!-- syntran-expect
+hello
+lo
+hel
+-->
+<!-- syntran-end -->
+
+Strings support the comparison operators `==`, `!=`, `<`, `<=`, `>`, and `>=`.
+Ordering is lexicographic (dictionary order) and length-aware:  two strings of
+different lengths are never padded before comparing, so a string that is a
+strict prefix of another always sorts before it.  All six comparisons also work
+elementwise on string arrays:
+
+<!-- syntran-begin mode=repl group=str-compare -->
+```rust
+"a" < "a ";
+// true
+"ab" < "abc";
+// true
+["a", "b"] < ["b", "b"];
+// [true, false]
+```
+<!-- syntran-expect
+true
+true
+[true, false]
+-->
+<!-- syntran-end -->
+
+The intrinsic function [`str()`](doc/intrinsics.md#str) converts other types to `str` and concatenates them:
 
 <!-- syntran-begin mode=repl group=str-str-fn -->
 ```rust
@@ -1919,7 +1993,7 @@ testing 1 2     1.000000000000000E+00    false
 
 Integers and bools are stringified without padding, so separate them with `" "` if that's what you want.
 
-Use [`println()`](doc/README.md#println) to print to stdout:
+Use [`println()`](doc/intrinsics.md#println) to print to stdout:
 
 <!-- syntran-begin mode=repl group=str-println -->
 ```rust
@@ -1931,7 +2005,7 @@ hello world
 -->
 <!-- syntran-end -->
 
-Use [`open()`](doc/README.md#open), [`writeln()`](doc/README.md#writeln), and [`close()`](doc/README.md#close) to write to a file:
+Use [`open()`](doc/intrinsics.md#open), [`writeln()`](doc/intrinsics.md#writeln), and [`close()`](doc/intrinsics.md#close) to write to a file:
 
 <!-- syntran-begin mode=file group=file-io -->
 ```rust

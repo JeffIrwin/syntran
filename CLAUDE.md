@@ -245,7 +245,8 @@ Module paths in `use` statements are resolved relative to the current source fil
 - `src/tests/test-src/` - Syntran script unit test files by category
 - `src/tests/long/aoc/` - Longer integration tests
 - `samples/` - Example syntran programs (not tested in CI)
-- `doc/README.md` - Intrinsic function documentation
+- `doc/README.md` - Table of contents for the other doc pages
+- `doc/intrinsics.md` - Intrinsic function documentation
 
 New features and bug fixes should have unit tests.
 Short syntran program strings can be evaluated directly in `test.f90`.

@@ -5961,7 +5961,7 @@ subroutine unit_test_struct_str(npass, nfail)
 	! scalars (`'f32`/`'i64`) -- so that print output can be pasted back in
 	! as valid syntran source.  This is only a separate test group from other
 	! struct tests for historical reasons (it used to be flagged as subject
-	! to change); see doc/README.md's struct printing section
+	! to change)
 
 	tests = &
 		[   &
