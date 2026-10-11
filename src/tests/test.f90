@@ -8952,11 +8952,25 @@ subroutine unit_test_runtime_errors(npass, nfail)
 			diag_has_code(get_diags( &
 				'let v = ["hello","world"]; v[:, 1:3] = "X";'), &
 				RC_ARRAY_SIZE_MISMATCH), &
+			! The same on a struct member (str_char_assign), for both a str
+			! member and an element of a [str; :] member
+			diag_has_code(get_diags( &
+				'struct S{s: str} let x = S{s = "hello"}; x.s[1:3] = "xyz";'), &
+				RC_ARRAY_SIZE_MISMATCH), &
+			diag_has_code(get_diags( &
+				'struct S{s: str} let x = S{s = "hello"}; x.s[1:3] = "A";'), &
+				RC_ARRAY_SIZE_MISMATCH), &
+			diag_has_code(get_diags( &
+				'struct S{v: [str; :]} let x = S{v = ["hello","world"]}; x.v[0, 1:3] = "XYZ";'), &
+				RC_ARRAY_SIZE_MISMATCH), &
 			! Exact-length substring RHS stays legal
 			diag_count_code(get_diags('let s = "hello"; s[1:3] = "XY";'), &
 				RC_ARRAY_SIZE_MISMATCH) == 0, &
 			diag_count_code(get_diags( &
 				'let v = ["hello","world"]; v[:, 1:3] = "XY";'), &
+				RC_ARRAY_SIZE_MISMATCH) == 0, &
+			diag_count_code(get_diags( &
+				'struct S{s: str} let x = S{s = "hello"}; x.s[1:3] = "XY";'), &
 				RC_ARRAY_SIZE_MISMATCH) == 0, &
 
 			! R21, index-array (arr_sub) character subscripts: a scatter

@@ -58,6 +58,7 @@ module syntran__core_m
 	!      introducing edge cases like unterminated pre-processor breaking
 	!      comments
 	!    * eventually (long away) shoot for a full syntran compiler using LLVM
+	!      + maybe a good fable task
 	!      + claude estimates compiler would be 3x more code than transpiler
 	!      + initial transpiler pr is about 15 kloc code
 	!      + considering claude did the transpiler in one day, a full compiler

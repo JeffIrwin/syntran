@@ -425,6 +425,14 @@ module subroutine str_char_assign(s, node, state, isub, rhs, slots)
 	call str_slice_bounds(node, isub, int(len(s), 8), state, il, iu, step, slots)
 	if (state%rt_halt) return
 
+	! The RHS string must exactly fill the selected window: a fixed-width
+	! character slice can't grow or shrink the string
+	if (int(len(rhs), 8) /= slice_len(il, step, iu)) then
+		call rt_throw(state, err_rt(RC_ARRAY_SIZE_MISMATCH, &
+			"size of RHS does not match size of LHS slice"))
+		return
+	end if
+
 	i8 = il
 	j8 = 1
 	do while ((step > 0 .and. i8 < iu) .or. (step < 0 .and. i8 > iu))
