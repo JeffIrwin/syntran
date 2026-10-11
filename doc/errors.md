@@ -716,6 +716,21 @@ See [transpile.md](transpile.md) for what is supported.
 
 [Example](../src/tests/test-src/errors/E115-transpile-unsupported.syntran)
 
+### E116 -- ref-alias
+
+The same variable is passed to a fn by a mutable `&` reference and by another
+reference too, e.g. `f(&h, &h)`, or `f(&h, h)` when the second parameter is
+`&const`.  This also applies to a method's receiver, which is a mutable
+reference to `self` unless the method is `const`, so `s.add(s)` is an error when
+`add` takes a `&const S`.  The two references would be live at once, and a call
+can't give out a mutable reference and anything else to the same variable.
+
+Several `&const` references to one variable are fine, e.g. `dot(v, v)`.  So is
+passing a mutable reference and the same variable by value, because the value is
+a copy.  To fix the error, copy the variable first: `let t = h; f(&h, t);`
+
+[Example](../src/tests/test-src/errors/E116-ref-alias.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type

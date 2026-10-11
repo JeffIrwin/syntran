@@ -493,7 +493,7 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 	!********
 
 	integer :: i, j, k
-	integer(kind = 8) :: i8, j8
+	integer(kind = 8) :: i8, j8, n_elems8
 
 	logical :: is_cat
 
@@ -938,10 +938,27 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 
 		!print *, "elem 1 type = ", kind_name(node%elems(1)%val%type)
 
-		call allocate_array(res, size(node%elems, kind = 8))
+		! Struct and enum elements are stored in res%struct(:), which can't be
+		! pushed to, so the concatenated length must be known up front.  Each
+		! array element contributes all of its elements and every other element
+		! contributes one
+		n_elems8 = size(node%elems, kind = 8)
+		if (any(res%array%type == [struct_type, enum_type])) then
+			n_elems8 = 0
+			do i = 1, size(node%elems)
+				if (slots(k + i)%type == array_type) then
+					n_elems8 = n_elems8 + slots(k + i)%array%len_
+				else
+					n_elems8 = n_elems8 + 1
+				end if
+			end do
+		end if
+
+		call allocate_array(res, n_elems8)
 
 		res%array%len_ = 0
 		is_cat = .false.
+		i8 = 0
 
 		do i = 1, size(node%elems)
 			k = k + 1; elem = slots(k)
@@ -949,7 +966,18 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 			!print *, 'elem['//str(i)//'] = ', elem%to_str()
 
 			if (any(res%array%type == [struct_type, enum_type])) then
-				res%struct(i) = elem
+				if (elem%type == array_type) then
+					! Concatenate a struct/enum array, like the primitive branch
+					! below.  Assign one element at a time so that value_copy()
+					! deep copies each one
+					do j8 = 1, elem%array%len_
+						i8 = i8 + 1
+						res%struct(i8) = elem%struct(j8)
+					end do
+				else
+					i8 = i8 + 1
+					res%struct(i8) = elem
+				end if
 
 			else if (elem%type == array_type) then
 				is_cat = .true.
@@ -972,7 +1000,7 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 		end if
 
 		if (any(res%array%type == [struct_type, enum_type])) then
-			res%array%len_ = size(node%elems)
+			res%array%len_ = n_elems8
 		end if
 
 		res%array%rank = 1

@@ -5877,6 +5877,52 @@ subroutine unit_test_struct_arr3(npass, nfail)
 				//'return s.v[4:2:3];' &
 				, quiet) == '[]', &
 			eval('let a = [10,11,12,13,14,15]; return a[4:2:3];', quiet) == '[]', &
+
+			! Regression: array literals of struct (or enum) arrays are
+			! concatenated like primitive arrays.  They used to build a nested
+			! array instead, with the same length as the number of elements,
+			! so e.g. `pts = [pts, [p]]` never grew and `pts[0]` printed as a
+			! struct wrapping a struct
+			eval('' &
+				//'struct P{x: i32}' &
+				//'let a = [P{x=1}, P{x=2}];' &
+				//'let b = [a, a];' &
+				//'return size(b, 0);' &
+				, quiet) == '4', &
+			eval('' &
+				//'struct P{x: i32}' &
+				//'let a = [P{x=1}, P{x=2}];' &
+				//'let b = [a, [P{x=3}], a];' &
+				//'return str(size(b, 0))+" "+str(b[2].x)+" "+str(b[4].x);' &
+				, quiet) == '5 3 2', &
+			eval('' &
+				//'struct P{x: i32}' &
+				//'let pts = [P{x=0}];' &
+				//'for i in [1: 4]' &
+				//'{ pts = [pts, [P{x=i}]]; }' &
+				//'return str(size(pts, 0))+" "+str(pts[0].x)+" "+str(pts[3].x);' &
+				, quiet) == '4 0 3', &
+			! An empty array is concatenated too, not just a one-element array
+			eval('' &
+				//'struct P{x: i32}' &
+				//'let e = [P{x=1}; 0];' &
+				//'let b = [e, [P{x=7}]];' &
+				//'return str(size(b, 0))+" "+str(b[0].x);' &
+				, quiet) == '1 7', &
+			! The elements are deep copies of the originals
+			eval('' &
+				//'struct P{x: [i32;:]}' &
+				//'let a = [P{x=[1,2]}];' &
+				//'let b = [a, a];' &
+				//'b[0].x[0] = 99;' &
+				//'return str(a[0].x[0])+" "+str(b[1].x[0])+" "+str(b[0].x[0]);' &
+				, quiet) == '1 1 99', &
+			eval('' &
+				//'enum C{R, G, B}' &
+				//'let a = [C.R, C.G];' &
+				//'let b = [a, [C.B], a];' &
+				//'return str(size(b, 0))+" "+str(b[2])+" "+str(b[4]);' &
+				, quiet) == '5 C.B C.G', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -6965,6 +7011,7 @@ subroutine unit_test_ref(npass, nfail)
 			interpret_file(path//'test-06.syntran', quiet) == '0', &
 			interpret_file(path//'test-07.syntran', quiet) == '0', &
 			interpret_file(path//'test-08.syntran', quiet) == '0', &
+			interpret_file(path//'test-09.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -8527,6 +8574,37 @@ subroutine unit_test_error_codes(npass, nfail)
 					'let x 4; let y = x + 1;'), &
 					EC_UNDECLARE_VAR), &
 
+				! E116: a mutable `&` ref can't alias another ref to the same
+				! variable, but `&const` refs can alias each other, and a
+				! mutable ref can be given the same variable by value
+				diag_count_code(get_diags( &
+					'fn f(a: &i32, b: &i32) { a = b; } let h = 1; f(&h, &h);'), &
+					EC_REF_ALIAS) == 1, &
+				diag_count_code(get_diags( &
+					'fn f(a: &i32, b: &const i32) { a = b; } let h = 1; f(&h, h);'), &
+					EC_REF_ALIAS) == 1, &
+				diag_count_code(get_diags( &
+					'fn f(a: &const i32, b: &i32) { b = a; } let h = 1; f(h, &h);'), &
+					EC_REF_ALIAS) == 1, &
+				diag_count_code(get_diags( &
+					'struct S{x: i32, fn add(o: &const S) { x += o.x; }} ' &
+					//'let s = S{x=1}; s.add(s);'), &
+					EC_REF_ALIAS) == 1, &
+				diag_count_code(get_diags( &
+					'struct S{x: i32, fn add(o: &const [S;:]) { x += o[0].x; }} ' &
+					//'let a = [S{x=1}]; a[0].add(a);'), &
+					EC_REF_ALIAS) == 1, &
+				.not. diag_has_code(get_diags( &
+					'fn f(a: &const i32, b: &const i32): i32 { return a + b; } ' &
+					//'let h = 1; let y = f(h, h);'), &
+					EC_REF_ALIAS), &
+				.not. diag_has_code(get_diags( &
+					'fn f(a: &i32, b: i32) { a = b; } let h = 1; f(&h, h);'), &
+					EC_REF_ALIAS), &
+				.not. diag_has_code(get_diags( &
+					'fn f(a: &i32, b: &i32) { a = b; } let h = 1; let k = 2; f(&h, &k);'), &
+					EC_REF_ALIAS), &
+
 				! Int/float assignment is rejected at parse time (E48).  This
 				! used to be marked by a "TODO: test int/float casting" note
 				! in runtime_control.f90's eval_assignment_expr, with no
@@ -9637,7 +9715,11 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_count_code(get_diags_file(P//'E114-missing-let-name.syntran'), &
 				EC_MISSING_LET_NAME) == 1, &
 			diag_loc_ok(get_diags_transpile_file(P//'E115-transpile-unsupported.syntran'), &
-				EC_TRANSPILE_UNSUPPORTED, P//'E115-transpile-unsupported.syntran', 9, 15, 6) &
+				EC_TRANSPILE_UNSUPPORTED, P//'E115-transpile-unsupported.syntran', 9, 15, 6), &
+			diag_loc_ok(get_diags_file(P//'E116-ref-alias.syntran'), &
+				EC_REF_ALIAS, P//'E116-ref-alias.syntran', 15, 11, 1), &
+			diag_count_code(get_diags_file(P//'E116-ref-alias.syntran'), &
+				EC_REF_ALIAS) == 1 &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

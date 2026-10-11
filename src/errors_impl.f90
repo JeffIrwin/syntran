@@ -317,6 +317,7 @@ module procedure get_all_error_codes
 	call codes%push(EC_MISSING_LET_EQUALS)
 	call codes%push(EC_MISSING_LET_NAME)
 	call codes%push(EC_TRANSPILE_UNSUPPORTED)
+	call codes%push(EC_REF_ALIAS)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -1174,6 +1175,21 @@ module procedure err_transpile_unsupported
 		//": run the program with the interpreter instead, i.e. without `--transpile`"
 
 end procedure err_transpile_unsupported
+
+
+!===============================================================================
+
+module procedure err_ref_alias
+
+	err = err_pre(EC_REF_ALIAS) &
+		//'variable `'//var//'` is passed to `'//fn//'` by `&` reference ' &
+		//'and also by another reference' &
+		//underline(context, span)//" aliased reference"//color_reset &
+		//line_feed//fg_bright_green//"help"//color_reset &
+		//": a mutable `&` reference can't alias another reference to the same " &
+		//"variable.  Copy it first, e.g. `let t = "//var//";`"
+
+end procedure err_ref_alias
 
 
 !===============================================================================

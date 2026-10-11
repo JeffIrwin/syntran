@@ -1529,6 +1529,10 @@ Only variable identifiers can be used as a reference.  Literals cannot be
 referenced, and array elements and struct members cannot currently be
 referenced.
 
+A variable can't be passed by a mutable `&` reference and by another reference
+in the same call, so `f(&x, &x)` is an error (E116).  This includes the receiver
+of a method call.  Copy the variable first if you need both: `let y = x; f(&x, y);`
+
 ### Function pointers (callbacks)
 
 A function's name, used without a trailing `(...)`, evaluates to a **function

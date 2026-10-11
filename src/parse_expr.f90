@@ -1212,6 +1212,10 @@ module subroutine build_method_call_node(parser, node, receiver, &
 
 	integer :: i, method_i
 
+	logical, allocatable :: alias_mut(:)
+
+	type(text_span_t), allocatable :: alias_spans(:)
+
 	character(len = :), allocatable :: param_name
 
 	logical :: param_is_ref, param_is_const_ref
@@ -1296,6 +1300,30 @@ module subroutine build_method_call_node(parser, node, receiver, &
 	do method_i = 1, call_args%len_
 		node%is_ref(1 + method_i) = eff_is_ref(method_i)
 	end do
+
+	! The receiver is by-ref too, so it can't alias another ref arg (see
+	! check_ref_aliases).  It is mutable unless the method is `const`
+	if (allocated(method_fn%node)) then
+		allocate(alias_mut(1 + call_args%len_), alias_spans(1 + call_args%len_))
+
+		alias_mut  (1) = .true.
+		alias_spans(1) = new_span(identifier%pos, len(identifier%text))
+		if (allocated(method_fn%node%is_const_ref)) &
+			alias_mut(1) = .not. method_fn%node%is_const_ref(1)
+
+		do method_i = 1, call_args%len_
+			alias_mut(1 + method_i) = method_fn%node%is_ref(1 + method_i)
+			if (allocated(method_fn%node%is_const_ref)) then
+				if (method_fn%node%is_const_ref(1 + method_i)) &
+					alias_mut(1 + method_i) = .false.
+			end if
+			alias_spans(1 + method_i) = new_span(pos_args%v(method_i), &
+				pos_args%v(method_i+1) - pos_args%v(method_i) - 1)
+		end do
+
+		call check_ref_aliases(parser, node%args, node%is_ref, alias_mut, &
+			alias_spans, identifier%text)
+	end if
 
 	! node%body is *not* set here -- same reasoning as parse_fn_call() in
 	! parse_fn.f90: the body is looked up via id_index at eval/compile time,

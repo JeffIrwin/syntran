@@ -44,6 +44,9 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 	type(syntax_token_t) :: identifier_, comma, lparen, rparen, dummy, amp, self_token
 
 	type(text_span_t) :: span
+	type(text_span_t), allocatable :: alias_spans(:)
+
+	logical, allocatable :: alias_mut(:)
 
 	type(value_t) :: param_val, var_val, self_val, field_val
 
@@ -468,6 +471,8 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 
 	fn_call%is_ref = is_ref%v(1: is_ref%len_)
 
+	allocate(alias_mut(args%len_), alias_spans(args%len_))
+
 	allocate(param_val%array)
 	do i = 1, args%len_
 
@@ -501,6 +506,8 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 			identifier_%text, i - 1, param_val, param_name, &
 			param_is_ref, param_is_const_ref, eff_is_ref)
 		fn_call%is_ref(i) = eff_is_ref
+		alias_mut  (i) = param_is_ref .and. .not. param_is_const_ref
+		alias_spans(i) = span
 
 		! A bare enum name is a special form, only allowed as a value to a
 		! small allowlist of intrinsics that consume the array and return a
@@ -519,6 +526,9 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		end if
 
 	end do
+
+	call check_ref_aliases(parser, args%v(1: args%len_), fn_call%is_ref, &
+		alias_mut, alias_spans, identifier_%text)
 
 	fn_call%id_index = id_index
 
@@ -2551,6 +2561,72 @@ module subroutine check_call_arg(parser, arg, call_is_ref_i, arg_span, &
 	end if
 
 end subroutine check_call_arg
+
+!===============================================================================
+
+module subroutine check_ref_aliases(parser, args, is_ref, is_mut, spans, fn_name)
+
+	! Called after every arg of a call has been through check_call_arg().
+	! A by-ref arg is moved out of its variable for the duration of the call
+	! and written back on return, so two by-ref args which share a root variable
+	! can't both be live.  Passing the same variable by a mutable `&` ref and
+	! by another ref is an error.  Several `&const` refs to one variable are
+	! fine, and all but the first are passed by value (as a copy) instead
+	!
+	! The receiver of a method call is arg 1, and is by-ref even though it has
+	! no `&` marker.  Only a bare name or a member/subscript chain from one has
+	! a root variable.  A receiver or arg that is a fn call result is a
+	! temporary and can't alias anything
+
+	class(parser_t), intent(inout) :: parser
+	type(syntax_node_t), intent(in) :: args(:)
+	logical, intent(inout) :: is_ref(:)
+	logical, intent(in) :: is_mut(:)
+	type(text_span_t), intent(in) :: spans(:)
+	character(len = *), intent(in) :: fn_name
+
+	!********
+
+	integer :: i, j
+
+	do j = 2, size(args)
+		if (.not. has_ref_root(args(j), is_ref(j))) cycle
+
+		do i = 1, j - 1
+			if (.not. has_ref_root(args(i), is_ref(i))) cycle
+			if (args(i)%id_index /= args(j)%id_index) cycle
+			if (args(i)%is_loc .neqv. args(j)%is_loc) cycle
+
+			if (is_mut(i) .or. is_mut(j)) then
+				call parser%diagnostics%push(err_ref_alias( &
+					parser%context(), spans(j), args(j)%identifier%text, fn_name))
+			else
+				! All `&const`.  Reading the same variable through two const
+				! refs is harmless, but it can only be moved onto the call stack
+				! once, so pass this one as a copy
+				is_ref(j) = .false.
+			end if
+
+			! One diagnostic per arg is enough
+			exit
+		end do
+	end do
+
+contains
+
+logical function has_ref_root(arg, arg_is_ref)
+
+	type(syntax_node_t), intent(in) :: arg
+	logical, intent(in) :: arg_is_ref
+
+	has_ref_root = .false.
+	if (.not. arg_is_ref) return
+	if (arg%root_kind /= 0) return
+	has_ref_root = arg%kind == name_expr .or. arg%kind == dot_expr
+
+end function has_ref_root
+
+end subroutine check_ref_aliases
 
 !===============================================================================
 

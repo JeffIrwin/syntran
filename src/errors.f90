@@ -131,6 +131,7 @@ module syntran__errors_m
 		EC_MISSING_LET_EQUALS = "E113", &
 		EC_MISSING_LET_NAME = "E114", &
 		EC_TRANSPILE_UNSUPPORTED = "E115", &
+		EC_REF_ALIAS = "E116", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -767,6 +768,13 @@ module syntran__errors_m
 			character(len = :), allocatable :: err
 			character(len = *), intent(in) :: what
 		end function err_transpile_unsupported
+
+		module function err_ref_alias(context, span, var, fn) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+			character(len = *), intent(in) :: var, fn
+		end function err_ref_alias
 
 		module function err_not_callable(context, span, var, type) result(err)
 			type(text_context_t) :: context

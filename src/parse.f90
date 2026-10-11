@@ -240,6 +240,15 @@ module syntran__parse_m
 			logical(kind = 1), intent(out) :: eff_is_ref
 		end subroutine check_call_arg
 
+		module subroutine check_ref_aliases(parser, args, is_ref, is_mut, spans, fn_name)
+			class(parser_t), intent(inout) :: parser
+			type(syntax_node_t), intent(in) :: args(:)
+			logical, intent(inout) :: is_ref(:)
+			logical, intent(in) :: is_mut(:)
+			type(text_span_t), intent(in) :: spans(:)
+			character(len = *), intent(in) :: fn_name
+		end subroutine check_ref_aliases
+
 		! Shared by parse_dot (explicit `recv.method()`) and parse_fn_call's
 		! self-method fallback (bare `method()` inside another method of the
 		! same struct): validates explicit args against method_fn's signature
