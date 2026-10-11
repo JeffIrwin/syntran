@@ -900,7 +900,7 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 			end do
 		case default
 			write(*,*) err_int(IC_TRANSPOSE_ARRAY_TYPE, 'cannot transpose array of type `' &
-				//kind_name(args(1)%array%type)//'`')
+				//type_name_primitive(args(1)%array%type)//'`')
 			call internal_error()
 		end select
 

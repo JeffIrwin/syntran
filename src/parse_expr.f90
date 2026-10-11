@@ -667,7 +667,7 @@ recursive module subroutine parse_expr(parser, parent_prec, expr)
 			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
 				err_unary_types(parser%context(), span, op%text, &
-				kind_name(expr%right%val%type)))
+				type_name(expr%right%val)))
 
 		end if
 
@@ -705,8 +705,8 @@ recursive module subroutine parse_expr(parser, parent_prec, expr)
 			call parser%diagnostics%push( &
 				err_binary_types(parser%context(), &
 				span, op%text, &
-				kind_name(ltype), &
-				kind_name(rtype)))
+				type_name(expr%left%val), &
+				type_name(expr%right%val)))
 
 		end if
 

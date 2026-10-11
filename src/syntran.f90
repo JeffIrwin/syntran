@@ -488,8 +488,8 @@ subroutine syntran_eval_value(str_, val, quiet, want_type, src_file, chdir_, &
 	if (present(want_type)) then
 		if (val%type /= want_type) then
 			if (.not. state%quiet) write(*,*) err_prefix// &
-				'syntran_eval_value() expected type `'//kind_name(want_type)// &
-				'` but the expression has type `'//kind_name(val%type)//'`'//color_reset
+				'syntran_eval_value() expected type `'//type_name_primitive(want_type)// &
+				'` but the expression has type `'//type_name(val)//'`'//color_reset
 			if (present(io)) io = exit_failure
 			call state_destroy(state)
 			return

@@ -9666,6 +9666,24 @@ subroutine unit_test_error_locations(npass, nfail)
 				EC_BINARY_RANKS, P//'E49-binary-ranks.syntran', 6, 11, 1), &
 			diag_loc_ok(get_diags_file(P//'E50-unary-types.syntran'), &
 				EC_UNARY_TYPES, P//'E50-unary-types.syntran', 5, 9, 1), &
+			! Type diagnostics name types the way the user writes them, not by
+			! internal kind name like `array_type`/`str_type`
+			diag_has_text(get_diags('let a = [1,2]; let b = a * "x";'), &
+				'for types [i32; :] and str'), &
+			.not. diag_has_text(get_diags('let a = [1,2]; let b = a * "x";'), &
+				'array_type'), &
+			.not. diag_has_text(get_diags('let a = [1,2]; let b = a * "x";'), &
+				'str_type'), &
+			diag_has_text(get_diags('let s = -"x";'), 'for type str'), &
+			.not. diag_has_text(get_diags('let s = -"x";'), 'str_type'), &
+			diag_has_text(get_diags_file(P//'E107-bad-switch-type.syntran'), &
+				'has type Point, which cannot be matched'), &
+			diag_has_text(get_diags_file(P//'E108-bad-case-type.syntran'), &
+				'has type str, which cannot be compared to the switch subject''s type i32'), &
+			.not. diag_has_text(get_diags_file(P//'E108-bad-case-type.syntran'), &
+				'str_type'), &
+			diag_has_text(get_diags_file(P//'E110-bad-case-range-type.syntran'), &
+				'has type str, which cannot be ordered against the switch subject''s type i32'), &
 			diag_loc_ok(get_diags_file(P//'E51-non-array-loop.syntran'), &
 				EC_NON_ARRAY_LOOP, P//'E51-non-array-loop.syntran', 5, 10, 1), &
 			diag_loc_ok(get_diags_file(P//'E52-non-bool-condition.syntran'), &

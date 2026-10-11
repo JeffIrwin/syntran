@@ -63,11 +63,6 @@ module syntran__core_m
 	!      + initial transpiler pr is about 15 kloc code
 	!      + considering claude did the transpiler in one day, a full compiler
 	!        could still be very achievable
-	!  - error message improvements:
-	!    * "Error[E48]: binary operator `*` is not defined for types array_type
-	!      and str_type"
-	!    * replace "array_type", "str_type", etc. with something more readable
-	!    * claude recently did something similar with a different error message
 	!  - build option macro for NO_ISOCLINE?
 	!    * or NO_C, NO_REPL, or any other name
 	!    * api users might want eval-only with no repl on no requirement for c

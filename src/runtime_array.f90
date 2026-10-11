@@ -504,7 +504,7 @@ module subroutine allocate_array(val, cap)
 	call alloc_array_prim(val%array, cap, ok)
 	if (.not. ok) then
 		write(*,*) err_int(IC_ALLOC_ARRAY_TYPE, 'cannot allocate array of type `' &
-			//kind_name(val%array%type)//'`')
+			//type_name_primitive(val%array%type)//'`')
 		call internal_error()
 	end if
 

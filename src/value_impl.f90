@@ -858,12 +858,12 @@ module procedure value_to_f32
 
 			! There is no user-facing `f32()` fn (or `f64()`) yet anyway, unlike `i32()`
 			write(*,*) err_int(IC_CONVERT_F32, 'cannot convert from type `' &
-				//kind_name(val%type)//'` to f32.  Use `parse_f32()`')
+				//value_type_name(val)//'` to f32.  Use `parse_f32()`')
 			call internal_error()
 
 		case default
 			write(*,*) err_int(IC_CONVERT_F32, 'cannot convert from type `' &
-				//kind_name(val%type)//'` to f32 ')
+				//value_type_name(val)//'` to f32 ')
 			call internal_error()
 
 	end select
@@ -894,12 +894,12 @@ module procedure value_to_f64
 		case (str_type)
 
 			write(*,*) err_int(IC_CONVERT_F64, 'cannot convert from type `' &
-				//kind_name(val%type)//'` to f64.  Use `parse_f64()`')
+				//value_type_name(val)//'` to f64.  Use `parse_f64()`')
 			call internal_error()
 
 		case default
 			write(*,*) err_int(IC_CONVERT_F64, 'cannot convert from type `' &
-				//kind_name(val%type)//'` to f64 ')
+				//value_type_name(val)//'` to f64 ')
 			call internal_error()
 
 	end select
@@ -937,13 +937,13 @@ module procedure value_to_i32
 				ans = iachar(val%str%s)
 			else
 				write(*,*) err_int(IC_CONVERT_I32, 'cannot convert from type `' &
-					//kind_name(val%type)//'` to i32.  Use `parse_i32()`')
+					//value_type_name(val)//'` to i32.  Use `parse_i32()`')
 				call internal_error()
 			end if
 
 		case default
 			write(*,*) err_int(IC_CONVERT_I32, 'cannot convert from type `' &
-				//kind_name(val%type)//'` to i32 ')
+				//value_type_name(val)//'` to i32 ')
 			call internal_error()
 
 	end select
@@ -992,7 +992,7 @@ module procedure value_to_i32_array
 
 		case default
 			write(*,*) err_int(IC_CONVERT_I32_ARR, 'cannot convert from type `' &
-				//kind_name(val%type)//'` to i32 ')
+				//value_type_name(val)//'` to i32 ')
 			call internal_error()
 
 	end select
@@ -1022,7 +1022,7 @@ module procedure value_to_i64
 
 		case default
 			write(*,*) err_int(IC_CONVERT_I64, 'cannot convert from type `' &
-				//kind_name(val%type)//'` to i64.  Use `parse_i64()`')
+				//value_type_name(val)//'` to i64.  Use `parse_i64()`')
 			call internal_error()
 
 	end select
@@ -1059,7 +1059,7 @@ module procedure value_to_i64_array
 
 		case default
 			write(*,*) err_int(IC_CONVERT_I64_ARR, 'cannot convert from type `' &
-				//kind_name(val%type)//'` to i64 ')
+				//value_type_name(val)//'` to i64 ')
 			call internal_error()
 
 	end select
@@ -1091,7 +1091,7 @@ module procedure value_to_f32_array
 
 		case default
 			write(*,*) err_int(IC_CONVERT_F32_ARR, 'cannot convert from type `' &
-				//kind_name(val%type)//'` to f32 ')
+				//value_type_name(val)//'` to f32 ')
 			call internal_error()
 
 	end select
@@ -1123,7 +1123,7 @@ module procedure value_to_f64_array
 
 		case default
 			write(*,*) err_int(IC_CONVERT_F64_ARR, 'cannot convert from type `' &
-				//kind_name(val%type)//'` to f64 ')
+				//value_type_name(val)//'` to f64 ')
 			call internal_error()
 
 	end select
@@ -1515,6 +1515,9 @@ module procedure value_type_name
 		str_ = a%struct_name
 	else if (a%type == enum_type) then
 		str_ = a%enum_name
+	else if (a%type == array_type .and. .not. allocated(a%array)) then
+		! Array whose element type isn't resolved yet, e.g. on parse pass 0
+		str_ = "array"
 	else if (a%type == array_type) then
 
 		if (a%array%type == struct_type) then

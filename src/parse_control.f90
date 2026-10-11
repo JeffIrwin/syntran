@@ -904,7 +904,7 @@ end function at_case_body_start
 
 !===============================================================================
 
-subroutine check_case_range_bound(parser, subj_type, bound, beg, end_)
+subroutine check_case_range_bound(parser, subj_type, subj_val, bound, beg, end_)
 
 	! Shared type check for both ends of a `case lo:hi` range: the bound must
 	! be orderable against the switch subject with `<`, mirroring the
@@ -915,6 +915,7 @@ subroutine check_case_range_bound(parser, subj_type, bound, beg, end_)
 
 	class(parser_t) :: parser
 	integer, intent(in) :: subj_type, beg, end_
+	type(value_t), intent(in) :: subj_val
 	type(syntax_node_t), intent(in) :: bound
 
 	!********
@@ -942,14 +943,15 @@ subroutine check_case_range_bound(parser, subj_type, bound, beg, end_)
 		span = new_span(beg, end_ - beg + 1)
 		call parser%diagnostics%push(err_bad_case_range_type( &
 			parser%context(), span, parser%text(beg, end_), &
-			kind_name(bound_type), kind_name(subj_type)))
+			type_name(bound%val), type_name(subj_val)))
 	end if
 
 end subroutine check_case_range_bound
 
 !===============================================================================
 
-recursive subroutine parse_case_range(parser, subj_type, lo, lo_beg, lo_end, range)
+recursive subroutine parse_case_range(parser, subj_type, subj_val, lo, lo_beg, lo_end, &
+		range)
 
 	! Parse the `:hi` half of a `case lo:hi` range, given the already-parsed
 	! `lo` bound.  Half-open like every other `:` range in syntran (e.g.
@@ -962,6 +964,7 @@ recursive subroutine parse_case_range(parser, subj_type, lo, lo_beg, lo_end, ran
 
 	class(parser_t) :: parser
 	integer, intent(in) :: subj_type
+	type(value_t), intent(in) :: subj_val
 	type(syntax_node_t), intent(inout) :: lo
 	integer, intent(in) :: lo_beg, lo_end
 	type(syntax_node_t), intent(out) :: range
@@ -971,7 +974,7 @@ recursive subroutine parse_case_range(parser, subj_type, lo, lo_beg, lo_end, ran
 	integer :: hi_beg, hi_end
 	type(syntax_node_t) :: hi
 
-	call check_case_range_bound(parser, subj_type, lo, lo_beg, lo_end)
+	call check_case_range_bound(parser, subj_type, subj_val, lo, lo_beg, lo_end)
 
 	hi_beg = parser%peek_pos(0)
 	call parser%parse_expr(expr = hi)
@@ -980,9 +983,9 @@ recursive subroutine parse_case_range(parser, subj_type, lo, lo_beg, lo_end, ran
 	! An array subject makes both bounds unorderable for the same one reason,
 	! so it's reported on lo only
 	if (subj_type == array_type) then
-		call check_case_range_bound(parser, unknown_type, hi, hi_beg, hi_end)
+		call check_case_range_bound(parser, unknown_type, subj_val, hi, hi_beg, hi_end)
 	else
-		call check_case_range_bound(parser, subj_type, hi, hi_beg, hi_end)
+		call check_case_range_bound(parser, subj_type, subj_val, hi, hi_beg, hi_end)
 	end if
 
 	range%kind = case_range
@@ -1021,10 +1024,8 @@ recursive subroutine parse_case_clause(parser, subj_type, subj_val, clause)
 
 	!********
 
-	integer :: i, val_beg, val_end, val_type, cond_beg, cond_end, subj_arr, &
-		val_arr
+	integer :: i, val_beg, val_end, val_type, cond_beg, cond_end
 	logical :: is_op_allowed
-	character(len = :), allocatable :: val_name, subj_name
 
 	type(syntax_node_t)  :: val_tmp, range_tmp, guard, body
 	type(syntax_node_vector_t) :: vals
@@ -1054,8 +1055,8 @@ recursive subroutine parse_case_clause(parser, subj_type, subj_val, clause)
 
 			! `case lo:hi` range, e.g. `case 1:10`
 			call parser%match(colon_token, colon)
-			call parse_case_range(parser, subj_type, val_tmp, val_beg, val_end, &
-				range_tmp)
+			call parse_case_range(parser, subj_type, subj_val, val_tmp, val_beg, &
+				val_end, range_tmp)
 			call vals%push_move(range_tmp)
 
 		else
@@ -1067,14 +1068,6 @@ recursive subroutine parse_case_clause(parser, subj_type, subj_val, clause)
 				! or a case value depends on a fn declared later in the file
 				is_op_allowed = .true.
 			else
-				! Element types, for the diagnostic below
-				subj_arr = unknown_type
-				val_arr  = unknown_type
-				if (subj_type == array_type .and. allocated(subj_val%array)) &
-					subj_arr = subj_val%array%type
-				if (val_type == array_type .and. allocated(val_tmp%val%array)) &
-					val_arr = val_tmp%val%array%type
-
 				! Array vs scalar is never allowed here: an array subject only
 				! matches whole-array values, and vice versa
 				is_op_allowed = (subj_type == array_type) .eqv. &
@@ -1087,15 +1080,9 @@ recursive subroutine parse_case_clause(parser, subj_type, subj_val, clause)
 
 			if (.not. is_op_allowed) then
 				span = new_span(val_beg, val_end - val_beg + 1)
-				val_name  = kind_name(val_type)
-				subj_name = kind_name(subj_type)
-				if (val_arr /= unknown_type) &
-					val_name = kind_name(val_arr)//" "//val_name
-				if (subj_arr /= unknown_type) &
-					subj_name = kind_name(subj_arr)//" "//subj_name
 				call parser%diagnostics%push(err_bad_case_type( &
 					parser%context(), span, parser%text(val_beg, val_end), &
-					val_name, subj_name))
+					type_name(val_tmp%val), type_name(subj_val)))
 
 			else if (subj_type == array_type .and. val_type == array_type .and. &
 				allocated(subj_val%array) .and. allocated(val_tmp%val%array)) then
@@ -1103,7 +1090,8 @@ recursive subroutine parse_case_clause(parser, subj_type, subj_val, clause)
 				! E49 in parse_expr.f90, so `case v` (defined as `subj == v`)
 				! reports the same.  A differing *extent* is a runtime
 				! non-match instead, since sizes aren't static.  The allocated()
-				! guards mirror the subj_arr/val_arr computation above
+				! guards are needed since a value can be array_type with its
+				! array not yet resolved (e.g. pass 0)
 				if (subj_val%array%rank /= val_tmp%val%array%rank) then
 					span = new_span(val_beg, val_end - val_beg + 1)
 					call parser%diagnostics%push(err_binary_ranks( &
@@ -1197,7 +1185,6 @@ recursive module subroutine parse_switch_statement(parser, statement)
 
 	integer :: i, subj_beg, subj_end, subj_type, pos0
 	logical :: has_default, bad_subj
-	character(len = :), allocatable :: type_name
 
 	type(syntax_node_t)  :: subject, def_body, clause
 	type(syntax_node_vector_t) :: arms
@@ -1226,13 +1213,10 @@ recursive module subroutine parse_switch_statement(parser, statement)
 		end if
 	end if
 	if (bad_subj) then
-		type_name = kind_name(subj_type)
-		if (subj_type == array_type .and. allocated(subject%val%array)) &
-			type_name = kind_name(subject%val%array%type)//" "//type_name
 		span = new_span(subj_beg, subj_end - subj_beg + 1)
 		call parser%diagnostics%push(err_bad_switch_type( &
 			parser%context(), span, parser%text(subj_beg, subj_end), &
-			type_name))
+			type_name(subject%val)))
 		! Stop cascading errors: treat the subject as unknown_type so
 		! parse_case_clause() doesn't also flag every case value as
 		! incomparable to it

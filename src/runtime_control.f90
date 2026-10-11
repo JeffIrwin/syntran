@@ -905,7 +905,7 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 			if (allocated(lbound_%enum_cookie)) res%enum_cookie = lbound_%enum_cookie
 
 		case default
-			write(*,*) err_eval_len_array(kind_name(res%array%type))
+			write(*,*) err_eval_len_array(type_name_primitive(res%array%type))
 			call internal_error()
 		end select
 

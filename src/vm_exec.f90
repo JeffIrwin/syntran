@@ -368,7 +368,7 @@ subroutine do_binop(left, right, op_kind, restype, res, rt_err)
 	if (op_kind /= matmul_token .and. &
 		left%type == array_type .and. right%type == array_type) then
 		if (.not. same_shape(left%array, right%array)) then
-			rt_err = err_rt_binop_shape(binop_text(op_kind), &
+			rt_err = err_rt_binop_shape(op_text(op_kind), &
 				left%array%size(1: left%array%rank), &
 				right%array%size(1: right%array%rank))
 			return
@@ -435,7 +435,7 @@ subroutine do_binop(left, right, op_kind, restype, res, rt_err)
 	case (amp_token)
 		call bit_and(left, right, res, '&')
 	case default
-		write(*,*) err_eval_binary_op(kind_name(op_kind))
+		write(*,*) err_eval_binary_op(op_text(op_kind))
 		call internal_error()
 	end select
 
@@ -443,10 +443,10 @@ end subroutine do_binop
 
 !===============================================================================
 
-function binop_text(op_kind) result(text)
+function op_text(op_kind) result(text)
 
-	! Source text of a binary operator token kind, for error messages.  Only
-	! called on an error path
+	! Source text of a unary or binary operator token kind, for error messages.
+	! Only called on an error path
 
 	integer, intent(in) :: op_kind
 	character(len = :), allocatable :: text
@@ -472,10 +472,12 @@ function binop_text(op_kind) result(text)
 	case (caret_token);          text = '^'
 	case (pipe_token);           text = '|'
 	case (amp_token);            text = '&'
+	case (bang_token);           text = '!'
+	case (not_keyword);          text = 'not'
 	case default;                text = kind_name(op_kind)
 	end select
 
-end function binop_text
+end function op_text
 
 !===============================================================================
 
@@ -497,7 +499,7 @@ subroutine do_array_binop_typed(left, right, op_kind, elem_type, res, rt_err)
 	character(len = :), allocatable, intent(out) :: rt_err
 
 	if (.not. same_shape(left%array, right%array)) then
-		rt_err = err_rt_binop_shape(binop_text(op_kind), &
+		rt_err = err_rt_binop_shape(op_text(op_kind), &
 			left%array%size(1: left%array%rank), &
 			right%array%size(1: right%array%rank))
 		return
@@ -633,7 +635,7 @@ subroutine do_unop(right, op_kind, res)
 	case (bang_token)
 		call bit_not(right, res, '~')
 	case default
-		write(*,*) err_eval_unary_op(kind_name(op_kind))
+		write(*,*) err_eval_unary_op(op_text(op_kind))
 		call internal_error()
 	end select
 

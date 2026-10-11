@@ -167,9 +167,6 @@ Use two asterisks for exponent powers, like Fortran and Scilab:
 5 ** 2;
 // 25
 ```
-<!-- syntran-expect
-25
--->
 <!-- syntran-end -->
 
 There's no need to [import `math.h`](https://en.cppreference.com/w/c/numeric/math/pow) and call the `pow()` function!
@@ -191,6 +188,7 @@ Powers group the same way as in Fortran, Python, and math notation.  They are ri
 // 4
 ```
 <!-- syntran-expect
+25
 512
 64
 -4
@@ -225,7 +223,7 @@ not q and foo + bar == baz;
 // true
 
 foo and p;
-// Error[E48]: binary operator `and` is not defined for types i32_type and bool_type
+// Error[E48]: binary operator `and` is not defined for types i32 and bool
 //   --> <stdin>:1:5
 //    |
 //  1 | foo and p;
@@ -241,7 +239,7 @@ true
 false
 true
 true
-Error[E48]: binary operator `and` is not defined for types i32_type and bool_type
+Error[E48]: binary operator `and` is not defined for types i32 and bool
   --> <stdin>:1:5
    |
  1 | foo and p;
