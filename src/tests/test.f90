@@ -2979,7 +2979,7 @@ subroutine unit_test_substr(npass, nfail)
 			eval('let s = "01234567"; s[[2: 5]];', quiet) == '234', &
 			eval('let s = "abcd"; s[[0, 0, 3]];', quiet) == 'aad', &
 			eval('let s = "abcd"; let k = 1; s[[k, k + 1]];', quiet) == 'bc', &
-			len(eval('let s = "abcd"; s[[1: 1]];', quiet)) == 0, &
+			eval('let s = "abcd"; s[[1: 1]];', quiet) == '', &
 			eval('fn f(): str { return "abcdef"; } f()[[5, 0]];', quiet) == 'fa', &
 
 			! ... on the char subscript of a str array element, of a slice of
