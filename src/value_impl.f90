@@ -664,6 +664,21 @@ end procedure mold
 
 !===============================================================================
 
+module procedure same_shape
+
+	! Whether two arrays have the same rank and extents.  Used to check that a
+	! reduction's `mask` matches its array, and that the operands of an
+	! element-wise binary operator conform
+
+	same_shape = .false.
+	if (a%rank /= b%rank) return
+	same_shape = all(a%size(1: a%rank) == b%size(1: b%rank))
+
+end procedure same_shape
+
+
+!===============================================================================
+
 module procedure copy_composite_id
 
 	! Copy the components that describe a struct or enum type beyond

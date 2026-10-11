@@ -211,6 +211,7 @@ module syntran__errors_m
 		RC_REDUCE_DIM_RANGE = "R34", &
 		RC_MASK_SHAPE_MISMATCH = "R35", &
 		RC_MINMAX_EMPTY = "R36", &
+		RC_BINOP_SHAPE_MISMATCH = "R37", &
 		WC_MISSING_RETURN = "W1"
 
 	! A text span indicates which characters to underline in a faulty line of
@@ -1071,6 +1072,12 @@ module syntran__errors_m
 			integer(kind = 8), intent(in) :: sizes(:)
 			character(len = :), allocatable :: err
 		end function err_rt_expl_array_size
+
+		module function err_rt_binop_shape(op_text, lsizes, rsizes) result(err)
+			character(len = *), intent(in) :: op_text
+			integer(kind = 8), intent(in) :: lsizes(:), rsizes(:)
+			character(len = :), allocatable :: err
+		end function err_rt_binop_shape
 
 		! RC_SUBSCRIPT_OOB (R33) pair: only raised in builds compiled with
 		! -DSYNTRAN_BOUNDS_CHECK (bounds_check, compiler.F90) -- see its

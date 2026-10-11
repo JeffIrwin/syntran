@@ -545,6 +545,37 @@ end function new_array
 
 !===============================================================================
 
+module subroutine compound_shape_err(lhs, rhs, op, rt_err)
+
+	! Check the operands of a whole-array compound assignment (`a += b`,
+	! `s.v &= b`, etc.).  Sets (allocates) rt_err to an R37 message when both
+	! are arrays with different shapes, and leaves it unallocated otherwise.
+	!
+	! This is a subroutine instead of a function because assigning an
+	! unallocated deferred-length function result to a variable is invalid
+	! Fortran, and gfortran gives a zero-length *allocated* string for it
+	!
+	! Plain `=` is exempt since it may legitimately resize the array.  The
+	! math kernels behind apply_assign_op() don't check shapes themselves, and
+	! that routine has no state_t to throw with, so each caller that has one
+	! calls this first and does the rt_throw()
+
+	type(value_t), intent(in) :: lhs, rhs
+	type(syntax_token_t), intent(in) :: op
+	character(len = :), allocatable, intent(out) :: rt_err
+
+	if (op%kind == equals_token) return
+	if (lhs%type /= array_type .or. rhs%type /= array_type) return
+	if (same_shape(lhs%array, rhs%array)) return
+
+	rt_err = err_rt_binop_shape(op%text, &
+		lhs%array%size(1: lhs%array%rank), &
+		rhs%array%size(1: rhs%array%rank))
+
+end subroutine compound_shape_err
+
+!===============================================================================
+
 module subroutine apply_assign_op(lhs, rhs, op)
 
 	! lhs += rhs;

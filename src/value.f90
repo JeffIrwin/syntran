@@ -274,6 +274,10 @@ module syntran__value_m
 			type(array_t), allocatable :: array
 		end function mold
 
+		module logical function same_shape(a, b)
+			type(array_t), intent(in) :: a, b
+		end function same_shape
+
 		module subroutine copy_composite_id(dst, src)
 			type(value_t), intent(inout) :: dst
 			type(value_t), intent(in)    :: src

@@ -351,16 +351,29 @@ subroutine do_binop(left, right, op_kind, restype, res, rt_err)
 	integer, intent(in) :: op_kind, restype
 	type(value_t), intent(out) :: res
 
-	! Set (allocated) on a reachable matmul dimension-mismatch runtime error.
-	! See the comment on matmul_value_t() in math_bin_matmul.f90: that module
-	! has no access to state_t, so the caller (vm_run's OP_BINOP handler,
-	! which does have state) is responsible for translating an allocated
-	! rt_err into call rt_throw(state, rt_err)
+	! Set (allocated) on a reachable matmul dimension-mismatch or element-wise
+	! shape-mismatch runtime error.  See the comment on matmul_value_t() in
+	! math_bin_matmul.f90: that module has no access to state_t, so the caller
+	! (vm_run's OP_BINOP handler, which does have state) is responsible for
+	! translating an allocated rt_err into call rt_throw(state, rt_err)
 	character(len = :), allocatable, intent(out) :: rt_err
 
 	!*******
 
 	integer :: larrtype, rarrtype
+
+	! Element-wise ops need conforming operands.  The math/bool kernels don't
+	! check, so without this a mismatch is a raw Fortran bounds abort (or UB
+	! without -fcheck).  Matmul does its own dimension check
+	if (op_kind /= matmul_token .and. &
+		left%type == array_type .and. right%type == array_type) then
+		if (.not. same_shape(left%array, right%array)) then
+			rt_err = err_rt_binop_shape(binop_text(op_kind), &
+				left%array%size(1: left%array%rank), &
+				right%array%size(1: right%array%rank))
+			return
+		end if
+	end if
 
 	if (restype /= unknown_type) then
 		res%type = restype
@@ -430,7 +443,43 @@ end subroutine do_binop
 
 !===============================================================================
 
-subroutine do_array_binop_typed(left, right, op_kind, elem_type, res)
+function binop_text(op_kind) result(text)
+
+	! Source text of a binary operator token kind, for error messages.  Only
+	! called on an error path
+
+	integer, intent(in) :: op_kind
+	character(len = :), allocatable :: text
+
+	select case (op_kind)
+	case (plus_token);           text = '+'
+	case (minus_token);          text = '-'
+	case (star_token);           text = '*'
+	case (sstar_token);          text = '**'
+	case (slash_token);          text = '/'
+	case (percent_token);        text = '%'
+	case (matmul_token);         text = '@'
+	case (and_keyword);          text = 'and'
+	case (or_keyword);           text = 'or'
+	case (eequals_token);        text = '=='
+	case (bang_equals_token);    text = '!='
+	case (less_token);           text = '<'
+	case (less_equals_token);    text = '<='
+	case (greater_token);        text = '>'
+	case (greater_equals_token); text = '>='
+	case (lless_token);          text = '<<'
+	case (ggreater_token);       text = '>>'
+	case (caret_token);          text = '^'
+	case (pipe_token);           text = '|'
+	case (amp_token);            text = '&'
+	case default;                text = kind_name(op_kind)
+	end select
+
+end function binop_text
+
+!===============================================================================
+
+subroutine do_array_binop_typed(left, right, op_kind, elem_type, res, rt_err)
 
 	! Fast-path for same-type numeric array ⊕ array operations emitted as
 	! OP_ARR_BINOP.  Inlines the array kernels from the math/bool routines,
@@ -442,6 +491,17 @@ subroutine do_array_binop_typed(left, right, op_kind, elem_type, res)
 	type(value_t), intent(inout) :: left, right
 	integer, intent(in) :: op_kind, elem_type
 	type(value_t), intent(out) :: res
+
+	! Set (allocated) when the operands' shapes differ.  The caller does the
+	! rt_throw(), as for do_binop()
+	character(len = :), allocatable, intent(out) :: rt_err
+
+	if (.not. same_shape(left%array, right%array)) then
+		rt_err = err_rt_binop_shape(binop_text(op_kind), &
+			left%array%size(1: left%array%rank), &
+			right%array%size(1: right%array%rank))
+		return
+	end if
 
 	res%type = array_type
 
@@ -1539,6 +1599,11 @@ module subroutine vm_run(prog, state, res)
 				call get_val(n, state%locs%vals(id), state, val, &
 					slots = stack%v(base_+1:base_+nslots_), pos = pos_)
 				if (state%rt_halt) exit
+				call compound_shape_err(val, right, n%op, rt_err)
+				if (allocated(rt_err)) then
+					call rt_throw(state, rt_err)
+					exit
+				end if
 				call do_compound(val, right, instr%b)
 				pos_ = 0
 				call set_val(n, state%locs%vals(id), state, val, &
@@ -1547,6 +1612,11 @@ module subroutine vm_run(prog, state, res)
 				call get_val(n, state%vars%vals(id), state, val, &
 					slots = stack%v(base_+1:base_+nslots_), pos = pos_)
 				if (state%rt_halt) exit
+				call compound_shape_err(val, right, n%op, rt_err)
+				if (allocated(rt_err)) then
+					call rt_throw(state, rt_err)
+					exit
+				end if
 				call do_compound(val, right, instr%b)
 				pos_ = 0
 				call set_val(n, state%vars%vals(id), state, val, &
@@ -2345,7 +2415,11 @@ module subroutine vm_run(prog, state, res)
 		case (OP_ARR_BINOP)
 			call vm_pop_copy(stack, right)
 			call vm_pop_copy(stack, left)
-			call do_array_binop_typed(left, right, instr%a, instr%b, val)
+			call do_array_binop_typed(left, right, instr%a, instr%b, val, rt_err)
+			if (allocated(rt_err)) then
+				call rt_throw(state, rt_err)
+				exit
+			end if
 			call vm_push_move(stack, val)
 
 		! --- M9: native scalar array element read ------------------------------------

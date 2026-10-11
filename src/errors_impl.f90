@@ -397,6 +397,7 @@ module procedure get_all_error_codes
 	call codes%push(RC_REDUCE_DIM_RANGE)
 	call codes%push(RC_MASK_SHAPE_MISMATCH)
 	call codes%push(RC_MINMAX_EMPTY)
+	call codes%push(RC_BINOP_SHAPE_MISMATCH)
 	call codes%push(WC_MISSING_RETURN)
 end procedure get_all_error_codes
 
@@ -1798,23 +1799,47 @@ module procedure err_rt_expl_array_size
 	! Shared by eval_array_expr() and the bytecode VM's OP_FOR_SETUP
 	! (size_array case) so their messages can't drift apart
 
-	integer :: i
-	integer(kind = 8) :: total
+	err = err_rt(RC_ARRAY_SIZE_MISMATCH, &
+		"explicit array has "//str(nelems)// &
+		" elements but declared size is "//dims_str(sizes)//" = "// &
+		str(product(sizes)))
+
+end procedure err_rt_expl_array_size
+
+
+!===============================================================================
+
+function dims_str(sizes) result(dims)
+
+	! Format array extents as `2 x 3 x 4`
+
+	integer(kind = 8), intent(in) :: sizes(:)
 	character(len = :), allocatable :: dims
 
-	dims  = ''
-	total = 1
+	integer :: i
+
+	dims = ''
 	do i = 1, size(sizes)
-		total = total * sizes(i)
 		if (i > 1) dims = dims//' x '
 		dims = dims//str(sizes(i))
 	end do
 
-	err = err_rt(RC_ARRAY_SIZE_MISMATCH, &
-		"explicit array has "//str(nelems)// &
-		" elements but declared size is "//dims//" = "//str(total))
+end function dims_str
 
-end procedure err_rt_expl_array_size
+
+!===============================================================================
+
+module procedure err_rt_binop_shape
+
+	! Runtime (R37) error for an element-wise binary operator whose array
+	! operands don't have the same extents.  Shared by the VM's OP_BINOP and
+	! OP_ARR_BINOP handlers and by compound assignment (`a += b`)
+
+	err = err_rt(RC_BINOP_SHAPE_MISMATCH, &
+		"array shape mismatch for binary operator `"//op_text//"`: "// &
+		dims_str(lsizes)//" and "//dims_str(rsizes))
+
+end procedure err_rt_binop_shape
 
 
 !===============================================================================

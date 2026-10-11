@@ -1,0 +1,6 @@
+// R37: binop-shape-mismatch
+// An element-wise binary operator was given two arrays with different shapes
+
+let a = [1, 2, 3];
+let b = [1, 2];
+let c = a * b;

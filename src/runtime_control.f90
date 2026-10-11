@@ -46,6 +46,8 @@ recursive module subroutine eval_assignment_expr(node, state, res, rhs_in, slots
 
 	logical :: has_char_sub
 
+	character(len = :), allocatable :: rt_err
+
 	type(i64_vector_t), allocatable :: asubs(:)
 	type(value_t) :: array_val, tmp, tmp_array
 
@@ -95,6 +97,19 @@ recursive module subroutine eval_assignment_expr(node, state, res, rhs_in, slots
 		! test.f90's `let i = 20; i += 5.1;` == '25' assertions
 
 		!print *, 'lhs type = ', kind_name( state%vars%vals(id)%type )
+
+		! Whole-array compound assignment needs conforming shapes, and the
+		! math kernels don't check (a mismatched `a += b` otherwise aborts in
+		! Fortran).  The variable is left unchanged
+		if (node%is_loc) then
+			call compound_shape_err(state%locs%vals(id), res, node%op, rt_err)
+		else
+			call compound_shape_err(state%vars%vals(id), res, node%op, rt_err)
+		end if
+		if (allocated(rt_err)) then
+			call rt_throw(state, rt_err)
+			return
+		end if
 
 		!print *, "apply_assign_op is_loc = ", node%is_loc
 		if (node%is_loc) then

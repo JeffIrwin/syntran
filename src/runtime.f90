@@ -207,6 +207,12 @@ module syntran__runtime_m
 			type(syntax_token_t), intent(in) :: op
 		end subroutine
 
+		module subroutine compound_shape_err(lhs, rhs, op, rt_err)
+			type(value_t), intent(in) :: lhs, rhs
+			type(syntax_token_t), intent(in) :: op
+			character(len = :), allocatable, intent(out) :: rt_err
+		end subroutine compound_shape_err
+
 		module subroutine eval_subscript_1d(node, state, i, lsub, ssub, usub, asub, contributes_rank, slots)
 			type(syntax_node_t), intent(in)    :: node
 			type(state_t),       intent(inout) :: state

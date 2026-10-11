@@ -967,21 +967,6 @@ end subroutine vm_call_intr
 
 !===============================================================================
 
-logical function same_shape(a, b)
-
-	! Whether two arrays have the same rank and extents.  Used to check that a
-	! reduction's `mask` matches its array
-
-	type(array_t), intent(in) :: a, b
-
-	same_shape = .false.
-	if (a%rank /= b%rank) return
-	same_shape = all(a%size(1: a%rank) == b%size(1: b%rank))
-
-end function same_shape
-
-!===============================================================================
-
 subroutine reduce_dim_setup(state, src, dim_, elem_type, inner, n, outer, res, ok)
 
 	! Common setup for reductions along a dimension.  Checks `dim_` (0-based, like

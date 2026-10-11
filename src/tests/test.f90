@@ -8866,6 +8866,40 @@ subroutine unit_test_runtime_errors(npass, nfail)
 			.not. diag_has_code(get_diags('sum([1, 2], [false, false]);'), RC_MINMAX_EMPTY), &
 			.not. diag_has_code(get_diags('minval([1, 2], [true, false]);'), RC_MINMAX_EMPTY), &
 
+			! R37: element-wise binary operator with array operands of different
+			! shapes.  Covers both the typed OP_ARR_BINOP fast path (same element
+			! type) and the generic OP_BINOP path (mixed types, bool, str), plus
+			! whole-array and struct-member compound assignment
+			rt_code_both_file(P//'R37-binop-shape-mismatch.syntran', RC_BINOP_SHAPE_MISMATCH), &
+			diag_count_code(get_diags_file( &
+				P//'R37-binop-shape-mismatch.syntran'), &
+				RC_BINOP_SHAPE_MISMATCH) == 1, &
+			diag_has_code(get_diags('println([1, 2, 3] + [1, 2]);'), RC_BINOP_SHAPE_MISMATCH), &
+			diag_has_code(get_diags('println([1, 2, 3] * [1, 2]);'), RC_BINOP_SHAPE_MISMATCH), &
+			diag_has_code(get_diags('println([1.0, 2.0] + [1, 2, 3]);'), RC_BINOP_SHAPE_MISMATCH), &
+			diag_has_code(get_diags('println([1, 2, 3] == [1, 2]);'), RC_BINOP_SHAPE_MISMATCH), &
+			diag_has_code(get_diags('println([1, 2, 3] < [1, 2]);'), RC_BINOP_SHAPE_MISMATCH), &
+			diag_has_code(get_diags('println([1, 2, 3] % [1, 2]);'), RC_BINOP_SHAPE_MISMATCH), &
+			diag_has_code(get_diags('println([1, 2, 3] ** [1, 2]);'), RC_BINOP_SHAPE_MISMATCH), &
+			diag_has_code(get_diags('println([1, 2, 3] | [1, 2]);'), RC_BINOP_SHAPE_MISMATCH), &
+			diag_has_code(get_diags('println([true, false] and [true]);'), RC_BINOP_SHAPE_MISMATCH), &
+			diag_has_code(get_diags('println(["a", "b"] + ["c"]);'), RC_BINOP_SHAPE_MISMATCH), &
+			diag_has_code(get_diags( &
+				'println([0; 2, 3] + [0; 3, 2]);'), RC_BINOP_SHAPE_MISMATCH), &
+			diag_has_code(get_diags('let a = [1, 2, 3]; a += [1, 2];'), RC_BINOP_SHAPE_MISMATCH), &
+			diag_has_code(get_diags('let a = [1, 2, 3]; a &= [1, 2];'), RC_BINOP_SHAPE_MISMATCH), &
+			diag_has_code(get_diags( &
+				'struct S{v:[i32;:]} let s = S{v=[1, 2, 3]}; s.v += [1, 2];'), &
+				RC_BINOP_SHAPE_MISMATCH), &
+			! Conforming operands, scalars, and plain `=` (which may resize) are fine
+			.not. diag_has_code(get_diags('println([1, 2, 3] + [4, 5, 6]);'), RC_BINOP_SHAPE_MISMATCH), &
+			.not. diag_has_code(get_diags('println([1, 2, 3] + 1, 1 + [1, 2]);'), RC_BINOP_SHAPE_MISMATCH), &
+			.not. diag_has_code(get_diags('println([0; 2, 3] + [1; 2, 3]);'), RC_BINOP_SHAPE_MISMATCH), &
+			.not. diag_has_code(get_diags('let a = [1, 2, 3]; a += 1; a += [1, 1, 1];'), RC_BINOP_SHAPE_MISMATCH), &
+			.not. diag_has_code(get_diags( &
+				'struct S{v:[i32;:]} let s = S{v=[1, 2, 3]}; s.v = [1, 2]; s.v += [1, 1];'), &
+				RC_BINOP_SHAPE_MISMATCH), &
+
 			! R21: rank-2+ array literal's element count doesn't match a
 			! runtime-valued declared size
 			rt_code_both_file( &

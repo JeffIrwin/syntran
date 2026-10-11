@@ -1143,6 +1143,12 @@ The `mask` argument of `sum(array, mask)` or `sum(array, dim, mask)` doesn't hav
 
 [Example](../src/tests/test-src/errors/R36-minmax-empty.syntran)
 
+### R37 -- binop-shape-mismatch
+
+An element-wise binary operator, such as `+`, `*`, `==`, `and`, or `&`, or its compound assignment form, such as `a += b`, was given two arrays with different extents.  The ranks of the operands are already checked at compile time ([E49](#e49----binary-ranks)), but their sizes aren't known until runtime.  The matrix product `@` has its own check, [R1](#r1----matmul-dim).  A scalar operand is fine with an array of any shape.
+
+[Example](../src/tests/test-src/errors/R37-binop-shape-mismatch.syntran)
+
 ## Warnings
 
 ### W1 -- missing-return
