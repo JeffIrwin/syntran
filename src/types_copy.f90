@@ -950,7 +950,11 @@ recursive module subroutine syntax_node_move(src, dst)
 
 	allocate(dst)
 
-	! POD scalars
+	! POD (plain old data) scalars
+	!
+	! Claude's use of the POD acronym means a type that only holds simple
+	! intrinsic values and no allocatable or pointer components. These members
+	! can be copied simply with no manual deep-copy definition
 	dst%kind            = src%kind
 	dst%op              = src%op
 	dst%identifier      = src%identifier

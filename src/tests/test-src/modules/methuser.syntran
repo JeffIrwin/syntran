@@ -1,0 +1,11 @@
+// Module that imports methmod.syntran, which the test also imports directly
+
+use methmod as methmod;
+
+fn make_total(): i32
+{
+	let a = methmod::new_acc();
+	a.add(5);
+	methmod::add_twice(&a, 3);
+	return a.get();
+}

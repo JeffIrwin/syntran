@@ -116,6 +116,9 @@ recursive module subroutine parse_array_expr(parser, expr)
 		expr%val%type        = array_type
 		if (allocated(lbound_%val%struct_name)) then
 			expr%val%struct_name = lbound_%val%struct_name
+			if (allocated(lbound_%val%struct_cookie)) &
+				expr%val%struct_cookie = lbound_%val%struct_cookie
+			expr%val%struct_reg_idx = lbound_%val%struct_reg_idx
 		else if (allocated(lbound_%val%enum_name)) then
 			expr%val%enum_name = lbound_%val%enum_name
 			if (allocated(lbound_%val%enum_cookie)) &
@@ -537,6 +540,9 @@ recursive module subroutine parse_array_expr(parser, expr)
 	expr%val%type        = array_type
 	if (allocated(lbound_%val%struct_name)) then
 		expr%val%struct_name = lbound_%val%struct_name
+		if (allocated(lbound_%val%struct_cookie)) &
+			expr%val%struct_cookie = lbound_%val%struct_cookie
+		expr%val%struct_reg_idx = lbound_%val%struct_reg_idx
 	else if (allocated(lbound_%val%enum_name)) then
 		expr%val%enum_name = lbound_%val%enum_name
 		if (allocated(lbound_%val%enum_cookie)) &

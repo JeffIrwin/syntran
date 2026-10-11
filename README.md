@@ -174,6 +174,30 @@ Use two asterisks for exponent powers, like Fortran and Scilab:
 
 There's no need to [import `math.h`](https://en.cppreference.com/w/c/numeric/math/pow) and call the `pow()` function!
 
+Powers group the same way as in Fortran, Python, and math notation.  They are right-associative, and they bind tighter than a unary minus:
+
+<!-- syntran-begin mode=repl group=intro-arith -->
+```cpp
+2 ** 3 ** 2;
+// 512
+
+(2 ** 3) ** 2;
+// 64
+
+-2 ** 2;
+// -4
+
+(-2) ** 2;
+// 4
+```
+<!-- syntran-expect
+512
+64
+-4
+4
+-->
+<!-- syntran-end -->
+
 ## Variables, Booleans, and type checking
 
 Variable declarations use the [`let` keyword](https://doc.rust-lang.org/std/keyword.let.html) as in Rust.  This is also similar to JavaScript, except there is no `var` keyword.  Variables are mutable.
@@ -325,6 +349,26 @@ Note: global block statement is not required as of 0.0.13.  Multiple statements 
 Make sure to wrap the entire script in a main block with braces `{}`.  The global block `{}` is not required when interactively using the interpreter because it parses and evaluates one statement at a time.  However, if you forget the global block `{}` in a script file, only the first statement will be parsed and any trailing junk statements will be unexpected.
 -->
 
+### Transpiling to Fortran
+
+Instead of running a program with the interpreter, `syntran --transpile`
+translates it to a standalone modern Fortran program, which you compile
+yourself with the Fortran compiler of your choice:
+
+<!-- syntran-begin mode=skip reason="shell invocation example" -->
+```
+syntran --transpile fib.f90 fib.syntran
+gfortran -O3 fib.f90 -o fib
+./fib
+```
+<!-- syntran-end -->
+
+Most of the language is supported, including structs, enums, modules, `switch`,
+file I/O, and function pointers.  The interpreter's call stack
+(`std::caller()` and friends) is not.  See [doc/transpile.md](doc/transpile.md)
+for what is supported, and for how the generated program differs from
+interpreting.
+
 ### Other command-line arguments
 
 Run `syntran -h` to see a comprehensive listing of syntran command-line arguments:
@@ -352,6 +396,8 @@ Run `syntran -h` to see a comprehensive listing of syntran command-line argument
      --permissive-return Downgrade missing-return errors to warnings
      --cd                Resolve the script's relative file paths against its own directory
      -s --syntax-only    Parse and type check without running the program
+     -t --transpile <f>  Write the program as Fortran source to <f> ('-' for stdout) instead of running it
+     --keep-unused-fns   With --transpile, also write the fns that nothing calls
      -- <args>...        Pass remaining arguments to script via std::args()
 ```
 <!-- syntran-expect
@@ -374,6 +420,8 @@ Run `syntran -h` to see a comprehensive listing of syntran command-line argument
      --permissive-return Downgrade missing-return errors to warnings
      --cd                Resolve the script's relative file paths against its own directory
      -s --syntax-only    Parse and type check without running the program
+     -t --transpile <f>  Write the program as Fortran source to <f> ('-' for stdout) instead of running it
+     --keep-unused-fns   With --transpile, also write the fns that nothing calls
      -- <args>...        Pass remaining arguments to script via std::args()
 -->
 <!-- syntran-end -->

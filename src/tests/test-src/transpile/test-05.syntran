@@ -1,0 +1,121 @@
+// Enums.  These programs are run by both the interpreter and the Fortran
+// transpiler (utils/test-transpile.sh), which must print the same thing.  The
+// return value is the number of failed checks
+
+let status = 0;
+
+fn check(ok: bool): i32
+{
+	if (ok) return 0;
+	return 1;
+}
+
+enum Suit
+{
+	Hearts,
+	Diamonds,
+	Clubs,
+	Spades,
+}
+
+// Explicit backing values, and an alias of a variant
+enum Card
+{
+	Two = 2,
+	Three,
+	Jack = 11,
+	Queen,
+	King,
+	Ace = King,
+}
+
+// Printing and the backing value
+let s = Suit.Clubs;
+println(s, " ", i32(s), " ", Suit.Spades, " ", i32(Suit.Spades));
+println(Card.Queen, " ", i32(Card.Queen), " ", Card.Ace, " ", i32(Card.Ace));
+println(str(Card.King), " ", str(Card.Ace), " ", str(Suit.Hearts) + "!");
+status += check(i32(s) == 2);
+status += check(i32(Card.Queen) == 12);
+status += check(str(Suit.Hearts) == "Suit.Hearts");
+
+// Comparison.  An alias is the variant that it names
+status += check(Suit.Hearts == Suit.Hearts);
+status += check(Suit.Hearts != Suit.Spades);
+status += check(Card.Ace == Card.King);
+status += check(not (Card.Ace != Card.King));
+println(Card.Ace == Card.King, " ", Card.Jack == Card.Queen);
+
+// Casting from an integer
+let n = 3;
+println(Suit(2), " ", Suit(n), " ", Card(12), " ", Card(13));
+status += check(Suit(n) == Suit.Spades);
+status += check(Suit(i32(Suit.Diamonds)) == Suit.Diamonds);
+
+// Arrays of enums, and the name of the enum for all of its variants
+let hand = [Suit.Spades, Suit.Hearts, Suit.Clubs];
+println(hand);
+println(hand[1], " ", size(hand));
+hand[1] = Suit.Diamonds;
+println(hand);
+println(Suit);
+println(size(Suit), " ", size(Card));
+status += check(hand[1] == Suit.Diamonds);
+status += check(size(Suit) == 4);
+
+let total = 0;
+for v in Suit
+{
+	total += i32(v);
+	println(v);
+}
+status += check(total == 6);
+
+let cards = [Card.Two, Card.Ace, Card.Jack];
+println(cards, " ", cards == [Card.Two, Card.King, Card.Jack]);
+println(all(cards == [Card.Two, Card.King, Card.Jack]), " ", any(cards == Card.Queen));
+
+let by_suit = [10, 20, 30, 40];
+println(by_suit[i32(Suit.Clubs)], " ", [by_suit[i32(Suit.Hearts)], by_suit[i32(Suit.Spades)]]);
+
+// Fns that take and return enums, and a by-reference enum
+fn next(x: Suit): Suit
+{
+	return Suit((i32(x) + 1) % 4);
+}
+
+fn bump(x: &Suit)
+{
+	x = next(x);
+}
+
+fn describe(c: Card): str
+{
+	switch c
+	{
+		case Card.Two, Card.Three { return "low"; }
+		case Card.Jack, Card.Queen, Card.King { return "face"; }
+		case Card.Ace { return "ace"; }
+		default { return "?"; }
+	}
+	return "";
+}
+
+let t = Suit.Spades;
+println(next(t), " ", next(next(t)));
+bump(&t);
+println(t);
+status += check(t == Suit.Hearts);
+println(describe(Card.Two), " ", describe(Card.Queen), " ", describe(Card.Ace));
+status += check(describe(Card.Three) == "low");
+status += check(describe(Card.King) == "face");
+
+// An array of enums as a switch subject
+switch hand
+{
+	case [Suit.Spades, Suit.Hearts, Suit.Clubs] { println("original"); }
+	case [Suit.Spades, Suit.Diamonds, Suit.Clubs] { println("changed"); }
+	default { println("other"); }
+}
+
+println(status);
+return status;

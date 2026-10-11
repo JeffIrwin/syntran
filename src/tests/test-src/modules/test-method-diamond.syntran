@@ -1,0 +1,12 @@
+// Regression test for a module with struct methods that is imported twice:
+// directly here, and again through methuser.  The methods of both copies share
+// the same `0Acc::add` key, which must not lose either copy
+
+use methmod as methmod;
+use methuser as methuser;
+
+let a = methmod::new_acc();
+a.add(1);
+methmod::add_twice(&a, 10);
+
+return a.get() == 21 and methuser::make_total() == 11;

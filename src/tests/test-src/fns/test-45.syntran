@@ -1,0 +1,66 @@
+// A by-value array or string parameter is a copy.  Assigning to the original
+// variable while the fn runs, whether through a global or through a
+// by-reference parameter, must not change the parameter.  The Fortran
+// transpiler passes arguments by reference, so it only avoids the copy where it
+// can prove this
+
+let g = [1, 2, 3];
+let gs = "abc";
+
+fn through_global(a: [i32; :], s: str): i32
+{
+	g[0] = 99;
+	gs = "xyz";
+	return a[0] + i32(len(s)) * 100 + i32(s[0]);
+}
+
+fn through_ref(a: [i32; :], b: &[i32; :]): i32
+{
+	b[0] = 7;
+	return a[0];
+}
+
+fn through_callee(a: [i32; :]): i32
+{
+	modify_global();
+	return a[1];
+}
+
+fn modify_global()
+{
+	g[1] = -5;
+	return;
+}
+
+fn pure_read(a: [i32; :]): i32
+{
+	return a[0] + a[1] + a[2];
+}
+
+fn recurse(a: [i32; :], n: i32): i32
+{
+	if (n == 0) return a[0] + a[1] + a[2];
+	return recurse(a, n - 1);
+}
+
+let status = 0;
+
+// `a` and `s` are copies of `g` and `gs`
+let r1 = through_global(g, gs);
+if (r1 != 1 + 300 + 97) status += 1;
+if (g[0] != 99) status += 2;
+
+let x = [1, 2, 3];
+let r2 = through_ref(x, &x);
+if (r2 != 1) status += 4;
+if (x[0] != 7) status += 8;
+
+g = [10, 20, 30];
+let r3 = through_callee(g);
+if (r3 != 20) status += 16;
+if (g[1] != -5) status += 32;
+
+if (pure_read([1, 2, 3]) != 6) status += 64;
+if (recurse([1, 2, 3], 3) != 6) status += 128;
+
+return status;

@@ -753,10 +753,13 @@ module integer function get_unary_op_prec(kind) result(prec)
 		case (plus_token, minus_token, not_keyword, bang_token)
 			! arithmetic +, arithmetic -, logical not, bitwise not
 			!
-			! NOTE: this must stay above the max binary precedence
-			! (get_binary_op_prec below, currently 11 for `**`), or unary
-			! `-x**2` would parse as `-(x**2)` instead of `(-x)**2`
-			prec = 12
+			! NOTE: like Fortran, this is below `**` (get_binary_op_prec
+			! below, 12) but above every other binary operator, so that
+			! `-x**2` is `-(x**2)`, while `-x * y` is `(-x) * y`.  Keep
+			! this one less than the `**` precedence:  parse_expr() uses
+			! it as the parent precedence of the right operand of `**`,
+			! which is how `2 ** -3` parses
+			prec = 11
 
 		case default
 			prec = 0
@@ -803,10 +806,12 @@ module integer function get_binary_op_prec(kind) result(prec)
 
 		!********
 
-		! NOTE: `**` is the highest-precedence binary op; see the matching
-		! note on get_unary_op_prec above -- unary must stay above this
+		! NOTE: `**` is the highest-precedence binary op, and it is above the
+		! unary ops, like Fortran.  It is also right-associative, which
+		! parse_expr() handles.  See the matching note on get_unary_op_prec
+		! above
 		case (sstar_token)
-			prec = 11
+			prec = 12
 
 		case (star_token, slash_token, percent_token, matmul_token)
 			prec = 10

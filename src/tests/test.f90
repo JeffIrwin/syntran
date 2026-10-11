@@ -80,6 +80,86 @@ end function get_diags_file
 
 !===============================================================================
 
+function transpile_src(str_, print_result, trim_result, shake_fns) result(src)
+
+	! The Fortran source that a syntran string transpiles to, as one string with
+	! a line_feed after each line.  Empty if there were diagnostics
+
+	character(len = *), intent(in) :: str_
+	logical, intent(in), optional :: print_result, trim_result, shake_fns
+	character(len = :), allocatable :: src
+
+	character(len = :), allocatable :: res_
+	integer :: i
+	type(string_vector_t) :: diag_
+	type(transpile_t) :: t
+
+	if (present(print_result)) t%print_result = print_result
+	if (present(trim_result )) t%trim_result  = trim_result
+	if (present(shake_fns)) then
+		t%shake_fns = shake_fns
+	end if
+
+	res_ = eval(str_, .true., diags = diag_, transpile = t)
+
+	src = ''
+	if (diag_%len_ > 0) return
+	do i = 1, t%src%len_
+		src = src//t%src%v(i)%s//line_feed
+	end do
+
+end function transpile_src
+
+!===============================================================================
+
+function transpile_is_empty(str_) result(empty)
+
+	! Does transpiling a program generate nothing?  A fn rather than `len()` of
+	! transpile_src() in the list of tests, which Intel Fortran takes for a
+	! constant expression
+
+	character(len = *), intent(in) :: str_
+	logical :: empty
+
+	empty = len(transpile_src(str_)) == 0
+
+end function transpile_is_empty
+
+!===============================================================================
+
+function get_diags_transpile(str_) result(diag_)
+	! Diagnostics from transpiling a string, which for a valid program are
+	! only constructs that aren't supported yet
+	character(len = *), intent(in) :: str_
+	type(string_vector_t) :: diag_
+	character(len = :), allocatable :: res_
+	type(transpile_t) :: t
+	res_ = eval(str_, .true., diags = diag_, transpile = t)
+end function get_diags_transpile
+
+!===============================================================================
+
+function get_diags_transpile_file(filename) result(diag_)
+	character(len = *), intent(in) :: filename
+	type(string_vector_t) :: diag_
+	character(len = :), allocatable :: res_
+	type(transpile_t) :: t
+	res_ = interpret_file(filename, quiet = .true., diags = diag_, transpile = t)
+end function get_diags_transpile_file
+
+!===============================================================================
+
+function transpiles_ok(filename) result(ok)
+	! Does a file transpile without any diagnostics?
+	character(len = *), intent(in) :: filename
+	logical :: ok
+	type(string_vector_t) :: diag_
+	diag_ = get_diags_transpile_file(filename)
+	ok = diag_%len_ == 0
+end function transpiles_ok
+
+!===============================================================================
+
 function diag_has_code(diag_, code) result(found)
 	type(string_vector_t), intent(in) :: diag_
 	character(len = *), intent(in) :: code
@@ -356,6 +436,14 @@ subroutine unit_test_bin_arith(npass, nfail)
 			eval_i32('24 / 6 / 2;') == 24 / 6 / 2, &
 			eval_i32('2 ** 5;') == 2 ** 5, &
 			eval_i32('3 ** 4;') == 3 ** 4, &
+			eval_i32('2 ** 3 ** 2;') == 2 ** 3 ** 2, &
+			eval_i32('2 ** 3 ** 2;') == 512, &
+			eval_i32('(2 ** 3) ** 2;') == (2 ** 3) ** 2, &
+			eval_i32('2 ** (3 ** 2);') == 2 ** (3 ** 2), &
+			eval_i32('2 ** 2 ** 2 ** 2;') == 2 ** 2 ** 2 ** 2, &
+			eval_i32('2 * 3 ** 2;') == 2 * 3 ** 2, &
+			eval_i32('3 ** 2 * 2;') == 3 ** 2 * 2, &
+			eval_i32('2 ** 3 ** 2 - 1;') == 2 ** 3 ** 2 - 1, &
 			eval_i32('13 % 4;') == mod(13, 4), &
 			eval_i32('14 % 4;') == mod(14, 4), &
 			eval_i32('15 % 4;') == mod(15, 4), &
@@ -460,6 +548,21 @@ subroutine unit_test_unary_arith(npass, nfail)
 			eval_i32('(1 + 2) * -3;') == (1 + 2) * -3, &
 			eval_i32('-1 * (2 * -3 * -4);') == -1 * (2 * -3 * -4), &
 			eval_i32('-73 - (+48);') == -73 - (+48), &
+			! Like Fortran, `**` binds tighter than a unary operator, but a
+			! unary operator still binds tighter than `*`
+			eval_i32('-2 ** 2;') == -2 ** 2, &
+			eval_i32('-2 ** 2;') == -4, &
+			eval_i32('(-2) ** 2;') == (-2) ** 2, &
+			eval_i32('-(2 ** 2);') == -(2 ** 2), &
+			eval_i32('+2 ** 2;') == +2 ** 2, &
+			eval_i32('-2 ** 3 ** 2;') == -2 ** 3 ** 2, &
+			eval_i32('3 * -2 ** 2;') == 3 * (-2 ** 2), &
+			eval_i32('-2 ** 2 * 3;') == (-2 ** 2) * 3, &
+			eval_i32('-2 * 3 ** 2;') == (-2) * 3 ** 2, &
+			eval_i32('2 ** -(-3);') == 2 ** (-(-3)), &
+			eval_f64('2.0 ** -1;') == 2.0d0 ** (-1), &
+			eval_f64('2.0 ** -1 ** 2;') == 0.5d0, &
+			eval_f64('-2.0 ** 2;') == -4.0d0, &
 			eval_i32('24 / (-6 / 2);') == 24 / (-6 / 2), &
 			eval_i32('343 - (-87654345 / 27 + -76 * (+234 - 65432)) / -63;') &
 			       == 343 - (-87654345 / 27 + -76 * (+234 - 65432)) / (-63)  &
@@ -3957,6 +4060,11 @@ subroutine unit_test_fns(npass, nfail)
 			! used to abort on a double free -- and calling one via implicit
 			! self (`f(x)` == `self.f(x)`), which used to be E29
 			interpret_file(path//'test-44.syntran', quiet) == 'true', &
+			! A by-value array/string parameter is a copy, even when the original
+			! is assigned through a global or by-ref parameter during the call
+			! (the Fortran transpiler only skips the copy when it can prove
+			! there's no such aliasing)
+			interpret_file(path//'test-45.syntran', quiet) == '0', &
 			! Printing a struct with a fn-pointer member renders the
 			! member's signature via value_to_str()'s fn_type case, same as
 			! a bare fn-pointer value (test-33 above)
@@ -6949,6 +7057,7 @@ subroutine unit_test_modules(npass, nfail)
 			interpret_file(path//'test-struct-collision.syntran', quiet) == 'true', &
 			interpret_file(path//'test-struct-collision-rev.syntran', quiet) == 'true', &
 			interpret_file(path//'test-struct-transitive.syntran', quiet) == 'true', &
+			interpret_file(path//'test-method-diamond.syntran', quiet) == 'true', &
 			interpret_file(path//'test-enum-mod.syntran', quiet) == 'true', &
 			interpret_file(path//'test-enum-mod-qualified.syntran', quiet) == 'true', &
 			interpret_file(path//'test-qual-assign-ok.syntran', quiet) == 'true', &
@@ -9526,7 +9635,9 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E114-missing-let-name.syntran'), &
 				EC_MISSING_LET_NAME, P//'E114-missing-let-name.syntran', 7, 6, 1), &
 			diag_count_code(get_diags_file(P//'E114-missing-let-name.syntran'), &
-				EC_MISSING_LET_NAME) == 1 &
+				EC_MISSING_LET_NAME) == 1, &
+			diag_loc_ok(get_diags_transpile_file(P//'E115-transpile-unsupported.syntran'), &
+				EC_TRANSPILE_UNSUPPORTED, P//'E115-transpile-unsupported.syntran', 9, 15, 6) &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
@@ -9581,6 +9692,449 @@ subroutine unit_test_dir_unreadable_errors(npass, nfail)
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_dir_unreadable_errors
+
+!===============================================================================
+
+subroutine unit_test_transpile(npass, nfail)
+
+	! The Fortran backend.  These only check the generated source and the
+	! diagnostics, which doesn't need a Fortran compiler.  Compiling and running
+	! the generated programs and comparing their output with the interpreter's is
+	! utils/test-transpile.sh
+
+	use syntran__transpile_m, only: transpile_rt_units_ok
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'Fortran transpiler'
+	character(len = *), parameter :: P = 'src/tests/test-src/errors/'
+	character(len = *), parameter :: T = 'src/tests/test-src/'
+
+	character(len = 8) :: sub_text
+	logical :: keeps_subnormals
+	logical, allocatable :: tests(:)
+	real :: sub_val
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! A build with fast-math flushes subnormals to zero, including the ones that
+	! the interpreter reads from a literal, so there's no subnormal for the
+	! emitter to see there.  Read one at run time, like the interpreter does
+	sub_text = '1.0e-45'
+	read(sub_text, *) sub_val
+	keeps_subnormals = sub_val /= 0 .and. abs(sub_val) < tiny(sub_val)
+
+	tests = &
+		[   &
+			! The generated program has the runtime, a main procedure, and a
+			! program to call it
+			index(transpile_src('let x = 1;'), 'module syntran_rt') > 0, &
+			index(transpile_src('let x = 1;'), 'subroutine syntran_main()') > 0, &
+
+			! The first thing in the file says what it is, not the runtime
+			index(transpile_src('let x = 1;'), &
+				'! Generated by `syntran --transpile`.') == 1, &
+			index(transpile_src('let x = 1;'), 'program syntran_program') > 0, &
+
+			! The notes for syntran developers aren't in what users get, and the
+			! comment that says where it's from is inside its module
+			index(transpile_src('let x = 1;'), 'gen_transpile_rt') == 0, &
+			index(transpile_src('let x = 1;'), 'INTERNAL') == 0, &
+			index(transpile_src('let x = 1;'), 'split_units') == 0, &
+			index(transpile_src('let x = 1;'), 'module syntran_prog'//line_feed// &
+				line_feed//'    ! Generated by `syntran --transpile`') > 0, &
+
+			! A variable has its own name, unless it's shadowed, in which case the
+			! one that shadows it is named by its slot so that it can't clash,
+			! even across types
+			index(transpile_src('let x = 1; { let x = "s"; println(x); } return x;'), &
+				'integer(int32) :: x'//line_feed) > 0, &
+			index(transpile_src('let x = 1; { let x = "s"; println(x); } return x;'), &
+				'character(len = :), allocatable :: x_g6') > 0, &
+			index(transpile_src('let x = 1; { let x = 2.0; } return x;'), &
+				'real(real64) :: x_g6') > 0, &
+			index(transpile_src('let x = 1; { let x = 2.0; } return x;'), 'x_g5') == 0, &
+
+			! Names that are reserved in Fortran, which are intrinsic fns that the
+			! generated code uses, or that could be taken for a name that the
+			! emitter makes up
+			index(transpile_src('let size = 1; return size;'), ':: size_g5') > 0, &
+			index(transpile_src('let int32 = 1; return int32;'), ':: int32_g5') > 0, &
+			index(transpile_src('let it_t1 = 1; return it_t1;'), ':: it_t1_g5') > 0, &
+			index(transpile_src('let p_a = 1; return p_a;'), ':: p_a_g5') > 0, &
+			index(transpile_src('let r = 1; return r;'), ':: r_g5') > 0, &
+			index(transpile_src('let x1 = 1; return x1;'), ':: x1'//line_feed) > 0, &
+			index(transpile_src('let point_2d = 1; return point_2d;'), &
+				':: point_2d'//line_feed) > 0, &
+
+			! Fortran is case insensitive
+			index(transpile_src('let x = 1; let X = 2; return x + X;'), &
+				':: x'//line_feed) > 0, &
+			index(transpile_src('let x = 1; let X = 2; return x + X;'), ':: X_g6') > 0, &
+
+			! A local doesn't have the name of a global that is hidden by it, and a
+			! fn doesn't have the name of a global
+			index(transpile_src('let n = 1; fn f(n: i32): i32 { return n; } return f(n);'), &
+				'value :: n_l1') > 0, &
+			index(transpile_src('let f = 1; fn f(a: i32): i32 { return a; } return f;', &
+				shake_fns = .false.), 'function f_f') > 0, &
+
+			! A fn that nothing calls is left out, unless it's asked to be kept.  One
+			! that is only called by another that is kept is in too, and so is one
+			! that is only named as a value
+			index(transpile_src('fn f(): i32 { return 1; } fn g(): i32 { return 2; } ' &
+				//'println(g());'), 'function f(') == 0, &
+			index(transpile_src('fn f(): i32 { return 1; } fn g(): i32 { return 2; } ' &
+				//'println(g());'), 'function g(') > 0, &
+			index(transpile_src('fn f(): i32 { return 1; } fn g(): i32 { return 2; } ' &
+				//'println(g());', shake_fns = .false.), 'function f(') > 0, &
+			index(transpile_src('fn f(): i32 { return 1; } fn g(): i32 { return f(); } ' &
+				//'println(g());'), 'function f(') > 0, &
+			index(transpile_src('fn f(): i32 { return 1; } fn g(): i32 { return f(); } ' &
+				//'fn h(): i32 { return g(); } println(1);'), 'function g(') == 0, &
+			index(transpile_src('fn f(x: i32): i32 { return x; } ' &
+				//'fn call(h: fn(i32): i32): i32 { return h(1); } println(call(f));'), &
+				'function f(') > 0, &
+
+			! The literals are as they are in the source, and of the default kind
+			! if it's int32
+			index(transpile_src('let x = 1.5e-3; return x;'), '1.5e-3_real64') > 0, &
+			index(transpile_src("let x = 3'f64; return x;"), '3.0_real64') > 0, &
+			index(transpile_src('let x = 1_000.5; return x;'), '1000.5_real64') > 0, &
+			index(transpile_src('let x = 2d3; return x;'), '2e3_real64') > 0, &
+			index(transpile_src('let x = 1.5f; return x;'), '1.5_real32') > 0, &
+
+			! A subnormal is written as its bits, which can't be flushed to zero
+			(.not. keeps_subnormals .or. &
+				index(transpile_src("let x = 1.0e-45'f32; return x;"), &
+				'transfer(1, 0.0_real32)') > 0), &
+			index(transpile_src('let x = 7; return x;'), '= 7'//line_feed) > 0, &
+			index(transpile_src("let x = 7'i64; return x;"), '7_int64') > 0, &
+
+			! The result of the program is printed like the CLI does, unless it
+			! is told not to
+			index(transpile_src('let x = 1;'), 'call rt_result(') > 0, &
+			index(transpile_src('let x = 1;', print_result = .false.), 'call rt_result(') == 0, &
+			index(transpile_src('let x = 1;'), 'call rt_result(trim(adjustl(') == 0, &
+			index(transpile_src('let x = 1;', trim_result = .true.), &
+				'call rt_result(trim(adjustl(') > 0, &
+
+			! A loop has no value, so the interpreter prints an invalid value
+			index(transpile_src('let x = 0; while (x < 3) x += 1;'), &
+				'Error: <invalid_value>') > 0, &
+
+			! A user fn is a recursive procedure.  A scalar parameter is `value`, so
+			! it isn't copied by hand even when the body assigns to it, but an
+			! array that is assigned to is
+			index(transpile_src('fn f(a: i32): i32 { return a; } return f(1);'), &
+				'recursive function f(') > 0, &
+			index(transpile_src('fn f(a: i32): i32 { return a; } return f(1);'), &
+				'integer(int32), value :: a') > 0, &
+			index(transpile_src('fn f(a: i32): i32 { a += 1; return a; } return f(1);'), &
+				'a_a') == 0, &
+			index(transpile_src('fn f(a: [i32; :]): i32 { a[0] = 1; return a[0]; } ' &
+				//'return f([1, 2]);'), 'a_a') > 0, &
+			eval('fn f(a: i32): i32 { a += 1; return a; } let b = 4; return f(b) * 10 + b;', &
+				.true.) == '54', &
+
+			! A `return` that ends a procedure is dropped, but not one that is
+			! nested in something
+			index(transpile_src('fn f(a: i32): i32 { return a; } return f(1);'), &
+				'return'//line_feed//'    end function') == 0, &
+			index(transpile_src('let x = 1; return x;'), &
+				'return'//line_feed//'    end subroutine syntran_main') == 0, &
+			index(transpile_src('fn f(a: i32): i32 { if (a > 0) { return 1; } return 2; } ' &
+				//'return f(1);'), '            return') > 0, &
+
+			! A result that is a literal is trimmed when it's transpiled
+			index(transpile_src('println("a");', trim_result = .true.), &
+				"call rt_result('')") > 0, &
+			index(transpile_src('println("a");', trim_result = .true.), &
+				'call rt_result(trim(adjustl(') == 0, &
+			index(transpile_src('return "  hi  ";', trim_result = .true.), &
+				"call rt_result('hi')") > 0, &
+			index(transpile_src('return "  hi  ";'), "call rt_result('  hi  ')") > 0, &
+
+			! A user's name can't clash with the runtime's names, whatever its case
+			index(transpile_src('fn rt_str(x: i32): i32 { return x; } return rt_str(1);'), &
+				'urt_str(') > 0, &
+			index(transpile_src('let RT_print = 1; return RT_print;'), ':: uRT_print'//line_feed) > 0, &
+
+			! Arrays are 1-based in Fortran, but 0-based in syntran
+			index(transpile_src('let a = [1, 2, 3]; return a[0];'), '(1)') > 0, &
+			index(transpile_src('let a = [1, 2, 3]; return a[1:3];'), '(2:3)') > 0, &
+
+			! Literals are folded: a widened i32 literal is an i64 literal, a dim
+			! has its 1 added, and the bounds of a range loop are constants
+			index(transpile_src('let a = [1, 2]; return size(a, 0) == 2;'), &
+				'dim = 1, kind = int64) == 2_int64') > 0, &
+			index(transpile_src('let a = [1, 2]; return size(a) == 2;'), &
+				'int(2, int64)') == 0, &
+			index(transpile_src('let t = 0; for i in [0: 4] { t += i; }'), &
+				'do i = 0, 3') > 0, &
+			index(transpile_src('let t = 0; for i in [0: 2: 10] { t += i; }'), &
+				'do i = 0, 9, 2') > 0, &
+			index(transpile_src('let t = 0; for i in [10: -3: 0] { t += i; }'), &
+				'do i = 10, 1, -3') > 0, &
+			index(transpile_src("let t = 0; for i in [0'i64: 3'i64] { t += 1; }"), &
+				'do i = 0_int64, 2_int64') > 0, &
+			index(transpile_src('let n = 4; let t = 0; for i in [0: n] { t += i; }'), &
+				'do i = 0, n - 1') > 0, &
+
+			! The loop variable is the do variable, unless the body assigns to it or
+			! passes it by reference, which Fortran doesn't allow.  A fn's too
+			index(transpile_src('let t = 0; for i in [0: 4] { t += i; }'), 'it_t') == 0, &
+			index(transpile_src('let t = 0; for i in [0: 4] { i += 1; t += i; }'), &
+				'do it_t1 = 0, 3') > 0, &
+			index(transpile_src('fn f(x: &i32) { x += 1; } let t = 0; for i in [0: 4] ' &
+				//'{ f(&i); t += i; }'), 'do it_t1 = 0, 3') > 0, &
+			index(transpile_src('fn f(n: i32): i32 { let t = 0; for i in [0: n] ' &
+				//'{ t += i; } return t; } return f(3);'), 'do i = 0, n - 1') > 0, &
+			index(transpile_src('fn f(n: i32): i32 { let t = 0; for i in [0: n] ' &
+				//'{ i += 1; t += i; } return t; } return f(3);'), 'do it_t') > 0, &
+
+			! The type spec of an array constructor is only there when it's needed
+			index(transpile_src('let a = [1, 2, 3]; return a;'), 'a = [1, 2, 3]') > 0, &
+			index(transpile_src('let a = [1.5, 2.5]; return a;'), '[1.5_real64, 2.5_real64]') > 0, &
+			index(transpile_src('let a = [true, false]; return a;'), '[.true., .false.]') > 0, &
+			index(transpile_src('let a = ["a", "b"]; return a;'), '[rt_str_t ::') > 0, &
+			index(transpile_src('let a = [1, 2, 3]; return a;'), 'integer(int32) :: 1') == 0, &
+
+			! println() is one call, with its arguments joined and adjacent literals
+			! made one
+			index(transpile_src('let x = 1; println("a", x);'), &
+				"call rt_println('a' // rt_str(x))") > 0, &
+			index(transpile_src('println("a", "b", "c");'), "call rt_println('abc')") > 0, &
+			index(transpile_src('println();'), "call rt_println('')") > 0, &
+			index(transpile_src('println("it''s");'), "call rt_println('it''s')") > 0, &
+			index(transpile_src('let x = 1; println(x, "a", "b", x);'), &
+				"call rt_println(rt_str(x) // 'ab' // rt_str(x))") > 0, &
+			index(transpile_src('let x = 1; println("a", x);'), 'rt_print(') == 0, &
+
+			! Parentheses are only there where Fortran needs them to read the
+			! operations as syntran's tree does
+			index(transpile_src('let a=1;let b=2;let c=3;let d=4; return a + b + c + d;'), &
+				'rt_str(a + b + c + d)') > 0, &
+			index(transpile_src('let a=1;let b=2;let c=3; return a - (b - c);'), &
+				'rt_str(a - (b - c))') > 0, &
+			index(transpile_src('let a=1;let b=2;let c=3; return a - b - c;'), &
+				'rt_str(a - b - c)') > 0, &
+			index(transpile_src('let a=1;let b=2;let c=3; return (a + b) * c;'), &
+				'rt_str((a + b) * c)') > 0, &
+			index(transpile_src('let a=1;let b=2;let c=3; return a + b * c;'), &
+				'rt_str(a + b * c)') > 0, &
+			index(transpile_src('let a=1;let b=2;let c=3; return a / b * c;'), &
+				'rt_str(a / b * c)') > 0, &
+			index(transpile_src('let a=1;let b=2;let c=3; return a / (b * c);'), &
+				'rt_str(a / (b * c))') > 0, &
+			index(transpile_src('let a=1;let b=2;let c=3; return -a * b;'), &
+				'rt_str((-a) * b)') > 0, &
+			index(transpile_src('let a=1;let b=2; return a - -b;'), 'rt_str(a - (-b))') > 0, &
+			index(transpile_src('let a=1;let b=2;let c=3; return a * b ** c;'), &
+				'rt_str(a * b ** c)') > 0, &
+			index(transpile_src('let a=1;let b=2;let c=3; return (a * b) ** c;'), &
+				'rt_str((a * b) ** c)') > 0, &
+			index(transpile_src('let a=1;let b=2;let c=3; return a ** b ** c;'), &
+				'rt_str(a ** b ** c)') > 0, &
+			index(transpile_src('let a=1;let b=2;let c=3; return a ** (b ** c);'), &
+				'rt_str(a ** b ** c)') > 0, &
+			index(transpile_src('let a=1;let b=2;let c=3; return (a ** b) ** c;'), &
+				'rt_str((a ** b) ** c)') > 0, &
+			index(transpile_src('let a=1;let b=2;let c=3; return a ** (b * c);'), &
+				'rt_str(a ** (b * c))') > 0, &
+			index(transpile_src('let a=1;let b=2; return -a ** b;'), '-a ** b') > 0, &
+			index(transpile_src('let a=1;let b=2; return (-a) ** b;'), '(-a) ** b') > 0, &
+			index(transpile_src('let a=1;let b=2; return a ** -b;'), 'a ** (-b)') > 0, &
+			index(transpile_src('let a=1;let b=2;let c=3; return (a + b) % c;'), &
+				'mod(a + b, c)') > 0, &
+			index(transpile_src('let a=1;let b=2;let c=3; return a + b == c;'), &
+				'(a + b == c)') > 0, &
+			index(transpile_src('let a=true;let b=false;let c=true; return (a and b) or c;'), &
+				'a .and. b .or. c') > 0, &
+			index(transpile_src('let a=true;let b=false;let c=true; return a and (b or c);'), &
+				'a .and. (b .or. c)') > 0, &
+			index(transpile_src('let a=1;let b=2;let c=3;let d=4; return (a == b) == (c == d);'), &
+				'a == b .eqv. c == d') > 0, &
+			index(transpile_src('let a=1;let b=2; return (a < b) == (b < a) != true;'), &
+				'.neqv.') > 0, &
+			index(transpile_src('let a=1; let x = 2.5; return a + x;'), &
+				'real(a, real64) + x') > 0, &
+			index(transpile_src('fn f(ok: bool): i32 { if (ok) return 1; return 0; } ' &
+				//'let a = 1; return f(a == 1);'), 'f(a == 1)') > 0, &
+			index(transpile_src('let a = 1.5; return abs(a - 2.0);'), 'abs(a - 2.0_real64)') > 0, &
+
+			! Only the parts of the runtime that a program uses, and what they use,
+			! are in it.  The runtime can be split into units and put back
+			transpile_rt_units_ok(), &
+			index(transpile_src('println(1);'), 'function rt_str_i32(') > 0, &
+			index(transpile_src('println(1);'), 'subroutine rt_println(') > 0, &
+			index(transpile_src('println(1);'), 'rt_str_a_i32_1') == 0, &
+			index(transpile_src('println(1);'), 'rt_open') == 0, &
+			index(transpile_src('println(1);'), 'rt_readln') == 0, &
+			index(transpile_src('println(1);'), 'rt_reshape_str') == 0, &
+			index(transpile_src('println(1);'), 'subroutine rt_result(') > 0, &
+			index(transpile_src('println(1);', print_result = .false.), &
+				'subroutine rt_result(') == 0, &
+			! A generic interface keeps its specifics, and they keep what they call
+			index(transpile_src('println([1, 2]);'), 'function rt_str_a_i64_2(') > 0, &
+			index(transpile_src('println([1, 2]);'), 'function rt_join(') > 0, &
+			index(transpile_src('let f = open("x.txt", "r"); close(f);'), &
+				'function rt_open(') > 0, &
+			index(transpile_src('let f = open("x.txt", "r"); close(f);'), &
+				'function rt_str_a_i64_2(') == 0, &
+
+			! The helpers of structs and enums are only there if they are used, and
+			! those they use come with them
+			index(transpile_src('struct P{x:i32} let p = P{x = 1}; println(p.x);'), &
+				'P_st1_str') == 0, &
+			index(transpile_src('struct P{x:i32} let p = P{x = 1}; println(p.x);'), &
+				'type :: P_st1') > 0, &
+			index(transpile_src('struct P{x:i32} let p = P{x = 1}; println(p);'), &
+				'function P_st1_str(') > 0, &
+			index(transpile_src('struct P{x:i32} let p = P{x = 1}; println(p);'), &
+				'P_st1_join') == 0, &
+			index(transpile_src('struct P{x:i32} let ps = [P{x = 1}]; println(ps);'), &
+				'function P_st1_join(') > 0, &
+			index(transpile_src('struct P{x:i32} let ps = [P{x = 1}]; println(ps);'), &
+				'function P_st1_str(') > 0, &
+			index(transpile_src('struct P{x:i32} let ps = [P{x = 1}]; println(ps);'), &
+				'P_st1_fill') == 0, &
+			index(transpile_src('struct P{x:i32} let ps = [P{x = 1}; 3]; println(size(ps));'), &
+				'function P_st1_fill(') > 0, &
+			index(transpile_src('enum Dir { N, S } let x = 1; println(x);'), &
+				'Dir_en1_') == 0, &
+			index(transpile_src('enum Dir { N, S } let d = Dir.S; println(d);'), &
+				'function Dir_en1_str(') > 0, &
+			index(transpile_src('enum Dir { N, S } let d = Dir.S; println(d);'), &
+				'Dir_en1_val') == 0, &
+			index(transpile_src('enum Dir { N, S } let d = Dir.S; println(i32(d));'), &
+				'function Dir_en1_val(') > 0, &
+
+			! The programs which the transpiler tests compare between backends
+			! still need to work as programs in the interpreter, with no failed
+			! checks of their own.  The generated programs are compared with the
+			! interpreter's output by utils/test-transpile.sh
+			interpret_file(T//'transpile/test-01.syntran', .true.) == '0', &
+			interpret_file(T//'transpile/test-02.syntran', .true.) == '0', &
+			interpret_file(T//'transpile/test-03.syntran', .true.) == '0', &
+			interpret_file(T//'transpile/test-04.syntran', .true.) == '0', &
+			interpret_file(T//'transpile/test-05.syntran', .true.) == '0', &
+			interpret_file(T//'transpile/test-06.syntran', .true.) == '0', &
+			interpret_file(T//'transpile/test-08.syntran', .true.) == '0', &
+			interpret_file(T//'transpile/test-09.syntran', .true.) == '0', &
+			interpret_file(T//'transpile/test-11.syntran', .true.) == '0', &
+			interpret_file(T//'transpile/test-12.syntran', .true.) == '0', &
+			transpiles_ok(T//'transpile/test-01.syntran'), &
+			transpiles_ok(T//'transpile/test-02.syntran'), &
+			transpiles_ok(T//'transpile/test-03.syntran'), &
+			transpiles_ok(T//'transpile/test-04.syntran'), &
+			transpiles_ok(T//'transpile/test-05.syntran'), &
+			transpiles_ok(T//'transpile/test-06.syntran'), &
+			transpiles_ok(T//'transpile/test-07.syntran'), &
+			transpiles_ok(T//'transpile/test-08.syntran'), &
+			transpiles_ok(T//'transpile/test-09.syntran'), &
+			transpiles_ok(T//'transpile/test-10.syntran'), &
+			transpiles_ok(T//'transpile/test-11.syntran'), &
+			transpiles_ok(T//'transpile/test-12.syntran'), &
+
+			! Most of the tests programs are supported
+			transpiles_ok(T//'fns/test-01.syntran'), &
+			transpiles_ok(T//'recursion/test-01.syntran'), &
+			transpiles_ok(T//'while-loops/test-01.syntran'), &
+			transpiles_ok(T//'for-loops/test-01.syntran'), &
+			transpiles_ok(T//'var-scopes/test-01.syntran'), &
+			transpiles_ok(T//'switch/test-01.syntran'), &
+			transpiles_ok(T//'switch/test-09.syntran'), &
+
+			! An enum value is the index of its variant, with helper fns for its name
+			! and its backing value
+			index(transpile_src('enum Dir { N, S = 5 } let d = Dir.S; println(d);'), &
+				'function Dir_en') > 0, &
+			index(transpile_src('enum Dir { N, S = 5 } let d = Dir.S; println(i32(d));'), &
+				'_val(') > 0, &
+
+			! A struct is a derived type with a component for each member, named by
+			! its index, and fns for its string
+			index(transpile_src('struct P{x:i32, s:str} let p = P{x = 1, s = "a"}; ' &
+				//'println(p.x);'), 'type :: P_st1') > 0, &
+			index(transpile_src('struct P{x:i32, s:str} let p = P{x = 1, s = "a"}; ' &
+				//'println(p.s);'), ':: p'//line_feed) > 0, &
+			index(transpile_src('struct P{x:i32} let p = P{x = 1}; p.x = 2;'), &
+				'%x = 2') > 0, &
+			index(transpile_src('struct P{a:i32, A:i32} let p = P{a = 1, A = 2}; p.a = 2;'), &
+				'%m1 = 2') > 0, &
+
+			! The loop variable of a `for` over an array of structs is a struct, which
+			! its members can be read from
+			eval('struct P{n: i32} let ps = [P{n = 4}, P{n = 5}]; let t = 0; ' &
+				//'for p in ps { t += p.n; } return t;', .true.) == '9', &
+
+			! A module's fns, its variables, and its own imports.  Its init code runs
+			! where it is imported
+			transpiles_ok(T//'modules/test-01.syntran'), &
+			transpiles_ok(T//'modules/test-modvar-01.syntran'), &
+			transpiles_ok(T//'modules/test-alias-01.syntran'), &
+			transpiles_ok(T//'modules/subdir/deep/test-grandparent.syntran'), &
+
+			! A module with struct methods that is imported twice, directly and through
+			! another module, has its methods parsed twice under one name
+			transpiles_ok(T//'modules/test-method-diamond.syntran'), &
+
+			! A switch is a named block that each arm leaves once it has run, with
+			! the subject stored once.  An array subject compares the shape and the
+			! elements
+			index(transpile_src('let x = 2; let r = 0; switch x { case 1 { r = 1; } ' &
+				//'case 2:5 { r = 2; } default { r = 3; } } return r;'), &
+				'sw_blk1: block') > 0, &
+			index(transpile_src('let x = 2; let r = 0; switch x { case 1 { r = 1; } ' &
+				//'default { r = 3; } } return r;'), 'exit sw_blk') > 0, &
+			index(transpile_src('let a = [1, 2]; let r = 0; switch a { case [1, 2] ' &
+				//'{ r = 1; } } return r;'), 'rt_arr_eq(') > 0, &
+
+			! A string with a step can't be a Fortran substring, so it's a call, for
+			! reading and for assigning
+			index(transpile_src('let s = "abc"; println(s[:-1:]);'), 'rt_str_step(') > 0, &
+			index(transpile_src('let s = "abc"; s[:-1:] = "xyz"; println(s);'), &
+				'call rt_str_step_set(') > 0, &
+			index(transpile_src('let v = ["ab", "cd"]; v[0: 2, :-1:] = "xy"; println(v);'), &
+				'call rt_str_step_set(') > 0, &
+			.not. diag_has_code(get_diags_transpile('let s = "abc"; println(s[:-1:]);'), &
+				EC_TRANSPILE_UNSUPPORTED), &
+
+			! Unsupported constructs are diagnostics.  Everything else in the
+			! program is still checked, one diagnostic per statement
+			diag_has_code(get_diags_transpile_file(P//'E115-transpile-unsupported.syntran'), &
+				EC_TRANSPILE_UNSUPPORTED), &
+			diag_count_code(get_diags_transpile_file(P//'E115-transpile-unsupported.syntran'), &
+				EC_TRANSPILE_UNSUPPORTED) == 4, &
+			! ... and structs, modules, file I/O, and fn pointers, which are supported,
+			! are not
+			transpiles_ok(T//'fns/test-24.syntran'), &
+			index(transpile_src('fn f(x: i32): i32 { return x; } fn g(h: fn(i32): i32): i32 ' &
+				//'{ return h(1); } return g(f);'), 'abstract interface') > 0, &
+			transpiles_ok(T//'struct/test-01.syntran'), &
+			transpiles_ok(T//'modules/boxuser.syntran'), &
+			transpiles_ok(T//'io/test-01.syntran'), &
+
+			! ... but a transpile-only diagnostic isn't an error when evaluating
+			.not. diag_has_code(get_diags_file(P//'E115-transpile-unsupported.syntran'), &
+				EC_TRANSPILE_UNSUPPORTED), &
+
+			! A program with a parse error is reported as usual, instead
+			.not. diag_has_code(get_diags_transpile('let x = ;'), EC_TRANSPILE_UNSUPPORTED), &
+			transpile_is_empty('let x = ;'), &
+
+			! Nothing is generated for a program with diagnostics
+			transpile_is_empty('let c = std::caller();') &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_transpile
 
 !===============================================================================
 
@@ -9694,6 +10248,7 @@ subroutine unit_tests(iostat)
 	if (run_group('bad_syntax')) call unit_test_bad_syntax(npass, nfail)
 	if (run_group('return_paths')) call unit_test_return_paths(npass, nfail)
 	if (run_group('error_codes')) call unit_test_error_codes(npass, nfail)
+	if (run_group('transpile')) call unit_test_transpile(npass, nfail)
 	if (run_group('runtime_errors')) call unit_test_runtime_errors(npass, nfail)
 	if (run_group('bounds_check')) call unit_test_bounds_check(npass, nfail)
 	if (run_group('runtime_traces')) call unit_test_runtime_traces(npass, nfail)

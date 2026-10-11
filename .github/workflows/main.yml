@@ -45,6 +45,11 @@
 			},
 			{
 				"if": "matrix.os == 'ubuntu-24.04'",
+				"name": "Check embedded transpiler runtime is up to date",
+				"run": "bash src/gen_transpile_rt.sh && git diff --exit-code src/transpile_rt.f90"
+			},
+			{
+				"if": "matrix.os == 'ubuntu-24.04'",
 				"name": "Set ubuntu PATH",
 				"run": "echo \"$HOME/bin\" >> $GITHUB_PATH"
 			},
@@ -236,6 +241,17 @@
 				"run":
 				"
 					bash ./utils/test-samples.sh \n
+				"
+			},
+			{
+				"if": "matrix.os == 'ubuntu-24.04'",
+				"name": "Test transpiler",
+				"shell": "bash",
+				"run":
+				"
+					# Transpile every test program and sample to Fortran, \n
+					# compile it, and compare its output with the interpreter's \n
+					bash ./utils/test-transpile.sh ./build/Debug/syntran gfortran-14 \n
 				"
 			},
 			{
@@ -526,12 +542,16 @@
 
 					ulimit -s unlimited \n
 
-					fpm test test --profile debug   --verbose --flag \"-DSYNTRAN_INTEL -fpp\" \n
+					# fpm's Intel debug profile uses `-check all`, which makes \n
+					# every array-temporary copy-in print a forrtl warning (406) \n
+					# with a backtrace.  They're harmless, so turn just that one \n
+					# check off. \n
+					fpm test test --profile debug   --verbose --flag \"-DSYNTRAN_INTEL -fpp -check noarg_temp_created\" \n
 
 					# Same short tests again, with runtime subscript/string-index \n
 					# bounds checking (RC_SUBSCRIPT_OOB, R33) turned on -- exercises \n
 					# unit_test_bounds_check, which is a no-op without this flag \n
-					fpm test test --profile debug   --verbose --flag \"-DSYNTRAN_INTEL -DSYNTRAN_BOUNDS_CHECK -fpp\" \n
+					fpm test test --profile debug   --verbose --flag \"-DSYNTRAN_INTEL -DSYNTRAN_BOUNDS_CHECK -fpp -check noarg_temp_created\" \n
 
 					# The optimized -Ofast build goes through cmake instead of \n
 					# fpm (see CMakeLists.txt), which also builds the core lib \n

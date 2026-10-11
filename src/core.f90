@@ -31,6 +31,42 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - transpiler improvements:
+	!    * cover more OS's and intel in addition to gnu in testing. currently
+	!      only gnu on ubuntu
+	!    * readln implementation is technically O(n**2), although the 256 char
+	!      buffer in practice usually has a nice constant factor
+	!    * rank-4 limitation is clunky. is there really no general size(*) or
+	!      polymorphic workaround? if not, maybe go up a few more ranks (at
+	!      least 6 or 7)
+	!    * replace stack_trace with a native backtrace() call instead of
+	!      parse erroring?
+	!    * option to split generated code into multiple files -- one for runtime
+	!      lib, another for user program, maybe even split user files per input
+	!      syntran module
+	!      + maybe also generate a cmake list (or makefile) to accompany?
+	!      + runtime lib probably shouldn't be shipped pre-compiled, since it
+	!        would only work with one user's compiler
+	!      + would want to flip --keep-unused-fns default if split. tree shaking
+	!        only makes sense for single file outputs. with splitting,
+	!        tree-shaking would introduce churn which would backfire for
+	!        incremental builds
+	!    * very low priority, but de-mangling and parenthesis stripping in
+	!      generated code seem to miss a few edge cases
+	!    * save comments? would need to save "trivia" tokens in parser. maybe
+	!      not worth the overhead or the complications of re-formating without
+	!      introducing edge cases like unterminated pre-processor breaking
+	!      comments
+	!    * eventually (long away) shoot for a full syntran compiler using LLVM
+	!      + claude estimates compiler would be 3x more code than transpiler
+	!      + initial transpiler pr is about 15 kloc code
+	!      + considering claude did the transpiler in one day, a full compiler
+	!        could still be very achievable
+	!  - Two pre-existing interpreter bugs turned up while probing, both
+	!    reproduced on the old binary. They are not part of this PR; you may
+	!    want issues for them:
+	!    * pts = [pts, [p]] with an array of structs → Internal syntran error[I2]
+	!    * f(&h, &h) with & and &const params → SIGSEGV
 	!  - api documentation
 	!    * the readme does not mention the eval*() functions and how to call
 	!      them from a simple fortran program
@@ -44,6 +80,14 @@ module syntran__core_m
 	!    * 15 has an intcode program struct getting passed down a recursive DFS
 	!    * maybe port both, they're fast
 	!    * consider 19, 21, 23, ... after i implement them
+	!  - error message improvements:
+	!    * "Error[E48]: binary operator `*` is not defined for types array_type
+	!      and str_type"
+	!    * replace "array_type", "str_type", etc. with something more readable
+	!    * claude recently did something similar with a different error message
+	!  - build option macro for NO_ISOCLINE?
+	!    * api users might want eval-only with no repl on no requirement for c
+	!      compiler
 	!  - direct enum to i64 casting. currently can only cast to i32 directly, or
 	!    to i64 awkwardly as i64(i32(Enum.variant))
 	!    * in the other direction, casting i64 to enum could fail for big nums,
