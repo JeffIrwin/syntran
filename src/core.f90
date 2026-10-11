@@ -80,6 +80,14 @@ module syntran__core_m
 	!    * 15 has an intcode program struct getting passed down a recursive DFS
 	!    * maybe port both, they're fast
 	!    * consider 19, 21, 23, ... after i implement them
+	!  - error message improvements:
+	!    * "Error[E48]: binary operator `*` is not defined for types array_type
+	!      and str_type"
+	!    * replace "array_type", "str_type", etc. with something more readable
+	!    * claude recently did something similar with a different error message
+	!  - build option macro for NO_ISOCLINE?
+	!    * api users might want eval-only with no repl on no requirement for c
+	!      compiler
 	!  - direct enum to i64 casting. currently can only cast to i32 directly, or
 	!    to i64 awkwardly as i64(i32(Enum.variant))
 	!    * in the other direction, casting i64 to enum could fail for big nums,
