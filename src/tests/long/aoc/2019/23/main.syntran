@@ -1,0 +1,170 @@
+
+use ../../utils_2026::*;
+use ../../queues/queue_i64 as queue_i64;
+
+use intcode;  // special-purpose -1 padded input queue
+
+let filename = "input.txt";
+
+//==============================================================================
+
+fn part1(): str
+{
+	let sum_ = 0'i64;
+
+	const prog0 = read_i64_mat_delim(filename, ",")[:,0];
+	let status = intcode::new_status();
+
+	const n = 50'i64;
+	let inputs = queue_i64::new();
+	let progs = [intcode::new_program(prog0); n];
+	let packets = queue_i64::new();
+
+	// When each computer boots up, it will request its network address via a
+	// single input instruction
+	//
+	// The only hard part about today's puzzle is that it's vague about how
+	// specifically to do things concurrently
+	//
+	// I use a modified intcode integerpretter which pads inputs with -1, but
+	// returns with a wait_input status after 3 pads in a row. If you don't pad
+	// at all you will never output, but if you pad indefinitely your first
+	// program will enter an infinite loop
+	for addr in [0: n]
+	{
+		inputs.push(addr);
+		let outputs = progs[addr].exec(&inputs, &status);
+		while not outputs.is_empty()
+			packets.push( outputs.pop() );
+		//println("outputs = ", outputs.data);
+		//println("status  = ", status);
+		//println();
+	}
+
+	// Process packet queue
+	while not packets.is_empty()
+	{
+		const addr = packets.pop();
+		let x = -1'i64;
+		let y = -1'i64;
+		if not packets.is_empty() x = packets.pop();
+		if not packets.is_empty() y = packets.pop();
+		//println("addr = ", addr);
+
+		if addr == 255
+		{
+			sum_ = y;
+			break;
+		}
+		if (addr < 0 ) continue;
+		if (addr >= n) continue;
+
+		inputs.push(x);
+		inputs.push(y);
+		let outputs = progs[addr].exec(&inputs, &status);
+		while not outputs.is_empty()
+			packets.push( outputs.pop() );
+	}
+
+	println("part 1 = ", sum_);
+	return str(sum_);
+}
+
+fn part2(): str
+{
+	let sum_ = 0'i64;
+
+	const prog0 = read_i64_mat_delim(filename, ",")[:,0];
+	let status = intcode::new_status();
+
+	const n = 50'i64;
+	let inputs = queue_i64::new();
+	let progs = [intcode::new_program(prog0); n];
+	let packets = queue_i64::new();
+
+	// When each computer boots up, it will request its network address via a
+	// single input instruction
+	for addr in [0: n]
+	{
+		inputs.push(addr);
+		let outputs = progs[addr].exec(&inputs, &status);
+		while not outputs.is_empty()
+			packets.push( outputs.pop() );
+		//println("outputs = ", outputs.data);
+		//println("status  = ", status);
+	}
+
+	// The data in each packet it receives overwrites the NAT's packet memory
+	// with the new packet's X and Y values
+	let natx  = -1;
+	let naty  = -1;
+	let naty0 = -1;
+
+	// Process packet queue
+	while true
+	{
+		let addr = 0;
+		let x = -1'i64;
+		let y = -1'i64;
+		if packets.is_empty()
+		{
+			// Not much of a twist for part 2
+			if naty == naty0
+			{
+				sum_ = naty;
+				break;
+			}
+			naty0 = naty;
+			x = natx;
+			y = naty;
+		}
+		else
+		{
+			addr = packets.pop();
+			x    = packets.pop();
+			y    = packets.pop();
+		}
+		//println("addr = ", addr);
+
+		if addr == 255
+		{
+			natx = x;
+			naty = y;
+		}
+		if (addr < 0 ) continue;
+		if (addr >= n) continue;
+
+		inputs.push(x);
+		inputs.push(y);
+		let outputs = progs[addr].exec(&inputs, &status);
+		while not outputs.is_empty()
+			packets.push( outputs.pop() );
+	}
+
+	println("part 2 = ", sum_);
+	return str(sum_);
+}
+
+//==============================================================================
+
+fn main(): str
+{
+	// For unit-testing (within the syntran repo), this main fn returns a value
+	// to be compared with expected results
+	println();
+	println("Starting AOC syntran main 2019/23");
+
+	let p1 = part1();
+	let p2 = part2();
+
+	println("Ending AOC syntran main");
+	println();
+	return p1 + ":" + p2;
+}
+
+//==============================================================================
+
+return main();
+
+//==============================================================================
+

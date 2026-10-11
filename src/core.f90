@@ -63,13 +63,6 @@ module syntran__core_m
 	!      + initial transpiler pr is about 15 kloc code
 	!      + considering claude did the transpiler in one day, a full compiler
 	!        could still be very achievable
-	!  - port something like aoc 2019/17 or 15 here as a long test
-	!    * good non-trivial coverage of enums in a module plus other recent
-	!      features (switch/case)
-	!    * 17 has switch case with array of enum subjects
-	!    * 15 has an intcode program struct getting passed down a recursive DFS
-	!    * maybe port both, they're fast
-	!    * consider 19, 21, 23, ... after i implement them
 	!  - error message improvements:
 	!    * "Error[E48]: binary operator `*` is not defined for types array_type
 	!      and str_type"
