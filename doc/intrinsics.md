@@ -29,6 +29,46 @@ elemental.
 
 # List of intrinsic functions
 
+## `abs`
+```rust
+fn abs(x: any_num): any_num
+#elemental
+```
+
+Return the absolute value of `x`, with the same type as `x`.
+
+The `abs` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+## `acos`
+```rust
+fn acos(x: any_float): any_float
+#elemental
+```
+
+Compute the inverse cosine of `x`, in radians.  The result is in the range
+`[0, std::PI]`.  If `x` is outside of `[-1, 1]`, the result is `NaN`.
+
+The `acos` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`cos`](#cos), [`acosd`](#acosd), [`asin`](#asin), [`atan`](#atan)
+
+## `acosd`
+```rust
+fn acosd(x: any_float): any_float
+#elemental
+```
+
+Compute the inverse cosine of `x`, in degrees.  The result is in the range
+`[0, 180]`.  If `x` is outside of `[-1, 1]`, the result is `NaN`.  This is
+[`acos`](#acos) with the result converted to degrees.
+
+The `acosd` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`cosd`](#cosd), [`acos`](#acos), [`asind`](#asind), [`atand`](#atand)
+
 ## `all`
 ```rust
 fn all(mask: [bool; any_rank]): bool
@@ -69,6 +109,75 @@ zero-indexed, and a `dim` outside of `0 <= dim < rank` is a runtime error
 
 Related functions: [`all`](#all)
 
+## `args`
+```rust
+fn args(): [str; :]
+```
+
+Return the command-line arguments passed to the script, as a rank-1 array of
+strings.  These are the arguments after `--` on the command line, e.g.
+`syntran script.syntran -- a b c` makes `std::args()` return `["a", "b", "c"]`.
+The array is empty if there are none.  Must be called with the `std::` prefix,
+e.g. `std::args()`.
+
+## `asin`
+```rust
+fn asin(x: any_float): any_float
+#elemental
+```
+
+Compute the inverse sine of `x`, in radians.  The result is in the range
+`[-std::PI / 2, std::PI / 2]`.  If `x` is outside of `[-1, 1]`, the result is
+`NaN`.
+
+The `asin` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`sin`](#sin), [`asind`](#asind), [`acos`](#acos), [`atan`](#atan)
+
+## `asind`
+```rust
+fn asind(x: any_float): any_float
+#elemental
+```
+
+Compute the inverse sine of `x`, in degrees.  The result is in the range
+`[-90, 90]`.  If `x` is outside of `[-1, 1]`, the result is `NaN`.  This is
+[`asin`](#asin) with the result converted to degrees.
+
+The `asind` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`sind`](#sind), [`asin`](#asin), [`acosd`](#acosd), [`atand`](#atand)
+
+## `atan`
+```rust
+fn atan(x: any_float): any_float
+#elemental
+```
+
+Compute the inverse tangent of `x`, in radians.  The result is in the range
+`[-std::PI / 2, std::PI / 2]`.
+
+The `atan` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`tan`](#tan), [`atand`](#atand), [`asin`](#asin), [`acos`](#acos)
+
+## `atand`
+```rust
+fn atand(x: any_float): any_float
+#elemental
+```
+
+Compute the inverse tangent of `x`, in degrees.  The result is in the range
+`[-90, 90]`.  This is [`atan`](#atan) with the result converted to degrees.
+
+The `atand` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`tand`](#tand), [`atan`](#atan), [`asind`](#asind), [`acosd`](#acosd)
+
 ## `caller`
 ```rust
 fn caller(): str
@@ -107,6 +216,35 @@ Close a `file_handle` created by [`open`](#open)
 
 Related functions: [`open`](#open), [`writeln`](#writeln)
 
+## `cos`
+```rust
+fn cos(x: any_float): any_float
+#elemental
+```
+
+Compute the cosine of `x`, where `x` is in radians.  For an argument in
+degrees, use [`cosd`](#cosd).
+
+The `cos` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`sin`](#sin), [`tan`](#tan), [`cosd`](#cosd), [`acos`](#acos)
+
+## `cosd`
+```rust
+fn cosd(x: any_float): any_float
+#elemental
+```
+
+Compute the cosine of `x`, where `x` is in degrees.  For example, `cosd(60.0)`
+is `0.5`, and `cosd(90.0)` is `0.0` where `cos(std::PI / 2.0)` is only
+approximately zero.  For an argument in radians, use [`cos`](#cos).
+
+The `cosd` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`sind`](#sind), [`tand`](#tand), [`cos`](#cos), [`acosd`](#acosd)
+
 ## `count`
 ```rust
 fn count(mask: [bool; any_rank]): i64
@@ -126,6 +264,22 @@ zero-indexed, and a `dim` outside of `0 <= dim < rank` is a runtime error
 ([R34](errors.md#r34----reduce-dim-range)).
 
 Related functions: [`any`](#any), [`all`](#all)
+
+## `dot`
+```rust
+fn dot(vector_a: [any_num; :], vector_b: [any_num; :]): any_num
+```
+
+Return the dot product of two vectors, i.e. the sum of `vector_a[i] * vector_b[i]`
+over all `i`.  For example, `dot([1, 2, 3], [4, 5, 6])` is `32`.
+
+Like Fortran's `dot_product()`, the arguments must be rank-1 arrays.  Both
+vectors must have the same element type, which is also the type of the result,
+and the same length.
+<!-- TODO: a length mismatch is not diagnosed by syntran.  In a debug build it
+aborts with a raw Fortran bounds-check error instead of a syntran runtime error. -->
+
+Related functions: [`norm2`](#norm2), [`sum`](#sum)
 
 ## `eof`
 ```rust
@@ -169,9 +323,15 @@ By the C convention, use status `0` for success and any other value for failure.
 ## `exp`
 ```rust
 fn exp(x: any_float): any_float
+#elemental
 ```
 
 Compute the base _e_ exponential of `x`
+
+The `exp` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`log`](#log)
 
 ## `getenv`
 ```rust
@@ -226,10 +386,54 @@ Other non-numeric types (`bool`, `file`) cannot be cast to `i64`.
 
 ## `len`
 ```rust
-fn len(s: str): i32
+fn len(s: str): i64
 ```
 
 Get the length of a string `s`
+
+Related functions: [`size`](#size), [`repeat`](#repeat)
+
+## `log`
+```rust
+fn log(x: any_float): any_float
+#elemental
+```
+
+Compute the natural logarithm (base _e_) of `x`.  The result is `NaN` if `x` is
+negative, and `-Infinity` if `x` is zero.  This is not an error.
+
+The `log` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`exp`](#exp), [`log10`](#log10), [`log2`](#log2)
+
+## `log10`
+```rust
+fn log10(x: any_float): any_float
+#elemental
+```
+
+Compute the base 10 logarithm of `x`.  Like [`log`](#log), the result is `NaN`
+if `x` is negative, and `-Infinity` if `x` is zero.
+
+The `log10` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`log`](#log), [`log2`](#log2)
+
+## `log2`
+```rust
+fn log2(x: any_float): any_float
+#elemental
+```
+
+Compute the base 2 logarithm of `x`.  Like [`log`](#log), the result is `NaN`
+if `x` is negative, and `-Infinity` if `x` is zero.
+
+The `log2` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`log`](#log), [`log10`](#log10)
 
 ## `max`
 ```rust
@@ -317,6 +521,21 @@ Not to be confused with [`min`](#min), which compares its scalar arguments.
 
 Related functions: [`maxval`](#maxval), [`min`](#min)
 
+## `norm2`
+```rust
+fn norm2(array: [any_float; any_rank]): any_float
+```
+
+Return the Euclidean norm of `array`, i.e. the square root of the sum of the
+squares of all of its elements.  For example, `norm2([3.0, 4.0])` is `5.0`.  The
+result is a scalar for an array of any rank.
+
+Like Fortran's `norm2()`, this only accepts floating-point arrays.  Integer
+arrays are a parser error, unlike [`dot`](#dot) and [`sum`](#sum) which accept
+them.
+
+Related functions: [`dot`](#dot), [`sum`](#sum)
+
 ## `open`
 ```rust
 fn open(filename: str, mode: str): file
@@ -357,7 +576,7 @@ Any invalid numbers will cause a runtime error.
 Note that other numeric types (`i32`) can be converted to float simply by
 multiplying by `1.0f`.
 
-Related functions: [`parse_i32`](`parse_i32`), [`str`](#str)
+Related functions: [`parse_i32`](#parse_i32), [`str`](#str)
 
 ## `parse_f64`
 ```rust
@@ -372,7 +591,7 @@ Any invalid numbers will cause a runtime error.
 Note that other numeric types (`i32`) can be converted to double simply by
 multiplying by `1.0`.
 
-Related functions: [`parse_f32`](`parse_f32`), [`str`](#str)
+Related functions: [`parse_f32`](#parse_f32), [`str`](#str)
 
 ## `parse_i32`
 ```rust
@@ -389,7 +608,7 @@ to similar functions as `atoi()`, `stoi()`, `read()`, `parse()`, `strtol()`,
 
 Note that other numeric types (`f32`) can be implicitly cast to `i32`.
 
-Related functions: [`parse_i64`](`parse_i64`), [`str`](#str)
+Related functions: [`parse_i64`](#parse_i64), [`str`](#str)
 
 ## `parse_i64`
 ```rust
@@ -401,7 +620,7 @@ returns `65`.
 
 Any invalid numbers will cause a runtime error.
 
-Related functions: [`parse_i32`](`parse_i32`), [`str`](#str)
+Related functions: [`parse_i32`](#parse_i32), [`str`](#str)
 
 ## `print_trace`
 ```rust
@@ -459,13 +678,109 @@ Read a single line from `file_handle`, or from stdin if called with no argument
 
 Related functions: [`close`](#close), [`eof`](#eof), [`open`](#open)
 
-## `size`
+## `repeat`
 ```rust
-fn size(array: [any; any_rank], dim: i32): i32
+fn repeat(str: str, ncopies: i32): str
 ```
 
-Determine the extent of `array` along a specified dimension `dim`
-<!-- , or the total number of elements in ARRAY if DIM is absent. -->
+Return `str` concatenated with itself `ncopies` times.  For example,
+`repeat("ab", 3)` is `"ababab"`, and an `ncopies` of `0` gives the empty
+string.  `ncopies` must not be negative.
+<!-- TODO: a negative `ncopies` is not diagnosed by syntran.  In a debug build
+it aborts with a raw Fortran runtime error instead of a syntran one. -->
+
+Related functions: [`len`](#len), [`str`](#str)
+
+## `reshape`
+```rust
+fn reshape(source: [any; any_rank], shape: [i32; :]): [any; size(shape)]
+```
+
+Return an array with the same elements as `source`, in the same order, but with
+the extents given by `shape`.  The result has the same element type as `source`
+and a rank equal to the length of `shape`.  Elements are in column-major order,
+i.e. the first dimension varies fastest, so for example this makes a 2x3 matrix:
+```rust
+let m = std::reshape([1, 2, 3, 4, 5, 6], [2, 3]);
+```
+
+The product of the extents in `shape` must equal the number of elements in
+`source`, otherwise it is a runtime error
+([R19](errors.md#r19----reshape-mismatch)).  Must be called with the `std::`
+prefix, e.g. `std::reshape()`.
+
+Related functions: [`shape`](#shape), [`size`](#size), [`transpose`](#transpose)
+
+## `shape`
+```rust
+fn shape(source: [any; any_rank]): [i64; :]
+```
+
+Return the extents of `source` along every dimension, as a rank-1 array of
+`i64`.  The length of the result is the rank of `source`, and element `d` of the
+result is `size(source, d)`.  For example, if `m` is a 2x3 matrix, `std::shape(m)`
+is `[2, 3]`.  Must be called with the `std::` prefix, e.g. `std::shape()`.
+
+Related functions: [`size`](#size), [`reshape`](#reshape)
+
+## `sin`
+```rust
+fn sin(x: any_float): any_float
+#elemental
+```
+
+Compute the sine of `x`, where `x` is in radians.  For an argument in degrees,
+use [`sind`](#sind).
+
+The `sin` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`cos`](#cos), [`tan`](#tan), [`sind`](#sind), [`asin`](#asin)
+
+## `sind`
+```rust
+fn sind(x: any_float): any_float
+#elemental
+```
+
+Compute the sine of `x`, where `x` is in degrees.  For example, `sind(30.0)` is
+`0.5`.  For an argument in radians, use [`sin`](#sin).
+
+The `sind` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`cosd`](#cosd), [`tand`](#tand), [`sin`](#sin), [`asind`](#asind)
+
+## `size`
+```rust
+fn size(array: [any; any_rank]): i64
+fn size(array: [any; any_rank], dim: i32): i64
+```
+
+Return the total number of elements in `array`.  If `dim` is given, instead
+return the extent of `array` along the dimension `dim`.  Like all dimension
+arguments, `dim` is zero-indexed, so for a 2x3 matrix `m`, `size(m, 0)` is `2`
+and `size(m, 1)` is `3`.  A `dim` outside of `0 <= dim < rank` is a runtime error
+([R17](errors.md#r17----size-rank-mismatch)).
+
+Not to be confused with [`count`](#count), which counts the `true` elements of
+a `bool` array, or [`len`](#len), which gets the length of a string.
+
+Related functions: [`shape`](#shape), [`count`](#count), [`len`](#len)
+
+## `sqrt`
+```rust
+fn sqrt(x: any_float): any_float
+#elemental
+```
+
+Compute the square root of `x`.  The result is `NaN` if `x` is negative.  This
+is not an error.
+
+The `sqrt` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`exp`](#exp), [`norm2`](#norm2)
 
 ## `stack_trace`
 ```rust
@@ -530,6 +845,47 @@ let sd = sum(a, 0, a > 2); // [0, 7, 11]
 
 Related functions: [`product`](#product), [`count`](#count)
 
+## `tan`
+```rust
+fn tan(x: any_float): any_float
+#elemental
+```
+
+Compute the tangent of `x`, where `x` is in radians.  For an argument in
+degrees, use [`tand`](#tand).
+
+The `tan` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`sin`](#sin), [`cos`](#cos), [`tand`](#tand), [`atan`](#atan)
+
+## `tand`
+```rust
+fn tand(x: any_float): any_float
+#elemental
+```
+
+Compute the tangent of `x`, where `x` is in degrees.  For an argument in
+radians, use [`tan`](#tan).
+
+The `tand` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`sind`](#sind), [`cosd`](#cosd), [`tan`](#tan), [`atand`](#atand)
+
+## `transpose`
+```rust
+fn transpose(source: [any; :, :]): [any; :, :]
+```
+
+Return the transpose of a rank-2 array, i.e. with its rows and columns
+exchanged, so that `std::transpose(m)[j, i]` is `m[i, j]`.  The result has the
+same element type as `source`.  A 2x3 matrix becomes a 3x2 matrix.  Only rank-2
+arrays are accepted.  Must be called with the `std::` prefix, e.g.
+`std::transpose()`.
+
+Related functions: [`reshape`](#reshape), [`shape`](#shape)
+
 ## `try_open`
 ```rust
 fn try_open(filename: str, mode: str): file
@@ -568,4 +924,20 @@ fn writeln(file_handle: file, s0: any, s1: any, s2: any, ...)
 Write to `file_handle`, with a newline
 
 Related functions: [`close`](#close), [`readln`](#readln), [`println`](#println), [`open`](#open)
+
+# Intrinsic constants
+
+These are built-in constants.  They must be referenced with the `std::` prefix,
+and they cannot be assigned to ([E82](errors.md#e82----immutable-var)).
+
+| Constant | Type | Meaning |
+|----------|------|---------|
+| `std::PI` | `f64` | The ratio of a circle's circumference to its diameter, π ≈ 3.14159. |
+| `std::IN` | `file` | Standard input, for [`readln`](#readln) and [`eof`](#eof). |
+| `std::OUT` | `file` | Standard output, for [`writeln`](#writeln). |
+| `std::ERR` | `file` | Standard error, for [`writeln`](#writeln). |
+
+The standard file handles have the same [members](#file-handle-members) as any
+other `file`, but closing one is a runtime error
+([R28](errors.md#r28----close-standard)).
 

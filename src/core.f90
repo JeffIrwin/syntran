@@ -69,6 +69,7 @@ module syntran__core_m
 	!    * replace "array_type", "str_type", etc. with something more readable
 	!    * claude recently did something similar with a different error message
 	!  - build option macro for NO_ISOCLINE?
+	!    * or NO_C, NO_REPL, or any other name
 	!    * api users might want eval-only with no repl on no requirement for c
 	!      compiler
 	!    * update doc/api.md after this
