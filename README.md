@@ -345,8 +345,6 @@ As programs get longer and more complicated, it becomes difficult to enter them 
 
 <!--
 Note: global block statement is not required as of 0.0.13.  Multiple statements (and functions) are parsed at the global scope.
-
-Make sure to wrap the entire script in a main block with braces `{}`.  The global block `{}` is not required when interactively using the interpreter because it parses and evaluates one statement at a time.  However, if you forget the global block `{}` in a script file, only the first statement will be parsed and any trailing junk statements will be unexpected.
 -->
 
 ### Transpiling to Fortran
@@ -437,6 +435,38 @@ Although the semantic version is always shown, `--version` shows more details:
 ```
 <!-- syntran-end -->
 This can be helpful for binary installations.  If you built from source, most of the details are pointlessly redundant, and the `git commit` will not be shown.
+
+## Calling syntran from Fortran
+
+Syntran is a Fortran library as well as an executable, so a Fortran program can
+evaluate syntran source directly.  Hand a string to one of the
+`syntran_eval_*()` functions and get a Fortran value back:
+
+<!-- syntran-begin mode=skip reason="Fortran host program, not syntran code" -->
+```fortran
+program main
+    use syntran
+    implicit none
+
+    integer :: io
+    real(kind = 8) :: x
+
+    x = syntran_eval_f64('sqrt(2.0) * 3.0;', quiet = .true., io = io)
+    if (io /= exit_success) error stop 'syntran failed'
+    print *, x
+end program main
+```
+<!-- syntran-end -->
+
+Typed functions are provided for `i32`, `i64`, `f32`, `f64`, `bool`, and `str`,
+and `syntran_eval()` returns any result as a string.  Pass `quiet = .true.`
+from a host program, or else a runtime error in the syntran source will call
+`exit()` and end your program too.
+
+See [doc/api.md](doc/api.md) for the full reference and for how to depend on
+syntran from your own fpm project (note that a plain `git` dependency doesn't
+work yet), and [`example/`](example) for programs which you can run with
+`fpm run --example eval_basic`.
 
 ## If statements and for loops
 
@@ -2611,6 +2641,7 @@ Many syntran samples are provided in this repository and elsewhere:
 
 1.  [Inline tests](src/tests/test.f90):  these are short one-to-few line syntran snippets, embedded in Fortran as a string and `eval`'d.  They are covered by the tests
 2.  [Script tests](src/tests/test-src):  these are longer syntran scripts, organized into categories by directory.  They are covered by the tests
-3.  [Samples](samples):  these are longer syntran scripts which can also take a while to run, e.g. the wave equation solvers.  They are *not* covered by the tests because of the time they take to run
-4.  [Advent of Code](https://github.com/JeffIrwin/aoc-syntran):  these are syntran scripts which solve problems from the [Advent of Code](https://adventofcode.com/about).  They are *not* covered by tests and in a separate repository
+3.  [Fortran examples](example):  short Fortran programs which call syntran as a library, see [above](#calling-syntran-from-fortran).  Run them with `fpm run --example <name>`
+4.  [Samples](samples):  these are longer syntran scripts which can also take a while to run, e.g. the wave equation solvers.  They are *not* covered by the tests because of the time they take to run
+5.  [Advent of Code](https://github.com/JeffIrwin/aoc-syntran):  these are syntran scripts which solve problems from the [Advent of Code](https://adventofcode.com/about).  They are *not* covered by tests and in a separate repository
 

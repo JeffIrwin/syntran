@@ -1,0 +1,7 @@
+
+// A script for interpret_file.f90
+let name = "syntran";
+println("hello from ", name);
+
+let v = [1: 6];
+println("sum of ", v, " is ", sum(v));

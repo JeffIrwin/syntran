@@ -62,16 +62,6 @@ module syntran__core_m
 	!      + initial transpiler pr is about 15 kloc code
 	!      + considering claude did the transpiler in one day, a full compiler
 	!        could still be very achievable
-	!  - Two pre-existing interpreter bugs turned up while probing, both
-	!    reproduced on the old binary. They are not part of this PR; you may
-	!    want issues for them:
-	!    * pts = [pts, [p]] with an array of structs → Internal syntran error[I2]
-	!    * f(&h, &h) with & and &const params → SIGSEGV
-	!  - api documentation
-	!    * the readme does not mention the eval*() functions and how to call
-	!      them from a simple fortran program
-	!    * could be a good selling point to the fortran community
-	!    * maybe make an 'examples' dir per fpm standard layout
 	!  - size-checking for array addition, multiplication, etc.
 	!  - port something like aoc 2019/17 or 15 here as a long test
 	!    * good non-trivial coverage of enums in a module plus other recent
@@ -88,6 +78,7 @@ module syntran__core_m
 	!  - build option macro for NO_ISOCLINE?
 	!    * api users might want eval-only with no repl on no requirement for c
 	!      compiler
+	!    * update doc/api.md after this
 	!  - direct enum to i64 casting. currently can only cast to i32 directly, or
 	!    to i64 awkwardly as i64(i32(Enum.variant))
 	!    * in the other direction, casting i64 to enum could fail for big nums,

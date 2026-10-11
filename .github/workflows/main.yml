@@ -118,6 +118,13 @@
 						diff ${f%.syntran}.out ${f%.syntran}.exp \n
 					done
 
+					# Fortran API examples in example/.  They `error stop` on a \n
+					# wrong result, so any failure fails the job.  They read \n
+					# example/hello.syntran relative to the project root \n
+					for ex in hello_world eval_basic eval_errors interpret_file ; do
+						fpm run --example $ex --profile debug --link-flag \"$lflags\" \n
+					done
+
 					# Short tests only.  Long tests are only done in release \n
 					fpm test test --profile debug --link-flag \"$lflags\" \n
 
