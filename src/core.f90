@@ -60,6 +60,8 @@ module syntran__core_m
 	!    * eventually (long away) shoot for a full syntran compiler using LLVM
 	!      + claude estimates compiler would be 3x more code than transpiler
 	!      + initial transpiler pr is about 15 kloc code
+	!      + considering claude did the transpiler in one day, a full compiler
+	!        could still be very achievable
 	!  - Two pre-existing interpreter bugs turned up while probing, both
 	!    reproduced on the old binary. They are not part of this PR; you may
 	!    want issues for them:
