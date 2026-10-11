@@ -141,6 +141,11 @@ module syntran__transpile_m
 		! allocated otherwise
 		character(len = :), allocatable :: str_step
 
+		! The subroutine that str_step is the trailing arguments of:
+		! `rt_str_step_set` for a stepped slice, or `rt_str_idx_set` for an index
+		! array subscript like `s[[0, 3, 5]]`.  Allocated whenever str_step is
+		character(len = :), allocatable :: str_set
+
 		! Source location of the statement being emitted, for diagnostics
 		integer :: cur_src_id = 0, cur_src_pos = 0
 

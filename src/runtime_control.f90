@@ -42,7 +42,7 @@ recursive module subroutine eval_assignment_expr(node, state, res, rhs_in, slots
 	integer :: rank_slice, id, type_, nelem
 	integer(kind = 8) :: i8, j8, index_, len8, size_i, il, iu, sstep
 	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:), &
-		size_tmp(:)
+		size_tmp(:), cidx(:)
 
 	logical :: has_char_sub
 
@@ -162,6 +162,36 @@ recursive module subroutine eval_assignment_expr(node, state, res, rhs_in, slots
 			! slice can't express a length-changing op like +=, so node%op
 			! reaching this branch is always equals_token
 
+			! An index array scatters characters, `s[[0, 3, 5]] = "abc"`.  It
+			! has no (il, iu, step) window, so it can't go through
+			! str_slice_bounds() below.  A repeated index is written more
+			! than once, so the last one wins
+			if (node%lsubscripts(1)%sub_kind == arr_sub) then
+				if (node%is_loc) then
+					call str_arr_sub_indices(node, 1, &
+						int(len(state%locs%vals(id)%str%s), 8), state, cidx, slots)
+				else
+					call str_arr_sub_indices(node, 1, &
+						int(len(state%vars%vals(id)%str%s), 8), state, cidx, slots)
+				end if
+				if (state%rt_halt) return
+
+				if (int(len(res%str%s), 8) /= size(cidx, kind = 8)) then
+					call rt_throw(state, err_rt(RC_ARRAY_SIZE_MISMATCH, &
+						"size of RHS does not match size of LHS slice"))
+					return
+				end if
+
+				do j8 = 1, size(cidx, kind = 8)
+					if (node%is_loc) then
+						state%locs%vals(id)%str%s(cidx(j8)+1: cidx(j8)+1) = res%str%s(j8:j8)
+					else
+						state%vars%vals(id)%str%s(cidx(j8)+1: cidx(j8)+1) = res%str%s(j8:j8)
+					end if
+				end do
+
+			else
+
 			! str_slice_bounds() handles scalar_sub/range_sub/step_sub/all_sub
 			! uniformly, so stepped/reversed slice assignment (e.g.
 			! s[:-1:] = "olleh") works the same as it does for arrays.
@@ -193,6 +223,8 @@ recursive module subroutine eval_assignment_expr(node, state, res, rhs_in, slots
 				i8 = i8 + sstep
 				j8 = j8 + 1
 			end do
+
+			end if   ! arr_sub / (il, iu, step) window
 
 		else if (has_char_sub) then
 
@@ -433,8 +465,40 @@ contains
 
 		integer :: isub
 		integer(kind = 8) :: il, iu, step, i8, j8
+		integer(kind = 8), allocatable :: idx(:)
 
 		isub = nelem_ + 1
+
+		! An index array scatters characters, see the scalar str case above
+		if (node%lsubscripts(isub)%sub_kind == arr_sub) then
+			if (node%is_loc) then
+				call str_arr_sub_indices(node, isub, &
+					int(len(state%locs%vals(id)%array%str(elem_idx+1)%s), 8), &
+					state, idx, slots)
+			else
+				call str_arr_sub_indices(node, isub, &
+					int(len(state%vars%vals(id)%array%str(elem_idx+1)%s), 8), &
+					state, idx, slots)
+			end if
+			if (state%rt_halt) return
+
+			if (int(len(rhs%str%s), 8) /= size(idx, kind = 8)) then
+				call rt_throw(state, err_rt(RC_ARRAY_SIZE_MISMATCH, &
+					"size of RHS does not match size of LHS slice"))
+				return
+			end if
+
+			do j8 = 1, size(idx, kind = 8)
+				if (node%is_loc) then
+					state%locs%vals(id)%array%str(elem_idx+1)%s(idx(j8)+1 : idx(j8)+1) = &
+						rhs%str%s(j8:j8)
+				else
+					state%vars%vals(id)%array%str(elem_idx+1)%s(idx(j8)+1 : idx(j8)+1) = &
+						rhs%str%s(j8:j8)
+				end if
+			end do
+			return
+		end if
 
 		if (node%is_loc) then
 			call str_slice_bounds(node, isub, &

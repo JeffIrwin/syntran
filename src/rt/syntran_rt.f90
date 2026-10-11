@@ -234,19 +234,38 @@ function rt_str_step_idx(n, step, lb, ub) result(r)
     r = rt_step_i64(lb_, step, ub_)
 end function rt_str_step_idx
 
+! s[idx], the characters at the 0-based indices idx, like `s[[0, 3, 5]]`
+function rt_str_idx(s, idx) result(r)
+    character(len = *), intent(in) :: s
+    integer(int64), intent(in) :: idx(:)
+    character(len = :), allocatable :: r
+    integer :: i
+    allocate(character(len = size(idx)) :: r)
+    do i = 1, size(idx)
+        r(i:i) = s(idx(i) + 1: idx(i) + 1)
+    end do
+end function rt_str_idx
+
+! s[idx] = rhs.  A repeated index is written more than once, so the last wins
+subroutine rt_str_idx_set(s, rhs, idx)
+    character(len = *), intent(inout) :: s
+    character(len = *), intent(in) :: rhs
+    integer(int64), intent(in) :: idx(:)
+    integer :: i
+    if (size(idx) /= len(rhs)) &
+        call rt_fatal('size of RHS does not match size of LHS slice')
+    do i = 1, size(idx)
+        s(idx(i) + 1: idx(i) + 1) = rhs(i:i)
+    end do
+end subroutine rt_str_idx_set
+
 ! s[lb: step: ub], like a reversed `s[:-1:]`
 function rt_str_step(s, step, lb, ub) result(r)
     character(len = *), intent(in) :: s
     integer(int64), intent(in) :: step
     integer(int64), intent(in), optional :: lb, ub
     character(len = :), allocatable :: r
-    integer(int64), allocatable :: idx(:)
-    integer :: i
-    idx = rt_str_step_idx(int(len(s), int64), step, lb, ub)
-    allocate(character(len = size(idx)) :: r)
-    do i = 1, size(idx)
-        r(i:i) = s(idx(i) + 1: idx(i) + 1)
-    end do
+    r = rt_str_idx(s, rt_str_step_idx(int(len(s), int64), step, lb, ub))
 end function rt_str_step
 
 ! s[lb: step: ub] = rhs
@@ -255,14 +274,7 @@ subroutine rt_str_step_set(s, rhs, step, lb, ub)
     character(len = *), intent(in) :: rhs
     integer(int64), intent(in) :: step
     integer(int64), intent(in), optional :: lb, ub
-    integer(int64), allocatable :: idx(:)
-    integer :: i
-    idx = rt_str_step_idx(int(len(s), int64), step, lb, ub)
-    if (size(idx) /= len(rhs)) &
-        call rt_fatal('size of RHS does not match size of LHS slice')
-    do i = 1, size(idx)
-        s(idx(i) + 1: idx(i) + 1) = rhs(i:i)
-    end do
+    call rt_str_idx_set(s, rhs, rt_str_step_idx(int(len(s), int64), step, lb, ub))
 end subroutine rt_str_step_set
 
 !===============================================================================

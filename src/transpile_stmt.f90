@@ -275,6 +275,7 @@ recursive module subroutine emit_assign(em, node)
 	! A compound assignment names its target twice, so anything with side
 	! effects in a subscript is only evaluated once, up front
 	if (allocated(em%str_step)) deallocate(em%str_step)
+	if (allocated(em%str_set)) deallocate(em%str_set)
 	lhs = emit_name_ref(em, node, hoist = compound, target = .true.)
 	rhs = emit_expr(em, node%right)
 
@@ -284,8 +285,9 @@ recursive module subroutine emit_assign(em, node)
 		! the target, like `s[:-1:] = s`
 		tmp = new_tmp(em, 'character(len = :), allocatable', 'sr')
 		call em_line(em, tmp//' = '//rhs)
-		call em_line(em, 'call rt_str_step_set('//lhs//', '//tmp//em%str_step//')')
+		call em_line(em, 'call '//em%str_set//'('//lhs//', '//tmp//em%str_step//')')
 		deallocate(em%str_step)
+		deallocate(em%str_set)
 		return
 	end if
 

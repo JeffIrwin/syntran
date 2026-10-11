@@ -2926,6 +2926,7 @@ subroutine unit_test_raw_str(npass, nfail)
 	tests = &
 		[   &
 			interpret_file(path//'test-01.syntran', quiet) == 'true', &
+			interpret_file(path//'test-02.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -2967,7 +2968,43 @@ subroutine unit_test_substr(npass, nfail)
 			eval('let s = "hello world"; s[1:5];', quiet) == 'ello', &
 			eval('let s = "hello world"; s[1:6];', quiet) == 'ello ', &
 			eval('let s = "hello world"; s[6:11];', quiet) == 'world', &
-			eval('let s = "hello world"; s[3];', quiet) == 'l'  &
+			eval('let s = "hello world"; s[3];', quiet) == 'l', &
+
+			! An index array gathers characters, like `v[[0, 3]]` does for
+			! arrays: a literal index array, a variable, i64 elements, a range
+			! literal, a repeated index and an empty selection
+			eval('let s = "01234567"; s[[0, 3, 5]];', quiet) == '035', &
+			eval('let s = "01234567"; let a = [7, 0, 3]; s[a];', quiet) == '703', &
+			eval('let s = "01234567"; let a = [1''i64, 6''i64]; s[a];', quiet) == '16', &
+			eval('let s = "01234567"; s[[2: 5]];', quiet) == '234', &
+			eval('let s = "abcd"; s[[0, 0, 3]];', quiet) == 'aad', &
+			eval('let s = "abcd"; let k = 1; s[[k, k + 1]];', quiet) == 'bc', &
+			len(eval('let s = "abcd"; s[[1: 1]];', quiet)) == 0, &
+			eval('fn f(): str { return "abcdef"; } f()[[5, 0]];', quiet) == 'fa', &
+
+			! ... on the char subscript of a str array element, of a slice of
+			! one, and on a str struct member
+			eval('let v = ["abcd", "efgh"]; v[1, [0, 2]];', quiet) == 'eg', &
+			eval('let v = ["abcd", "efgh"]; v[:, [0, 2]];', quiet) == '[ac, eg]', &
+			eval('let v = ["abcd", "efgh"]; v[[1, 0], [3, 0]];', quiet) == '[he, da]', &
+			eval('struct S{s: str} let x = S{s = "hello"}; x.s[[4, 0]];', quiet) == 'oh', &
+			eval('struct S{n: [str; :]} let x = S{n = ["abcd", "efgh"]}; ' &
+				//'x.n[:, [0, 2]];', quiet) == '[ac, eg]', &
+
+			! ... and scatters on assignment.  The last write of a repeated
+			! index wins
+			eval('let s = "abcd"; s[[0, 2]] = "xy"; s;', quiet) == 'xbyd', &
+			eval('let s = "abcd"; s[[3, 0]] = "xy"; s;', quiet) == 'ybcx', &
+			eval('let s = "abcd"; s[[1, 1]] = "xy"; s;', quiet) == 'aycd', &
+			eval('let v = ["abcd", "efgh"]; v[1, [0, 2]] = "xy"; v;', quiet) == '[abcd, xfyh]', &
+			eval('let v = ["abcd", "efgh"]; v[:, [0, 2]] = "xy"; v;', quiet) == '[xbyd, xfyh]', &
+			eval('struct S{s: str} let x = S{s = "hello"}; x.s[[0, 1]] = "HE"; x.s;', quiet) &
+				== 'HEllo', &
+
+			! Index arrays on the element dimension of a str array still select
+			! elements, with and without a substring
+			eval('let v = ["abcd", "efgh", "ijkl"]; v[[0, 2]];', quiet) == '[abcd, ijkl]', &
+			eval('let v = ["abcd", "efgh", "ijkl"]; v[[0, 2], 1:3];', quiet) == '[bc, jk]' &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
@@ -8922,6 +8959,26 @@ subroutine unit_test_runtime_errors(npass, nfail)
 				'let v = ["hello","world"]; v[:, 1:3] = "XY";'), &
 				RC_ARRAY_SIZE_MISMATCH) == 0, &
 
+			! R21, index-array (arr_sub) character subscripts: a scatter
+			! `s[[0, 2]] = rhs` needs one RHS character per index, on a str
+			! (eval_assignment_expr), a str array's char subscript
+			! (str_arr_char_assign) and a struct member (str_char_assign)
+			diag_has_code(get_diags('let s = "hello"; s[[0, 2]] = "ABC";'), &
+				RC_ARRAY_SIZE_MISMATCH), &
+			diag_has_code(get_diags('let s = "hello"; s[[0, 2]] = "A";'), &
+				RC_ARRAY_SIZE_MISMATCH), &
+			diag_has_code(get_diags( &
+				'let v = ["hello","world"]; v[1, [0, 2]] = "ABC";'), &
+				RC_ARRAY_SIZE_MISMATCH), &
+			diag_has_code(get_diags( &
+				'struct S{s: str} let x = S{s = "hello"}; x.s[[0, 2]] = "ABC";'), &
+				RC_ARRAY_SIZE_MISMATCH), &
+			diag_count_code(get_diags('let s = "hello"; s[[0, 2]] = "AB";'), &
+				RC_ARRAY_SIZE_MISMATCH) == 0, &
+			diag_count_code(get_diags( &
+				'let v = ["hello","world"]; v[:, [0, 2]] = "AB";'), &
+				RC_ARRAY_SIZE_MISMATCH) == 0, &
+
 			! R23-R27: step-is-0 family (for loop, range/array literal, slice
 			! subscript), each for both an integer and float variant where
 			! applicable
@@ -9022,6 +9079,19 @@ subroutine unit_test_bounds_check(npass, nfail)
 		! runtime_array.f90 -- not covered by any native opcode)
 		diag_has_code(get_diags( &
 			'struct P{v: [i32; :],} let p = P{v = [1, 2, 3]}; println(p.v[9]);'), &
+			RC_SUBSCRIPT_OOB), &
+
+		! Index-array character subscript: every index is checked, not
+		! just the endpoints (str_arr_sub_indices), on a read, a write,
+		! a str array element and a negative index
+		diag_has_code(get_diags('let s = "abc"; println(s[[0, 9]]);'), &
+			RC_SUBSCRIPT_OOB), &
+		diag_has_code(get_diags('let s = "abc"; println(s[[0, -1]]);'), &
+			RC_SUBSCRIPT_OOB), &
+		diag_has_code(get_diags('let s = "abc"; s[[0, 9]] = "xy";'), &
+			RC_SUBSCRIPT_OOB), &
+		diag_has_code(get_diags( &
+			'let v = ["abc", "def"]; println(v[1, [0, 9]]);'), &
 			RC_SUBSCRIPT_OOB) &
 		], label, npass, nfail)
 
@@ -10185,6 +10255,35 @@ subroutine unit_test_transpile(npass, nfail)
 			index(transpile_src('let v = ["ab", "cd"]; v[0: 2, :-1:] = "xy"; println(v);'), &
 				'call rt_str_step_set(') > 0, &
 			.not. diag_has_code(get_diags_transpile('let s = "abc"; println(s[:-1:]);'), &
+				EC_TRANSPILE_UNSUPPORTED), &
+
+			! An index array of a string is a call too, since Fortran has no
+			! vector subscript of a substring: a gather for reading, a scatter
+			! for assigning, on a string, on a str array element, on a slice of
+			! strings, and on a struct member
+			index(transpile_src('let s = "abc"; let a = [2, 0]; println(s[a]);'), &
+				'rt_str_idx(') > 0, &
+			index(transpile_src('let s = "abc"; s[[2, 0]] = "xy"; println(s);'), &
+				'call rt_str_idx_set(') > 0, &
+			index(transpile_src('let v = ["ab", "cd"]; println(v[1, [1, 0]]);'), &
+				'rt_str_idx(') > 0, &
+			index(transpile_src('let v = ["ab", "cd"]; v[1, [1, 0]] = "xy"; println(v);'), &
+				'call rt_str_idx_set(') > 0, &
+			index(transpile_src('let v = ["ab", "cd"]; v[0: 2, [1, 0]] = "xy"; println(v);'), &
+				'call rt_str_idx_set(') > 0, &
+			index(transpile_src('struct S{s: str} let x = S{s = "abc"}; ' &
+				//'x.s[[2, 0]] = "xy"; println(x.s);'), &
+				'call rt_str_idx_set(') > 0, &
+			.not. diag_has_code(get_diags_transpile( &
+				'let s = "abc"; println(s[[2, 0]]); s[[1, 0]] = "xy";'), &
+				EC_TRANSPILE_UNSUPPORTED), &
+			.not. diag_has_code(get_diags_transpile( &
+				'let v = ["ab", "cd"]; v[0: 2, [1, 0]] = "xy"; println(v);'), &
+				EC_TRANSPILE_UNSUPPORTED), &
+			! The substring of a slice of strings is not supported, with a
+			! step or an index array
+			diag_has_code(get_diags_transpile( &
+				'let v = ["ab", "cd"]; println(v[:, [1, 0]]);'), &
 				EC_TRANSPILE_UNSUPPORTED), &
 
 			! Unsupported constructs are diagnostics.  Everything else in the

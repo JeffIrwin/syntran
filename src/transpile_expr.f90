@@ -816,7 +816,7 @@ module subroutine emit_str_slice_assign(em, node, done)
 
 	!********
 
-	character(len = :), allocatable :: base, i_, lo, hi, rhs, sargs, tmp
+	character(len = :), allocatable :: base, callee, i_, lo, hi, rhs, sargs, tmp
 
 	type(slot_info_t) :: info
 
@@ -833,7 +833,8 @@ module subroutine emit_str_slice_assign(em, node, done)
 		if (sub%sub_kind /= range_sub .and. sub%sub_kind /= all_sub) return
 		if (node%lsubscripts(2)%sub_kind /= scalar_sub .and. &
 				node%lsubscripts(2)%sub_kind /= range_sub .and. &
-				node%lsubscripts(2)%sub_kind /= step_sub) return
+				node%lsubscripts(2)%sub_kind /= step_sub .and. &
+				node%lsubscripts(2)%sub_kind /= arr_sub) return
 	end associate
 
 	base = var_name(em, node)
@@ -849,8 +850,16 @@ module subroutine emit_str_slice_assign(em, node, done)
 	end if
 
 	sargs = ''
+	callee = ''
 	if (node%lsubscripts(2)%sub_kind == step_sub) then
 		sargs = str_step_args(em, node, 2, .true.)
+		callee = 'rt_str_step_set'
+	else if (node%lsubscripts(2)%sub_kind == arr_sub) then
+		sargs = ', '//str_idx_arg(em, node, 2, .true.)
+		callee = 'rt_str_idx_set'
+	end if
+
+	if (len(callee) > 0) then
 
 		! Stored first, so that a call isn't aliased by an rhs which names an
 		! element
@@ -862,8 +871,8 @@ module subroutine emit_str_slice_assign(em, node, done)
 	i_ = new_tmp(em, 'integer(int64)', 'si')
 	call em_line(em, 'do '//i_//' = '//lo//', '//hi)
 	em%indent = em%indent + 1
-	if (node%lsubscripts(2)%sub_kind == step_sub) then
-		call em_line(em, 'call rt_str_step_set('//base//'('//i_//')%s, '//rhs// &
+	if (len(callee) > 0) then
+		call em_line(em, 'call '//callee//'('//base//'('//i_//')%s, '//rhs// &
 			sargs//')')
 	else
 		call em_line(em, base//'('//i_//')%s('//emit_char_sub(em, node, 2, .true.)//') = '//rhs)
@@ -2141,12 +2150,72 @@ recursive function str_step_ref(em, node, i, desig, as_target) result(s)
 
 	if (as_target) then
 		em%str_step = str_step_args(em, node, i)
+		em%str_set = 'rt_str_step_set'
 		s = desig
 	else
 		s = 'rt_str_step('//desig//str_step_args(em, node, i)//')'
 	end if
 
 end function str_step_ref
+
+!===============================================================================
+
+recursive function str_idx_arg(em, node, i, do_hoist) result(s)
+
+	! The index array of an index array subscript i of a string, like the
+	! `[0, 3, 5]` of `s[[0, 3, 5]]`, as an int64 array for rt_str_idx() and
+	! rt_str_idx_set().  With `do_hoist` it is first evaluated into a temporary
+	! unless it's a variable, for a call that is in a loop
+
+	type(emitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	integer, intent(in) :: i
+	logical, intent(in) :: do_hoist
+	character(len = :), allocatable :: s
+
+	!********
+
+	character(len = :), allocatable :: tmp
+
+	associate (sub => node%lsubscripts(i))
+
+		s = convert(emit_expr(em, sub), elem_type(sub%val), i64_type)
+
+		if (do_hoist .and. .not. is_simple(sub)) then
+			tmp = new_tmp(em, 'integer(int64), allocatable', 'ix', '(:)')
+			call em_line(em, tmp//' = '//s)
+			s = tmp
+		end if
+
+	end associate
+
+end function str_idx_arg
+
+!===============================================================================
+
+recursive function str_idx_ref(em, node, i, desig, as_target) result(s)
+
+	! An index array subscript `desig[idx]` of a string, whose designator is
+	! `desig`.  It is a call to rt_str_idx(), unless it's assigned to.  Then it
+	! is the string itself, like str_step_ref(), and the arguments for
+	! rt_str_idx_set() are left in em%str_step
+
+	type(emitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	integer, intent(in) :: i
+	character(len = *), intent(in) :: desig
+	logical, intent(in) :: as_target
+	character(len = :), allocatable :: s
+
+	if (as_target) then
+		em%str_step = ', '//str_idx_arg(em, node, i, .false.)
+		em%str_set = 'rt_str_idx_set'
+		s = desig
+	else
+		s = 'rt_str_idx('//desig//', '//str_idx_arg(em, node, i, .false.)//')'
+	end if
+
+end function str_idx_ref
 
 !===============================================================================
 
@@ -2258,6 +2327,11 @@ recursive function subscripted(em, node, base, info, do_hoist, str_hoist) result
 			return
 		end if
 
+		if (node%lsubscripts(1)%sub_kind == arr_sub) then
+			s = str_idx_ref(em, node, 1, base, str_hoist)
+			return
+		end if
+
 		s = base//'('//emit_char_sub(em, node, 1, str_hoist)//')'
 		return
 	end if
@@ -2294,6 +2368,11 @@ recursive function subscripted(em, node, base, info, do_hoist, str_hoist) result
 
 		if (node%lsubscripts(nsub)%sub_kind == step_sub) then
 			s = str_step_ref(em, node, nsub, base//'('//subs//')%s', str_hoist)
+			return
+		end if
+
+		if (node%lsubscripts(nsub)%sub_kind == arr_sub) then
+			s = str_idx_ref(em, node, nsub, base//'('//subs//')%s', str_hoist)
 			return
 		end if
 
@@ -2762,8 +2841,10 @@ recursive function emit_user_call(em, node) result(s)
 					! an array that a method is called on
 					arg = emit_name_ref(em, node%args(i), target = .true.)
 					if (allocated(em%str_step)) then
-						call em_unsupported(em, 'a stepped string slice passed by reference')
+						call em_unsupported(em, &
+							'a stepped or indexed string slice passed by reference')
 						deallocate(em%str_step)
+						if (allocated(em%str_set)) deallocate(em%str_set)
 					end if
 				else if (node%args(i)%kind /= name_expr .or. &
 						allocated(node%args(i)%lsubscripts)) then

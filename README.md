@@ -1957,6 +1957,39 @@ hel
 -->
 <!-- syntran-end -->
 
+Like an array, a string can also be subscripted by an index array, which picks
+out arbitrary characters in any order:
+<!-- syntran-begin mode=repl group=str-index-array -->
+```rust
+let string6 = "01234567";
+string6[[0, 3, 5]];
+// 035
+string6[[7, 0]];
+// 70
+```
+<!-- syntran-expect
+01234567
+035
+70
+-->
+<!-- syntran-end -->
+
+An index array can be assigned to as well.  The right-hand side needs exactly
+one character per index:
+<!-- syntran-begin mode=repl group=str-index-array-assign -->
+```rust
+let string7 = "abcd";
+string7[[0, 2]] = "xy";
+string7;
+// xbyd
+```
+<!-- syntran-expect
+abcd
+xy
+xbyd
+-->
+<!-- syntran-end -->
+
 Strings support the comparison operators `==`, `!=`, `<`, `<=`, `>`, and `>=`.
 Ordering is lexicographic (dictionary order) and length-aware:  two strings of
 different lengths are never padded before comparing, so a string that is a

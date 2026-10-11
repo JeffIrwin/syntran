@@ -331,6 +331,22 @@ module function str_char_slice(s, node, state, isub, slots) result(out)
 	!********
 
 	integer(kind = 8) :: il, iu, step, i8, j8, n_out
+	integer(kind = 8), allocatable :: idx(:)
+
+	! An index array gathers characters (`s[[0, 3, 5]]`), which isn't a
+	! (il, iu, step) window like the kinds below
+	if (node%lsubscripts(isub)%sub_kind == arr_sub) then
+		call str_arr_sub_indices(node, isub, int(len(s), 8), state, idx, slots)
+		if (state%rt_halt) then
+			out = ""
+			return
+		end if
+		allocate(character(len = size(idx)) :: out)
+		do j8 = 1, size(idx, kind = 8)
+			out(j8:j8) = s(idx(j8)+1 : idx(j8)+1)
+		end do
+		return
+	end if
 
 	! str_slice_bounds() handles scalar/range/step/all subscript kinds
 	! uniformly (0-based, upper-exclusive in the direction of step), so a
@@ -388,6 +404,23 @@ module subroutine str_char_assign(s, node, state, isub, rhs, slots)
 	!********
 
 	integer(kind = 8) :: il, iu, step, i8, j8
+	integer(kind = 8), allocatable :: idx(:)
+
+	! An index array scatters characters (`s[[0, 3, 5]] = "abc"`).  A
+	! repeated index is written more than once, so the last one wins
+	if (node%lsubscripts(isub)%sub_kind == arr_sub) then
+		call str_arr_sub_indices(node, isub, int(len(s), 8), state, idx, slots)
+		if (state%rt_halt) return
+		if (int(len(rhs), 8) /= size(idx, kind = 8)) then
+			call rt_throw(state, err_rt(RC_ARRAY_SIZE_MISMATCH, &
+				"size of RHS does not match size of LHS slice"))
+			return
+		end if
+		do j8 = 1, size(idx, kind = 8)
+			s(idx(j8)+1 : idx(j8)+1) = rhs(j8:j8)
+		end do
+		return
+	end if
 
 	call str_slice_bounds(node, isub, int(len(s), 8), state, il, iu, step, slots)
 	if (state%rt_halt) return

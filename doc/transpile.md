@@ -45,7 +45,9 @@ This is a subset of the language so far:
   be a scalar or a whole array
 - Array literals of every form: `[a, b, c]`, `[a: b]`, `[a: step: b]`,
   `[a: b; n]`, `[v; n, m]`, and `[a, b, c, d; n, m]`
-- Subscripts and slices, including steps, omitted bounds, and vector subscripts
+- Subscripts and slices, including steps, omitted bounds, and vector subscripts.
+  The characters of a string can be read or assigned with an index array too,
+  like `s[[0, 3, 5]]`
 - Functions, including recursion, arrays as parameters and return values, and
   parameters passed by reference with `&` or `&const`
 - Structs: declarations, instances, members that are scalars, strings, arrays,

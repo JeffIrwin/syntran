@@ -266,6 +266,15 @@ module syntran__runtime_m
 			type(value_t),       intent(in)    :: slots(:)
 		end subroutine
 
+		module subroutine str_arr_sub_indices(node, isub, sz, state, idx, slots)
+			type(syntax_node_t), intent(in)    :: node
+			integer,             intent(in)    :: isub
+			integer(kind = 8),   intent(in)    :: sz
+			type(state_t),       intent(inout) :: state
+			integer(kind = 8), allocatable, intent(out) :: idx(:)
+			type(value_t),       intent(in)    :: slots(:)
+		end subroutine
+
 		module subroutine get_field_slice_val(member_node, field_val, state, res, slots)
 			type(syntax_node_t), intent(in)    :: member_node
 			type(value_t),       intent(in)    :: field_val

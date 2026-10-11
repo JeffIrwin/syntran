@@ -280,6 +280,7 @@ src/tests/test-src/ref/test-06.syntran
 src/tests/test-src/ref/test-07.syntran
 src/tests/test-src/ref/test-08.syntran
 src/tests/test-src/str/test-01.syntran
+src/tests/test-src/str/test-02.syntran
 src/tests/test-src/struct/test-01.syntran
 src/tests/test-src/struct/test-02.syntran
 src/tests/test-src/struct/test-03.syntran
