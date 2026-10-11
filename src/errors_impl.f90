@@ -398,6 +398,8 @@ module procedure get_all_error_codes
 	call codes%push(RC_MASK_SHAPE_MISMATCH)
 	call codes%push(RC_MINMAX_EMPTY)
 	call codes%push(RC_BINOP_SHAPE_MISMATCH)
+	call codes%push(RC_DOT_SIZE_MISMATCH)
+	call codes%push(RC_REPEAT_NEGATIVE)
 	call codes%push(WC_MISSING_RETURN)
 end procedure get_all_error_codes
 
@@ -1840,6 +1842,30 @@ module procedure err_rt_binop_shape
 		dims_str(lsizes)//" and "//dims_str(rsizes))
 
 end procedure err_rt_binop_shape
+
+
+!===============================================================================
+
+module procedure err_rt_dot_size
+
+	! Runtime (R38) error for dot() called with vectors of different lengths
+
+	err = err_rt(RC_DOT_SIZE_MISMATCH, &
+		"vector length mismatch in dot(): "//str(lsize)//" and "//str(rsize))
+
+end procedure err_rt_dot_size
+
+
+!===============================================================================
+
+module procedure err_rt_repeat_negative
+
+	! Runtime (R39) error for repeat() called with a negative ncopies
+
+	err = err_rt(RC_REPEAT_NEGATIVE, &
+		"ncopies argument of repeat() is negative: "//str(ncopies))
+
+end procedure err_rt_repeat_negative
 
 
 !===============================================================================

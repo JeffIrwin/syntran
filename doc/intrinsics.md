@@ -275,9 +275,8 @@ over all `i`.  For example, `dot([1, 2, 3], [4, 5, 6])` is `32`.
 
 Like Fortran's `dot_product()`, the arguments must be rank-1 arrays.  Both
 vectors must have the same element type, which is also the type of the result,
-and the same length.
-<!-- TODO: a length mismatch is not diagnosed by syntran.  In a debug build it
-aborts with a raw Fortran bounds-check error instead of a syntran runtime error. -->
+and the same length.  A length mismatch is a runtime error,
+[R38](errors.md#r38----dot-size-mismatch).
 
 Related functions: [`norm2`](#norm2), [`sum`](#sum)
 
@@ -685,9 +684,8 @@ fn repeat(str: str, ncopies: i32): str
 
 Return `str` concatenated with itself `ncopies` times.  For example,
 `repeat("ab", 3)` is `"ababab"`, and an `ncopies` of `0` gives the empty
-string.  `ncopies` must not be negative.
-<!-- TODO: a negative `ncopies` is not diagnosed by syntran.  In a debug build
-it aborts with a raw Fortran runtime error instead of a syntran one. -->
+string.  `ncopies` must not be negative, which is a runtime error,
+[R39](errors.md#r39----repeat-negative).
 
 Related functions: [`len`](#len), [`str`](#str)
 

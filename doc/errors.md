@@ -1149,6 +1149,18 @@ An element-wise binary operator, such as `+`, `*`, `==`, `and`, or `&`, or its c
 
 [Example](../src/tests/test-src/errors/R37-binop-shape-mismatch.syntran)
 
+### R38 -- dot-size-mismatch
+
+The two vectors passed to [`dot()`](intrinsics.md#dot) have different lengths.  Their ranks and element types are checked at compile time, but their lengths aren't known until runtime.  This is the vector analogue of [R37](#r37----binop-shape-mismatch), and of [R1](#r1----matmul-dim) for the `@` operator.
+
+[Example](../src/tests/test-src/errors/R38-dot-size-mismatch.syntran)
+
+### R39 -- repeat-negative
+
+The `ncopies` argument of [`repeat()`](intrinsics.md#repeat) is negative.  Zero is allowed, and gives the empty string.
+
+[Example](../src/tests/test-src/errors/R39-repeat-negative.syntran)
+
 ## Warnings
 
 ### W1 -- missing-return

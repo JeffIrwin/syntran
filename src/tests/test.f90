@@ -8900,6 +8900,28 @@ subroutine unit_test_runtime_errors(npass, nfail)
 				'struct S{v:[i32;:]} let s = S{v=[1, 2, 3]}; s.v = [1, 2]; s.v += [1, 1];'), &
 				RC_BINOP_SHAPE_MISMATCH), &
 
+			! R38: dot() of vectors with different lengths, for each element type
+			rt_code_both_file(P//'R38-dot-size-mismatch.syntran', RC_DOT_SIZE_MISMATCH), &
+			diag_count_code(get_diags_file( &
+				P//'R38-dot-size-mismatch.syntran'), &
+				RC_DOT_SIZE_MISMATCH) == 1, &
+			diag_has_code(get_diags('println(dot([1, 2, 3], [1, 2]));'), RC_DOT_SIZE_MISMATCH), &
+			diag_has_code(get_diags('println(dot([1.0, 2.0], [1.0, 2.0, 3.0]));'), RC_DOT_SIZE_MISMATCH), &
+			diag_has_code(get_diags('println(dot([1.0f, 2.0f], [1.0f]));'), RC_DOT_SIZE_MISMATCH), &
+			diag_has_code(get_diags( &
+				'println(dot(i64([1, 2]), i64([1, 2, 3])));'), RC_DOT_SIZE_MISMATCH), &
+			.not. diag_has_code(get_diags('println(dot([1, 2], [3, 4]));'), RC_DOT_SIZE_MISMATCH), &
+			.not. diag_has_code(get_diags('println(dot([1.0f], [2.0f]));'), RC_DOT_SIZE_MISMATCH), &
+
+			! R39: repeat() with a negative ncopies.  Zero is fine
+			rt_code_both_file(P//'R39-repeat-negative.syntran', RC_REPEAT_NEGATIVE), &
+			diag_count_code(get_diags_file( &
+				P//'R39-repeat-negative.syntran'), &
+				RC_REPEAT_NEGATIVE) == 1, &
+			diag_has_code(get_diags('println(repeat("ab", -1));'), RC_REPEAT_NEGATIVE), &
+			.not. diag_has_code(get_diags('println(repeat("ab", 0));'), RC_REPEAT_NEGATIVE), &
+			.not. diag_has_code(get_diags('println(repeat("ab", 3));'), RC_REPEAT_NEGATIVE), &
+
 			! R21: rank-2+ array literal's element count doesn't match a
 			! runtime-valued declared size
 			rt_code_both_file( &

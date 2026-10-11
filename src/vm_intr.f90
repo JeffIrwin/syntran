@@ -458,6 +458,10 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 
 	case (INTR_REPEAT)
 		res%type = str_type
+		if (args(2)%sca%i32 < 0) then
+			call rt_throw(state, err_rt_repeat_negative(args(2)%sca%i32))
+			return
+		end if
 		if (.not. allocated(res%str)) allocate(res%str)
 		res%str%s = repeat(args(1)%str%s, args(2)%sca%i32)
 
@@ -701,21 +705,31 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 	case (INTR_NORM2_F64)
 		res%type = f64_type; res%sca%f64 = norm2(args(1)%array%f64)
 
-	case (INTR_DOT_F32)
-		res%type = f32_type
-		res%sca%f32 = dot_product(args(1)%array%f32, args(2)%array%f32)
+	case (INTR_DOT_F32, INTR_DOT_F64, INTR_DOT_I32, INTR_DOT_I64)
+		! dot() only takes rank-1 arrays, so the extent is size(1)
+		if (args(1)%array%size(1) /= args(2)%array%size(1)) then
+			call rt_throw(state, err_rt_dot_size( &
+				args(1)%array%size(1), args(2)%array%size(1)))
+			return
+		end if
 
-	case (INTR_DOT_F64)
-		res%type = f64_type
-		res%sca%f64 = dot_product(args(1)%array%f64, args(2)%array%f64)
+		select case (intr_id)
+		case (INTR_DOT_F32)
+			res%type = f32_type
+			res%sca%f32 = dot_product(args(1)%array%f32, args(2)%array%f32)
 
-	case (INTR_DOT_I32)
-		res%type = i32_type
-		res%sca%i32 = dot_product(args(1)%array%i32, args(2)%array%i32)
+		case (INTR_DOT_F64)
+			res%type = f64_type
+			res%sca%f64 = dot_product(args(1)%array%f64, args(2)%array%f64)
 
-	case (INTR_DOT_I64)
-		res%type = i64_type
-		res%sca%i64 = dot_product(args(1)%array%i64, args(2)%array%i64)
+		case (INTR_DOT_I32)
+			res%type = i32_type
+			res%sca%i32 = dot_product(args(1)%array%i32, args(2)%array%i32)
+
+		case (INTR_DOT_I64)
+			res%type = i64_type
+			res%sca%i64 = dot_product(args(1)%array%i64, args(2)%array%i64)
+		end select
 
 	case (INTR_ALL)
 		res%type = bool_type; res%sca%bool = all(args(1)%array%bool)

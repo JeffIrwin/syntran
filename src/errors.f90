@@ -212,6 +212,8 @@ module syntran__errors_m
 		RC_MASK_SHAPE_MISMATCH = "R35", &
 		RC_MINMAX_EMPTY = "R36", &
 		RC_BINOP_SHAPE_MISMATCH = "R37", &
+		RC_DOT_SIZE_MISMATCH = "R38", &
+		RC_REPEAT_NEGATIVE = "R39", &
 		WC_MISSING_RETURN = "W1"
 
 	! A text span indicates which characters to underline in a faulty line of
@@ -1078,6 +1080,16 @@ module syntran__errors_m
 			integer(kind = 8), intent(in) :: lsizes(:), rsizes(:)
 			character(len = :), allocatable :: err
 		end function err_rt_binop_shape
+
+		module function err_rt_dot_size(lsize, rsize) result(err)
+			integer(kind = 8), intent(in) :: lsize, rsize
+			character(len = :), allocatable :: err
+		end function err_rt_dot_size
+
+		module function err_rt_repeat_negative(ncopies) result(err)
+			integer, intent(in) :: ncopies
+			character(len = :), allocatable :: err
+		end function err_rt_repeat_negative
 
 		! RC_SUBSCRIPT_OOB (R33) pair: only raised in builds compiled with
 		! -DSYNTRAN_BOUNDS_CHECK (bounds_check, compiler.F90) -- see its

@@ -1,0 +1,5 @@
+// R39: repeat-negative
+// repeat() was given a negative number of copies
+
+let n = -2;
+let s = repeat("ab", n);
