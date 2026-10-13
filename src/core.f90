@@ -63,11 +63,6 @@ module syntran__core_m
 	!      + initial transpiler pr is about 15 kloc code
 	!      + considering claude did the transpiler in one day, a full compiler
 	!        could still be very achievable
-	!  - direct enum to i64 casting. currently can only cast to i32 directly, or
-	!    to i64 awkwardly as i64(i32(Enum.variant))
-	!    * in the other direction, casting i64 to enum could fail for big nums,
-	!      maybe should be avoided
-	!    * similarly, casting char to i64?
 	!  - split or streamline ci/cd:
 	!    * "build on ubuntu-24" stage is now the slowest. i believe this just
 	!      changed after ast removal. previously, windows and intel-compiler

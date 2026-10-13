@@ -364,7 +364,8 @@ error if you try a string of 2 or more chars. -->
 Explicitly cast any numeric type to 32-bit integer `i32`. The `i32()` fn also
 casts single-character strings to their ASCII values, e.g. `i32("A")` returns
 `65`.  The inverse ASCII lookup is [`char`](#char).  To read a decimal number
-from a string, use `parse_i32()` instead.
+from a string, use `parse_i32()` instead.  An enum value is cast to its backing
+value, e.g. `i32(Card.Queen)`.
 
 The `i32` function is _elemental_, i.e. it can operate on both scalars and
 arrays.
@@ -379,8 +380,14 @@ fn i64(a: any_num): i64
 #elemental
 ```
 
-Explicitly cast any numeric type to 64-bit integer `i64`.
-<!-- TODO For the non-numeric type `str`, use [`parse_i32`](#parse_i64) instead.  -->
+Explicitly cast any numeric type to 64-bit integer `i64`.  Like `i32()`, the
+`i64()` fn also casts single-character strings to their ASCII values, e.g.
+`i64("A")` returns `65`, and enum values to their backing value.  To read a
+decimal number from a string, use `parse_i64()` instead.
+
+The `i64` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
 Other non-numeric types (`bool`, `file`) cannot be cast to `i64`.
 
 ## `len`

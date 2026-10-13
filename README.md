@@ -2604,7 +2604,7 @@ let d = Dir.North;
 
 Enum values only support equality comparison, `==` and `!=`.  To use a
 variant as an integer -- e.g. for ordering, arithmetic, or array indexing --
-convert it explicitly with `i32()`:
+convert it explicitly with `i32()` or `i64()`:
 <!-- syntran-begin mode=file group=enums -->
 ```rust
 let a = [10, 20, 30, 40];

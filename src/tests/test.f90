@@ -1548,6 +1548,8 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('i32("(");') ==  "40", &
 			eval('i32(")");') ==  "41", &
 			eval('i32(" ");') ==  "32", &
+			eval('i64(" ");') ==  "32", &
+			eval('i64("A");') ==  "65", &
 			eval('i32([ 0.0, 2.2, 3.3]);') ==  "[0, 2, 3]", &
 			eval('i32([ 1.1, 2.2, 3.3]);') ==  "[1, 2, 3]", &
 			eval('i32([-1.1, 2.2, 3.3]);') ==  "[-1, 2, 3]", &
@@ -6814,6 +6816,18 @@ subroutine unit_test_enum(npass, nfail)
 				//'i32(E.B);', quiet) == '0', &
 			eval( 'enum E{A=-5,B,C}' &
 				//'i32(E.C);', quiet) == '-3', &
+
+			! Direct enum to i64 cast, scalar and array
+			eval( 'enum Card{Two,Three,Jack=10,Queen,King}' &
+				//'i64(Card.King);', quiet) == '12', &
+			eval( 'enum E{A=-5,B,C}' &
+				//'i64(E.C);', quiet) == '-3', &
+			eval( 'enum Suit{Hearts,Diamonds,Clubs,Spades}' &
+				//'i64([Suit.Hearts, Suit.Clubs]);', quiet) == '[0, 2]', &
+			eval( 'enum Suit{Hearts,Diamonds,Clubs,Spades}' &
+				//'i32([Suit.Hearts, Suit.Clubs]);', quiet) == '[0, 2]', &
+			eval( 'enum Suit{Hearts,Diamonds,Clubs,Spades}' &
+				//'i64(Suit.Spades) + 5000000000;', quiet) == '5000000003', &
 
 			! Two variants both pinned explicitly to the same negative
 			! value are an intentional alias, not a duplicate-value error

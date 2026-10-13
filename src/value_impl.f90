@@ -977,6 +977,10 @@ module procedure value_to_i32_array
 		case (i64_type)
 			ans%i32 = int(val%array%i64, 4)
 
+		case (enum_type)
+			! Enum elements live in val%struct(:), not in the typed arrays
+			ans%i32 = val%struct%sca%i32
+
 		!case (str_type)
 
 		!	! TODO: loops are needed for str array conversion via iachar
@@ -1020,6 +1024,20 @@ module procedure value_to_i64
 		case (i64_type)
 			ans = val%sca%i64
 
+		case (enum_type)
+			! The backing ordinal, e.g. i64(Card.Queen) -> 11
+			ans = val%sca%i32
+
+		case (str_type)
+
+			if (allocated(val%str) .and. len(val%str%s) == 1) then
+				ans = iachar(val%str%s)
+			else
+				write(*,*) err_int(IC_CONVERT_I64, 'cannot convert from type `' &
+					//value_type_name(val)//'` to i64.  Use `parse_i64()`')
+				call internal_error()
+			end if
+
 		case default
 			write(*,*) err_int(IC_CONVERT_I64, 'cannot convert from type `' &
 				//value_type_name(val)//'` to i64.  Use `parse_i64()`')
@@ -1056,6 +1074,10 @@ module procedure value_to_i64_array
 		case (i64_type)
 			!ans%i64 = int(val%array%i64, 4)
 			ans%i64 = val%array%i64
+
+		case (enum_type)
+			! Enum elements live in val%struct(:), not in the typed arrays
+			ans%i64 = val%struct%sca%i32
 
 		case default
 			write(*,*) err_int(IC_CONVERT_I64_ARR, 'cannot convert from type `' &
