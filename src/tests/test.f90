@@ -1578,6 +1578,10 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('i64([ 0, 2, 3]);') ==  "[0, 2, 3]", &
 			eval('i64([ 1, 2, 3]);') ==  "[1, 2, 3]", &
 			eval('i64([-1, 2, 3]);') ==  "[-1, 2, 3]", &
+			eval('i32(["a", "B", " "]);') ==  "[97, 66, 32]", &
+			eval('i64(["a", "B", " "]);') ==  "[97, 66, 32]", &
+			eval('i32(["A"]);') ==  "[65]", &
+			eval('sum(i32(["a", "b", "c", "d"; 2, 2]));') ==  "394", &
 			eval('any([true]);') == "true", &
 			eval('any([false]);') == "false", &
 			eval('any([false, true]);') == "true", &

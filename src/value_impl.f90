@@ -825,9 +825,8 @@ module procedure trim_array
 	case (str_type)
 		vector%str = vector%str(1: vector%len_)
 
-	! TODO: str case, bool case.  File?  Struct?  Other types?
 	case default
-		write(*,*) err_int(IC_TRIM_ARRAY_TYPE, 'trim_array() implemented for this type')
+		write(*,*) err_int(IC_TRIM_ARRAY_TYPE, 'trim_array() not implemented for this type')
 		call internal_error()
 	end select
 
@@ -955,7 +954,7 @@ end procedure value_to_i32
 
 module procedure value_to_i32_array
 
-
+	integer(kind = 8) :: i8
 
 	!print *, "starting value_to_i32_array()"
 	!print *, "val%type = ", kind_name(val%type)
@@ -981,18 +980,18 @@ module procedure value_to_i32_array
 			! Enum elements live in val%struct(:), not in the typed arrays
 			ans%i32 = val%struct%sca%i32
 
-		!case (str_type)
+		case (str_type)
 
-		!	! TODO: loops are needed for str array conversion via iachar
-		!	if (all(len(val%sca%str%s) == 1)) then
-		!		!ans = iachar(val%sca%str%s)
-		!		ans%i32 = iachar(val%array%str%s)
-
-		!	else
-		!		write(*,*) err_int_prefix//'cannot convert from type `' &
-		!			//kind_name(val%type)//'` to i32.  Use `parse_i32()`'//color_reset
-		!		call internal_error()
-		!	end if
+			! Like the scalar case, only single-character strings can be cast
+			allocate(ans%i32( size(val%array%str, kind = 8) ))
+			do i8 = 1, val%array%len_
+				if (len(val%array%str(i8)%s) /= 1) then
+					write(*,*) err_int(IC_CONVERT_I32_ARR, 'cannot convert from type `' &
+						//value_type_name(val)//'` to i32.  Use `parse_i32()`')
+					call internal_error()
+				end if
+				ans%i32(i8) = iachar(val%array%str(i8)%s)
+			end do
 
 		case default
 			write(*,*) err_int(IC_CONVERT_I32_ARR, 'cannot convert from type `' &
@@ -1052,7 +1051,7 @@ end procedure value_to_i64
 
 module procedure value_to_i64_array
 
-
+	integer(kind = 8) :: i8
 
 	!print *, "starting value_to_i64_array()"
 	!print *, "val%type = ", kind_name(val%type)
@@ -1078,6 +1077,19 @@ module procedure value_to_i64_array
 		case (enum_type)
 			! Enum elements live in val%struct(:), not in the typed arrays
 			ans%i64 = val%struct%sca%i32
+
+		case (str_type)
+
+			! Like the scalar case, only single-character strings can be cast
+			allocate(ans%i64( size(val%array%str, kind = 8) ))
+			do i8 = 1, val%array%len_
+				if (len(val%array%str(i8)%s) /= 1) then
+					write(*,*) err_int(IC_CONVERT_I64_ARR, 'cannot convert from type `' &
+						//value_type_name(val)//'` to i64.  Use `parse_i64()`')
+					call internal_error()
+				end if
+				ans%i64(i8) = iachar(val%array%str(i8)%s)
+			end do
 
 		case default
 			write(*,*) err_int(IC_CONVERT_I64_ARR, 'cannot convert from type `' &
@@ -1214,14 +1226,12 @@ end procedure struct_reg_set
 
 module procedure value_to_str
 
-
 	! When .true., render str members quoted/escaped and give f32/i64
 	! scalars an explicit `'f32`/`'i64` type suffix, so the result lexes back
 	! to an equivalent syntran literal.  Only meant to be set by the
 	! struct_type case below (labeling members also implies round-trip mode
 	! for their values) -- top-level println()/str() calls never pass this,
 	! so plain `println("hi")` and `println(1.5f)` are unaffected
-
 
 	!********
 
@@ -1508,7 +1518,6 @@ module procedure value_to_str
 
 end procedure value_to_str
 
-
 !===============================================================================
 
 module procedure value_type_name
@@ -1524,8 +1533,6 @@ module procedure value_type_name
 	! rendering (which needs this same logic for its param/return types) can
 	! call it directly: syntran__types_m depends on syntran__value_m, not the
 	! other way around, so only this direction avoids a circular dependency
-
-
 
 	!********
 
@@ -1584,8 +1591,6 @@ module procedure value_type_name_primitive
 	! Primitive (non-struct/array/fn) type-name mapping.  c.f. lookup_type()
 	! which is mostly the inverse of this
 
-
-
 	select case (itype)
 	case (i32_type)
 		str_ = "i32"
@@ -1616,9 +1621,6 @@ end procedure value_type_name_primitive
 
 module procedure scalar_to_str
 
-
-
-
 	!********
 
 	character(len = 16) :: buf16
@@ -1630,7 +1632,7 @@ module procedure scalar_to_str
 			ans = ''
 
 		case (bool_type)
-			! TODO: use bool1_str() and other primitive converters
+			! bool1_str() takes a logical(1) array element, not this default-kind scalar
 			if (val%bool) then
 				ans = "true"
 			else
