@@ -75,7 +75,7 @@ program main
 		!
 		! TODO: add a test that covers a "-i" interactive run
 		res = syntran_interpret(startup_file = args%syntran_file, &
-			script_args = args%script_args)
+			script_args = args%script_args, chdir_ = args%chdir)
 
 	else if (args%syntran_file_arg) then
 		! Interpret a file and exit

@@ -161,6 +161,10 @@ unlike `syntran_eval()`.
 The interactive REPL, which is what the `syntran` executable runs when you give
 it no file.  Embedding it is rarely what you want.
 
+It also takes `startup_file` and `script_args`.  `chdir_` is a *logical*, as in
+`syntran_interpret_file()`:  if it is true, relative file paths are resolved
+against the directory of `startup_file`.  This is what `--cd` does with `-i`.
+
 ## Things to know
 
 ### Errors and `quiet`

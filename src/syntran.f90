@@ -70,7 +70,7 @@ end subroutine log_rt_diags
 
 !===============================================================================
 
-function syntran_interpret(str_, quiet, startup_file, script_args) result(res_str)
+function syntran_interpret(str_, quiet, startup_file, script_args, chdir_) result(res_str)
 
 	! This is the interactive interpreter shell REPL
 	!
@@ -92,12 +92,18 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 	character(len = *), intent(in), optional :: startup_file
 	type(string_vector_t), optional, intent(in) :: script_args
 
+	! Resolve relative file paths (e.g. for open()) against the directory of
+	! startup_file instead of the working directory.  A logical, like the
+	! chdir_ arg of syntran_interpret_file().  Does nothing without a
+	! startup_file
+	logical, intent(in), optional :: chdir_
+
 	character(len = :), allocatable :: res_str
 
 	!********
 
 	character(len = :), allocatable :: line, chunk, src_file, source_text, &
-		prompt, prompt_color
+		prompt, prompt_color, src_dir
 
 	integer, parameter :: iu = input_unit, ou = output_unit
 	integer :: io, dir_action
@@ -137,7 +143,12 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 	end if
 	!print *, "src_file = ", src_file
 
-	call init_state(state, script_args)
+	src_dir = ''
+	if (present(chdir_) .and. present(startup_file)) then
+		if (chdir_) src_dir = get_dir(startup_file)
+	end if
+
+	call init_state(state, script_args, src_dir)
 	state%quiet = .false.
 	if (present(quiet)) state%quiet = quiet
 
@@ -169,7 +180,6 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 			return
 		end if
 
-		! TODO: chdir option?
 		call eval_dispatch(compilation, state, res)
 		if (state%rt_halt) then
 			! eval_dispatch() already printed and exited for non-quiet
@@ -271,7 +281,7 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 			! was started with
 			saved_quiet    = state%quiet
 			call state_destroy(state)
-			call init_state(state, script_args)
+			call init_state(state, script_args, src_dir)
 			state%quiet = saved_quiet
 			continue_ = .false.
 			cycle
@@ -792,26 +802,12 @@ end subroutine syntran_write_transpiled
 function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args, diags, &
 		syntax_only, transpile, io) result(res)
 
-	! TODO:
-	!   - enable input echo for file input (not for stdin)
-	!   - echo inputs w/o "syntran$" prompt and print outputs after a comment,
-	!     for ease of updating documentation with consistent styling
-
 	character(len = *), intent(in)  :: filename
 	character(len = :), allocatable :: res
 
-	! TODO: refactor verbosity as an int for silent, error, warn, info, debug, etc.
-	! Maybe not all those options yet, but at least silent, error, and info.
-	! Debug/trace could have an impact on perf so maybe that should still be a
-	! compile-time const:
-	!
-	!     SILENT = -20
-	!     ERROR  = -10
-	!     WARN   =   0
-	!     INFO   =  10
-	!     DEBUG  =  20
-	!     TRACE  =  30
-	!
+	! `quiet` suppresses diagnostics and the `Interpreting file` line, and keeps
+	! a runtime error from calling exit().  `quiet_info` only suppresses the
+	! `Interpreting file` line
 	logical, optional, intent(in) :: quiet, quiet_info
 
 	logical, optional, intent(in) :: chdir_

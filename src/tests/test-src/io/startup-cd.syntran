@@ -1,0 +1,7 @@
+
+// Startup file for the REPL `chdir_` test in unit_test_repl_directives().  It
+// doesn't do anything itself, the test checks how relative paths are resolved
+// after it has been loaded
+
+let startup_cd_loaded = 1;
+

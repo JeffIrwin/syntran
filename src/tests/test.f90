@@ -4320,6 +4320,20 @@ subroutine unit_test_repl_directives(npass, nfail)
 				'return 5;'//line_feed// &
 				'}'//line_feed// &
 				'g();', quiet) == '5', &
+			! chdir_ resolves relative paths against the startup file's
+			! directory.  test-01.syntran is a sibling of the startup file, not
+			! of the working directory
+			interpret('std::exists("test-01.syntran");', quiet, &
+				startup_file = 'src/tests/test-src/io/startup-cd.syntran', &
+				chdir_ = .true.) == 'true', &
+			! ... and without chdir_ it's still relative to the working directory
+			interpret('std::exists("test-01.syntran");', quiet, &
+				startup_file = 'src/tests/test-src/io/startup-cd.syntran') == 'false', &
+			! #clear keeps the startup file's directory, like it keeps quiet
+			interpret('#clear'//line_feed// &
+				'std::exists("test-01.syntran");', quiet, &
+				startup_file = 'src/tests/test-src/io/startup-cd.syntran', &
+				chdir_ = .true.) == 'true', &
 			! intr_fn_names() sees the real registry (not empty, and not
 			! silently missing a plain name or an overloaded one)
 			fn_names%len_ > 0, &
