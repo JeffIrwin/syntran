@@ -40,7 +40,7 @@ fn main(): bool
 		"line final"
 	];
 
-	let filename = "build/test-05.txt";
+	let filename = "build/test-06.txt";
 
 	// write
 	let fo = open(filename, "w");
