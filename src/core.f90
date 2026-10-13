@@ -63,11 +63,6 @@ module syntran__core_m
 	!      + initial transpiler pr is about 15 kloc code
 	!      + considering claude did the transpiler in one day, a full compiler
 	!        could still be very achievable
-	!  - build option macro for NO_ISOCLINE?
-	!    * or NO_C, NO_REPL, or any other name
-	!    * api users might want eval-only with no repl on no requirement for c
-	!      compiler
-	!    * update doc/api.md after this
 	!  - direct enum to i64 casting. currently can only cast to i32 directly, or
 	!    to i64 awkwardly as i64(i32(Enum.variant))
 	!    * in the other direction, casting i64 to enum could fail for big nums,

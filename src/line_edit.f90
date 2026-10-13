@@ -50,6 +50,11 @@ module syntran__line_edit_m
 			character(kind = c_char), intent(in) :: cont_marker(*)
 		end subroutine ic_set_prompt_marker_c
 
+		function syntran_has_isocline_c() bind(c, name = "syntran_has_isocline") result(res)
+			import :: c_int
+			integer(c_int) :: res
+		end function syntran_has_isocline_c
+
 		function syntran_isatty_c() bind(c, name = "syntran_isatty") result(res)
 			import :: c_int
 			integer(c_int) :: res
@@ -84,6 +89,15 @@ module syntran__line_edit_m
 	end interface
 
 contains
+
+!===============================================================================
+
+logical function line_edit_available()
+	! Was isocline compiled into this build?  False for a build with
+	! -DSYNTRAN_NO_ISOCLINE, in which case the REPL always uses the plain
+	! read_line() path, even on a real terminal
+	line_edit_available = syntran_has_isocline_c() /= 0
+end function line_edit_available
 
 !===============================================================================
 

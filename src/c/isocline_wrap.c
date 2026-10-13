@@ -9,8 +9,17 @@
  * quoted, relative path) so both build systems only need to know about this
  * one shim file rather than isocline's whole file list.
  *
+ * Define SYNTRAN_NO_ISOCLINE (-DSYNTRAN_NO_ISOCLINE, i.e. fpm
+ * `--c-flag "-DSYNTRAN_NO_ISOCLINE"` or cmake `-DSYNTRAN_NO_ISOCLINE=ON`) to
+ * leave isocline out.  The external/isocline submodule is then not needed at
+ * all, which is what an fpm git dependency wants, since fpm doesn't fetch
+ * submodules.  The `ic_*` entry points that src/line_edit.f90 binds are
+ * replaced by inert stubs, and syntran_has_isocline() reports 0 so the REPL
+ * falls back to its plain read_line() path (the same one used for piped stdin).
+ *
  * This file also provides small platform-specific helpers that syntran needs
  * and that don't belong in Fortran:
+ *   - syntran_has_isocline(): was isocline compiled in?
  *   - syntran_isatty():       are stdin AND stdout real terminals?
  *   - syntran_history_path(): where should REPL history persist?
  *   - syntran_is_dir():       does a path refer to a directory?
@@ -20,7 +29,70 @@
  * needed on either FPM or CMake).
  */
 
+#ifndef SYNTRAN_NO_ISOCLINE
+
 #include "../../external/isocline/src/isocline.c"
+
+int syntran_has_isocline(void)
+{
+	return 1;
+}
+
+#else
+
+#include <stdbool.h>
+#include <stdlib.h>
+
+/* Stubs for every isocline symbol bound by src/line_edit.f90, so that the
+ * Fortran interfaces still link.  They are never reached in practice, because
+ * the REPL checks syntran_has_isocline() before it takes the interactive path.
+ * ic_readline() returns NULL, which line_edit.f90 treats as EOF.
+ */
+char *ic_readline(const char *prompt_text)
+{
+	(void) prompt_text;
+	return NULL;
+}
+
+void ic_free(void *p)
+{
+	free(p);
+}
+
+void ic_set_history(const char *fname, long max_entries)
+{
+	(void) fname;
+	(void) max_entries;
+}
+
+void ic_history_add(const char *entry)
+{
+	(void) entry;
+}
+
+void ic_history_remove_last(void)
+{
+}
+
+void ic_set_prompt_marker(const char *prompt_marker,
+                          const char *continuation_prompt_marker)
+{
+	(void) prompt_marker;
+	(void) continuation_prompt_marker;
+}
+
+bool ic_enable_brace_insertion(bool enable)
+{
+	(void) enable;
+	return false;
+}
+
+int syntran_has_isocline(void)
+{
+	return 0;
+}
+
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,6 +101,9 @@
 #include <sys/stat.h>
 
 #ifdef _WIN32
+/* Without isocline, nothing else pulls this in, and syntran_is_mintty() and
+ * syntran_enable_vt() below need it */
+#include <windows.h>
 #include <io.h>
 #include <direct.h>
 #else

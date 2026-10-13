@@ -149,6 +149,12 @@ subroutine repl_help_keys(ou)
 
 	character(len = :), allocatable :: hist_path
 
+	if (.not. line_edit_available()) then
+		write(ou, "(a)") "This build has no line editing (history, arrow keys), because it"
+		write(ou, "(a)") "was built with SYNTRAN_NO_ISOCLINE."
+		return
+	end if
+
 	write(ou, "(a)") "Line editing:"
 	write(ou, "(a)") tab//"Up / Down    Recall the previous / next history entry"
 	write(ou, "(a)") tab//"Ctrl+R       Reverse-search history"

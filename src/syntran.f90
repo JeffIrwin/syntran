@@ -125,8 +125,9 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 
 	! Only use interactive line editing (history, arrow keys) when reading a
 	! real terminal.  Piped stdin, `-c` strings, and file interpretation all
-	! keep using the plain read_line() path in utils.f90
-	interactive = .not. present(str_) .and. is_tty()
+	! keep using the plain read_line() path in utils.f90, as does a build
+	! without isocline (-DSYNTRAN_NO_ISOCLINE)
+	interactive = .not. present(str_) .and. line_edit_available() .and. is_tty()
 	if (interactive) call line_edit_init()
 
 	if (present(str_)) then
@@ -141,7 +142,7 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 	if (present(quiet)) state%quiet = quiet
 
 	if (.not. interactive .and. .not. present(str_) .and. &
-			.not. state%quiet .and. is_mintty()) then
+			.not. state%quiet .and. line_edit_available() .and. is_mintty()) then
 		write(*,*) 'Note: interactive line editing (history, arrow keys) is'// &
 			' not available in Git Bash / MinTTY.'
 		write(*,*) 'For full REPL editing use: winpty syntran'// &

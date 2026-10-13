@@ -40,7 +40,8 @@ building fails with
 fatal error: '../../external/isocline/src/isocline.c' file not found
 ```
 
-Instead, clone syntran recursively and use a `path` dependency:
+You can either [build without isocline](#without-isocline), or clone syntran
+recursively and use a `path` dependency:
 
 ```bash
 git clone --recursive https://github.com/JeffIrwin/syntran
@@ -54,12 +55,34 @@ syntran = { path = "../syntran" }
 
 Then `use syntran` in any of your sources.
 
+#### Without isocline
+
+If you only want to embed the interpreter, you don't need isocline.  Build with
+`SYNTRAN_NO_ISOCLINE` defined and the submodule isn't read at all, so a plain
+`git` dependency works:
+
+```toml
+[dependencies]
+syntran = { git = "https://github.com/JeffIrwin/syntran" }
+```
+
+```bash
+fpm build --c-flag "-DSYNTRAN_NO_ISOCLINE"
+```
+
+The macro is only read by the C shim, so it goes in `--c-flag`, not `--flag`.
+It removes line editing (history, arrow keys) from the REPL.  Everything else
+is unchanged, and the REPL still works with plain line input, like it does for
+piped stdin.
+
 ### With CMake
 
 The CMake build produces a static library, which the `syntran`
 executable, the tests, and your own targets can link against.  See
 `add_library(${LIB} ...)` in the top-level `CMakeLists.txt`.  The `example/`
 programs are only wired up for fpm.
+
+Pass `-DSYNTRAN_NO_ISOCLINE=ON` to build without isocline, as described above.
 
 ## Reference
 

@@ -32,6 +32,14 @@ else()
 	message("NOT defining _WIN32 in cmake")
 endif()
 
+# Leave the vendored isocline REPL line editor (external/isocline) out of the
+# build.  Only src/c/isocline_wrap.c reads this macro.  fpm builds spell it
+# `--c-flag "-DSYNTRAN_NO_ISOCLINE"`
+option(SYNTRAN_NO_ISOCLINE "Build without the isocline REPL line editor" OFF)
+if(SYNTRAN_NO_ISOCLINE)
+	add_compile_definitions(SYNTRAN_NO_ISOCLINE)
+endif()
+
 if(DEFINED ENV{SYNTRAN_INTEL})
 	# ifort-specific flags must NOT reach the C compiler (icx doesn't
 	# understand -fpp/etc), so gate them to Fortran only.
