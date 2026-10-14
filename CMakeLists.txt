@@ -40,8 +40,9 @@ if(SYNTRAN_NO_ISOCLINE)
 	add_compile_definitions(SYNTRAN_NO_ISOCLINE)
 endif()
 
-# Build without BLAS/LAPACK.  The matmul `@` operator and std::solve() use
-# portable Fortran fallbacks instead of sgemm/dgemm/sgesv/dgesv.  Only
+# Build without BLAS/LAPACK.  The matmul `@` operator, std::solve(), and
+# std::lu_factor()/std::lu_solve() use portable Fortran fallbacks instead of
+# sgemm/dgemm/sgesv/dgesv/sgetrf/dgetrf/sgetrs/dgetrs.  Only
 # src/linalg.F90 reads this macro.  fpm builds spell it `--features
 # release,noblas` (see [features] in fpm.toml)
 option(SYNTRAN_NO_BLAS "Build without BLAS/LAPACK" OFF)

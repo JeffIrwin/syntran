@@ -13,19 +13,21 @@ contains
 
 !===============================================================================
 
-function new_solve_fn(elem_type) result(fn)
+function new_solve_fn(elem_type, b_rank) result(fn)
 
-	! Build the signature of std::solve(A, b) for one float element type:
+	! Build the signature of std::solve(A, b) for one float element type and
+	! one rank of `b`:
 	!
 	!     solve(A: [T; :, :], b: [T; :]):    [T; :]
 	!     solve(A: [T; :, :], b: [T; :, :]): [T; :, :]
 	!
-	! The result has the shape of `b`, so its rank is resolved per-call in
-	! resolve_overload().  Both overloads are covered by one rank-agnostic `b`
-	! param, and non-float or mismatched element types are rejected by the
-	! ordinary arg type check (E42)
+	! The result has the shape of `b`.  Each rank of `b` is its own overload,
+	! picked by resolve_overload(), so that a `b` of any other rank is rejected
+	! by the ordinary arg type check (E42) along with non-float or mismatched
+	! element types.  The one exception is the unqualified-call stub, which is
+	! never actually called and passes b_rank = -1
 
-	integer, intent(in) :: elem_type
+	integer, intent(in) :: elem_type, b_rank
 
 	type(fn_t) :: fn
 
@@ -34,7 +36,7 @@ function new_solve_fn(elem_type) result(fn)
 	fn%type%type = array_type
 	allocate(fn%type%array)
 	fn%type%array%type = elem_type
-	fn%type%array%rank = -1  ! resolved per-call in resolve_overload
+	fn%type%array%rank = b_rank
 
 	allocate(fn%params(2))
 	allocate(fn%param_names%v(2))
@@ -48,7 +50,7 @@ function new_solve_fn(elem_type) result(fn)
 	fn%params(2)%type = array_type
 	allocate(fn%params(2)%array)
 	fn%params(2)%array%type = elem_type
-	fn%params(2)%array%rank = -1  ! rank-1 or rank-2
+	fn%params(2)%array%rank = b_rank
 	fn%param_names%v(2)%s = "b"
 
 end function new_solve_fn
@@ -99,20 +101,20 @@ end function new_lu_factor_fn
 
 !===============================================================================
 
-function new_lu_solve_fn(elem_type) result(fn)
+function new_lu_solve_fn(elem_type, b_rank) result(fn)
 
 	! Build the signature of std::lu_solve(A, ipiv, &b) for one float element
-	! type:
+	! type and one rank of `b`:
 	!
 	!     lu_solve(A: &const [T; :, :], ipiv: &const [i32; :], b: &[T; :])
 	!     lu_solve(A: &const [T; :, :], ipiv: &const [i32; :], b: &[T; :, :])
 	!
 	! `b` is overwritten with the solution.  `A` and `ipiv` are the outputs of
 	! lu_factor().  They are `&const` so that a bare variable is borrowed
-	! instead of copied, which keeps each solve at O(n^2).  Both overloads of
-	! `b` are covered by one rank-agnostic param, like solve()
+	! instead of copied, which keeps each solve at O(n^2).  Each rank of `b` is
+	! its own overload, like solve()
 
-	integer, intent(in) :: elem_type
+	integer, intent(in) :: elem_type, b_rank
 
 	type(fn_t) :: fn
 
@@ -138,7 +140,7 @@ function new_lu_solve_fn(elem_type) result(fn)
 	fn%params(3)%type = array_type
 	allocate(fn%params(3)%array)
 	fn%params(3)%array%type = elem_type
-	fn%params(3)%array%rank = -1  ! rank-1 or rank-2
+	fn%params(3)%array%rank = b_rank
 	fn%param_names%v(3)%s = "b"
 
 	fn%ref_params       = [.true., .true., .true.]
@@ -232,8 +234,10 @@ subroutine declare_array_fns(fns, id_index, fn_array)
 		dot_f32_fn, dot_f64_fn, dot_i32_fn, dot_i64_fn, &
 		reshape_fn, transpose_fn, shape_fn, &
 		solve_f32_fn, solve_f64_fn, solve_std_fn, &
+		solve_f32_mat_fn, solve_f64_mat_fn, &
 		lu_factor_f32_fn, lu_factor_f64_fn, lu_factor_std_fn, &
-		lu_solve_f32_fn, lu_solve_f64_fn, lu_solve_std_fn
+		lu_solve_f32_fn, lu_solve_f64_fn, lu_solve_std_fn, &
+		lu_solve_f32_mat_fn, lu_solve_f64_mat_fn
 
 	! Overloads of the reductions that take `dim` and/or `mask` args.  These are
 	! resolved from the plain names (e.g. sum) by resolve_overload().  They all
@@ -771,19 +775,26 @@ subroutine declare_array_fns(fns, id_index, fn_array)
 	! matrix of right-hand side columns, of the same type.
 	!
 	! The typed overloads are named like the other overloads, "0solve_f32" and
-	! "0solve_f64".  resolve_overload() picks one for std::solve(), and `std::`
-	! lookup falls back to the plain name.  The "std::solve" entry only exists
-	! so that an unqualified solve() gets the "must be called as std::solve()"
-	! diagnostic like std::transpose, and users can still define their own
-	! solve().
+	! "0solve_f64" for a vector `b`, and "0solve_f32_mat" and "0solve_f64_mat"
+	! for a matrix `b`.  resolve_overload() picks one for std::solve(), and
+	! `std::` lookup falls back to the plain name.  The "std::solve" entry only
+	! exists so that an unqualified solve() gets the "must be called as
+	! std::solve()" diagnostic like std::transpose, and users can still define
+	! their own solve().
 
-	solve_f32_fn = new_solve_fn(f32_type)
+	solve_f32_fn = new_solve_fn(f32_type, 1)
 	call fns%insert("0solve_f32", solve_f32_fn, id_index)
 
-	solve_f64_fn = new_solve_fn(f64_type)
+	solve_f64_fn = new_solve_fn(f64_type, 1)
 	call fns%insert("0solve_f64", solve_f64_fn, id_index)
 
-	solve_std_fn = new_solve_fn(f64_type)
+	solve_f32_mat_fn = new_solve_fn(f32_type, 2)
+	call fns%insert("0solve_f32_mat", solve_f32_mat_fn, id_index)
+
+	solve_f64_mat_fn = new_solve_fn(f64_type, 2)
+	call fns%insert("0solve_f64_mat", solve_f64_mat_fn, id_index)
+
+	solve_std_fn = new_solve_fn(f64_type, -1)
 	call fns%insert("std::solve", solve_std_fn, id_index)
 
 	!********
@@ -802,13 +813,19 @@ subroutine declare_array_fns(fns, id_index, fn_array)
 	lu_factor_std_fn = new_lu_factor_fn(f64_type)
 	call fns%insert("std::lu_factor", lu_factor_std_fn, id_index)
 
-	lu_solve_f32_fn = new_lu_solve_fn(f32_type)
+	lu_solve_f32_fn = new_lu_solve_fn(f32_type, 1)
 	call fns%insert("0lu_solve_f32", lu_solve_f32_fn, id_index)
 
-	lu_solve_f64_fn = new_lu_solve_fn(f64_type)
+	lu_solve_f64_fn = new_lu_solve_fn(f64_type, 1)
 	call fns%insert("0lu_solve_f64", lu_solve_f64_fn, id_index)
 
-	lu_solve_std_fn = new_lu_solve_fn(f64_type)
+	lu_solve_f32_mat_fn = new_lu_solve_fn(f32_type, 2)
+	call fns%insert("0lu_solve_f32_mat", lu_solve_f32_mat_fn, id_index)
+
+	lu_solve_f64_mat_fn = new_lu_solve_fn(f64_type, 2)
+	call fns%insert("0lu_solve_f64_mat", lu_solve_f64_mat_fn, id_index)
+
+	lu_solve_std_fn = new_lu_solve_fn(f64_type, -1)
 	call fns%insert("std::lu_solve", lu_solve_std_fn, id_index)
 
 	!********
@@ -899,8 +916,10 @@ subroutine declare_array_fns(fns, id_index, fn_array)
 			reshape_fn, &
 			transpose_fn, &
 			solve_f32_fn, solve_f64_fn, solve_std_fn, &
+			solve_f32_mat_fn, solve_f64_mat_fn, &
 			lu_factor_f32_fn, lu_factor_f64_fn, lu_factor_std_fn, &
 			lu_solve_f32_fn, lu_solve_f64_fn, lu_solve_std_fn, &
+			lu_solve_f32_mat_fn, lu_solve_f64_mat_fn, &
 			shape_fn, &
 			ext_fns &
 		]

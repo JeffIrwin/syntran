@@ -121,7 +121,7 @@ module syntran__core_m
 	!  - "expert" interface for matrix solve:
 	!    * done: std::lu_factor(&A[, &info]) and std::lu_solve(A, ipiv, &b), by
 	!      LAPACK getrf/getrs.  They overwrite their inputs, and `info` is the
-	!      iostat-style status.  Intrinsics can now take `&` args via
+	!      LAPACK-style status (0 is success).  Intrinsics can now take `&` args via
 	!      fn_t%ref_params and OP_CALL_INTR_REF
 	!    * the transpiler doesn't support them yet (E115)
 	!  - built-in `move` fn to move_alloc an array (or struct)? it's useful to

@@ -20,8 +20,9 @@
 #     fpm build --profile debug --flag "-DSYNTRAN_BOUNDS_CHECK"
 #     fpm test test --profile debug --flag "-DSYNTRAN_BOUNDS_CHECK"
 #
-#     # Use portable Fortran fallbacks instead of BLAS/LAPACK for `@` and
-#     # std::solve(), and don't link them.  See [features] below.  Features
+#     # Use portable Fortran fallbacks instead of BLAS/LAPACK for `@`,
+#     # std::solve(), and std::lu_factor()/std::lu_solve(), and don't link
+#     # them.  See [features] below.  Features
 #     # replace --profile (they can't be combined), so name release/debug here
 #     fpm build --features release,noblas
 #     fpm test test --features debug,noblas
@@ -87,8 +88,8 @@ homepage = "https://github.com/JeffIrwin/syntran"
 #     auto-examples    = true
 #     module-naming    = false
 
-# BLAS/LAPACK for the matmul `@` operator and std::solve(), through
-# src/linalg.F90.  They're linked by default via the "blas" feature, which the
+# BLAS/LAPACK for the matmul `@` operator, std::solve(), and
+# std::lu_factor()/std::lu_solve(), through src/linalg.F90.  They're linked by default via the "blas" feature, which the
 # default profile always enables, including with --profile debug/release.  On
 # macOS they resolve to the Accelerate framework with no install.  Elsewhere,
 # install an optimized implementation (e.g. libopenblas-dev), not the

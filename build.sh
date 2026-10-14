@@ -79,7 +79,8 @@ fi
 #build=build
 build="build/$config"
 
-# BLAS/LAPACK is required by default (for `@` and std::solve()).  This cmake
+# BLAS/LAPACK is required by default (for `@`, std::solve(), and
+# std::lu_factor()/std::lu_solve()).  This cmake
 # build still uses the portable fallbacks on Windows, since the runner has no
 # BLAS that find_package(LAPACK) knows about.  The shipped Windows binary comes
 # from the fpm build in CI, which links OpenBLAS (see main.yml).  Anyone can

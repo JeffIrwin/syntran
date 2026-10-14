@@ -956,9 +956,15 @@ pure integer function intr_id_from_name(name) result(id)
 	! The bare "solve" is only the registered "std::solve" stub, which exists to
 	! diagnose an unqualified call.  A real call is always resolved to one of
 	! the typed names first
-	case ("0solve_f32", "0solve_f64", "solve"); id = INTR_SOLVE
-	case ("0lu_factor_f32", "0lu_factor_f64", "lu_factor"); id = INTR_LU_FACTOR
-	case ("0lu_solve_f32", "0lu_solve_f64", "lu_solve"); id = INTR_LU_SOLVE
+	! The `_mat` overloads are for a matrix `b`, as opposed to a vector
+	case ("0solve_f32", "0solve_f64", "0solve_f32_mat", "0solve_f64_mat", &
+		"solve")
+		id = INTR_SOLVE
+	case ("0lu_factor_f32", "0lu_factor_f64", "lu_factor")
+		id = INTR_LU_FACTOR
+	case ("0lu_solve_f32", "0lu_solve_f64", "0lu_solve_f32_mat", &
+		"0lu_solve_f64_mat", "lu_solve")
+		id = INTR_LU_SOLVE
 	case ("0dot_i32");       id = INTR_DOT_I32
 	case ("0dot_i64");       id = INTR_DOT_I64
 	case ("all");            id = INTR_ALL

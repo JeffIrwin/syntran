@@ -168,6 +168,8 @@ recursive subroutine resolve_overload(args, fn_call, has_rank, has_arr_type, arr
 
 	integer :: type_, arr_type
 
+	logical :: is_lu_solve
+
 	has_rank = .false.
 	if (present(has_arr_type)) has_arr_type = .false.
 	if (present(arr_type_src)) arr_type_src = 0
@@ -1011,7 +1013,10 @@ recursive subroutine resolve_overload(args, fn_call, has_rank, has_arr_type, arr
 		! std::solve(A, b) -- only fires for std::solve, not a user-defined
 		! solve(), because module_prefix is set before this call.  The element
 		! type of A picks the overload.  Anything but f32 falls through to f64,
-		! so that other types are rejected by the arg type check against f64
+		! so that other types are rejected by the arg type check against f64.
+		! A `b` that isn't a vector picks the matrix overload, so any rank
+		! other than 1 or 2 is rejected by the arg type check too.  The result
+		! has the rank of b, which is part of the overload's signature
 		if (allocated(fn_call%module_prefix)) then
 			if (fn_call%module_prefix == "std") then
 
@@ -1026,14 +1031,8 @@ recursive subroutine resolve_overload(args, fn_call, has_rank, has_arr_type, arr
 					fn_call%identifier%text = "0solve_f64"
 				end if
 
-				! Result has the rank of b (second argument)
-				if (args%len_ >= 2) then
-					if (args%v(2)%val%type == array_type) then
-						has_rank = .true.
-						if (.not. allocated(fn_call%val%array)) allocate(fn_call%val%array)
-						fn_call%val%array%rank = args%v(2)%val%array%rank
-					end if
-				end if
+				if (.not. arg_is_rank1(args, 2)) &
+					fn_call%identifier%text = fn_call%identifier%text//"_mat"
 
 			end if
 		end if
@@ -1045,9 +1044,12 @@ recursive subroutine resolve_overload(args, fn_call, has_rank, has_arr_type, arr
 		! overload and anything but f32 falls through to f64, so that it's
 		! rejected by the arg type check.  The result type doesn't depend on the
 		! args (lu_factor returns [i32; :] and lu_solve is void), so no rank
-		! needs to be resolved
+		! needs to be resolved.  Like solve(), lu_solve() has a matrix overload
+		! for any `b` (arg 3) that isn't a vector
 		if (allocated(fn_call%module_prefix)) then
 			if (fn_call%module_prefix == "std") then
+
+				is_lu_solve = fn_call%identifier%text == "lu_solve"
 
 				type_ = f64_type
 				if (args%len_ >= 1) then
@@ -1059,6 +1061,9 @@ recursive subroutine resolve_overload(args, fn_call, has_rank, has_arr_type, arr
 				else
 					fn_call%identifier%text = "0"//fn_call%identifier%text//"_f64"
 				end if
+
+				if (is_lu_solve .and. .not. arg_is_rank1(args, 3)) &
+					fn_call%identifier%text = fn_call%identifier%text//"_mat"
 
 			end if
 		end if
@@ -1089,6 +1094,26 @@ recursive subroutine resolve_overload(args, fn_call, has_rank, has_arr_type, arr
 	end select
 
 end subroutine resolve_overload
+
+!===============================================================================
+
+logical function arg_is_rank1(args, i)
+
+	! Is the i-th (1-based) arg a rank-1 array?  False if there is no such arg
+	! or it isn't an array, in which case the arg type check that follows
+	! reports the error
+
+	type(syntax_node_vector_t), intent(in) :: args
+	integer, intent(in) :: i
+
+	arg_is_rank1 = .false.
+	if (args%len_ < i) return
+	if (args%v(i)%val%type /= array_type) return
+	if (.not. allocated(args%v(i)%val%array)) return
+
+	arg_is_rank1 = args%v(i)%val%array%rank == 1
+
+end function arg_is_rank1
 
 !===============================================================================
 

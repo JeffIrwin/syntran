@@ -10558,6 +10558,40 @@ subroutine unit_test_transpile(npass, nfail)
 				EC_TRANSPILE_UNSUPPORTED), &
 			diag_count_code(get_diags_transpile_file(P//'E115-transpile-unsupported.syntran'), &
 				EC_TRANSPILE_UNSUPPORTED) == 4, &
+			! The rank of `b` is part of the overload, so only a vector or a matrix is
+			! accepted by std::solve() and std::lu_solve().  A rank-3 `b` used to be
+			! accepted, and only its first column was solved
+			diag_has_code(get_diags( &
+				'let A = [1.0, 0.0, 0.0, 1.0; 2, 2]; println(std::solve(A, [1.0; 2, 2, 2]));'), &
+				EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags( &
+				'let A = [1.0f, 0.0f, 0.0f, 1.0f; 2, 2]; println(std::solve(A, [1.0f; 2, 2, 2]));'), &
+				EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags( &
+				'let A = [1.0, 0.0, 0.0, 1.0; 2, 2]; println(std::solve(A, 1.0));'), &
+				EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags( &
+				'let A = [1.0; 2, 2]; let b = [1.0; 2, 2, 2]; std::lu_solve(A, [0, 1], &b);'), &
+				EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags( &
+				'let A = [1.0f; 2, 2]; let b = [1.0f; 2, 2, 2]; std::lu_solve(A, [0, 1], &b);'), &
+				EC_BAD_ARG_TYPE), &
+			.not. diag_has_code(get_diags( &
+				'let A = [1.0, 0.0, 0.0, 1.0; 2, 2]; println(std::solve(A, [1.0, 2.0]));'), &
+				EC_BAD_ARG_TYPE), &
+			.not. diag_has_code(get_diags( &
+				'let A = [1.0, 0.0, 0.0, 1.0; 2, 2]; println(std::solve(A, [1.0; 2, 3]));'), &
+				EC_BAD_ARG_TYPE), &
+			.not. diag_has_code(get_diags( &
+				'let A = [1.0f, 0.0f, 0.0f, 1.0f; 2, 2]; println(std::solve(A, [1.0f; 2, 3]));'), &
+				EC_BAD_ARG_TYPE), &
+			.not. diag_has_code(get_diags( &
+				'let A = [1.0, 0.0, 0.0, 1.0; 2, 2]; let b = [1.0, 2.0]; std::lu_solve(A, [0, 1], &b);'), &
+				EC_BAD_ARG_TYPE), &
+			.not. diag_has_code(get_diags( &
+				'let A = [1.0, 0.0, 0.0, 1.0; 2, 2]; let b = [1.0; 2, 3]; std::lu_solve(A, [0, 1], &b);'), &
+				EC_BAD_ARG_TYPE), &
+
 			! std::lu_factor() and std::lu_solve() (by-ref intrinsics) aren't
 			! transpiled yet.  The diagnostic names the fn, not its mangled
 			! overload

@@ -26,7 +26,10 @@ These are the special polymorphic types used in documentation:
 A few intrinsic functions take arguments by reference, which are indicated with
 `&` like a user-defined function's by-reference parameters, e.g.
 [`lu_factor`](#lu_factor).  The caller must write `&` too, and the argument must
-be a variable name that is not `const`.
+be a variable name that is not `const`.  The exception is a `&const` parameter,
+e.g. `A` and `ipiv` of [`lu_solve`](#lu_solve), which is only read.  It accepts
+plain value syntax and `const` variables, and a variable name is borrowed
+instead of copied.
 
 All of these special properties are special cases for intrinsic functions.  For
 now at least, user-defined functions cannot be variadic, polymorphic, or

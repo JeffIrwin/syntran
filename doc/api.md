@@ -77,9 +77,10 @@ piped stdin.
 
 #### BLAS and LAPACK
 
-The `@` operator on `f32`/`f64` arrays calls BLAS `gemm`, and
-[`std::solve()`](intrinsics.md#solve) calls LAPACK `gesv`.  They must be
-installed to link:
+The `@` operator on `f32`/`f64` arrays calls BLAS `gemm`,
+[`std::solve()`](intrinsics.md#solve) calls LAPACK `gesv`, and
+[`std::lu_factor()`](intrinsics.md#lu_factor)/[`std::lu_solve()`](intrinsics.md#lu_solve)
+call LAPACK `getrf`/`getrs`.  They must be installed to link:
 
 - macOS: nothing to install, the Accelerate framework is used
 - Debian/Ubuntu: `sudo apt-get install libopenblas-dev`.  Install OpenBLAS, not
