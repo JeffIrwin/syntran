@@ -86,7 +86,7 @@ call LAPACK `getrf`/`getrs`.  They must be installed to link:
 - Debian/Ubuntu: `sudo apt-get install libopenblas-dev`.  Install OpenBLAS, not
   the reference `libblas-dev`/`liblapack-dev`, which are many times slower
 - Alpine: `apk add openblas-dev`, then `ln -s libopenblas.so /usr/lib/libblas.so`
-- Fedora/Rocky: `dnf install openblas-devel`
+- Fedora/Rocky: `dnf install --enablerepo=crb openblas-devel blas-devel lapack-devel`
 
 Building syntran itself with fpm links them by default.  To build without them,
 use the `noblas` feature, which uses portable Fortran instead.  It's slower for

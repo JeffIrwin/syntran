@@ -115,7 +115,7 @@ Using cmake:
 
 If you installed syntran as a binary, you can skip this section.
 
-A [Fortran compiler](https://fortran-lang.org/en/compilers/) and either [CMake](https://cmake.org/download/) or [FPM](https://fpm.fortran-lang.org/index.html) are required.  Supported compilers are gfortran 10 through 15, or Intel 2025.2.  Also check `matrix.gfortran` in the [github actions workflow ](.github/workflows/main.yml) to see which compilers are regularly tested in CI/CD.  For performance, gfortran is recommended over Intel.
+A [Fortran compiler](https://fortran-lang.org/en/compilers/) and either [CMake](https://cmake.org/download/) or [FPM](https://fpm.fortran-lang.org/index.html) are required.  Supported compilers are gfortran 10 through 15, or Intel 2025.2.  Also check `matrix.gfortran` in the [github actions workflow ](.github/workflows/main.yml) to see which compilers are regularly tested in CI/CD.  For performance, gfortran is recommended over Intel.  A BLAS/LAPACK library is also needed by default, see [below](#blas-and-lapack).
 
 Two independent build systems are provided for syntran.  You can either use cmake, which is run by `build.sh` as shown above, or you can use the Fortran Package Manager `fpm`:
 
@@ -135,6 +135,48 @@ docker container using the included [Dockerfile](Dockerfile).  See the
 
 You shouldn't need to worry about this, but note that some of the source code is
 auto-generated.  [Go here for details](doc/src-gen.md).
+
+### BLAS and LAPACK
+
+The `@` operator on `f32`/`f64` arrays, `std::solve()`, and
+`std::lu_factor()`/`std::lu_solve()` call BLAS and LAPACK.  Binary releases
+already have them linked in statically, so this only matters if you build from
+source.  Install an optimized implementation (OpenBLAS), not the much slower
+reference `libblas`/`liblapack`:
+
+- macOS: nothing to install, the Accelerate framework is used
+- Debian/Ubuntu: `sudo apt-get install libopenblas-dev`
+- Fedora/Rocky/Alma: `sudo dnf install --enablerepo=crb openblas-devel blas-devel lapack-devel`
+- Alpine: `apk add openblas-dev`, then `ln -s libopenblas.so /usr/lib/libblas.so`
+- Windows: install OpenBLAS from MSYS2 with
+  `pacman -S mingw-w64-ucrt-x86_64-openblas`, copy
+  `C:\msys64\ucrt64\lib\libopenblas.a` to `build/openblas/libblas.a` and
+  `build/openblas/liblapack.a` in the syntran directory, and pass
+  `--flag "-fopenmp -Lbuild/openblas"` to fpm.  See the "Install OpenBLAS windows" step in
+  the [github actions workflow](.github/workflows/main.yml) for the full recipe.
+  Note that `build.sh` (cmake) doesn't look for BLAS on Windows and always
+  builds with the portable fallbacks described below
+
+To build without BLAS and LAPACK, define `SYNTRAN_NO_BLAS`.  Portable Fortran
+fallbacks are used instead, which give the same results up to rounding but are
+slower for large matrices.  Nothing needs to be installed:
+
+<!-- syntran-begin mode=skip reason="builds the interpreter itself; out of scope for output testing" -->
+```
+# cmake, via build.sh
+SYNTRAN_NO_BLAS=1 ./build.sh
+
+# fpm, which needs version 0.13.0 or later
+fpm build --features release,noblas
+fpm test test --features debug,noblas
+```
+<!-- syntran-end -->
+
+With fpm, `--features` takes the place of `--profile`, so name `release` or
+`debug` in the list.
+
+If you depend on syntran from your own fpm project, see
+[doc/api.md](doc/api.md#blas-and-lapack).
 
 ## Run
 
