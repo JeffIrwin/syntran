@@ -61,6 +61,17 @@
 					# liblapack-dev) provides the fast BLAS/LAPACK for \n
 					# fpm.toml's `link`.  macOS gets Accelerate for free \n
 					sudo apt-get install gfortran-14 libopenblas-dev \n
+
+					# Ubuntu's `-llapack -lblas` would resolve to shared \n
+					# libs, which a bare container doesn't have.  Like \n
+					# Dockerfile.rocky, link libopenblas.a (which also \n
+					# contains LAPACK) statically through a private dir \n
+					# that is first in the linker search path \n
+					a=$(find /usr/lib -name libopenblas.a | head -n 1) \n
+					[[ -n \"$a\" ]] \n
+					sudo mkdir -p /opt/blas-static \n
+					sudo ln -sf \"$a\" /opt/blas-static/libblas.a \n
+					sudo ln -sf \"$a\" /opt/blas-static/liblapack.a \n
 				"
 			},
 			{
@@ -156,7 +167,7 @@
 					fpm install
 					  --profile release
 					  --link-flag
-					  '-static-libgcc -static-libgfortran -static-libquadmath'
+					  '-L/opt/blas-static -static-libgcc -static-libgfortran -static-libquadmath'
 					  --prefix='$HOME' \n
 
 					# TODO: copy to a subdir for easier upload \n
@@ -166,12 +177,18 @@
 					chmod +x ./syntran \n
 					patchelf --set-rpath '$ORIGIN' ./syntran \n
 
+					# BLAS/LAPACK and the gfortran runtime must be static, \n
+					# or the binary won't run in a bare container \n
+					ldd ./syntran \n
+					if ldd ./syntran | grep -Eq 'blas|lapack|gfortran' ; then exit 1 ; fi \n
+					./syntran -c 'let A = [2.0, 1.0, 1.0, 3.0; 2, 2]; println(std::solve(A, [3.0, 5.0])); println(A @ A);' \n
+
 					dir_='src/tests/test-src/explorer/' \n
 					for f in $dir_/*.syntran ; do
 						fpm run
 							--profile release
 							--link-flag
-							'-static-libgcc -static-libgfortran -static-libquadmath'
+							'-L/opt/blas-static -static-libgcc -static-libgfortran -static-libquadmath'
 							-- -q $f > ${f%.syntran}.out \n
 						diff ${f%.syntran}.out ${f%.syntran}.exp \n
 					done
