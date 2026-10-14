@@ -4551,6 +4551,7 @@ subroutine unit_test_linalg_fns(npass, nfail)
 			interpret_file(path//'test-07.syntran', quiet) == 'true', &
 			interpret_file(path//'test-08.syntran', quiet) == '2.000000000000000E+01', &
 			interpret_file(path//'test-09.syntran', quiet) == '0', &
+			interpret_file(path//'test-10.syntran', quiet) == 'true', &  ! std::solve
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -8953,6 +8954,38 @@ subroutine unit_test_runtime_errors(npass, nfail)
 			diag_has_code(get_diags('println(repeat("ab", -1));'), RC_REPEAT_NEGATIVE), &
 			.not. diag_has_code(get_diags('println(repeat("ab", 0));'), RC_REPEAT_NEGATIVE), &
 			.not. diag_has_code(get_diags('println(repeat("ab", 3));'), RC_REPEAT_NEGATIVE), &
+
+			! R40: std::solve() with a non-square `A`, or a `b` with the wrong
+			! number of rows, for both element types and both ranks of `b`
+			rt_code_both_file(P//'R40-solve-shape.syntran', RC_SOLVE_SHAPE), &
+			diag_count_code(get_diags_file( &
+				P//'R40-solve-shape.syntran'), &
+				RC_SOLVE_SHAPE) == 1, &
+			diag_has_code(get_diags( &
+				'println(std::solve([1.0, 2.0, 3.0, 4.0; 2, 2], [1.0, 2.0, 3.0]));'), &
+				RC_SOLVE_SHAPE), &
+			diag_has_code(get_diags( &
+				'println(std::solve([1.0f, 2.0f, 3.0f, 4.0f; 2, 2], [1.0f; 3, 2]));'), &
+				RC_SOLVE_SHAPE), &
+			.not. diag_has_code(get_diags( &
+				'println(std::solve([1.0, 0.0, 0.0, 1.0; 2, 2], [1.0, 2.0]));'), &
+				RC_SOLVE_SHAPE), &
+			.not. diag_has_code(get_diags( &
+				'println(std::solve([1.0, 0.0, 0.0, 1.0; 2, 2], [1.0; 2, 3]));'), &
+				RC_SOLVE_SHAPE), &
+
+			! R41: std::solve() of an exactly singular matrix
+			rt_code_both_file(P//'R41-solve-singular.syntran', RC_SOLVE_SINGULAR), &
+			diag_count_code(get_diags_file( &
+				P//'R41-solve-singular.syntran'), &
+				RC_SOLVE_SINGULAR) == 1, &
+			diag_has_code(get_diags( &
+				'println(std::solve([0.0; 1, 1], [1.0]));'), RC_SOLVE_SINGULAR), &
+			diag_has_code(get_diags( &
+				'println(std::solve([1.0f, 1.0f, 1.0f, 1.0f; 2, 2], [1.0f, 2.0f]));'), &
+				RC_SOLVE_SINGULAR), &
+			.not. diag_has_code(get_diags( &
+				'println(std::solve([2.0; 1, 1], [1.0]));'), RC_SOLVE_SINGULAR), &
 
 			! R21: rank-2+ array literal's element count doesn't match a
 			! runtime-valued declared size

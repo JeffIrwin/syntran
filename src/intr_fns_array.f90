@@ -13,6 +13,48 @@ contains
 
 !===============================================================================
 
+function new_solve_fn(elem_type) result(fn)
+
+	! Build the signature of std::solve(A, b) for one float element type:
+	!
+	!     solve(A: [T; :, :], b: [T; :]):    [T; :]
+	!     solve(A: [T; :, :], b: [T; :, :]): [T; :, :]
+	!
+	! The result has the shape of `b`, so its rank is resolved per-call in
+	! resolve_overload().  Both overloads are covered by one rank-agnostic `b`
+	! param, and non-float or mismatched element types are rejected by the
+	! ordinary arg type check (E42)
+
+	integer, intent(in) :: elem_type
+
+	type(fn_t) :: fn
+
+	!********
+
+	fn%type%type = array_type
+	allocate(fn%type%array)
+	fn%type%array%type = elem_type
+	fn%type%array%rank = -1  ! resolved per-call in resolve_overload
+
+	allocate(fn%params(2))
+	allocate(fn%param_names%v(2))
+
+	fn%params(1)%type = array_type
+	allocate(fn%params(1)%array)
+	fn%params(1)%array%type = elem_type
+	fn%params(1)%array%rank = 2
+	fn%param_names%v(1)%s = "A"
+
+	fn%params(2)%type = array_type
+	allocate(fn%params(2)%array)
+	fn%params(2)%array%type = elem_type
+	fn%params(2)%array%rank = -1  ! rank-1 or rank-2
+	fn%param_names%v(2)%s = "b"
+
+end function new_solve_fn
+
+!===============================================================================
+
 function new_reduce_fn(array_name, elem_type, ret_type, has_dim, has_mask) result(fn)
 
 	! Build the signature of one reduction overload that takes extra `dim`
@@ -95,7 +137,8 @@ subroutine declare_array_fns(fns, id_index, fn_array)
 		product_i32_fn, product_i64_fn, product_f32_fn, product_f64_fn, &
 		norm2_f32_fn, norm2_f64_fn, &
 		dot_f32_fn, dot_f64_fn, dot_i32_fn, dot_i64_fn, &
-		reshape_fn, transpose_fn, shape_fn
+		reshape_fn, transpose_fn, shape_fn, &
+		solve_f32_fn, solve_f64_fn, solve_std_fn
 
 	! Overloads of the reductions that take `dim` and/or `mask` args.  These are
 	! resolved from the plain names (e.g. sum) by resolve_overload().  They all
@@ -628,6 +671,28 @@ subroutine declare_array_fns(fns, id_index, fn_array)
 
 	!********
 
+	! std::solve(A, b) -- solve A * x = b for x.  Returns x and leaves A and b
+	! unmodified.  `A` is a square f32 or f64 matrix and `b` is a vector or a
+	! matrix of right-hand side columns, of the same type.
+	!
+	! The typed overloads are named like the other overloads, "0solve_f32" and
+	! "0solve_f64".  resolve_overload() picks one for std::solve(), and `std::`
+	! lookup falls back to the plain name.  The "std::solve" entry only exists
+	! so that an unqualified solve() gets the "must be called as std::solve()"
+	! diagnostic like std::transpose, and users can still define their own
+	! solve().
+
+	solve_f32_fn = new_solve_fn(f32_type)
+	call fns%insert("0solve_f32", solve_f32_fn, id_index)
+
+	solve_f64_fn = new_solve_fn(f64_type)
+	call fns%insert("0solve_f64", solve_f64_fn, id_index)
+
+	solve_std_fn = new_solve_fn(f64_type)
+	call fns%insert("std::solve", solve_std_fn, id_index)
+
+	!********
+
 	! std::shape(source) -- return the extents of source as a rank-1 i64 array.
 	! The result length equals the rank of source; result[i] is the size along
 	! dimension i.  Return type is i64 for consistency with the size() intrinsic.
@@ -713,6 +778,7 @@ subroutine declare_array_fns(fns, id_index, fn_array)
 			all_fn, any_fn, &
 			reshape_fn, &
 			transpose_fn, &
+			solve_f32_fn, solve_f64_fn, solve_std_fn, &
 			shape_fn, &
 			ext_fns &
 		]

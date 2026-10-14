@@ -1161,6 +1161,18 @@ The `ncopies` argument of [`repeat()`](intrinsics.md#repeat) is negative.  Zero 
 
 [Example](../src/tests/test-src/errors/R39-repeat-negative.syntran)
 
+### R40 -- solve-shape
+
+The matrix `A` passed to [`std::solve()`](intrinsics.md#solve) is not square, or the right-hand side `b` has a number of rows that is different from the order of `A`.  The element types and ranks are checked at compile time, but the extents aren't known until runtime.
+
+[Example](../src/tests/test-src/errors/R40-solve-shape.syntran)
+
+### R41 -- solve-singular
+
+The matrix `A` passed to [`std::solve()`](intrinsics.md#solve) is exactly singular, i.e. LU factorization hit a zero pivot, so the system has no unique solution.  A matrix that is merely close to singular doesn't raise this error.
+
+[Example](../src/tests/test-src/errors/R41-solve-singular.syntran)
+
 ## Warnings
 
 ### W1 -- missing-return

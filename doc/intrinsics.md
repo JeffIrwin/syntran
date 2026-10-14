@@ -773,6 +773,41 @@ a `bool` array, or [`len`](#len), which gets the length of a string.
 
 Related functions: [`shape`](#shape), [`count`](#count), [`len`](#len)
 
+## `solve`
+```rust
+fn solve(A: [any_float; :, :], b: [any_float; :]): [any_float; :]
+fn solve(A: [any_float; :, :], b: [any_float; :, :]): [any_float; :, :]
+```
+
+Solve the linear system `A @ x == b` for `x`, using LU factorization with
+partial pivoting.  `A` is a square `n x n` matrix and `b` is either a vector
+of length `n` or an `n x k` matrix of `k` right-hand sides, one per column.
+The result has the shape of `b`.  `A` and `b` are not modified.
+
+`A` and `b` must both be `f32` or both be `f64`.  Other element types, or a
+mix, are a compile-time error.  The result has the same type.
+
+A matrix that is not square, or a `b` with a number of rows other than `n`, is
+a runtime error ([R40](errors.md#r40----solve-shape)), as is a matrix that is
+exactly singular ([R41](errors.md#r41----solve-singular)).  A matrix that is
+only nearly singular is not an error, but its solution is inaccurate.
+
+Prefer `solve` to computing an inverse, which is slower and less accurate.
+Must be called with the `std::` prefix, e.g. `std::solve()`.
+
+```rust
+let A = [2.0, 1.0, 1.0, 3.0; 2, 2];  // [[2, 1], [1, 3]]
+let b = [3.0, 5.0];
+let x = std::solve(A, b);
+println(x);      // [0.8, 1.4]
+println(A @ x);  // [3.0, 5.0]
+```
+
+Official builds use LAPACK's `gesv`.  Builds made with `SYNTRAN_NO_BLAS` use a
+portable implementation instead, which may differ in the last digits.
+
+Related functions: [`transpose`](#transpose), [`dot`](#dot)
+
 ## `sqrt`
 ```rust
 fn sqrt(x: any_float): any_float

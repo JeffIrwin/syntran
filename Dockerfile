@@ -9,6 +9,10 @@ RUN apk add gfortran musl-dev
 RUN apk add libc6-compat  # syntran needs glibc compatibility, not alpine's musl libc
 RUN apk add linux-headers # provides linux/kd.h, needed by isocline's term.c
 RUN apk add curl
+# BLAS/LAPACK for `@` and std::solve().  Alpine's openblas-dev has no libblas.so
+# for fpm.toml's `-lblas`, but OpenBLAS contains the BLAS symbols too
+RUN apk add openblas-dev
+RUN ln -s libopenblas.so /usr/lib/libblas.so
 
 COPY src src
 COPY external external

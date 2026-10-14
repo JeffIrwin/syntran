@@ -79,6 +79,14 @@ fi
 #build=build
 build="build/$config"
 
-cmake -S . -B "$build" "${generator[@]}" -DCMAKE_BUILD_TYPE=$config -DCMAKE_Fortran_COMPILER=$FC
+# BLAS/LAPACK is required by default (for `@` and std::solve()).  There is no
+# BLAS on the Windows CI runners, so use the portable fallbacks there.  Anyone
+# can also opt out on any platform with `SYNTRAN_NO_BLAS=1 bash build.sh`
+extra=()
+if [[ "$machine" == "MinGw" || -n "${SYNTRAN_NO_BLAS:-}" ]]; then
+	extra+=(-DSYNTRAN_NO_BLAS=ON)
+fi
+
+cmake -S . -B "$build" "${generator[@]}" "${extra[@]}" -DCMAKE_BUILD_TYPE=$config -DCMAKE_Fortran_COMPILER=$FC
 cmake --build "$build" --config $config --parallel
 

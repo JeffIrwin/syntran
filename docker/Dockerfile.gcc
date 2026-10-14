@@ -27,6 +27,8 @@ RUN dnf install -y diffutils
 RUN dnf install -y file
 RUN dnf install -y findutils  # needed?
 RUN dnf install -y which      # needed?
+# BLAS/LAPACK for `@` and std::solve() (fpm.toml's `link`)
+RUN dnf install -y --enablerepo=crb openblas-devel blas-devel lapack-devel
 
 ARG SRC_DIR="gcc-src"
 

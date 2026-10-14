@@ -15,6 +15,18 @@ RUN dnf update -y && dnf install -y \
 ## Static libc.a and libm.a can also be installed, but it does not remove the dependency on libc.so etc. from syntran
 #dnf --enablerepo=crb install glibc-static -y
 
+# BLAS/LAPACK for the `@` operator and std::solve().  Rocky ships a static
+# OpenBLAS (CRB repo), and it's linked statically so that the shipped binary
+# doesn't need any BLAS shared library at runtime, on the distros covered by
+# utils/test-branch.sh.  libopenblas.a also contains LAPACK.  It isn't named
+# like the -lblas -llapack in fpm.toml's `link`, so give the linker a private
+# dir with only static libs of those names, first in its search path (see
+# LINK_FLAG below)
+RUN dnf install -y --enablerepo=crb openblas-static
+RUN mkdir /opt/blas-static \
+	&& ln -s /usr/lib64/libopenblas.a /opt/blas-static/libblas.a \
+	&& ln -s /usr/lib64/libopenblas.a /opt/blas-static/liblapack.a
+
 RUN find /opt -name "gfortran"
 
 ENV PATH="$PATH:/opt/rh/gcc-toolset-13/root/usr/bin/"
@@ -64,7 +76,7 @@ RUN echo "PROFILE = $PROFILE"
 
 #ARG LINK_FLAG="-static-libgcc"
 #ARG LINK_FLAG="-static-libgcc -static-libgfortran"
-ARG LINK_FLAG="-static-libgcc -static-libgfortran -static-libquadmath"
+ARG LINK_FLAG="-L/opt/blas-static -static-libgcc -static-libgfortran -static-libquadmath"
 
 RUN fpm build --compiler gfortran --profile "$PROFILE" --link-flag "$LINK_FLAG"
 RUN fpm test test --compiler gfortran --profile "$PROFILE" --link-flag "$LINK_FLAG"

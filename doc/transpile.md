@@ -83,6 +83,7 @@ which isn't supported.  Run them with the interpreter instead.
 - The call stack of the interpreter, which is `std::caller()`,
   `std::print_trace()`, and `std::stack_trace()`
 - Printing an array, or having an array of strings, with a rank above 4
+- Solving a linear system with `std::solve()`
 
 ## Differences from the interpreter
 

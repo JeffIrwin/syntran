@@ -118,14 +118,20 @@ module syntran__core_m
 	!    * ANSI color codes, or some other way to color text
 	!    * E, I (after complex numbers)
 	!    * done: PI, std::IN/OUT/ERR
+	!  - "expert" interface for matrix solve:
+	!    * first factor, then solve. overwrite inputs. expose iostat info
 	!  - built-in `move` fn to move_alloc an array (or struct)? it's useful to
 	!    avoid a copy in many cases, e.g. dynamic vector example
 	!    src/tests/test-src/struct/test-03.syntran
-	!  - matrix inverse? link gfortran to mkl?
-	!    * related and maybe more cheaply, blas/accelerate or equivalent to
-	!      replace existing matmul
-	!    * numpy beats us on matmul. linking to apple accelerate framework is
-	!      trivial. for cross-platform, may need openblas or mkl
+	!  - matrix inverse?
+	!    * done: `@` calls BLAS gemm and std::solve(A, b) calls LAPACK gesv,
+	!      both through src/linalg.F90.  Accelerate on macOS, openblas
+	!      elsewhere.  SYNTRAN_NO_BLAS uses portable fortran fallbacks instead
+	!    * not an explicit inverse, since std::solve() covers the use case.  The
+	!      names `lu` and `lu_solve` are reserved for the factor-once,
+	!      solve-many pair from the "expert" interface above
+	!    * integer matmul still uses the fortran intrinsic.  There's no integer
+	!      gemm
 	!  - generics? longshot, lots of design decisions
 	!  - log a known issue that syntran is not threadsafe
 	!    * did some work on feature/parallel branch to try running long tests in

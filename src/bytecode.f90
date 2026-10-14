@@ -469,6 +469,9 @@ module syntran__bytecode_m
 		INTR_PRINT_TRACE  = 145, INTR_STACK_TRACE  = 146, &
 		INTR_CALLER       = 147
 
+	! std::solve(A, b), for both f32 and f64
+	integer, parameter :: INTR_SOLVE = 148
+
 	!********
 
 	! A single bytecode instruction.  Kept as a plain POD record (no allocatable
@@ -935,6 +938,10 @@ pure integer function intr_id_from_name(name) result(id)
 	case ("0norm2_f64");     id = INTR_NORM2_F64
 	case ("0dot_f32");       id = INTR_DOT_F32
 	case ("0dot_f64");       id = INTR_DOT_F64
+	! The bare "solve" is only the registered "std::solve" stub, which exists to
+	! diagnose an unqualified call.  A real call is always resolved to one of
+	! the typed names first
+	case ("0solve_f32", "0solve_f64", "solve"); id = INTR_SOLVE
 	case ("0dot_i32");       id = INTR_DOT_I32
 	case ("0dot_i64");       id = INTR_DOT_I64
 	case ("all");            id = INTR_ALL

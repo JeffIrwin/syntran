@@ -57,7 +57,10 @@
 				"if": "matrix.os == 'ubuntu-24.04'",
 				"run":
 				"
-					sudo apt-get install gfortran-14 \n
+					# libopenblas-dev (not the reference libblas-dev/ \n
+					# liblapack-dev) provides the fast BLAS/LAPACK for \n
+					# fpm.toml's `link`.  macOS gets Accelerate for free \n
+					sudo apt-get install gfortran-14 libopenblas-dev \n
 				"
 			},
 			{
@@ -215,8 +218,16 @@
 					# \n
 					# All go through `--flag`, not `--link-flag`, which fpm \n
 					# 0.12-alpha silently ignores. \n
-					fpm test test --profile release --flag \"-static -Wl,--wrap=setlocale -Wl,--stack,67108864\" \n
-					fpm test long --profile release --flag \"-static -Wl,--wrap=setlocale -Wl,--stack,67108864\" \n
+					# \n
+					# There's no BLAS/LAPACK on this runner, so build with the \n
+					# portable fallbacks.  fpm.toml's `link` is unconditional, \n
+					# though, so also satisfy `-lblas -llapack` with empty \n
+					# static archives that nothing references. \n
+					New-Item -ItemType Directory -Force build/noblas | Out-Null \n
+					ar rcs build/noblas/libblas.a \n
+					ar rcs build/noblas/liblapack.a \n
+					fpm test test --profile release --flag \"-static -Wl,--wrap=setlocale -Wl,--stack,67108864 -DSYNTRAN_NO_BLAS -Lbuild/noblas\" \n
+					fpm test long --profile release --flag \"-static -Wl,--wrap=setlocale -Wl,--stack,67108864 -DSYNTRAN_NO_BLAS -Lbuild/noblas\" \n
 				"
 			},
 			{
@@ -297,7 +308,7 @@
 					# release binary from the \"Test fpm windows\" step instead \n
 					# of rebuilding from scratch with cmake.  --prefix places \n
 					# it in a predictable location for packaging \n
-					fpm install --profile release --flag \"-static -Wl,--wrap=setlocale -Wl,--stack,67108864\" --prefix ./build/ \n
+					fpm install --profile release --flag \"-static -Wl,--wrap=setlocale -Wl,--stack,67108864 -DSYNTRAN_NO_BLAS -Lbuild/noblas\" --prefix ./build/ \n
 
 					copy .\\build\\bin\\syntran.exe .\\ \n
 				"
@@ -472,7 +483,7 @@
 			},
 			{
 				"if": "matrix.os == 'ubuntu-latest'",
-				"run": "sudo apt-get install gfortran-${{ matrix.gfortran }}"
+				"run": "sudo apt-get install gfortran-${{ matrix.gfortran }} libopenblas-dev"
 			},
 			{
 				"if": "matrix.os == 'ubuntu-latest'",
@@ -535,6 +546,11 @@
 					"compiler": "${{ matrix.toolchain.compiler }}",
 					"version": "${{ matrix.toolchain.version }}"
 				}
+			},
+			{
+				"if": "matrix.os == 'ubuntu-latest'",
+				"name": "Install BLAS/LAPACK",
+				"run": "sudo apt-get install -y libopenblas-dev"
 			},
 			{
 				"if": "matrix.os == 'ubuntu-latest'",

@@ -20,6 +20,10 @@
 #     fpm build --profile debug --flag "-DSYNTRAN_BOUNDS_CHECK"
 #     fpm test test --profile debug --flag "-DSYNTRAN_BOUNDS_CHECK"
 #
+#     # Use portable Fortran fallbacks instead of BLAS/LAPACK for `@` and
+#     # std::solve().  See `link` in [build] below
+#     fpm build --flag "-DSYNTRAN_NO_BLAS"
+#
 #     # Defense-in-depth for release builds: force deterministic (nonzero)
 #     # contents into otherwise-uninitialized stack/derived-type memory, so any
 #     # remaining uninitialized read fails loudly/reproducibly instead of
@@ -76,6 +80,17 @@ homepage = "https://github.com/JeffIrwin/syntran"
 auto-executables = true
 auto-tests       = true
 auto-examples    = true
+
+# BLAS/LAPACK for the matmul `@` operator and std::solve().  On macOS these
+# resolve to the Accelerate framework with no install.  Elsewhere, install an
+# optimized implementation (e.g. libopenblas-dev), not the unoptimized
+# reference libblas-dev/liblapack-dev.
+#
+# `--flag "-DSYNTRAN_NO_BLAS"` removes the calls and uses portable Fortran
+# fallbacks instead, but fpm can't make this list conditional, so the libs still
+# have to exist at link time.  A cmake build with -DSYNTRAN_NO_BLAS=ON drops the
+# dependency entirely
+link = ["lapack", "blas"]
 
 #module-naming    = true
 module-naming    = false

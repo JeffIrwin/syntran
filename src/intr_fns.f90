@@ -1006,6 +1006,38 @@ recursive subroutine resolve_overload(args, fn_call, has_rank, has_arr_type, arr
 			end if
 		end if
 
+	case ("solve")
+
+		! std::solve(A, b) -- only fires for std::solve, not a user-defined
+		! solve(), because module_prefix is set before this call.  The element
+		! type of A picks the overload.  Anything but f32 falls through to f64,
+		! so that other types are rejected by the arg type check against f64
+		if (allocated(fn_call%module_prefix)) then
+			if (fn_call%module_prefix == "std") then
+
+				type_ = f64_type
+				if (args%len_ >= 1) then
+					if (args%v(1)%val%type == array_type) type_ = args%v(1)%val%array%type
+				end if
+
+				if (type_ == f32_type) then
+					fn_call%identifier%text = "0solve_f32"
+				else
+					fn_call%identifier%text = "0solve_f64"
+				end if
+
+				! Result has the rank of b (second argument)
+				if (args%len_ >= 2) then
+					if (args%v(2)%val%type == array_type) then
+						has_rank = .true.
+						if (.not. allocated(fn_call%val%array)) allocate(fn_call%val%array)
+						fn_call%val%array%rank = args%v(2)%val%array%rank
+					end if
+				end if
+
+			end if
+		end if
+
 	case ("transpose")
 
 		! std::transpose(source) -- only fires for std::transpose, not a

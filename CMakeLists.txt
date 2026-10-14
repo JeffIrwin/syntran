@@ -40,6 +40,16 @@ if(SYNTRAN_NO_ISOCLINE)
 	add_compile_definitions(SYNTRAN_NO_ISOCLINE)
 endif()
 
+# Build without BLAS/LAPACK.  The matmul `@` operator and std::solve() use
+# portable Fortran fallbacks instead of sgemm/dgemm/sgesv/dgesv.  Only
+# src/linalg.F90 reads this macro.  fpm builds spell it `--flag
+# "-DSYNTRAN_NO_BLAS"`, but fpm can't make its `link` list conditional, so only
+# cmake fully drops the dependency
+option(SYNTRAN_NO_BLAS "Build without BLAS/LAPACK" OFF)
+if(SYNTRAN_NO_BLAS)
+	add_compile_definitions(SYNTRAN_NO_BLAS)
+endif()
+
 if(DEFINED ENV{SYNTRAN_INTEL})
 	# ifort-specific flags must NOT reach the C compiler (icx doesn't
 	# understand -fpp/etc), so gate them to Fortran only.
@@ -111,10 +121,9 @@ message("")
 if(APPLE)
 	add_link_options(-openmp)
 elseif(DEFINED ENV{SYNTRAN_INTEL})
-	# No -qmkl: nothing in this codebase calls into BLAS/LAPACK (grep finds
-	# only a speculative TODO comment), and CI's Intel install doesn't
-	# provide the MKL libraries -- linking it just fails with "cannot find
-	# -lmkl_intel_lp64" et al.
+	# No -qmkl: CI's Intel install doesn't provide the MKL libraries --
+	# linking it just fails with "cannot find -lmkl_intel_lp64" et al.  BLAS
+	# and LAPACK come from find_package(LAPACK) below instead.
 	add_link_options(-fopenmp)
 else()
 	add_link_options(-fopenmp)
@@ -203,6 +212,7 @@ set(LIB_SRC
 	${SRC_DIR}/intr_vars.f90
 	${SRC_DIR}/lex.f90
 	${SRC_DIR}/line_edit.f90
+	${SRC_DIR}/linalg.F90
 	${SRC_DIR}/math.f90
 	${SRC_DIR}/math_bin_add.f90
 	${SRC_DIR}/math_bin_div.f90
@@ -280,6 +290,15 @@ else()
 endif()
 
 set(LINK_LIBS "${LIB}")
+
+if(NOT SYNTRAN_NO_BLAS)
+	# Accelerate on Apple, otherwise whatever BLAS/LAPACK the system provides
+	# (prefer an optimized one, e.g. OpenBLAS, over reference Netlib)
+	find_package(LAPACK REQUIRED)
+	# Appended to LINK_LIBS (which each exe links) rather than linked to ${LIB},
+	# since link deps of an OBJECT library (the Intel build) aren't propagated
+	list(APPEND LINK_LIBS ${LAPACK_LIBRARIES})
+endif()
 
 #===============================================================================
 

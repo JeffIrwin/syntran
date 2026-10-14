@@ -3,6 +3,7 @@
 
 module syntran__math_matmul_m
 
+	use syntran__linalg_m
 	use syntran__value_m
 
 	implicit none
@@ -386,23 +387,11 @@ subroutine do_matmul_f32(left, right, res, lrank, rrank, lr, lc, rc)
 	integer, intent(in)          :: lrank, rrank
 	integer(kind = 8), intent(in) :: lr, lc, rc
 
-	real(kind = 4), allocatable :: C(:)
-
-	if (lrank == 2 .and. rrank == 2) then
-		C = reshape(matmul( &
-			reshape(left %array%f32, [int(lr), int(lc)]), &
-			reshape(right%array%f32, [int(lc), int(rc)])), &
-			[int(lr * rc)])
-	else if (lrank == 2) then
-		C = matmul( &
-			reshape(left%array%f32, [int(lr), int(lc)]), &
-			right%array%f32)
-	else
-		C = matmul( &
-			left%array%f32, &
-			reshape(right%array%f32, [int(lc), int(rc)]))
-	end if
-	res%array%f32 = C
+	! All three shape cases (M @ M, M @ v, v @ M) are one gemm: lr, lc, rc
+	! already treat a rank-1 left as 1 x N and a rank-1 right as N x 1.  The
+	! flat column-major buffers are passed straight through, no reshaping
+	call gemm_f32(int(lr), int(rc), int(lc), &
+		left%array%f32, right%array%f32, res%array%f32)
 
 end subroutine do_matmul_f32
 
@@ -414,23 +403,11 @@ subroutine do_matmul_f64(left, right, res, lrank, rrank, lr, lc, rc)
 	integer, intent(in)          :: lrank, rrank
 	integer(kind = 8), intent(in) :: lr, lc, rc
 
-	real(kind = 8), allocatable :: C(:)
-
-	if (lrank == 2 .and. rrank == 2) then
-		C = reshape(matmul( &
-			reshape(left %array%f64, [int(lr), int(lc)]), &
-			reshape(right%array%f64, [int(lc), int(rc)])), &
-			[int(lr * rc)])
-	else if (lrank == 2) then
-		C = matmul( &
-			reshape(left%array%f64, [int(lr), int(lc)]), &
-			right%array%f64)
-	else
-		C = matmul( &
-			left%array%f64, &
-			reshape(right%array%f64, [int(lc), int(rc)]))
-	end if
-	res%array%f64 = C
+	! All three shape cases (M @ M, M @ v, v @ M) are one gemm: lr, lc, rc
+	! already treat a rank-1 left as 1 x N and a rank-1 right as N x 1.  The
+	! flat column-major buffers are passed straight through, no reshaping
+	call gemm_f64(int(lr), int(rc), int(lc), &
+		left%array%f64, right%array%f64, res%array%f64)
 
 end subroutine do_matmul_f64
 

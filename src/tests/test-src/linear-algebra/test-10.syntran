@@ -1,0 +1,55 @@
+
+// Test std::solve(A, b), which solves A @ x == b for x.  Results are checked
+// via the residual instead of exact digits, so that the BLAS/LAPACK path and
+// the portable fallback (-DSYNTRAN_NO_BLAS) both pass
+//
+// Storage is column-major: [1,2,3,4; 2,2] = [[1,3],[2,4]]
+
+let tol = 1.e-10;
+
+// 1. well-conditioned 3x3, rank-1 rhs
+let A = [
+	4.0, 1.0, 2.0,
+	1.0, 5.0, 1.0,
+	2.0, 1.0, 6.0;
+	3, 3
+];
+let b = [1.0, 2.0, 3.0];
+let x = std::solve(A, b);
+let ok1 = maxval(abs(A @ x - b)) < tol and size(x) == 3;
+
+// 2. zero on the diagonal, so it needs pivoting: [[0,1],[2,3]] @ x == [5,6]
+//    has the exact solution x == [-4.5, 5]
+let P = [0.0, 2.0, 1.0, 3.0; 2, 2];
+let xp = std::solve(P, [5.0, 6.0]);
+let ok2 = abs(xp[0] + 4.5) < tol and abs(xp[1] - 5.0) < tol;
+
+// 3. several right-hand sides at once (rank-2 b), result has b's shape
+let B = [1.0, 2.0, 3.0, 0.0, 1.0, 0.0; 3, 2];
+let X = std::solve(A, B);
+let sh = std::shape(X);
+let ok3 = maxval(abs(A @ X - B)) < tol and sh[0] == 3 and sh[1] == 2;
+
+// 4. 1x1
+let x1 = std::solve([4.0; 1, 1], [2.0]);
+let ok4 = abs(x1[0] - 0.5) < tol and size(x1) == 1;
+
+// 5. f32
+let Af = [4.0f, 1.0f, 2.0f, 3.0f; 2, 2];
+let bf = [1.0f, 2.0f];
+let xf = std::solve(Af, bf);
+let ok5 = maxval(abs(Af @ xf - bf)) < 1.e-4f;
+
+// 6. A and b aren't modified
+let A0 = A;
+let b0 = b;
+let xx = std::solve(A, b);
+let ok6 = maxval(abs(A - A0)) == 0.0 and maxval(abs(b - b0)) == 0.0;
+
+// 7. solve(A, A) is the identity
+let I3 = std::solve(A, A);
+let ok7 = abs(I3[0,0] - 1.0) < tol and abs(I3[1,1] - 1.0) < tol and
+	abs(I3[2,2] - 1.0) < tol and abs(I3[0,1]) < tol and abs(I3[2,0]) < tol;
+
+return ok1 and ok2 and ok3 and ok4 and ok5 and ok6 and ok7;
+

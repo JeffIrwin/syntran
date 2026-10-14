@@ -13,6 +13,8 @@ submodule (syntran__vm_m) syntran__vm_intr
 	! here; they are handled inline in vm_exec with slot writeback.  The no-arg
 	! readln() (stdin) has no slot to write back to, so it IS routed here
 
+	use syntran__linalg_m
+
 	implicit none
 
 	! Which numeric reduction reduce_dim_numeric() should do
@@ -36,6 +38,7 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 	integer :: i, io
 	integer :: env_len, env_stat
 	integer :: red_inner, red_n, red_outer, red_op
+	integer :: solve_n, solve_nrhs, solve_info
 	integer(kind = 8) :: ir, ic
 
 	logical :: exists_, red_ok
@@ -730,6 +733,41 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 			res%type = i64_type
 			res%sca%i64 = dot_product(args(1)%array%i64, args(2)%array%i64)
 		end select
+
+	case (INTR_SOLVE)
+		! std::solve(A, b) -- A is n x n, b is a length-n vector or n x nrhs
+		! matrix, both f32 or both f64 (checked at parse time).  Returns x
+		! without modifying A or b
+		if (args(1)%array%size(1) /= args(1)%array%size(2) .or. &
+			args(1)%array%size(1) /= args(2)%array%size(1)) then
+			call rt_throw(state, err_rt_solve_shape(args(1)%array%size(1), &
+				args(1)%array%size(2), args(2)%array%size(1)))
+			return
+		end if
+
+		solve_n = int(args(1)%array%size(1))
+		solve_nrhs = 1
+		if (args(2)%array%rank == 2) solve_nrhs = int(args(2)%array%size(2))
+
+		! Result has the shape of b.  mold() copies the metadata but not the
+		! buffers, and the solution overwrites a copy of b in place
+		res%type  = array_type
+		res%array = mold(args(2)%array, args(2)%array%type)
+
+		if (args(1)%array%type == f32_type) then
+			res%array%f32 = args(2)%array%f32(1: args(2)%array%len_)
+			call gesv_f32(solve_n, solve_nrhs, args(1)%array%f32, &
+				res%array%f32, solve_info)
+		else
+			res%array%f64 = args(2)%array%f64(1: args(2)%array%len_)
+			call gesv_f64(solve_n, solve_nrhs, args(1)%array%f64, &
+				res%array%f64, solve_info)
+		end if
+
+		if (solve_info > 0) then
+			call rt_throw(state, err_rt_solve_singular(solve_info))
+			return
+		end if
 
 	case (INTR_ALL)
 		res%type = bool_type; res%sca%bool = all(args(1)%array%bool)

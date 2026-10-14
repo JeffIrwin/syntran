@@ -3214,7 +3214,7 @@ recursive function emit_intr_call(em, node) result(s)
 
 	case default
 		call em_unsupported(em, 'the intrinsic fn `'// &
-			node%identifier%text//'`', node%identifier%pos)
+			base//'`', node%identifier%pos)
 		s = '0'
 
 	end select

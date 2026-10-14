@@ -400,6 +400,8 @@ module procedure get_all_error_codes
 	call codes%push(RC_BINOP_SHAPE_MISMATCH)
 	call codes%push(RC_DOT_SIZE_MISMATCH)
 	call codes%push(RC_REPEAT_NEGATIVE)
+	call codes%push(RC_SOLVE_SHAPE)
+	call codes%push(RC_SOLVE_SINGULAR)
 	call codes%push(WC_MISSING_RETURN)
 end procedure get_all_error_codes
 
@@ -1866,6 +1868,38 @@ module procedure err_rt_repeat_negative
 		"ncopies argument of repeat() is negative: "//str(ncopies))
 
 end procedure err_rt_repeat_negative
+
+
+!===============================================================================
+
+module procedure err_rt_solve_shape
+
+	! Runtime (R40) error for std::solve() with a non-square `A`, or a `b`
+	! whose leading extent isn't the order of `A`
+
+	if (arows /= acols) then
+		err = err_rt(RC_SOLVE_SHAPE, &
+			"matrix `A` in solve() is not square: "//str(arows)//" x "//str(acols))
+	else
+		err = err_rt(RC_SOLVE_SHAPE, &
+			"size mismatch in solve(): `A` is "//str(arows)//" x "//str(acols)// &
+			" but `b` has "//str(brows)//" rows")
+	end if
+
+end procedure err_rt_solve_shape
+
+
+!===============================================================================
+
+module procedure err_rt_solve_singular
+
+	! Runtime (R41) error for std::solve() of an exactly singular matrix.
+	! `pivot` is 1-based
+
+	err = err_rt(RC_SOLVE_SINGULAR, &
+		"matrix `A` in solve() is singular: zero pivot at row "//str(pivot))
+
+end procedure err_rt_solve_singular
 
 
 !===============================================================================
