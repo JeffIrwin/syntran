@@ -34,6 +34,16 @@ module syntran__vm_m
 			type(value_t), intent(out) :: res
 		end subroutine
 
+		! Implemented in vm_intr.f90.  Dispatch for intrinsics with by-ref args
+		! (fn_t%ref_params), which unlike vm_call_intr may modify args(:).  The
+		! caller moves them back into their variables afterwards
+		module subroutine vm_call_intr_ref(intr_id, nargs, args, state, res)
+			integer, intent(in) :: intr_id, nargs
+			type(value_t), intent(inout) :: args(:)
+			type(state_t), intent(inout) :: state
+			type(value_t), intent(out) :: res
+		end subroutine
+
 	end interface
 
 !===============================================================================

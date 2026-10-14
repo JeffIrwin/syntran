@@ -4552,6 +4552,7 @@ subroutine unit_test_linalg_fns(npass, nfail)
 			interpret_file(path//'test-08.syntran', quiet) == '2.000000000000000E+01', &
 			interpret_file(path//'test-09.syntran', quiet) == '0', &
 			interpret_file(path//'test-10.syntran', quiet) == 'true', &  ! std::solve
+			interpret_file(path//'test-11.syntran', quiet) == 'true', &  ! std::lu_factor, lu_solve
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -8028,6 +8029,61 @@ subroutine unit_test_error_codes(npass, nfail)
 			! mutable & is unaffected: a value arg still requires E43
 			diag_has_code(get_diags( &
 				'fn f(x: &str) {} f("hi");'), EC_BAD_ARG_VAL), &
+
+			! std::lu_factor(&A[, &info]) and std::lu_solve(A, ipiv, &b) are the
+			! only intrinsics with by-ref params.  They get the same checks as
+			! a user fn: const variables (E83), a missing `&` (E43), aliasing
+			! (E116), and arg types (E42).  `A` and `ipiv` of lu_solve() are
+			! &const, so they accept plain value syntax or an explicit `&`
+			diag_has_code(get_diags( &
+				'const A = [2.0; 1, 1]; let p = std::lu_factor(&A);'), EC_CONST_ASSIGN), &
+			diag_has_code(get_diags( &
+				'let A = [2.0; 1, 1]; const i = 0; let p = std::lu_factor(&A, &i);'), &
+				EC_CONST_ASSIGN), &
+			diag_has_code(get_diags( &
+				'let A = [2.0; 1, 1]; const b = [1.0]; std::lu_solve(A, [0], &b);'), &
+				EC_CONST_ASSIGN), &
+			.not. diag_has_code(get_diags( &
+				'const A = [2.0; 1, 1]; const p = [0]; let b = [1.0]; std::lu_solve(A, p, &b);'), &
+				EC_CONST_ASSIGN), &
+			diag_has_code(get_diags( &
+				'let A = [2.0; 1, 1]; let p = std::lu_factor(A);'), EC_BAD_ARG_VAL), &
+			diag_has_code(get_diags( &
+				'let A = [2.0; 1, 1]; let i = 0; let p = std::lu_factor(&A, i);'), EC_BAD_ARG_VAL), &
+			diag_has_code(get_diags( &
+				'let A = [2.0; 1, 1]; let b = [1.0]; std::lu_solve(A, [0], b);'), EC_BAD_ARG_VAL), &
+			.not. diag_has_code(get_diags( &
+				'let A = [2.0; 1, 1]; let b = [1.0]; let p = std::lu_factor(&A); ' &
+				//'std::lu_solve(A, p, &b);'), EC_BAD_ARG_VAL), &
+			.not. diag_has_code(get_diags( &
+				'let A = [2.0; 1, 1]; let b = [1.0]; let p = std::lu_factor(&A); ' &
+				//'std::lu_solve(&A, &p, &b);'), EC_BAD_ARG_REF), &
+			diag_has_code(get_diags( &
+				'let A = [2.0; 1, 1]; let p = std::lu_factor(&A, &A);'), EC_REF_ALIAS), &
+			diag_has_code(get_diags( &
+				'let B = [2.0; 1, 1]; std::lu_solve(B, [0], &B);'), EC_REF_ALIAS), &
+			diag_has_code(get_diags( &
+				'let A = [2.0f; 1, 1]; let b = [1.0]; std::lu_solve(A, [0], &b);'), &
+				EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags( &
+				'let A = [2; 1, 1]; let p = std::lu_factor(&A);'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags( &
+				'let A = [2.0; 1, 1]; let i = 0; let j = 0; ' &
+				//'let p = std::lu_factor(&A, &i, &j);'), EC_TOO_MANY_ARGS), &
+			diag_has_code(get_diags( &
+				'let A = [2.0; 1, 1]; let p = lu_factor(&A);'), EC_STD_ONLY_FN), &
+			diag_has_code(get_diags( &
+				'let A = [2.0; 1, 1]; let b = [1.0]; lu_solve(A, [0], &b);'), EC_STD_ONLY_FN), &
+			! `&` on a bare variable name only, as for a user fn
+			diag_has_code(get_diags( &
+				'let A = [2.0; 1, 1]; let p = std::lu_factor(&A[0, 0]);'), EC_SUB_REF), &
+			! Other intrinsics are still by value only
+			diag_has_code(get_diags( &
+				'let A = [2.0; 1, 1]; println(size(&A));'), EC_BAD_ARG_REF), &
+			diag_has_code(get_diags( &
+				'let x = 1.0; println(abs(&x));'), EC_BAD_ARG_REF), &
+			diag_has_code(get_diags( &
+				'let A = [2.0; 1, 1]; println(std::solve(&A, [1.0]));'), EC_BAD_ARG_REF), &
 			! const flag must survive module import
 			diag_has_code(get_diags('use const_mod; const_mod::CVAL = 0;', MODSRC), EC_CONST_ASSIGN), &
 			! a top-level `return` in an imported module is banned (E86), but
@@ -8986,6 +9042,63 @@ subroutine unit_test_runtime_errors(npass, nfail)
 				RC_SOLVE_SINGULAR), &
 			.not. diag_has_code(get_diags( &
 				'println(std::solve([2.0; 1, 1], [1.0]));'), RC_SOLVE_SINGULAR), &
+
+			! std::lu_factor() and std::lu_solve() share R40 and R41 with
+			! std::solve().  lu_factor() takes any shape, but lu_solve() needs
+			! square factors and a `b` with a matching number of rows
+			.not. diag_has_code(get_diags( &
+				'let A = [1.0; 2, 3]; let p = std::lu_factor(&A);'), RC_SOLVE_SHAPE), &
+			.not. diag_has_code(get_diags( &
+				'let A = [1.0; 3, 2]; let p = std::lu_factor(&A);'), RC_SOLVE_SHAPE), &
+			diag_has_code(get_diags( &
+				'let A = [1.0; 2, 3]; let b = [1.0, 2.0]; std::lu_solve(A, [0, 1], &b);'), &
+				RC_SOLVE_SHAPE), &
+			diag_has_code(get_diags( &
+				'let A = [1.0; 2, 2]; let b = [1.0, 2.0, 3.0]; std::lu_solve(A, [0, 1], &b);'), &
+				RC_SOLVE_SHAPE), &
+			diag_has_code(get_diags( &
+				'let A = [1.0f; 2, 2]; let b = [1.0f; 3, 2]; std::lu_solve(A, [0, 1], &b);'), &
+				RC_SOLVE_SHAPE), &
+			.not. diag_has_code(get_diags( &
+				'let A = [1.0, 0.0, 0.0, 1.0; 2, 2]; let b = [1.0, 2.0]; ' &
+				//'std::lu_solve(A, [0, 1], &b);'), RC_SOLVE_SHAPE), &
+
+			! A zero pivot is R41 unless the `info` arg is there.  Either way
+			! the factors are written back, so lu_solve() can still be tried
+			diag_has_code(get_diags( &
+				'let A = [1.0, 2.0, 2.0, 4.0; 2, 2]; let p = std::lu_factor(&A);'), &
+				RC_SOLVE_SINGULAR), &
+			diag_has_code(get_diags( &
+				'let A = [1.0f, 2.0f, 2.0f, 4.0f; 2, 2]; let p = std::lu_factor(&A);'), &
+				RC_SOLVE_SINGULAR), &
+			.not. diag_has_code(get_diags( &
+				'let A = [1.0, 2.0, 2.0, 4.0; 2, 2]; let i = 0; ' &
+				//'let p = std::lu_factor(&A, &i);'), RC_SOLVE_SINGULAR), &
+			diag_has_code(get_diags( &
+				'let A = [1.0, 2.0, 2.0, 4.0; 2, 2]; let i = 0; ' &
+				//'let p = std::lu_factor(&A, &i); let b = [1.0, 2.0]; ' &
+				//'std::lu_solve(A, p, &b);'), RC_SOLVE_SINGULAR), &
+
+			! R42: pivots that aren't valid for lu_solve()
+			rt_code_both_file(P//'R42-lu-bad-pivots.syntran', RC_LU_BAD_PIVOTS), &
+			diag_count_code(get_diags_file( &
+				P//'R42-lu-bad-pivots.syntran'), &
+				RC_LU_BAD_PIVOTS) == 1, &
+			diag_has_code(get_diags( &
+				'let A = [1.0; 2, 2]; let b = [1.0, 2.0]; std::lu_solve(A, [0], &b);'), &
+				RC_LU_BAD_PIVOTS), &
+			diag_has_code(get_diags( &
+				'let A = [1.0; 2, 2]; let b = [1.0, 2.0]; std::lu_solve(A, [0, 1, 0], &b);'), &
+				RC_LU_BAD_PIVOTS), &
+			diag_has_code(get_diags( &
+				'let A = [1.0; 2, 2]; let b = [1.0, 2.0]; std::lu_solve(A, [-1, 1], &b);'), &
+				RC_LU_BAD_PIVOTS), &
+			diag_has_code(get_diags( &
+				'let A = [1.0; 2, 2]; let b = [1.0, 2.0]; std::lu_solve(A, [0, 2], &b);'), &
+				RC_LU_BAD_PIVOTS), &
+			.not. diag_has_code(get_diags( &
+				'let A = [1.0, 0.0, 0.0, 1.0; 2, 2]; let b = [1.0, 2.0]; ' &
+				//'std::lu_solve(A, [1, 1], &b);'), RC_LU_BAD_PIVOTS), &
 
 			! R21: rank-2+ array literal's element count doesn't match a
 			! runtime-valued declared size
@@ -10445,6 +10558,18 @@ subroutine unit_test_transpile(npass, nfail)
 				EC_TRANSPILE_UNSUPPORTED), &
 			diag_count_code(get_diags_transpile_file(P//'E115-transpile-unsupported.syntran'), &
 				EC_TRANSPILE_UNSUPPORTED) == 4, &
+			! std::lu_factor() and std::lu_solve() (by-ref intrinsics) aren't
+			! transpiled yet.  The diagnostic names the fn, not its mangled
+			! overload
+			diag_has_code(get_diags_transpile( &
+				'let A = [2.0; 1, 1]; let p = std::lu_factor(&A);'), &
+				EC_TRANSPILE_UNSUPPORTED), &
+			diag_has_text(get_diags_transpile( &
+				'let A = [2.0; 1, 1]; let p = std::lu_factor(&A);'), &
+				'the intrinsic fn `lu_factor`'), &
+			diag_has_text(get_diags_transpile( &
+				'let A = [2.0f; 1, 1]; let b = [1.0f]; std::lu_solve(A, [0], &b);'), &
+				'the intrinsic fn `lu_solve`'), &
 			! ... and structs, modules, file I/O, and fn pointers, which are supported,
 			! are not
 			transpiles_ok(T//'fns/test-24.syntran'), &

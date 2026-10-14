@@ -119,7 +119,11 @@ module syntran__core_m
 	!    * E, I (after complex numbers)
 	!    * done: PI, std::IN/OUT/ERR
 	!  - "expert" interface for matrix solve:
-	!    * first factor, then solve. overwrite inputs. expose iostat info
+	!    * done: std::lu_factor(&A[, &info]) and std::lu_solve(A, ipiv, &b), by
+	!      LAPACK getrf/getrs.  They overwrite their inputs, and `info` is the
+	!      iostat-style status.  Intrinsics can now take `&` args via
+	!      fn_t%ref_params and OP_CALL_INTR_REF
+	!    * the transpiler doesn't support them yet (E115)
 	!  - built-in `move` fn to move_alloc an array (or struct)? it's useful to
 	!    avoid a copy in many cases, e.g. dynamic vector example
 	!    src/tests/test-src/struct/test-03.syntran
@@ -127,9 +131,8 @@ module syntran__core_m
 	!    * done: `@` calls BLAS gemm and std::solve(A, b) calls LAPACK gesv,
 	!      both through src/linalg.F90.  Accelerate on macOS, openblas
 	!      elsewhere.  SYNTRAN_NO_BLAS uses portable fortran fallbacks instead
-	!    * not an explicit inverse, since std::solve() covers the use case.  The
-	!      names `lu` and `lu_solve` are reserved for the factor-once,
-	!      solve-many pair from the "expert" interface above
+	!    * not an explicit inverse, since std::solve() covers the use case, and
+	!      std::lu_factor()/std::lu_solve() cover factor-once, solve-many
 	!    * integer matmul still uses the fortran intrinsic.  There's no integer
 	!      gemm
 	!  - generics? longshot, lots of design decisions

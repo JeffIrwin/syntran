@@ -55,6 +55,99 @@ end function new_solve_fn
 
 !===============================================================================
 
+function new_lu_factor_fn(elem_type) result(fn)
+
+	! Build the signature of std::lu_factor(&A[, &info]) for one float element
+	! type:
+	!
+	!     lu_factor(A: &[T; :, :]):                  [i32; :]
+	!     lu_factor(A: &[T; :, :], info: &i32):      [i32; :]
+	!
+	! `A` is overwritten with its L and U factors, and the returned pivots are
+	! 0-based.  The optional `info` is the only variadic param, set up the same
+	! way as the `dim` of size().  Both args are by-ref, see fn_t%ref_params
+
+	integer, intent(in) :: elem_type
+
+	type(fn_t) :: fn
+
+	!********
+
+	fn%type%type = array_type
+	allocate(fn%type%array)
+	fn%type%array%type = i32_type
+	fn%type%array%rank = 1
+
+	allocate(fn%params(1))
+	allocate(fn%param_names%v(1))
+
+	fn%params(1)%type = array_type
+	allocate(fn%params(1)%array)
+	fn%params(1)%array%type = elem_type
+	fn%params(1)%array%rank = 2
+	fn%param_names%v(1)%s = "A"
+
+	fn%variadic_min  = 0
+	fn%variadic_max  = 1
+	fn%variadic_type = i32_type
+	fn%variadic_name = "info"
+
+	fn%ref_params       = [.true., .true.]
+	fn%const_ref_params = [.false., .false.]
+
+end function new_lu_factor_fn
+
+!===============================================================================
+
+function new_lu_solve_fn(elem_type) result(fn)
+
+	! Build the signature of std::lu_solve(A, ipiv, &b) for one float element
+	! type:
+	!
+	!     lu_solve(A: &const [T; :, :], ipiv: &const [i32; :], b: &[T; :])
+	!     lu_solve(A: &const [T; :, :], ipiv: &const [i32; :], b: &[T; :, :])
+	!
+	! `b` is overwritten with the solution.  `A` and `ipiv` are the outputs of
+	! lu_factor().  They are `&const` so that a bare variable is borrowed
+	! instead of copied, which keeps each solve at O(n^2).  Both overloads of
+	! `b` are covered by one rank-agnostic param, like solve()
+
+	integer, intent(in) :: elem_type
+
+	type(fn_t) :: fn
+
+	!********
+
+	fn%type%type = void_type
+
+	allocate(fn%params(3))
+	allocate(fn%param_names%v(3))
+
+	fn%params(1)%type = array_type
+	allocate(fn%params(1)%array)
+	fn%params(1)%array%type = elem_type
+	fn%params(1)%array%rank = 2
+	fn%param_names%v(1)%s = "A"
+
+	fn%params(2)%type = array_type
+	allocate(fn%params(2)%array)
+	fn%params(2)%array%type = i32_type
+	fn%params(2)%array%rank = 1
+	fn%param_names%v(2)%s = "ipiv"
+
+	fn%params(3)%type = array_type
+	allocate(fn%params(3)%array)
+	fn%params(3)%array%type = elem_type
+	fn%params(3)%array%rank = -1  ! rank-1 or rank-2
+	fn%param_names%v(3)%s = "b"
+
+	fn%ref_params       = [.true., .true., .true.]
+	fn%const_ref_params = [.true., .true., .false.]
+
+end function new_lu_solve_fn
+
+!===============================================================================
+
 function new_reduce_fn(array_name, elem_type, ret_type, has_dim, has_mask) result(fn)
 
 	! Build the signature of one reduction overload that takes extra `dim`
@@ -138,7 +231,9 @@ subroutine declare_array_fns(fns, id_index, fn_array)
 		norm2_f32_fn, norm2_f64_fn, &
 		dot_f32_fn, dot_f64_fn, dot_i32_fn, dot_i64_fn, &
 		reshape_fn, transpose_fn, shape_fn, &
-		solve_f32_fn, solve_f64_fn, solve_std_fn
+		solve_f32_fn, solve_f64_fn, solve_std_fn, &
+		lu_factor_f32_fn, lu_factor_f64_fn, lu_factor_std_fn, &
+		lu_solve_f32_fn, lu_solve_f64_fn, lu_solve_std_fn
 
 	! Overloads of the reductions that take `dim` and/or `mask` args.  These are
 	! resolved from the plain names (e.g. sum) by resolve_overload().  They all
@@ -693,6 +788,31 @@ subroutine declare_array_fns(fns, id_index, fn_array)
 
 	!********
 
+	! std::lu_factor(&A[, &info]) and std::lu_solve(A, ipiv, &b) -- the
+	! "expert" pair: factor once, then solve for many right-hand sides.  Named
+	! and resolved like solve() above, including the "std::" stubs for the
+	! unqualified-call diagnostic
+
+	lu_factor_f32_fn = new_lu_factor_fn(f32_type)
+	call fns%insert("0lu_factor_f32", lu_factor_f32_fn, id_index)
+
+	lu_factor_f64_fn = new_lu_factor_fn(f64_type)
+	call fns%insert("0lu_factor_f64", lu_factor_f64_fn, id_index)
+
+	lu_factor_std_fn = new_lu_factor_fn(f64_type)
+	call fns%insert("std::lu_factor", lu_factor_std_fn, id_index)
+
+	lu_solve_f32_fn = new_lu_solve_fn(f32_type)
+	call fns%insert("0lu_solve_f32", lu_solve_f32_fn, id_index)
+
+	lu_solve_f64_fn = new_lu_solve_fn(f64_type)
+	call fns%insert("0lu_solve_f64", lu_solve_f64_fn, id_index)
+
+	lu_solve_std_fn = new_lu_solve_fn(f64_type)
+	call fns%insert("std::lu_solve", lu_solve_std_fn, id_index)
+
+	!********
+
 	! std::shape(source) -- return the extents of source as a rank-1 i64 array.
 	! The result length equals the rank of source; result[i] is the size along
 	! dimension i.  Return type is i64 for consistency with the size() intrinsic.
@@ -779,6 +899,8 @@ subroutine declare_array_fns(fns, id_index, fn_array)
 			reshape_fn, &
 			transpose_fn, &
 			solve_f32_fn, solve_f64_fn, solve_std_fn, &
+			lu_factor_f32_fn, lu_factor_f64_fn, lu_factor_std_fn, &
+			lu_solve_f32_fn, lu_solve_f64_fn, lu_solve_std_fn, &
 			shape_fn, &
 			ext_fns &
 		]

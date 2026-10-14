@@ -226,7 +226,17 @@ module syntran__bytecode_m
 		OP_LE_STR           = 1243, &
 		OP_GT_STR           = 1244, &
 		OP_GE_STR           = 1245, &
-		OP_EQ_ARRAY         = 1247
+		OP_EQ_ARRAY         = 1247, &
+		OP_CALL_INTR_REF    = 1248
+
+	! OP_CALL_INTR_REF: intrinsic call with by-ref args (fn_t%ref_params), e.g.
+	! std::lu_factor(&A).  a = intr_id, b = prog%nodes index of the call node
+	! (nargs = size(args), is_ref(:) says which args are by-ref and their
+	! variable slots are args(i)%id_index/is_loc).  The stack layout on entry is
+	! the same as OP_CALL's: [by-value args][by-ref args], both in ascending
+	! arg order.  By-ref args are moved out of their variables with
+	! OP_LOAD_REF_*, and moved back at the end of the call, even after a
+	! runtime error, so a variable is never left empty
 
 	! OP_EQ_ARRAY: whole-array equality for switch-statement case tests.
 	!   Pushes a SCALAR bool.  True iff the subject and the case value have
@@ -471,6 +481,11 @@ module syntran__bytecode_m
 
 	! std::solve(A, b), for both f32 and f64
 	integer, parameter :: INTR_SOLVE = 148
+
+	! std::lu_factor(&A[, &info]) and std::lu_solve(A, ipiv, &b), both f32 and
+	! f64.  These take by-ref args, so they're dispatched by OP_CALL_INTR_REF
+	! instead of OP_CALL_INTR
+	integer, parameter :: INTR_LU_FACTOR = 149, INTR_LU_SOLVE = 150
 
 	!********
 
@@ -942,6 +957,8 @@ pure integer function intr_id_from_name(name) result(id)
 	! diagnose an unqualified call.  A real call is always resolved to one of
 	! the typed names first
 	case ("0solve_f32", "0solve_f64", "solve"); id = INTR_SOLVE
+	case ("0lu_factor_f32", "0lu_factor_f64", "lu_factor"); id = INTR_LU_FACTOR
+	case ("0lu_solve_f32", "0lu_solve_f64", "lu_solve"); id = INTR_LU_SOLVE
 	case ("0dot_i32");       id = INTR_DOT_I32
 	case ("0dot_i64");       id = INTR_DOT_I64
 	case ("all");            id = INTR_ALL

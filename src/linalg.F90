@@ -3,10 +3,12 @@
 
 module syntran__linalg_m
 
-	! Dense linear algebra kernels: matrix product (gemm) and linear solve
-	! (gesv) for f32 and f64.
+	! Dense linear algebra kernels: matrix product (gemm), linear solve (gesv),
+	! and LU factorization (getrf) with a solve from its factors (getrs), for
+	! f32 and f64.
 	!
-	! By default these call BLAS/LAPACK (sgemm/dgemm/sgesv/dgesv).  Define
+	! By default these call BLAS/LAPACK (sgemm/dgemm, sgesv/dgesv, sgetrf/dgetrf,
+	! sgetrs/dgetrs).  Define
 	! SYNTRAN_NO_BLAS to drop the external dependency and use the portable
 	! Fortran fallbacks below.  That's -DSYNTRAN_NO_BLAS=ON for cmake, and the
 	! `noblas` feature for fpm (`--features release,noblas`, see [features] in
@@ -59,9 +61,37 @@ module syntran__linalg_m
 			integer, intent(out) :: ipiv(*), info
 			real(kind = 8), intent(inout) :: a(lda, *), b(ldb, *)
 		end subroutine dgesv
+
+		subroutine sgetrf(m, n, a, lda, ipiv, info)
+			integer, intent(in) :: m, n, lda
+			integer, intent(out) :: ipiv(*), info
+			real(kind = 4), intent(inout) :: a(lda, *)
+		end subroutine sgetrf
+
+		subroutine dgetrf(m, n, a, lda, ipiv, info)
+			integer, intent(in) :: m, n, lda
+			integer, intent(out) :: ipiv(*), info
+			real(kind = 8), intent(inout) :: a(lda, *)
+		end subroutine dgetrf
+
+		subroutine sgetrs(trans, n, nrhs, a, lda, ipiv, b, ldb, info)
+			character, intent(in) :: trans
+			integer, intent(in) :: n, nrhs, lda, ldb, ipiv(*)
+			integer, intent(out) :: info
+			real(kind = 4), intent(in) :: a(lda, *)
+			real(kind = 4), intent(inout) :: b(ldb, *)
+		end subroutine sgetrs
+
+		subroutine dgetrs(trans, n, nrhs, a, lda, ipiv, b, ldb, info)
+			character, intent(in) :: trans
+			integer, intent(in) :: n, nrhs, lda, ldb, ipiv(*)
+			integer, intent(out) :: info
+			real(kind = 8), intent(in) :: a(lda, *)
+			real(kind = 8), intent(inout) :: b(ldb, *)
+		end subroutine dgetrs
 	end interface
 
-	private :: sgemm, dgemm, sgesv, dgesv
+	private :: sgemm, dgemm, sgesv, dgesv, sgetrf, dgetrf, sgetrs, dgetrs
 #endif
 
 !===============================================================================
@@ -136,19 +166,18 @@ subroutine gesv_f32(n, nrhs, a, b, info)
 	!********
 
 	real(kind = 4), allocatable :: w(:,:)
-#ifndef SYNTRAN_NO_BLAS
 	integer, allocatable :: ipiv(:)
-#endif
 
 	info = 0
 	if (n <= 0 .or. nrhs <= 0) return
 
 	w = a
+	allocate(ipiv(n))
 
 #ifdef SYNTRAN_NO_BLAS
-	call lu_solve_f32(n, nrhs, w, b, info)
+	call lu_factor_f32(n, n, w, ipiv, info)
+	if (info == 0) call lu_subst_f32(n, nrhs, w, ipiv, b)
 #else
-	allocate(ipiv(n))
 	call sgesv(n, nrhs, w, n, ipiv, b, n, info)
 #endif
 
@@ -168,23 +197,132 @@ subroutine gesv_f64(n, nrhs, a, b, info)
 	!********
 
 	real(kind = 8), allocatable :: w(:,:)
-#ifndef SYNTRAN_NO_BLAS
 	integer, allocatable :: ipiv(:)
-#endif
 
 	info = 0
 	if (n <= 0 .or. nrhs <= 0) return
 
 	w = a
+	allocate(ipiv(n))
 
 #ifdef SYNTRAN_NO_BLAS
-	call lu_solve_f64(n, nrhs, w, b, info)
+	call lu_factor_f64(n, n, w, ipiv, info)
+	if (info == 0) call lu_subst_f64(n, nrhs, w, ipiv, b)
 #else
-	allocate(ipiv(n))
 	call dgesv(n, nrhs, w, n, ipiv, b, n, info)
 #endif
 
 end subroutine gesv_f64
+
+!===============================================================================
+
+subroutine getrf_f32(m, n, a, ipiv, info)
+
+	! LU factorization with partial pivoting of an m x n matrix, in place:
+	! a = P * L * U.  L is unit lower trapezoidal (below the diagonal) and U is
+	! upper trapezoidal, both stored in `a`.  `ipiv` has min(m,n) entries and is
+	! 1-based like LAPACK: row i was swapped with row ipiv(i).
+	!
+	! info > 0 means that u(info,info) is exactly zero.  The factorization is
+	! still completed, like LAPACK
+
+	integer, intent(in) :: m, n
+	real(kind = 4), intent(inout) :: a(m, n)
+	integer, intent(out) :: ipiv(min(m, n))
+	integer, intent(out) :: info
+
+	!********
+
+	info = 0
+	if (m <= 0 .or. n <= 0) return
+
+#ifdef SYNTRAN_NO_BLAS
+	call lu_factor_f32(m, n, a, ipiv, info)
+#else
+	call sgetrf(m, n, a, m, ipiv, info)
+#endif
+
+end subroutine getrf_f32
+
+!===============================================================================
+
+subroutine getrf_f64(m, n, a, ipiv, info)
+
+	! See getrf_f32
+
+	integer, intent(in) :: m, n
+	real(kind = 8), intent(inout) :: a(m, n)
+	integer, intent(out) :: ipiv(min(m, n))
+	integer, intent(out) :: info
+
+	!********
+
+	info = 0
+	if (m <= 0 .or. n <= 0) return
+
+#ifdef SYNTRAN_NO_BLAS
+	call lu_factor_f64(m, n, a, ipiv, info)
+#else
+	call dgetrf(m, n, a, m, ipiv, info)
+#endif
+
+end subroutine getrf_f64
+
+!===============================================================================
+
+subroutine getrs_f32(n, nrhs, a, ipiv, b)
+
+	! Solve a * x = b using the n x n factors and 1-based pivots from
+	! getrf_f32().  `b` is overwritten with `x`.  The caller must check that `a`
+	! has no zero diagonal and that `ipiv` is in range
+
+	integer, intent(in) :: n, nrhs
+	real(kind = 4), intent(in)    :: a(n, n)
+	integer, intent(in) :: ipiv(n)
+	real(kind = 4), intent(inout) :: b(n, nrhs)
+
+	!********
+
+#ifndef SYNTRAN_NO_BLAS
+	integer :: info
+#endif
+
+	if (n <= 0 .or. nrhs <= 0) return
+
+#ifdef SYNTRAN_NO_BLAS
+	call lu_subst_f32(n, nrhs, a, ipiv, b)
+#else
+	call sgetrs('N', n, nrhs, a, n, ipiv, b, n, info)
+#endif
+
+end subroutine getrs_f32
+
+!===============================================================================
+
+subroutine getrs_f64(n, nrhs, a, ipiv, b)
+
+	! See getrs_f32
+
+	integer, intent(in) :: n, nrhs
+	real(kind = 8), intent(in)    :: a(n, n)
+	integer, intent(in) :: ipiv(n)
+	real(kind = 8), intent(inout) :: b(n, nrhs)
+
+	!********
+
+#ifndef SYNTRAN_NO_BLAS
+	integer :: info
+#endif
+
+	if (n <= 0 .or. nrhs <= 0) return
+
+#ifdef SYNTRAN_NO_BLAS
+	call lu_subst_f64(n, nrhs, a, ipiv, b)
+#else
+	call dgetrs('N', n, nrhs, a, n, ipiv, b, n, info)
+#endif
+
+end subroutine getrs_f64
 
 !===============================================================================
 !
@@ -193,100 +331,177 @@ end subroutine gesv_f64
 !
 !===============================================================================
 
-subroutine lu_solve_f32(n, nrhs, a, b, info)
+subroutine lu_factor_f32(m, n, a, ipiv, info)
 
-	! Gaussian elimination with partial pivoting.  `a` is destroyed (it's a
-	! working copy), `b` is overwritten with the solution
+	! Gaussian elimination with partial pivoting of an m x n matrix, in place,
+	! like LAPACK getf2.  `ipiv` is 1-based.  On an exactly zero pivot, info is
+	! set to the first such column but the elimination continues, so that the
+	! factors and info match LAPACK's
 
-	integer, intent(in) :: n, nrhs
-	real(kind = 4), intent(inout) :: a(n, n), b(n, nrhs)
+	integer, intent(in) :: m, n
+	real(kind = 4), intent(inout) :: a(m, n)
+	integer, intent(out) :: ipiv(min(m, n))
 	integer, intent(out) :: info
 
 	!********
 
-	integer :: i, j, p
-	real(kind = 4) :: f
-	real(kind = 4) :: rowtmp(n), btmp(nrhs)
+	integer :: j, k, p
+	real(kind = 4) :: rowtmp(n)
 
 	info = 0
 
-	do j = 1, n
+	do j = 1, min(m, n)
 
 		! Pivot: largest magnitude entry in column j at or below the diagonal
-		p = j - 1 + maxloc(abs(a(j: n, j)), 1)
+		p = j - 1 + maxloc(abs(a(j: m, j)), 1)
+		ipiv(j) = p
+
 		if (a(p, j) == 0) then
-			info = j
-			return
+			if (info == 0) info = j
+			cycle
 		end if
 
 		if (p /= j) then
 			rowtmp = a(j, :) ; a(j, :) = a(p, :) ; a(p, :) = rowtmp
-			btmp   = b(j, :) ; b(j, :) = b(p, :) ; b(p, :) = btmp
 		end if
 
-		do i = j + 1, n
-			f = a(i, j) / a(j, j)
-			if (f == 0) cycle
-			a(i, j+1: n) = a(i, j+1: n) - f * a(j, j+1: n)
-			b(i, :) = b(i, :) - f * b(j, :)
+		a(j+1: m, j) = a(j+1: m, j) / a(j, j)
+		do k = j + 1, n
+			a(j+1: m, k) = a(j+1: m, k) - a(j+1: m, j) * a(j, k)
 		end do
 
 	end do
 
-	! Back substitution
-	do i = n, 1, -1
-		if (i < n) b(i, :) = b(i, :) - matmul(a(i, i+1: n), b(i+1: n, :))
-		b(i, :) = b(i, :) / a(i, i)
-	end do
-
-end subroutine lu_solve_f32
+end subroutine lu_factor_f32
 
 !===============================================================================
 
-subroutine lu_solve_f64(n, nrhs, a, b, info)
+subroutine lu_subst_f32(n, nrhs, a, ipiv, b)
 
-	! See lu_solve_f32
+	! Solve using the n x n factors from lu_factor_f32().  `b` is overwritten
+	! with the solution
 
 	integer, intent(in) :: n, nrhs
-	real(kind = 8), intent(inout) :: a(n, n), b(n, nrhs)
-	integer, intent(out) :: info
+	real(kind = 4), intent(in) :: a(n, n)
+	integer, intent(in) :: ipiv(n)
+	real(kind = 4), intent(inout) :: b(n, nrhs)
 
 	!********
 
-	integer :: i, j, p
-	real(kind = 8) :: f
-	real(kind = 8) :: rowtmp(n), btmp(nrhs)
+	integer :: i, j, k, p
+	real(kind = 4) :: btmp(nrhs)
 
-	info = 0
-
-	do j = 1, n
-
-		p = j - 1 + maxloc(abs(a(j: n, j)), 1)
-		if (a(p, j) == 0) then
-			info = j
-			return
+	! Apply the row swaps in order
+	do i = 1, n
+		p = ipiv(i)
+		if (p /= i) then
+			btmp = b(i, :) ; b(i, :) = b(p, :) ; b(p, :) = btmp
 		end if
+	end do
 
-		if (p /= j) then
-			rowtmp = a(j, :) ; a(j, :) = a(p, :) ; a(p, :) = rowtmp
-			btmp   = b(j, :) ; b(j, :) = b(p, :) ; b(p, :) = btmp
-		end if
+	do k = 1, nrhs
 
-		do i = j + 1, n
-			f = a(i, j) / a(j, j)
-			if (f == 0) cycle
-			a(i, j+1: n) = a(i, j+1: n) - f * a(j, j+1: n)
-			b(i, :) = b(i, :) - f * b(j, :)
+		! Forward substitution with unit lower L, column-oriented
+		do j = 1, n - 1
+			b(j+1: n, k) = b(j+1: n, k) - b(j, k) * a(j+1: n, j)
+		end do
+
+		! Back substitution with U
+		do j = n, 1, -1
+			b(j, k) = b(j, k) / a(j, j)
+			b(1: j-1, k) = b(1: j-1, k) - b(j, k) * a(1: j-1, j)
 		end do
 
 	end do
 
-	do i = n, 1, -1
-		if (i < n) b(i, :) = b(i, :) - matmul(a(i, i+1: n), b(i+1: n, :))
-		b(i, :) = b(i, :) / a(i, i)
+end subroutine lu_subst_f32
+
+!===============================================================================
+
+subroutine lu_factor_f64(m, n, a, ipiv, info)
+
+	! Gaussian elimination with partial pivoting of an m x n matrix, in place,
+	! like LAPACK getf2.  `ipiv` is 1-based.  On an exactly zero pivot, info is
+	! set to the first such column but the elimination continues, so that the
+	! factors and info match LAPACK's
+
+	integer, intent(in) :: m, n
+	real(kind = 8), intent(inout) :: a(m, n)
+	integer, intent(out) :: ipiv(min(m, n))
+	integer, intent(out) :: info
+
+	!********
+
+	integer :: j, k, p
+	real(kind = 8) :: rowtmp(n)
+
+	info = 0
+
+	do j = 1, min(m, n)
+
+		! Pivot: largest magnitude entry in column j at or below the diagonal
+		p = j - 1 + maxloc(abs(a(j: m, j)), 1)
+		ipiv(j) = p
+
+		if (a(p, j) == 0) then
+			if (info == 0) info = j
+			cycle
+		end if
+
+		if (p /= j) then
+			rowtmp = a(j, :) ; a(j, :) = a(p, :) ; a(p, :) = rowtmp
+		end if
+
+		a(j+1: m, j) = a(j+1: m, j) / a(j, j)
+		do k = j + 1, n
+			a(j+1: m, k) = a(j+1: m, k) - a(j+1: m, j) * a(j, k)
+		end do
+
 	end do
 
-end subroutine lu_solve_f64
+end subroutine lu_factor_f64
+
+!===============================================================================
+
+subroutine lu_subst_f64(n, nrhs, a, ipiv, b)
+
+	! Solve using the n x n factors from lu_factor_f64().  `b` is overwritten
+	! with the solution
+
+	integer, intent(in) :: n, nrhs
+	real(kind = 8), intent(in) :: a(n, n)
+	integer, intent(in) :: ipiv(n)
+	real(kind = 8), intent(inout) :: b(n, nrhs)
+
+	!********
+
+	integer :: i, j, k, p
+	real(kind = 8) :: btmp(nrhs)
+
+	! Apply the row swaps in order
+	do i = 1, n
+		p = ipiv(i)
+		if (p /= i) then
+			btmp = b(i, :) ; b(i, :) = b(p, :) ; b(p, :) = btmp
+		end if
+	end do
+
+	do k = 1, nrhs
+
+		! Forward substitution with unit lower L, column-oriented
+		do j = 1, n - 1
+			b(j+1: n, k) = b(j+1: n, k) - b(j, k) * a(j+1: n, j)
+		end do
+
+		! Back substitution with U
+		do j = n, 1, -1
+			b(j, k) = b(j, k) / a(j, j)
+			b(1: j-1, k) = b(1: j-1, k) - b(j, k) * a(1: j-1, j)
+		end do
+
+	end do
+
+end subroutine lu_subst_f64
 
 !===============================================================================
 

@@ -1276,6 +1276,48 @@ end function lookup_slot
 
 !===============================================================================
 
+function intr_display_name(name) result(s)
+
+	! The name of an intrinsic fn to show in a diagnostic.  Overloads are
+	! mangled like `0solve_f64` or `0lu_factor_f32`, so strip the leading `0`
+	! and then the element type suffix.  Splitting at the first `_` isn't
+	! enough, since the base name itself can have one.  A name without the `0`
+	! prefix is returned as is
+
+	character(len = *), intent(in) :: name
+	character(len = :), allocatable :: s
+
+	!********
+
+	character(len = *), parameter :: sfxs(*) = &
+		['_i32', '_i64', '_f32', '_f64']
+
+	integer :: i, ix, iu
+
+	s = name
+	if (len(name) < 2) return
+	if (name(1:1) /= '0') return
+
+	s = name(2:)
+
+	! Earliest of the type suffixes
+	iu = 0
+	do i = 1, size(sfxs)
+		ix = index(s, sfxs(i))
+		if (ix > 0) then
+			if (iu == 0 .or. ix < iu) iu = ix
+		end if
+	end do
+
+	! Otherwise, like the split in emit_intr_call()
+	if (iu == 0) iu = index(s, '_')
+
+	if (iu > 0) s = s(1: iu-1)
+
+end function intr_display_name
+
+!===============================================================================
+
 subroutine em_unsupported(em, what, pos)
 
 	! Report that a construct can't be transpiled yet.  The caret goes at the

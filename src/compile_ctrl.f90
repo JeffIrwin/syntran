@@ -1634,6 +1634,7 @@ recursive subroutine compile_node_impl(prog, cs, node)
 		block
 			integer :: intr_id_, nargs_
 			integer(kind = 8) :: slot_c
+			logical :: has_ref_
 			intr_id_ = intr_id_from_name(node%identifier%text)
 			select case (intr_id_)
 			case (INTR_READLN, INTR_CLOSE)
@@ -1703,15 +1704,53 @@ recursive subroutine compile_node_impl(prog, cs, node)
 				end if
 
 			case default
-				! Native dispatch: push all args, then emit OP_CALL_INTR.
 				nargs_ = 0
-				if (allocated(node%args)) then
-					do i = 1, size(node%args)
+				if (allocated(node%args)) nargs_ = size(node%args)
+
+				has_ref_ = .false.
+				if (allocated(node%is_ref)) has_ref_ = any(node%is_ref)
+
+				if (has_ref_) then
+					! By-ref args (fn_t%ref_params), e.g. std::lu_factor(&A).
+					! Same two-pass layout as a user fn's OP_CALL: by-value args
+					! first, then each by-ref arg moved out of its variable.
+					! OP_CALL_INTR_REF moves them back afterwards, using the
+					! node for their slots
+					idx = add_node(prog, node)
+
+					do i = 1, nargs_
+						if (.not. node%is_ref(i)) call compile_node(prog, cs, node%args(i))
+					end do
+
+					do i = 1, nargs_
+						if (.not. node%is_ref(i)) cycle
+
+						! The parser only allows `&` on a plain variable name.  Fail
+						! loudly rather than writing back to the wrong slot if that
+						! ever changes
+						if (node%args(i)%kind /= name_expr .or. &
+							allocated(node%args(i)%lsubscripts) .or. &
+							allocated(node%args(i)%member)) then
+							write(*,*) 'compile: by-ref intrinsic argument must be ' // &
+								'a plain variable'
+							call internal_error()
+						end if
+
+						if (node%args(i)%is_loc) then
+							call emit(prog, OP_LOAD_REF_LOCAL, a = node%args(i)%id_index)
+						else
+							call emit(prog, OP_LOAD_REF_GLOBAL, a = node%args(i)%id_index)
+						end if
+					end do
+
+					call emit(prog, OP_CALL_INTR_REF, a = intr_id_, b = idx)
+				else
+					! Native dispatch: push all args, then emit OP_CALL_INTR.
+					do i = 1, nargs_
 						call compile_node(prog, cs, node%args(i))
 					end do
-					nargs_ = size(node%args)
+					call emit(prog, OP_CALL_INTR, a = intr_id_, b = nargs_)
 				end if
-				call emit(prog, OP_CALL_INTR, a = intr_id_, b = nargs_)
 			end select
 		end block
 		if (allocated(node%lsubscripts)) then

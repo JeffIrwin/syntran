@@ -55,7 +55,8 @@ that one uppercase `.F90` file instead of a `#ifdef` at each check site.
 
 #### BLAS/LAPACK
 
-`@` on f32/f64 and `std::solve()` call BLAS `gemm` / LAPACK `gesv` through
+`@` on f32/f64, `std::solve()`, and `std::lu_factor()`/`std::lu_solve()` call BLAS
+`gemm` / LAPACK `gesv`, `getrf`, and `getrs` through
 `src/linalg.F90`, which is the only file with BLAS `#ifdef`s.  macOS resolves
 `-llapack -lblas` to Accelerate with no install.  Linux needs an *optimized*
 implementation (`sudo apt-get install libopenblas-dev`), not the reference

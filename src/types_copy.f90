@@ -227,6 +227,18 @@ recursive module subroutine fn_copy(dst, src)
 		deallocate(dst%variadic_name)
 	end if
 
+	if (allocated(src%ref_params)) then
+		dst%ref_params = src%ref_params
+	else if (allocated(dst%ref_params)) then
+		deallocate(dst%ref_params)
+	end if
+
+	if (allocated(src%const_ref_params)) then
+		dst%const_ref_params = src%const_ref_params
+	else if (allocated(dst%const_ref_params)) then
+		deallocate(dst%const_ref_params)
+	end if
+
 	if (allocated(src%params)) then
 		! Not a bare `deallocate(dst%params)`: this is an array of value_t, the
 		! nested-allocatable shape this codebase never trusts to gfortran's
@@ -304,6 +316,8 @@ recursive module subroutine fn_move(src, dst)
 	dst%variadic_max  = src%variadic_max
 	dst%variadic_type = src%variadic_type
 	call move_alloc(src%variadic_name, dst%variadic_name)
+	call move_alloc(src%ref_params, dst%ref_params)
+	call move_alloc(src%const_ref_params, dst%const_ref_params)
 
 	call move_alloc(src%node, dst%node)
 

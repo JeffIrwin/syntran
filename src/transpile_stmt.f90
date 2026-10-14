@@ -214,7 +214,7 @@ recursive subroutine emit_call_stmt(em, node)
 			call em_line(em, 'call '//emit_expr(em, node))
 		else
 			call em_unsupported(em, 'the intrinsic fn `'// &
-				node%identifier%text//'`', node%identifier%pos)
+				intr_display_name(node%identifier%text)//'`', node%identifier%pos)
 		end if
 
 	else

@@ -402,6 +402,7 @@ module procedure get_all_error_codes
 	call codes%push(RC_REPEAT_NEGATIVE)
 	call codes%push(RC_SOLVE_SHAPE)
 	call codes%push(RC_SOLVE_SINGULAR)
+	call codes%push(RC_LU_BAD_PIVOTS)
 	call codes%push(WC_MISSING_RETURN)
 end procedure get_all_error_codes
 
@@ -1874,15 +1875,16 @@ end procedure err_rt_repeat_negative
 
 module procedure err_rt_solve_shape
 
-	! Runtime (R40) error for std::solve() with a non-square `A`, or a `b`
-	! whose leading extent isn't the order of `A`
+	! Runtime (R40) error for std::solve() or std::lu_solve() with a non-square
+	! `A`, or a `b` whose leading extent isn't the order of `A`.  `fn` is the
+	! name of the fn to report
 
 	if (arows /= acols) then
 		err = err_rt(RC_SOLVE_SHAPE, &
-			"matrix `A` in solve() is not square: "//str(arows)//" x "//str(acols))
+			"matrix `A` in "//fn//"() is not square: "//str(arows)//" x "//str(acols))
 	else
 		err = err_rt(RC_SOLVE_SHAPE, &
-			"size mismatch in solve(): `A` is "//str(arows)//" x "//str(acols)// &
+			"size mismatch in "//fn//"(): `A` is "//str(arows)//" x "//str(acols)// &
 			" but `b` has "//str(brows)//" rows")
 	end if
 
@@ -1893,13 +1895,36 @@ end procedure err_rt_solve_shape
 
 module procedure err_rt_solve_singular
 
-	! Runtime (R41) error for std::solve() of an exactly singular matrix.
-	! `pivot` is 1-based
+	! Runtime (R41) error for std::solve(), std::lu_factor(), or std::lu_solve()
+	! of an exactly singular matrix.  `pivot` is the 1-based LAPACK `info`, but
+	! it's reported as a zero-based index like the rest of syntran
 
 	err = err_rt(RC_SOLVE_SINGULAR, &
-		"matrix `A` in solve() is singular: zero pivot at row "//str(pivot))
+		"matrix `A` in "//fn//"() is singular: pivot U["//str(pivot - 1)//", " &
+		//str(pivot - 1)//"] is zero")
 
 end procedure err_rt_solve_singular
+
+
+!===============================================================================
+
+module procedure err_rt_lu_bad_pivots
+
+	! Runtime (R42) error for std::lu_solve() with an `ipiv` that isn't a valid
+	! row permutation for the n x n factors in `A`.  If `i` is negative, then
+	! the length of `ipiv` is wrong.  Otherwise, `ipiv[i]` is out of range
+
+	if (i < 0) then
+		err = err_rt(RC_LU_BAD_PIVOTS, &
+			"size mismatch in lu_solve(): `A` is "//str(n)//" x "//str(n)// &
+			" but `ipiv` has "//str(len_)//" elements")
+	else
+		err = err_rt(RC_LU_BAD_PIVOTS, &
+			"invalid pivot in lu_solve(): ipiv["//str(i)//"] is "//str(p)// &
+			", which is outside of [0, "//str(n)//")")
+	end if
+
+end procedure err_rt_lu_bad_pivots
 
 
 !===============================================================================

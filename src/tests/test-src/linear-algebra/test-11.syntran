@@ -1,0 +1,159 @@
+
+// Test std::lu_factor() and std::lu_solve(), the "expert" interface for linear
+// systems: factor once, then solve for as many right-hand sides as you like.
+// Results are checked via residuals instead of exact digits, so that the
+// BLAS/LAPACK path and the portable fallback (-DSYNTRAN_NO_BLAS) both pass
+//
+// Storage is column-major: [1,2,3,4; 2,2] = [[1,3],[2,4]]
+
+let tol = 1.e-10;
+
+let A0 = [
+	4.0, 1.0, 2.0,
+	1.0, 5.0, 1.0,
+	2.0, 1.0, 6.0;
+	3, 3
+];
+let b1 = [1.0, 2.0, 3.0];
+let b2 = [-1.0, 0.5, 2.0];
+let B  = [1.0, 2.0, 3.0, 0.0, 1.0, 0.0; 3, 2];
+
+// Rebuild the original matrix from the output of lu_factor(), P * L * U.  L is
+// m x k unit lower trapezoidal and U is k x n upper trapezoidal, where k is
+// min(m, n).  P is applied by undoing the row swaps in reverse order
+fn rebuild(F: [f64; :, :], ipiv: [i32; :]): [f64; :, :]
+{
+	let m = i32(size(F, 0));
+	let n = i32(size(F, 1));
+	let k = i32(size(ipiv));
+
+	let L = [0.0; m, k];
+	let U = [0.0; k, n];
+	for j in [0: k]
+	{
+		L[j, j] = 1.0;
+		for i in [j + 1: m]
+		{
+			L[i, j] = F[i, j];
+		}
+		for c in [j: n]
+		{
+			U[j, c] = F[j, c];
+		}
+	}
+
+	let R = L @ U;
+	for t in [0: k]
+	{
+		let i = k - 1 - t;
+		let r = ipiv[i];
+		for c in [0: n]
+		{
+			let tmp = R[i, c];
+			R[i, c] = R[r, c];
+			R[r, c] = tmp;
+		}
+	}
+	return R;
+}
+
+// Everything is local in here, and the by-ref args are locals too
+fn solve_local(M: [f64; :, :], b: [f64; :]): [f64; :]
+{
+	let F = M;
+	let p = std::lu_factor(&F);
+	let x = b;
+	std::lu_solve(F, p, &x);
+	return x;
+}
+
+// A by-ref fn param forwarded to an intrinsic
+fn factor_ref(M: &[f64; :, :]): [i32; :]
+{
+	return std::lu_factor(&M);
+}
+
+// 1. factor.  `info` is overwritten with 0, and A is overwritten with L and U
+let F = A0;
+let info = -7;
+let ipiv = std::lu_factor(&F, &info);
+let ok1 = size(ipiv) == 3 and info == 0 and
+	minval(ipiv) >= 0 and maxval(ipiv) < 3 and
+	maxval(abs(F - A0)) > 0.0 and
+	maxval(abs(rebuild(F, ipiv) - A0)) < tol;
+
+// 2. solve for two right-hand sides with the same factors.  The factors are
+//    not modified
+let F0 = F;
+let ipiv0 = ipiv;
+let x1 = b1;
+std::lu_solve(F, ipiv, &x1);
+let x2 = b2;
+std::lu_solve(F, ipiv, &x2);
+let ok2 = maxval(abs(A0 @ x1 - b1)) < tol and
+	maxval(abs(A0 @ x2 - b2)) < tol and
+	maxval(abs(x1 - std::solve(A0, b1))) < tol and
+	maxval(abs(F - F0)) == 0.0 and all(ipiv == ipiv0);
+
+// 3. several right-hand sides at once (rank-2 b), result has b's shape
+let X = B;
+std::lu_solve(F, ipiv, &X);
+let sh = std::shape(X);
+let ok3 = maxval(abs(A0 @ X - B)) < tol and sh[0] == 3 and sh[1] == 2;
+
+// 4. zero on the diagonal, so it needs pivoting: [[0,1],[2,3]] @ x == [5,6]
+//    has the exact solution x == [-4.5, 5].  Pivots are zero-based, and row 0
+//    is swapped with row 1
+let P = [0.0, 2.0, 1.0, 3.0; 2, 2];
+let pp = std::lu_factor(&P);
+let xp = [5.0, 6.0];
+std::lu_solve(P, pp, &xp);
+let ok4 = pp[0] == 1 and pp[1] == 1 and
+	abs(xp[0] + 4.5) < tol and abs(xp[1] - 5.0) < tol;
+
+// 5. f32
+let Af = [4.0f, 1.0f, 2.0f, 3.0f; 2, 2];
+let Ff = Af;
+let pf = std::lu_factor(&Ff);
+let bf = [1.0f, 2.0f];
+let xf = bf;
+std::lu_solve(Ff, pf, &xf);
+let ok5 = maxval(abs(Af @ xf - bf)) < 1.e-4f and size(pf) == 2;
+
+// 6. an exactly singular matrix doesn't throw if there's an `info` arg to
+//    receive the problem.  info is the 1-based position of the zero pivot
+let S = [1.0, 2.0, 2.0, 4.0; 2, 2];
+let info2 = -7;
+let ps = std::lu_factor(&S, &info2);
+let ok6 = info2 == 2 and size(ps) == 2;
+
+// 7. non-square, tall and wide.  There are min(m, n) pivots
+let T0 = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0; 3, 2];
+let T = T0;
+let pt = std::lu_factor(&T);
+let ok7a = size(pt) == 2 and maxval(abs(rebuild(T, pt) - T0)) < tol;
+
+let W0 = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0; 2, 3];
+let W = W0;
+let pw = std::lu_factor(&W);
+let ok7b = size(pw) == 2 and maxval(abs(rebuild(W, pw) - W0)) < tol;
+
+// 8. locals inside a fn
+let ok8 = maxval(abs(solve_local(A0, b1) - x1)) < tol and
+	maxval(abs(solve_local(A0, b2) - x2)) < tol;
+
+// 9. a by-ref param forwarded.  The caller's matrix is factored
+let G = A0;
+let pg = factor_ref(&G);
+let ok9 = maxval(abs(G - F)) == 0.0 and all(pg == ipiv);
+
+// 10. 1x1
+let a1 = [4.0; 1, 1];
+let p1 = std::lu_factor(&a1);
+let x1x = [2.0];
+std::lu_solve(a1, p1, &x1x);
+let ok10 = p1[0] == 0 and abs(x1x[0] - 0.5) < tol;
+
+return ok1 and ok2 and ok3 and ok4 and ok5 and ok6 and ok7a and ok7b and
+	ok8 and ok9 and ok10;
+

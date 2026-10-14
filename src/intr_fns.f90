@@ -1038,6 +1038,31 @@ recursive subroutine resolve_overload(args, fn_call, has_rank, has_arr_type, arr
 			end if
 		end if
 
+	case ("lu_factor", "lu_solve")
+
+		! std::lu_factor(&A[, &info]) and std::lu_solve(A, ipiv, &b) -- like
+		! std::solve above, the element type of the first arg picks the
+		! overload and anything but f32 falls through to f64, so that it's
+		! rejected by the arg type check.  The result type doesn't depend on the
+		! args (lu_factor returns [i32; :] and lu_solve is void), so no rank
+		! needs to be resolved
+		if (allocated(fn_call%module_prefix)) then
+			if (fn_call%module_prefix == "std") then
+
+				type_ = f64_type
+				if (args%len_ >= 1) then
+					if (args%v(1)%val%type == array_type) type_ = args%v(1)%val%array%type
+				end if
+
+				if (type_ == f32_type) then
+					fn_call%identifier%text = "0"//fn_call%identifier%text//"_f32"
+				else
+					fn_call%identifier%text = "0"//fn_call%identifier%text//"_f64"
+				end if
+
+			end if
+		end if
+
 	case ("transpose")
 
 		! std::transpose(source) -- only fires for std::transpose, not a

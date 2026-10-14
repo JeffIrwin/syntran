@@ -41,6 +41,13 @@ module syntran__types_m
 		integer :: variadic_min = -1, variadic_max = -1, variadic_type
 		character(len = :), allocatable :: variadic_name
 
+		! By-ref params of an *intrinsic* fn, indexed by arg position (including
+		! variadic positions).  User fns instead use node%is_ref/is_const_ref
+		! below.  Unallocated means that no param is by-ref.  A by-ref arg is
+		! moved out of its variable for the call and moved back afterwards, see
+		! OP_CALL_INTR_REF
+		logical, allocatable :: ref_params(:), const_ref_params(:)
+
 		! Reference to the function definition, i.e. the syntax node containing
 		! the function parameters and body
 		type(syntax_node_t), allocatable :: node
