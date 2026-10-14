@@ -87,6 +87,8 @@ if [[ "$machine" == "MinGw" || -n "${SYNTRAN_NO_BLAS:-}" ]]; then
 	extra+=(-DSYNTRAN_NO_BLAS=ON)
 fi
 
-cmake -S . -B "$build" "${generator[@]}" "${extra[@]}" -DCMAKE_BUILD_TYPE=$config -DCMAKE_Fortran_COMPILER=$FC
+# The `${extra[@]+...}` form is for bash 3.2 on macOS, where expanding an empty
+# array under `set -u` is an "unbound variable" error
+cmake -S . -B "$build" "${generator[@]}" ${extra[@]+"${extra[@]}"} -DCMAKE_BUILD_TYPE=$config -DCMAKE_Fortran_COMPILER=$FC
 cmake --build "$build" --config $config --parallel
 
