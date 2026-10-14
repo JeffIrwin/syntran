@@ -79,9 +79,11 @@ fi
 #build=build
 build="build/$config"
 
-# BLAS/LAPACK is required by default (for `@` and std::solve()).  There is no
-# BLAS on the Windows CI runners, so use the portable fallbacks there.  Anyone
-# can also opt out on any platform with `SYNTRAN_NO_BLAS=1 bash build.sh`
+# BLAS/LAPACK is required by default (for `@` and std::solve()).  This cmake
+# build still uses the portable fallbacks on Windows, since the runner has no
+# BLAS that find_package(LAPACK) knows about.  The shipped Windows binary comes
+# from the fpm build in CI, which links OpenBLAS (see main.yml).  Anyone can
+# also opt out on any platform with `SYNTRAN_NO_BLAS=1 bash build.sh`
 extra=()
 if [[ "$machine" == "MinGw" || -n "${SYNTRAN_NO_BLAS:-}" ]]; then
 	extra+=(-DSYNTRAN_NO_BLAS=ON)
