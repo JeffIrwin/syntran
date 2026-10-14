@@ -21,8 +21,10 @@
 #     fpm test test --profile debug --flag "-DSYNTRAN_BOUNDS_CHECK"
 #
 #     # Use portable Fortran fallbacks instead of BLAS/LAPACK for `@` and
-#     # std::solve().  See `link` in [build] below
-#     fpm build --flag "-DSYNTRAN_NO_BLAS"
+#     # std::solve(), and don't link them.  See [features] below.  Features
+#     # replace --profile (they can't be combined), so name release/debug here
+#     fpm build --features release,noblas
+#     fpm test test --features debug,noblas
 #
 #     # Defense-in-depth for release builds: force deterministic (nonzero)
 #     # contents into otherwise-uninitialized stack/derived-type memory, so any
@@ -76,24 +78,35 @@ homepage = "https://github.com/JeffIrwin/syntran"
 # script which sets --flag (or FPM_FFLAGS env var, but that should probably be
 # left to other users to override my --flag args)
 
-[build]
-auto-executables = true
-auto-tests       = true
-auto-examples    = true
-
-# BLAS/LAPACK for the matmul `@` operator and std::solve().  On macOS these
-# resolve to the Accelerate framework with no install.  Elsewhere, install an
-# optimized implementation (e.g. libopenblas-dev), not the unoptimized
-# reference libblas-dev/liblapack-dev.
+# There is deliberately no [build] table, because fpm only allows a build
+# configuration in one place, and BLAS/LAPACK below needs [features.blas.build].
+# Everything that used to be here is fpm's default anyway:
 #
-# `--flag "-DSYNTRAN_NO_BLAS"` removes the calls and uses portable Fortran
-# fallbacks instead, but fpm can't make this list conditional, so the libs still
-# have to exist at link time.  A cmake build with -DSYNTRAN_NO_BLAS=ON drops the
-# dependency entirely
-link = ["lapack", "blas"]
+#     auto-executables = true
+#     auto-tests       = true
+#     auto-examples    = true
+#     module-naming    = false
 
-#module-naming    = true
-module-naming    = false
+# BLAS/LAPACK for the matmul `@` operator and std::solve(), through
+# src/linalg.F90.  They're linked by default via the "blas" feature, which the
+# default profile always enables, including with --profile debug/release.  On
+# macOS they resolve to the Accelerate framework with no install.  Elsewhere,
+# install an optimized implementation (e.g. libopenblas-dev), not the
+# unoptimized reference libblas-dev/liblapack-dev.
+#
+# `--features release,noblas` (or `debug,noblas`) opts out: it defines
+# SYNTRAN_NO_BLAS, so portable Fortran fallbacks are used instead of the calls,
+# and nothing is linked.
+#
+# This needs fpm >= 0.13.0.  Earlier versions reject [features] as an unknown
+# key.  It has to be `build.link`, not `link-time-flags`: fpm puts link flags
+# *before* the objects and libraries, where GNU ld silently drops them
+[features]
+blas.build.link = ["lapack", "blas"]
+noblas.preprocess.cpp.macros = "SYNTRAN_NO_BLAS"
+
+[profiles]
+default = ["blas"]
 
 [install]
 library = true

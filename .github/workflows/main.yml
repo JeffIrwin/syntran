@@ -219,15 +219,11 @@
 					# All go through `--flag`, not `--link-flag`, which fpm \n
 					# 0.12-alpha silently ignores. \n
 					# \n
-					# There's no BLAS/LAPACK on this runner, so build with the \n
-					# portable fallbacks.  fpm.toml's `link` is unconditional, \n
-					# though, so also satisfy `-lblas -llapack` with empty \n
-					# static archives that nothing references. \n
-					New-Item -ItemType Directory -Force build/noblas | Out-Null \n
-					ar rcs build/noblas/libblas.a \n
-					ar rcs build/noblas/liblapack.a \n
-					fpm test test --profile release --flag \"-static -Wl,--wrap=setlocale -Wl,--stack,67108864 -DSYNTRAN_NO_BLAS -Lbuild/noblas\" \n
-					fpm test long --profile release --flag \"-static -Wl,--wrap=setlocale -Wl,--stack,67108864 -DSYNTRAN_NO_BLAS -Lbuild/noblas\" \n
+					# There's no BLAS/LAPACK on this runner, so use the \n
+					# portable fallbacks and don't link them.  --features \n
+					# replaces --profile, so it names release \n
+					fpm test test --features release,noblas --flag \"-static -Wl,--wrap=setlocale -Wl,--stack,67108864\" \n
+					fpm test long --features release,noblas --flag \"-static -Wl,--wrap=setlocale -Wl,--stack,67108864\" \n
 				"
 			},
 			{
@@ -308,7 +304,7 @@
 					# release binary from the \"Test fpm windows\" step instead \n
 					# of rebuilding from scratch with cmake.  --prefix places \n
 					# it in a predictable location for packaging \n
-					fpm install --profile release --flag \"-static -Wl,--wrap=setlocale -Wl,--stack,67108864 -DSYNTRAN_NO_BLAS -Lbuild/noblas\" --prefix ./build/ \n
+					fpm install --features release,noblas --flag \"-static -Wl,--wrap=setlocale -Wl,--stack,67108864\" --prefix ./build/ \n
 
 					copy .\\build\\bin\\syntran.exe .\\ \n
 				"

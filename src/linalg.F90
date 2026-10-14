@@ -7,9 +7,10 @@ module syntran__linalg_m
 	! (gesv) for f32 and f64.
 	!
 	! By default these call BLAS/LAPACK (sgemm/dgemm/sgesv/dgesv).  Define
-	! SYNTRAN_NO_BLAS (cmake: -DSYNTRAN_NO_BLAS=ON, fpm: --flag
-	! "-DSYNTRAN_NO_BLAS") to drop the external dependency and use the portable
-	! Fortran fallbacks below.
+	! SYNTRAN_NO_BLAS to drop the external dependency and use the portable
+	! Fortran fallbacks below.  That's -DSYNTRAN_NO_BLAS=ON for cmake, and the
+	! `noblas` feature for fpm (`--features release,noblas`, see [features] in
+	! fpm.toml), which also stops fpm from linking BLAS/LAPACK
 	!
 	! The uppercase .F90 extension is deliberate, for the same reason as
 	! compiler.F90: fpm doesn't pass -cpp for plain .f90 sources, so an #ifdef

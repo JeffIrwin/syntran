@@ -78,9 +78,8 @@ piped stdin.
 #### BLAS and LAPACK
 
 The `@` operator on `f32`/`f64` arrays calls BLAS `gemm`, and
-[`std::solve()`](intrinsics.md#solve) calls LAPACK `gesv`.  fpm links them with
-`-llapack -lblas`, which `fpm.toml` already lists in `link`, so a dependent
-project doesn't need to do anything as long as the libraries exist:
+[`std::solve()`](intrinsics.md#solve) calls LAPACK `gesv`.  They must be
+installed to link:
 
 - macOS: nothing to install, the Accelerate framework is used
 - Debian/Ubuntu: `sudo apt-get install libopenblas-dev`.  Install OpenBLAS, not
@@ -88,20 +87,29 @@ project doesn't need to do anything as long as the libraries exist:
 - Alpine: `apk add openblas-dev`, then `ln -s libopenblas.so /usr/lib/libblas.so`
 - Fedora/Rocky: `dnf install openblas-devel`
 
-To avoid the dependency, define `SYNTRAN_NO_BLAS`.  The calls are replaced with
-portable Fortran, which is slower for large matrices but otherwise gives the
-same results up to rounding:
+Building syntran itself with fpm links them by default.  To build without them,
+use the `noblas` feature, which uses portable Fortran instead.  It's slower for
+large matrices but otherwise gives the same results up to rounding:
 
 ```bash
+fpm build --features release,noblas
+```
+
+`--features` takes the place of `--profile`, so name `release` or `debug` in
+the list.  It needs fpm 0.13.0 or later.
+
+**Depending on syntran from another fpm project** links BLAS and LAPACK for you
+too, so there's nothing to do other than installing them.  fpm only applies
+features of the package being built, so `--features noblas` isn't available to
+your project.  Define the macro yourself instead:
+
+```bash
+# The macro is read by a Fortran file, so it goes in --flag, not --c-flag
 fpm build --flag "-DSYNTRAN_NO_BLAS"
 ```
 
-This macro is read by a Fortran file, so it goes in `--flag`, not `--c-flag`.
-fpm can't make `link` conditional though, so the libraries still have to be
-present to link.  If you don't have them, create empty static archives named
-`libblas.a` and `liblapack.a` in a directory and pass `-L<that dir>` in
-`--flag` too, as syntran's own Windows CI does.  The CMake build below doesn't
-have this limitation.
+That removes the calls, but fpm still links `-llapack -lblas` for the
+dependency, so they must still be present to link.
 
 ### With CMake
 
@@ -114,8 +122,7 @@ Pass `-DSYNTRAN_NO_ISOCLINE=ON` to build without isocline, as described above.
 
 CMake finds BLAS and LAPACK with `find_package(LAPACK)`, and it's an error if
 they're not found.  Pass `-DSYNTRAN_NO_BLAS=ON` to build without them, as
-described [above](#blas-and-lapack).  With CMake, that drops the dependency
-completely.
+described [above](#blas-and-lapack).
 
 ## Reference
 

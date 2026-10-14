@@ -56,21 +56,28 @@ that one uppercase `.F90` file instead of a `#ifdef` at each check site.
 #### BLAS/LAPACK
 
 `@` on f32/f64 and `std::solve()` call BLAS `gemm` / LAPACK `gesv` through
-`src/linalg.F90`, which is the only file with BLAS `#ifdef`s.  fpm links them
-via `link = ["lapack", "blas"]` in `fpm.toml`.  macOS resolves that to
-Accelerate with no install.  Linux needs an *optimized* implementation
-(`sudo apt-get install libopenblas-dev`), not the reference
+`src/linalg.F90`, which is the only file with BLAS `#ifdef`s.  macOS resolves
+`-llapack -lblas` to Accelerate with no install.  Linux needs an *optimized*
+implementation (`sudo apt-get install libopenblas-dev`), not the reference
 `libblas-dev`/`liblapack-dev`.
 
-`-DSYNTRAN_NO_BLAS` swaps in portable Fortran fallbacks (intrinsic `matmul`, a
-built-in LU).  It is `--flag "-DSYNTRAN_NO_BLAS"` for fpm and
-`-DSYNTRAN_NO_BLAS=ON` for CMake, and only CMake drops the link dependency.
-The test suite must pass both ways:
+fpm links them through the `blas` feature in `fpm.toml`, which the default
+profile always enables, so `fpm build`, `--profile debug`, etc. all link BLAS.
+Opt out with `--features release,noblas` (or `debug,noblas`).  That defines
+`SYNTRAN_NO_BLAS`, which swaps in portable Fortran fallbacks (intrinsic
+`matmul`, a built-in LU), and links nothing.  `--features` can't be combined
+with `--profile`, and it also drops the default profile.  CMake spells it
+`-DSYNTRAN_NO_BLAS=ON`.  Features need fpm >= 0.13.0.  The test suite must
+pass both ways:
 
 ```bash
 fpm test test --profile debug
-fpm test test --profile debug --flag "-DSYNTRAN_NO_BLAS"
+fpm test test --features debug,noblas
 ```
+
+A project that *depends* on syntran links BLAS too, but can't select its
+features, so it opts out with `--flag "-DSYNTRAN_NO_BLAS"`, which still links
+the libraries.  See `doc/api.md`.
 
 #### Getting a stable path to a built binary
 

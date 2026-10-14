@@ -42,9 +42,8 @@ endif()
 
 # Build without BLAS/LAPACK.  The matmul `@` operator and std::solve() use
 # portable Fortran fallbacks instead of sgemm/dgemm/sgesv/dgesv.  Only
-# src/linalg.F90 reads this macro.  fpm builds spell it `--flag
-# "-DSYNTRAN_NO_BLAS"`, but fpm can't make its `link` list conditional, so only
-# cmake fully drops the dependency
+# src/linalg.F90 reads this macro.  fpm builds spell it `--features
+# release,noblas` (see [features] in fpm.toml)
 option(SYNTRAN_NO_BLAS "Build without BLAS/LAPACK" OFF)
 if(SYNTRAN_NO_BLAS)
 	add_compile_definitions(SYNTRAN_NO_BLAS)
