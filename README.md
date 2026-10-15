@@ -141,7 +141,9 @@ auto-generated.  [Go here for details](doc/src-gen.md).
 The `@` operator on `f32`/`f64` arrays, `std::solve()`, and
 `std::lu_factor()`/`std::lu_solve()` call BLAS and LAPACK.  Binary releases
 already have them linked in statically, so this only matters if you build from
-source.  Install an optimized implementation (OpenBLAS), not the much slower
+source.  The Linux and Windows releases bundle OpenBLAS and LAPACK, and their
+license notices are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), which
+is shipped alongside the binary.  Install an optimized implementation (OpenBLAS), not the much slower
 reference `libblas`/`liblapack`:
 
 - macOS: nothing to install, the Accelerate framework is used

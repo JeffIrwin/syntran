@@ -398,7 +398,7 @@
 				"uses": "actions/upload-artifact@v7",
 				"if": "matrix.os == 'macOS-latest'",
 				"with": {
-					"path": "./syntran\n./libgomp.1.dylib",
+					"path": "./syntran\n./libgomp.1.dylib\n./LICENSE\n./THIRD_PARTY_NOTICES.md",
 					"name": "syntran-macos"
 				}
 			},
@@ -406,7 +406,7 @@
 				"uses": "actions/upload-artifact@v7",
 				"if": "matrix.os == 'windows-latest'",
 				"with": {
-					"path": "./syntran.exe",
+					"path": "./syntran.exe\n./LICENSE\n./THIRD_PARTY_NOTICES.md",
 					"name": "syntran-windows"
 				}
 			},
@@ -414,7 +414,7 @@
 				"uses": "actions/upload-artifact@v7",
 				"if": "matrix.os == 'ubuntu-24.04'",
 				"with": {
-					"path": "./syntran",
+					"path": "./syntran\n./LICENSE\n./THIRD_PARTY_NOTICES.md",
 					"name": "syntran-ubuntu"
 				}
 			},
@@ -477,7 +477,7 @@
 			{
 				"uses": "actions/upload-artifact@v7",
 				"with": {
-					"path": "./bin/syntran",
+					"path": "./bin/syntran\n./bin/LICENSE\n./bin/THIRD_PARTY_NOTICES.md",
 					"name": "syntran-linux"
 				}
 			},
