@@ -1804,6 +1804,49 @@ module subroutine vm_run(prog, state, res)
 
 			call vm_push_move(stack, val)
 
+		! --- intrinsic call with by-ref args ------------------------------------
+		! Stack layout on entry (bottom to top): [by-value args][by-ref args],
+		! both in ascending arg order, like OP_CALL.  The by-ref args were moved
+		! out of their variables by OP_LOAD_REF_*, so every one of them is moved
+		! back below, *before* any rt_halt exit.  A runtime error ends the REPL
+		! and the program, so nothing normally runs after that, but this keeps
+		! the invariant that no variable is left emptied
+		case (OP_CALL_INTR_REF)
+			node_idx_call = instr%b
+			associate(cn => prog%nodes(node_idx_call))
+			nintr = size(cn%args)
+			if (nintr > iargs_pool_cap) then
+				call value_array_destroy(iargs_pool)
+				allocate(iargs_pool(nintr))
+				iargs_pool_cap = nintr
+			end if
+
+			do i = nintr, 1, -1
+				if (cn%is_ref(i)) call vm_pop_copy(stack, iargs_pool(i))
+			end do
+			do i = nintr, 1, -1
+				if (.not. cn%is_ref(i)) call vm_pop_copy(stack, iargs_pool(i))
+			end do
+
+			call vm_call_intr_ref(instr%a, nintr, iargs_pool(1:nintr), state, val)
+
+			! A by-ref arg is always a plain variable name (checked at compile
+			! time), so it's a direct move back into the slot
+			do i = 1, nintr
+				if (.not. cn%is_ref(i)) cycle
+				if (cn%args(i)%is_loc) then
+					call value_move(iargs_pool(i), &
+						state%locs%vals(cn%args(i)%id_index))
+				else
+					call value_move(iargs_pool(i), &
+						state%vars%vals(cn%args(i)%id_index))
+				end if
+			end do
+			end associate
+
+			if (state%rt_halt) exit
+			call vm_push_move(stack, val)
+
 		! --- M8: for-loop setup ---------------------------------------------------
 		! Evaluates loop bounds / computes len8; pushes a for_iter_t onto the
 		! for-iterator stack.

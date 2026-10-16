@@ -23,6 +23,14 @@ These are the special polymorphic types used in documentation:
 - `any_num`: any numeric type, i.e. `i32`, `i64`, `f32`, or `f64`
 - `any_float`: any floating-point type, i.e. `f32` or `f64`
 
+A few intrinsic functions take arguments by reference, which are indicated with
+`&` like a user-defined function's by-reference parameters, e.g.
+[`lu_factor`](#lu_factor).  The caller must write `&` too, and the argument must
+be a variable name that is not `const`.  The exception is a `&const` parameter,
+e.g. `A` and `ipiv` of [`lu_solve`](#lu_solve), which is only read.  It accepts
+plain value syntax and `const` variables, and a variable name is borrowed
+instead of copied.
+
 All of these special properties are special cases for intrinsic functions.  For
 now at least, user-defined functions cannot be variadic, polymorphic, or
 elemental.
@@ -441,6 +449,94 @@ arrays.
 
 Related functions: [`log`](#log), [`log10`](#log10)
 
+## `lu_factor`
+```rust
+fn lu_factor(A: &[any_float; :, :]): [i32; :]
+fn lu_factor(A: &[any_float; :, :], info: &i32): [i32; :]
+```
+
+Compute the LU factorization with partial pivoting of the matrix `A`, in place.
+This is the first half of the "expert" interface for linear systems.  Factor
+once with `lu_factor`, then call [`lu_solve`](#lu_solve) for as many right-hand
+sides as you like.  If you only have one right-hand side, use
+[`solve`](#solve) instead.
+
+`A` is an `m x n` `f32` or `f64` matrix.  It need not be square.  On return, `A`
+has been _overwritten_ with its factors, so make a copy first if you still need
+the original.  Its strict lower triangle holds `L`, which has an implicit unit
+diagonal, and its upper triangle holds `U`, such that `A == P * L * U` for a
+row permutation `P`.
+
+The result is the pivots `ipiv`, an `i32` vector of length `min(m, n)`.  Pivots
+are zero-based: `ipiv[i] == r` means that row `i` was swapped with row `r`,
+applied in order for `i = 0, 1, ...`.  Pass `ipiv` unmodified to `lu_solve`.
+
+An exactly singular matrix is a runtime error
+([R41](errors.md#r41----solve-singular)), but the factors are still written
+back to `A`.  If you give the optional `info` argument, then there is no error
+and `info` is set instead.  Following LAPACK, `info` is `0` on success, or
+`k > 0` if `U[k-1, k-1]` is exactly zero.  This is a status code and not an
+index, so it is one-based unlike `ipiv`.  `info` is always assigned, and any
+previous value is overwritten.
+
+Both arguments are passed by reference, so they must be written with `&`.
+Must be called with the `std::` prefix, e.g. `std::lu_factor()`.
+
+```rust
+let A = [2.0, 1.0, 1.0, 3.0; 2, 2];  // [[2, 1], [1, 3]]
+let F = A;
+let info = 0;
+let ipiv = std::lu_factor(&F, &info);
+
+// Factor once, solve for many right-hand sides
+let x1 = [3.0, 5.0];
+std::lu_solve(F, ipiv, &x1);
+println(x1);      // [0.8, 1.4]
+
+let x2 = [1.0, 0.0];
+std::lu_solve(F, ipiv, &x2);
+println(A @ x2);  // [1.0, 0.0]
+```
+
+Official builds use LAPACK's `getrf`.  Builds made with `SYNTRAN_NO_BLAS` use a
+portable implementation instead, which may differ in the last digits.
+
+Related functions: [`lu_solve`](#lu_solve), [`solve`](#solve)
+
+## `lu_solve`
+```rust
+fn lu_solve(A: &const [any_float; :, :], ipiv: &const [i32; :], b: &[any_float; :])
+fn lu_solve(A: &const [any_float; :, :], ipiv: &const [i32; :], b: &[any_float; :, :])
+```
+
+Solve the linear system `A @ x == b` for `x`, using the factors from
+[`lu_factor`](#lu_factor).  This is the second half of the "expert" interface.
+`A` and `ipiv` are the factors and pivots that `lu_factor` produced, and must
+not have been changed.  `b` is either a vector of length `n` or an `n x k`
+matrix of `k` right-hand sides, one per column.
+
+`b` is _overwritten_ with the solution `x`.  `A` and `ipiv` are not modified, so
+they can be reused for another call.  Each call costs `O(n^2)` per right-hand
+side, compared to `O(n^3)` for the factorization.
+
+`A` and `b` must both be `f32` or both be `f64`.  Other element types, or a mix,
+are a compile-time error.  The factors must be square, because a non-square
+matrix has no unique solution.  `A` and `ipiv` are `&const` params, so they
+don't need `&` at the call site and they are not copied, but `b` does.
+
+The following are runtime errors:
+- `A` is not square, or `b` has a number of rows other than `n`
+  ([R40](errors.md#r40----solve-shape))
+- `U` has an exactly zero on its diagonal, i.e. the matrix was singular
+  ([R41](errors.md#r41----solve-singular))
+- `ipiv` has a length other than `n`, or an entry outside of `[0, n)`
+  ([R42](errors.md#r42----lu-bad-pivots))
+
+Must be called with the `std::` prefix, e.g. `std::lu_solve()`.  See
+[`lu_factor`](#lu_factor) for an example.
+
+Related functions: [`lu_factor`](#lu_factor), [`solve`](#solve)
+
 ## `max`
 ```rust
 fn max(a0: any_num, a1: any_num, a2: any_num, ...): any_num
@@ -772,6 +868,43 @@ Not to be confused with [`count`](#count), which counts the `true` elements of
 a `bool` array, or [`len`](#len), which gets the length of a string.
 
 Related functions: [`shape`](#shape), [`count`](#count), [`len`](#len)
+
+## `solve`
+```rust
+fn solve(A: [any_float; :, :], b: [any_float; :]): [any_float; :]
+fn solve(A: [any_float; :, :], b: [any_float; :, :]): [any_float; :, :]
+```
+
+Solve the linear system `A @ x == b` for `x`, using LU factorization with
+partial pivoting.  `A` is a square `n x n` matrix and `b` is either a vector
+of length `n` or an `n x k` matrix of `k` right-hand sides, one per column.
+The result has the shape of `b`.  `A` and `b` are not modified.
+
+`A` and `b` must both be `f32` or both be `f64`.  Other element types, or a
+mix, are a compile-time error.  The result has the same type.
+
+A matrix that is not square, or a `b` with a number of rows other than `n`, is
+a runtime error ([R40](errors.md#r40----solve-shape)), as is a matrix that is
+exactly singular ([R41](errors.md#r41----solve-singular)).  A matrix that is
+only nearly singular is not an error, but its solution is inaccurate.
+
+Prefer `solve` to computing an inverse, which is slower and less accurate.  To
+solve for many right-hand sides that aren't all known up front, factor once with
+[`lu_factor`](#lu_factor) and then call [`lu_solve`](#lu_solve) repeatedly.
+Must be called with the `std::` prefix, e.g. `std::solve()`.
+
+```rust
+let A = [2.0, 1.0, 1.0, 3.0; 2, 2];  // [[2, 1], [1, 3]]
+let b = [3.0, 5.0];
+let x = std::solve(A, b);
+println(x);      // [0.8, 1.4]
+println(A @ x);  // [3.0, 5.0]
+```
+
+Official builds use LAPACK's `gesv`.  Builds made with `SYNTRAN_NO_BLAS` use a
+portable implementation instead, which may differ in the last digits.
+
+Related functions: [`lu_factor`](#lu_factor), [`lu_solve`](#lu_solve), [`transpose`](#transpose), [`dot`](#dot)
 
 ## `sqrt`
 ```rust

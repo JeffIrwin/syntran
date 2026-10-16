@@ -121,11 +121,6 @@ module syntran__core_m
 	!  - built-in `move` fn to move_alloc an array (or struct)? it's useful to
 	!    avoid a copy in many cases, e.g. dynamic vector example
 	!    src/tests/test-src/struct/test-03.syntran
-	!  - matrix inverse? link gfortran to mkl?
-	!    * related and maybe more cheaply, blas/accelerate or equivalent to
-	!      replace existing matmul
-	!    * numpy beats us on matmul. linking to apple accelerate framework is
-	!      trivial. for cross-platform, may need openblas or mkl
 	!  - generics? longshot, lots of design decisions
 	!  - log a known issue that syntran is not threadsafe
 	!    * did some work on feature/parallel branch to try running long tests in
@@ -266,13 +261,6 @@ module syntran__core_m
 	!      newlines, just like the real interactive repl
 	!    * added a couple basic tests in main.yml
 	!    * should also cover options like `-i` (startup include file)
-	!  - optional `dim` and/or `mask` args for intrn fns, e.g. sum, minval, any,
-	!    etc.
-	!    * just use `reshape` and call the fortran built-in.  no need for any
-	!      slice logic on my end
-	!    * "all" that needs to be done is resolve overloads based on which args
-	!       are present, call fortran build-in with reshape to the appropriate
-	!       size, and then set the result data along with size/rank meta-data
 	!  - using `in` (a keyword) as a fn arg name crashes the parser
 	!    * when? check blame for this comment. can't repro in 1.0.1
 	!  - print improvements:
@@ -283,6 +271,7 @@ module syntran__core_m
 	!      + can be worked around with str() to build a line and then println
 	!    * maybe strhex() as a stopgap?
 	!    * bin/oct too
+	!    * c.f. "binary file" note below
 	!  - installer packaging:
 	!    * bin exists.  nest it in a `bin` folder
 	!    * add build os to `--version` output, to distinguish between rocky vs

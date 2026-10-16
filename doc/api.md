@@ -75,6 +75,43 @@ It removes line editing (history, arrow keys) from the REPL.  Everything else
 is unchanged, and the REPL still works with plain line input, like it does for
 piped stdin.
 
+#### BLAS and LAPACK
+
+The `@` operator on `f32`/`f64` arrays calls BLAS `gemm`,
+[`std::solve()`](intrinsics.md#solve) calls LAPACK `gesv`, and
+[`std::lu_factor()`](intrinsics.md#lu_factor)/[`std::lu_solve()`](intrinsics.md#lu_solve)
+call LAPACK `getrf`/`getrs`.  They must be installed to link:
+
+- macOS: nothing to install, the Accelerate framework is used
+- Debian/Ubuntu: `sudo apt-get install libopenblas-dev`.  Install OpenBLAS, not
+  the reference `libblas-dev`/`liblapack-dev`, which are many times slower
+- Alpine: `apk add openblas-dev`, then `ln -s libopenblas.so /usr/lib/libblas.so`
+- Fedora/Rocky: `dnf install --enablerepo=crb openblas-devel blas-devel lapack-devel`
+
+Building syntran itself with fpm links them by default.  To build without them,
+use the `noblas` feature, which uses portable Fortran instead.  It's slower for
+large matrices but otherwise gives the same results up to rounding:
+
+```bash
+fpm build --features release,noblas
+```
+
+`--features` takes the place of `--profile`, so name `release` or `debug` in
+the list.  It needs fpm 0.13.0 or later.
+
+**Depending on syntran from another fpm project** links BLAS and LAPACK for you
+too, so there's nothing to do other than installing them.  fpm only applies
+features of the package being built, so `--features noblas` isn't available to
+your project.  Define the macro yourself instead:
+
+```bash
+# The macro is read by a Fortran file, so it goes in --flag, not --c-flag
+fpm build --flag "-DSYNTRAN_NO_BLAS"
+```
+
+That removes the calls, but fpm still links `-llapack -lblas` for the
+dependency, so they must still be present to link.
+
 ### With CMake
 
 The CMake build produces a static library, which the `syntran`
@@ -83,6 +120,10 @@ executable, the tests, and your own targets can link against.  See
 programs are only wired up for fpm.
 
 Pass `-DSYNTRAN_NO_ISOCLINE=ON` to build without isocline, as described above.
+
+CMake finds BLAS and LAPACK with `find_package(LAPACK)`, and it's an error if
+they're not found.  Pass `-DSYNTRAN_NO_BLAS=ON` to build without them, as
+described [above](#blas-and-lapack).
 
 ## Reference
 

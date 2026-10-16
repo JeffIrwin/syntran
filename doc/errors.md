@@ -1161,6 +1161,28 @@ The `ncopies` argument of [`repeat()`](intrinsics.md#repeat) is negative.  Zero 
 
 [Example](../src/tests/test-src/errors/R39-repeat-negative.syntran)
 
+### R40 -- solve-shape
+
+The matrix `A` passed to [`std::solve()`](intrinsics.md#solve) or [`std::lu_solve()`](intrinsics.md#lu_solve) is not square, or the right-hand side `b` has a number of rows that is different from the order of `A`.  The element types and ranks are checked at compile time, but the extents aren't known until runtime.
+
+[`std::lu_factor()`](intrinsics.md#lu_factor) accepts a matrix of any shape, so it doesn't raise this error.
+
+[Example](../src/tests/test-src/errors/R40-solve-shape.syntran)
+
+### R41 -- solve-singular
+
+The matrix `A` passed to [`std::solve()`](intrinsics.md#solve), [`std::lu_factor()`](intrinsics.md#lu_factor), or [`std::lu_solve()`](intrinsics.md#lu_solve) is exactly singular, i.e. LU factorization hit a zero pivot, so the system has no unique solution.  A matrix that is merely close to singular doesn't raise this error.
+
+`std::lu_factor()` doesn't raise this error if it is given its optional `info` argument.  It sets `info` instead.
+
+[Example](../src/tests/test-src/errors/R41-solve-singular.syntran)
+
+### R42 -- lu-bad-pivots
+
+The pivots `ipiv` passed to [`std::lu_solve()`](intrinsics.md#lu_solve) are not valid for its `n x n` factors `A`.  Either `ipiv` doesn't have `n` elements, or an entry is outside of `[0, n)`.  Pass the pivots returned by [`std::lu_factor()`](intrinsics.md#lu_factor) as they are.
+
+[Example](../src/tests/test-src/errors/R42-lu-bad-pivots.syntran)
+
 ## Warnings
 
 ### W1 -- missing-return

@@ -499,6 +499,12 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 			param_is_ref = fn%node%is_ref(i)
 			if (allocated(fn%node%is_const_ref)) &
 				param_is_const_ref = fn%node%is_const_ref(i)
+		else if (allocated(fn%ref_params)) then
+			! Intrinsic with by-ref params, e.g. std::lu_factor(&A)
+			if (i <= size(fn%ref_params)) then
+				param_is_ref       = fn%ref_params(i)
+				param_is_const_ref = fn%const_ref_params(i)
+			end if
 		end if
 
 		span = new_span(pos_args%v(i), pos_args%v(i+1) - pos_args%v(i) - 1)

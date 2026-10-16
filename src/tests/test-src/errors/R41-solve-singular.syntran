@@ -1,0 +1,6 @@
+// R41: solve-singular
+// std::solve() was given a matrix that is exactly singular
+
+let A = [1.0, 2.0, 2.0, 4.0; 2, 2];
+let b = [1.0, 1.0];
+let x = std::solve(A, b);

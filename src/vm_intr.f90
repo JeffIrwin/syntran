@@ -13,6 +13,8 @@ submodule (syntran__vm_m) syntran__vm_intr
 	! here; they are handled inline in vm_exec with slot writeback.  The no-arg
 	! readln() (stdin) has no slot to write back to, so it IS routed here
 
+	use syntran__linalg_m
+
 	implicit none
 
 	! Which numeric reduction reduce_dim_numeric() should do
@@ -36,6 +38,7 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 	integer :: i, io
 	integer :: env_len, env_stat
 	integer :: red_inner, red_n, red_outer, red_op
+	integer :: solve_n, solve_nrhs, solve_info
 	integer(kind = 8) :: ir, ic
 
 	logical :: exists_, red_ok
@@ -731,6 +734,42 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 			res%sca%i64 = dot_product(args(1)%array%i64, args(2)%array%i64)
 		end select
 
+	case (INTR_SOLVE)
+		! std::solve(A, b) -- A is n x n, b is a length-n vector or n x nrhs
+		! matrix, both f32 or both f64 (checked at parse time).  Returns x
+		! without modifying A or b
+		if (args(1)%array%size(1) /= args(1)%array%size(2) .or. &
+			args(1)%array%size(1) /= args(2)%array%size(1)) then
+			call rt_throw(state, err_rt_solve_shape("solve", &
+				args(1)%array%size(1), args(1)%array%size(2), &
+				args(2)%array%size(1)))
+			return
+		end if
+
+		solve_n = int(args(1)%array%size(1))
+		solve_nrhs = 1
+		if (args(2)%array%rank == 2) solve_nrhs = int(args(2)%array%size(2))
+
+		! Result has the shape of b.  mold() copies the metadata but not the
+		! buffers, and the solution overwrites a copy of b in place
+		res%type  = array_type
+		res%array = mold(args(2)%array, args(2)%array%type)
+
+		if (args(1)%array%type == f32_type) then
+			res%array%f32 = args(2)%array%f32(1: args(2)%array%len_)
+			call gesv_f32(solve_n, solve_nrhs, args(1)%array%f32, &
+				res%array%f32, solve_info)
+		else
+			res%array%f64 = args(2)%array%f64(1: args(2)%array%len_)
+			call gesv_f64(solve_n, solve_nrhs, args(1)%array%f64, &
+				res%array%f64, solve_info)
+		end if
+
+		if (solve_info > 0) then
+			call rt_throw(state, err_rt_solve_singular("solve", solve_info))
+			return
+		end if
+
 	case (INTR_ALL)
 		res%type = bool_type; res%sca%bool = all(args(1)%array%bool)
 
@@ -978,6 +1017,134 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 	end select
 
 end subroutine vm_call_intr
+
+!===============================================================================
+
+module subroutine vm_call_intr_ref(intr_id, nargs, args, state, res)
+
+	! Dispatch for intrinsics with by-ref args, i.e. fn_t%ref_params.  Unlike
+	! vm_call_intr(), this may modify `args` in place.  The VM moves the by-ref
+	! ones back into their variables afterwards (OP_CALL_INTR_REF), even after
+	! a runtime error here
+
+	integer, intent(in) :: intr_id, nargs
+	type(value_t), intent(inout) :: args(:)
+	type(state_t), intent(inout) :: state
+	type(value_t), intent(out) :: res
+
+	!*******
+
+	integer :: i, n, m, nrhs, info
+	integer, allocatable :: ip1(:)
+
+	logical :: is_f32
+
+	res%type = unknown_type
+
+	select case (intr_id)
+
+	case (INTR_LU_FACTOR)
+		! std::lu_factor(&A[, &info]) -- A is m x n, overwritten with its L and
+		! U factors.  Returns the min(m,n) pivots, 0-based.  Any shape is fine,
+		! like LAPACK getrf.  A zero pivot is an error, unless the `info` arg is
+		! there to receive it
+		m = int(args(1)%array%size(1))
+		n = int(args(1)%array%size(2))
+		is_f32 = args(1)%array%type == f32_type
+
+		res%type = array_type
+		allocate(res%array)
+		res%array%type = i32_type
+		res%array%rank = 1
+		res%array%len_ = min(m, n)
+		allocate(res%array%size(1))
+		res%array%size(1) = res%array%len_
+		allocate(res%array%i32(res%array%len_))
+
+		if (is_f32) then
+			call getrf_f32(m, n, args(1)%array%f32, res%array%i32, info)
+		else
+			call getrf_f64(m, n, args(1)%array%f64, res%array%i32, info)
+		end if
+
+		! LAPACK pivots are 1-based, but syntran's are not
+		res%array%i32 = res%array%i32 - 1
+
+		if (nargs >= 2) then
+			args(2)%sca%i32 = info
+		else if (info > 0) then
+			call rt_throw(state, err_rt_solve_singular("lu_factor", info))
+			return
+		end if
+
+	case (INTR_LU_SOLVE)
+		! std::lu_solve(A, ipiv, &b) -- A and ipiv are the outputs of
+		! lu_factor() and must be n x n.  b is a length-n vector or n x nrhs
+		! matrix, and is overwritten with x
+		m = int(args(1)%array%size(1))
+		n = int(args(1)%array%size(2))
+
+		if (m /= n .or. m /= args(3)%array%size(1)) then
+			call rt_throw(state, err_rt_solve_shape("lu_solve", &
+				args(1)%array%size(1), args(1)%array%size(2), &
+				args(3)%array%size(1)))
+			return
+		end if
+
+		! ipiv comes from user code, so validate it before LAPACK reads rows
+		! with it
+		if (args(2)%array%len_ /= n) then
+			call rt_throw(state, err_rt_lu_bad_pivots(int(n, 8), &
+				args(2)%array%len_, -1_8, 0))
+			return
+		end if
+
+		allocate(ip1(n))
+		do i = 1, n
+			if (args(2)%array%i32(i) < 0 .or. args(2)%array%i32(i) >= n) then
+				call rt_throw(state, err_rt_lu_bad_pivots(int(n, 8), &
+					args(2)%array%len_, int(i - 1, 8), args(2)%array%i32(i)))
+				return
+			end if
+			ip1(i) = args(2)%array%i32(i) + 1
+		end do
+
+		nrhs = 1
+		if (args(3)%array%rank == 2) nrhs = int(args(3)%array%size(2))
+
+		! An exactly zero U diagonal means that the factors came from a
+		! singular matrix.  lu_factor() raises an error for that unless its
+		! caller asked for `info` instead, so check again here instead of
+		! dividing by zero
+		is_f32 = args(1)%array%type == f32_type
+		info = 0
+		do i = 1, n
+			if (is_f32) then
+				if (args(1)%array%f32((i - 1) * n + i) == 0) info = i
+			else
+				if (args(1)%array%f64((i - 1) * n + i) == 0) info = i
+			end if
+			if (info > 0) exit
+		end do
+		if (info > 0) then
+			call rt_throw(state, err_rt_solve_singular("lu_solve", info))
+			return
+		end if
+
+		if (is_f32) then
+			call getrs_f32(n, nrhs, args(1)%array%f32, ip1, args(3)%array%f32)
+		else
+			call getrs_f64(n, nrhs, args(1)%array%f64, ip1, args(3)%array%f64)
+		end if
+		res%type = void_type
+
+	case default
+		write(*,*) 'vm_call_intr_ref: intrinsic id ', intr_id, ' has no by-ref dispatch'
+		call internal_error()
+
+	end select
+
+end subroutine vm_call_intr_ref
 
 !===============================================================================
 

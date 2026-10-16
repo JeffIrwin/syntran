@@ -1,0 +1,7 @@
+// R40: solve-shape
+// std::solve() was given a matrix that isn't square, or a right-hand side
+// with the wrong number of rows
+
+let A = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0; 2, 3];
+let b = [1.0, 1.0];
+let x = std::solve(A, b);
