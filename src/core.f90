@@ -118,23 +118,9 @@ module syntran__core_m
 	!    * ANSI color codes, or some other way to color text
 	!    * E, I (after complex numbers)
 	!    * done: PI, std::IN/OUT/ERR
-	!  - "expert" interface for matrix solve:
-	!    * done: std::lu_factor(&A[, &info]) and std::lu_solve(A, ipiv, &b), by
-	!      LAPACK getrf/getrs.  They overwrite their inputs, and `info` is the
-	!      LAPACK-style status (0 is success).  Intrinsics can now take `&` args via
-	!      fn_t%ref_params and OP_CALL_INTR_REF
-	!    * the transpiler doesn't support them yet (E115)
 	!  - built-in `move` fn to move_alloc an array (or struct)? it's useful to
 	!    avoid a copy in many cases, e.g. dynamic vector example
 	!    src/tests/test-src/struct/test-03.syntran
-	!  - matrix inverse?
-	!    * done: `@` calls BLAS gemm and std::solve(A, b) calls LAPACK gesv,
-	!      both through src/linalg.F90.  Accelerate on macOS, openblas
-	!      elsewhere.  SYNTRAN_NO_BLAS uses portable fortran fallbacks instead
-	!    * not an explicit inverse, since std::solve() covers the use case, and
-	!      std::lu_factor()/std::lu_solve() cover factor-once, solve-many
-	!    * integer matmul still uses the fortran intrinsic.  There's no integer
-	!      gemm
 	!  - generics? longshot, lots of design decisions
 	!  - log a known issue that syntran is not threadsafe
 	!    * did some work on feature/parallel branch to try running long tests in
@@ -275,13 +261,6 @@ module syntran__core_m
 	!      newlines, just like the real interactive repl
 	!    * added a couple basic tests in main.yml
 	!    * should also cover options like `-i` (startup include file)
-	!  - optional `dim` and/or `mask` args for intrn fns, e.g. sum, minval, any,
-	!    etc.
-	!    * just use `reshape` and call the fortran built-in.  no need for any
-	!      slice logic on my end
-	!    * "all" that needs to be done is resolve overloads based on which args
-	!       are present, call fortran build-in with reshape to the appropriate
-	!       size, and then set the result data along with size/rank meta-data
 	!  - using `in` (a keyword) as a fn arg name crashes the parser
 	!    * when? check blame for this comment. can't repro in 1.0.1
 	!  - print improvements:
@@ -292,6 +271,7 @@ module syntran__core_m
 	!      + can be worked around with str() to build a line and then println
 	!    * maybe strhex() as a stopgap?
 	!    * bin/oct too
+	!    * c.f. "binary file" note below
 	!  - installer packaging:
 	!    * bin exists.  nest it in a `bin` folder
 	!    * add build os to `--version` output, to distinguish between rocky vs
