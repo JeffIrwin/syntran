@@ -1,0 +1,6 @@
+// E123: mod-import-name
+// Only `std` can be imported one name at a time
+
+let x = 1;
+
+use mymod::helper;

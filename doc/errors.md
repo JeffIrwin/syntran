@@ -790,6 +790,14 @@ May include a "did you mean" suggestion.
 
 [Example](../src/tests/test-src/errors/E122-std-unknown-name.syntran)
 
+### E123 -- mod-import-name
+
+`use module::name;` imports a single name from a user module, which isn't
+supported.  Only `std` can be imported that way.  Use `use module::*;` to import
+every name, or `use module;` and call `module::name`.
+
+[Example](../src/tests/test-src/errors/E123-mod-import-name.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type

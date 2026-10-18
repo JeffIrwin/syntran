@@ -337,6 +337,15 @@ recursive module subroutine parse_use_statement(parser, statement)
 
 	call parser%match(semicolon_token, semi)
 
+	! `use mod::name;` is only supported for `std`, which has no file to load.
+	! For a user module it used to silently import everything, like the glob
+	if (import_name /= "" .and. import_name /= "*" .and. module_name /= "std") then
+		span = new_span(name_identifier%pos, len(name_identifier%text))
+		call parser%diagnostics%push( &
+			err_mod_import_name(parser%context(), span, module_name, import_name))
+		return
+	end if
+
 	! Compute qualified_prefix once for qualified imports
 	! Use alias if provided, otherwise convert module_name (with "/" -> "::")
 	if (qualified_import) then

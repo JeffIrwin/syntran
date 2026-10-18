@@ -9044,6 +9044,14 @@ subroutine unit_test_error_codes(npass, nfail)
 				diag_has_code(get_diags('use std::nope;'), EC_STD_UNKNOWN_NAME), &
 				.not. diag_has_code(get_diags('use std::reshape;'), EC_STD_UNKNOWN_NAME), &
 
+				! E123: only `std` can be imported one name at a time
+				diag_count_code(get_diags_file(P//'E123-mod-import-name.syntran'), &
+					EC_MOD_IMPORT_NAME) == 1, &
+				diag_has_code(get_diags('use mymath::add;', MODSRC), EC_MOD_IMPORT_NAME), &
+				.not. diag_has_code(get_diags('use mymath::*;', MODSRC), EC_MOD_IMPORT_NAME), &
+				.not. diag_has_code(get_diags('use mymath;', MODSRC), EC_MOD_IMPORT_NAME), &
+				.not. diag_has_code(get_diags('use std::reshape;', MODSRC), EC_MOD_IMPORT_NAME), &
+
 				! printf() and writef() check their format strings like format()
 				diag_has_code(get_diags('std::printf("{}");'), EC_FORMAT_COUNT), &
 				diag_has_code(get_diags('std::printf("{} {}", 1);'), EC_FORMAT_COUNT), &
@@ -10434,7 +10442,9 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E121-reshape-shape-lit.syntran'), &
 				EC_RESHAPE_SHAPE_LIT, P//'E121-reshape-shape-lit.syntran', 7, 26, 5), &
 			diag_loc_ok(get_diags_file(P//'E122-std-unknown-name.syntran'), &
-				EC_STD_UNKNOWN_NAME, P//'E122-std-unknown-name.syntran', 6, 10, 6) &
+				EC_STD_UNKNOWN_NAME, P//'E122-std-unknown-name.syntran', 6, 10, 6), &
+			diag_loc_ok(get_diags_file(P//'E123-mod-import-name.syntran'), &
+				EC_MOD_IMPORT_NAME, P//'E123-mod-import-name.syntran', 6, 12, 6) &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

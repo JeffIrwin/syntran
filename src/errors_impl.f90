@@ -324,6 +324,7 @@ module procedure get_all_error_codes
 	call codes%push(EC_FORMAT_COUNT)
 	call codes%push(EC_RESHAPE_SHAPE_LIT)
 	call codes%push(EC_STD_UNKNOWN_NAME)
+	call codes%push(EC_MOD_IMPORT_NAME)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -1290,6 +1291,21 @@ module procedure err_std_unknown_name
 	end if
 
 end procedure err_std_unknown_name
+
+!===============================================================================
+
+module procedure err_mod_import_name
+
+	err = err_pre(EC_MOD_IMPORT_NAME) &
+		//'importing a single name from a module is not supported' &
+		//underline(context, span)//" cannot import `"//name//"` alone"//color_reset &
+		//line_feed//fg_bright_green//"help"//color_reset &
+		//": use `"//fg_bright_green//"use "//module//"::*;"//color_reset &
+		//"` to import every name, or `" &
+		//fg_bright_green//"use "//module//";"//color_reset &
+		//"` and call `"//module//"::"//name//"`"
+
+end procedure err_mod_import_name
 
 !===============================================================================
 

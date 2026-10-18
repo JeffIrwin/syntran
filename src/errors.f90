@@ -138,6 +138,7 @@ module syntran__errors_m
 		EC_FORMAT_COUNT = "E120", &
 		EC_RESHAPE_SHAPE_LIT = "E121", &
 		EC_STD_UNKNOWN_NAME = "E122", &
+		EC_MOD_IMPORT_NAME = "E123", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -831,6 +832,13 @@ module syntran__errors_m
 			character(len = *), intent(in) :: name
 			character(len = *), intent(in), optional :: suggest
 		end function err_std_unknown_name
+
+		module function err_mod_import_name(context, span, module, name) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+			character(len = *), intent(in) :: module, name
+		end function err_mod_import_name
 
 		module function err_not_callable(context, span, var, type) result(err)
 			type(text_context_t) :: context
