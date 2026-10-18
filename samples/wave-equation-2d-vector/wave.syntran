@@ -38,21 +38,13 @@ fn write_vtk(filename: str, u: [f64; :,:])
 
 	writeln(file, "VECTORS Amplitude float");
 
-	// VTK uses x-major ordering
-	//
-	// TODO: allow vectorized writes in syntran without wrapping [brackets],
-	// without comma delimeters, and without temporary str concatenation.  Just
-	// write an array with a single fortran write statement
-	for iy in [0: size(u,1)]
-		for ix in [0: size(u,0)]
-			writeln(file, 0.0, 0.0, u[ix,iy]);
-
-	//// Use something like this once vectorized writes are ready
-	////
-	//// Pad scalar-per-point with zeros to make a vector-per-point
-	//let uvec = [0.0; 3, size(u,0), size(u,1)];
-	//uvec[2,:,:] = u;
-	//writeln(file, uvec);
+	// VTK uses x-major ordering, which is the storage order of uvec below, with
+	// the vector component varying fastest.  Pad the scalar-per-point with zeros
+	// to make a vector-per-point.  format() writes the elements of an array
+	// separated by spaces and without brackets, one line per row of 3 components
+	let uvec = [0.0; 3, size(u,0), size(u,1)];
+	uvec[2,:,:] = u;
+	writeln(file, format("{}", uvec));
 
 	close(file);
 	return;

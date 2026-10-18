@@ -4,6 +4,7 @@
 submodule (syntran__parse_m) syntran__parse_fn
 
 	use syntran__intr_fns_m
+	use syntran_rt, only: rt_str_t, rt_fmt_split, rt_fmt_parse
 
 	implicit none
 
@@ -517,7 +518,7 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 
 		! A bare enum name is a special form, only allowed as a value to a
 		! small allowlist of intrinsics that consume the array and return a
-		! non-array (size/str/println/writeln) -- everywhere else, including
+		! non-array (size/str/print/println/write/writeln) -- everywhere else, including
 		! user fns and any other intrinsic (e.g. std::reshape, which would
 		! just hand the variant array back out), reject it as E99
 		if (args%v(i)%is_enum_name) then
@@ -525,7 +526,9 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 				identifier_%text == "size"    .or. &
 				identifier_%text == "str"     .or. &
 				identifier_%text == "println" .or. &
-				identifier_%text == "writeln"))) then
+				identifier_%text == "print"   .or. &
+				identifier_%text == "writeln" .or. &
+				identifier_%text == "write"))) then
 
 				call parser%check_enum_name_value(args%v(i))
 			end if
@@ -535,6 +538,11 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 
 	call check_ref_aliases(parser, args%v(1: args%len_), fn_call%is_ref, &
 		alias_mut, alias_spans, identifier_%text)
+
+	if (fn%is_intr .and. identifier_%text == "format") then
+		span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
+		call check_format_call(parser, args%v(1: args%len_), alias_spans, span)
+	end if
 
 	fn_call%id_index = id_index
 
@@ -2633,6 +2641,174 @@ logical function has_ref_root(arg, arg_is_ref)
 end function has_ref_root
 
 end subroutine check_ref_aliases
+
+!===============================================================================
+
+module subroutine check_format_call(parser, args, spans, call_span)
+
+	! The format string of format() is checked against the rest of its arguments
+	! when the call is parsed, so a literal is required.  Its placeholders are
+	! `{}` or `{:spec}`, with one argument each.  The spec has to make sense for
+	! the type of its argument, e.g. `x` is for integers.  The interpreter and
+	! the Fortran backend then never see a bad format
+
+	class(parser_t), intent(inout) :: parser
+	type(syntax_node_t), intent(in) :: args(:)
+	type(text_span_t), intent(in) :: spans(:), call_span
+
+	!********
+
+	character(len = 1) :: fill, align, ty
+	character(len = :), allocatable :: fmt, spec, why, tname
+
+	integer :: i, ierr, width, prec, nspecs, nargs, cat
+
+	logical :: plus, alt, zero
+
+	type(rt_str_t), allocatable :: pieces(:), specs(:)
+
+	if (size(args) < 1) return
+
+	! A format that isn't a string has already been reported as a type error
+	if (args(1)%val%type /= str_type) return
+
+	if (args(1)%kind /= literal_expr) then
+		call parser%diagnostics%push(err_format_not_literal(parser%context(), spans(1)))
+		return
+	end if
+
+	fmt = args(1)%val%str%s
+	call rt_fmt_split(fmt, pieces, specs, ierr)
+	if (ierr /= 0) then
+		if (fmt(ierr: ierr) == '}') then
+			why = 'unmatched `}` at position '//str(ierr)//' of the format string'
+		else
+			why = 'the `{` at position '//str(ierr)//' of the format string is ' &
+				//'not closed, or is not `{}` or `{:spec}`'
+		end if
+		call parser%diagnostics%push(err_bad_format(parser%context(), spans(1), why))
+		return
+	end if
+
+	nspecs = size(specs)
+	nargs  = size(args) - 1
+	if (nspecs /= nargs) then
+		call parser%diagnostics%push(err_format_count(parser%context(), call_span, &
+			nspecs, nargs))
+		return
+	end if
+
+	do i = 1, nspecs
+
+		spec = '{:'//specs(i)%s//'}'
+		if (len(specs(i)%s) == 0) spec = '{}'
+
+		call rt_fmt_parse(specs(i)%s, fill, align, plus, alt, zero, width, prec, ty, ierr)
+		if (ierr /= 0) then
+			if (ierr <= len(specs(i)%s)) then
+				why = 'unexpected `'//specs(i)%s(ierr: ierr)//'` at position '//str(ierr) &
+					//' of the spec `'//spec//'`'
+			else
+				why = 'the spec `'//spec//'` ends where a digit is expected'
+			end if
+			call parser%diagnostics%push(err_bad_format(parser%context(), &
+				spans(1), why))
+			cycle
+		end if
+
+		associate (val => args(i+1)%val)
+
+			tname = type_name(val)
+			cat = format_category(val)
+
+			why = ''
+			select case (cat)
+			case (0)
+				why = 'only numbers, bools, strings, structs, enums, and arrays of ' &
+					//'numbers, bools, and strings can be formatted'
+
+			case (1)
+				! Integers
+				if (ty == 'e' .or. ty == 'E') then
+					why = '`e` is for floats.  Integers can use `x`, `X`, `o`, or `b`'
+				else if (prec >= 0) then
+					why = 'an integer has no precision'
+				else if (alt .and. ty == ' ') then
+					why = '`#` adds a prefix to `x`, `X`, `o`, or `b`'
+				end if
+
+			case (2)
+				! Floats
+				if (ty /= ' ' .and. ty /= 'e' .and. ty /= 'E') then
+					why = '`x`, `X`, `o`, and `b` are for integers.  Floats can use `e` or `E`'
+				else if (alt) then
+					why = '`#` adds a prefix to integers in `x`, `X`, `o`, or `b`'
+				end if
+
+			case default
+				! Bools, strings, enums, and structs are padded, and only strings
+				! can be truncated by a precision
+				if (ty /= ' ') then
+					why = '`'//ty//'` is for numbers'
+				else if (plus .or. alt .or. zero) then
+					why = '`+`, `#`, and `0` are for numbers'
+				else if (prec >= 0 .and. cat /= 3) then
+					why = 'only a string has a precision, to truncate it'
+				end if
+			end select
+
+			if (len(why) > 0) then
+				call parser%diagnostics%push(err_format_type(parser%context(), &
+					spans(i+1), spec, tname, why))
+			end if
+
+		end associate
+	end do
+
+contains
+
+	function format_category(val) result(cat_)
+
+		! 0  can not be formatted
+		! 1  integer
+		! 2  float
+		! 3  string
+		! 4  bool, enum, or struct
+
+		type(value_t), intent(in) :: val
+		integer :: cat_
+
+		integer :: t
+
+		t = val%type
+		if (t == array_type) then
+			if (.not. allocated(val%array)) then
+				cat_ = 0
+				return
+			end if
+			t = val%array%type
+			if (t == struct_type .or. t == enum_type) then
+				cat_ = 0
+				return
+			end if
+		end if
+
+		select case (t)
+		case (i32_type, i64_type)
+			cat_ = 1
+		case (f32_type, f64_type)
+			cat_ = 2
+		case (str_type)
+			cat_ = 3
+		case (bool_type, enum_type, struct_type)
+			cat_ = 4
+		case default
+			cat_ = 0
+		end select
+
+	end function format_category
+
+end subroutine check_format_call
 
 !===============================================================================
 

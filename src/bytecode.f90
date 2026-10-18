@@ -487,6 +487,17 @@ module syntran__bytecode_m
 	! instead of OP_CALL_INTR
 	integer, parameter :: INTR_LU_FACTOR = 149, INTR_LU_SOLVE = 150
 
+	! print() and write(file, ...) are println() and writeln() without the newline
+	integer, parameter :: INTR_PRINT = 151, INTR_WRITE = 152
+
+	! format(fmt, values...) with a literal format string
+	integer, parameter :: INTR_FORMAT = 153
+
+	! std::read_i32(), read_i64(), read_f32(), read_f64(), each for one value or
+	! an array of n
+	integer, parameter :: INTR_READ_I32 = 154, INTR_READ_I64 = 155, &
+		INTR_READ_F32 = 156, INTR_READ_F64 = 157
+
 	!********
 
 	! A single bytecode instruction.  Kept as a plain POD record (no allocatable
@@ -911,6 +922,16 @@ pure integer function intr_id_from_name(name) result(id)
 	case ("0max_f64");       id = INTR_MAX_F64
 	! String / conversion
 	case ("println");        id = INTR_PRINTLN
+	case ("print");          id = INTR_PRINT
+	case ("format");         id = INTR_FORMAT
+	case ("read_i32", "0read_i32_sca", "0read_i32_arr")
+		id = INTR_READ_I32
+	case ("read_i64", "0read_i64_sca", "0read_i64_arr")
+		id = INTR_READ_I64
+	case ("read_f32", "0read_f32_sca", "0read_f32_arr")
+		id = INTR_READ_F32
+	case ("read_f64", "0read_f64_sca", "0read_f64_arr")
+		id = INTR_READ_F64
 	case ("str");            id = INTR_STR
 	case ("len");            id = INTR_LEN
 	case ("repeat");         id = INTR_REPEAT
@@ -927,6 +948,7 @@ pure integer function intr_id_from_name(name) result(id)
 	case ("open");           id = INTR_OPEN
 	case ("readln");         id = INTR_READLN
 	case ("writeln");        id = INTR_WRITELN
+	case ("write");          id = INTR_WRITE
 	case ("eof");            id = INTR_EOF
 	case ("close");          id = INTR_CLOSE
 	! Misc + reduction

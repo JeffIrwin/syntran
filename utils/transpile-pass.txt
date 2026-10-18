@@ -201,6 +201,9 @@ src/tests/test-src/io/test-09.syntran
 src/tests/test-src/io/test-10.syntran
 src/tests/test-src/io/test-11.syntran
 src/tests/test-src/io/test-12.syntran
+src/tests/test-src/io/test-13.syntran
+src/tests/test-src/io/test-14.syntran
+src/tests/test-src/io/test-15.syntran
 src/tests/test-src/linear-algebra/test-01.syntran
 src/tests/test-src/linear-algebra/test-02.syntran
 src/tests/test-src/linear-algebra/test-03.syntran
@@ -318,6 +321,7 @@ src/tests/test-src/transpile/test-10.syntran
 src/tests/test-src/transpile/test-11.syntran
 src/tests/test-src/transpile/test-12.syntran
 src/tests/test-src/transpile/test-13.syntran
+src/tests/test-src/transpile/test-14.syntran
 src/tests/test-src/var-scopes/test-01.syntran
 src/tests/test-src/var-scopes/test-02.syntran
 src/tests/test-src/var-scopes/test-03.syntran

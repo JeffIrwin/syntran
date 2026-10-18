@@ -249,6 +249,12 @@ module syntran__parse_m
 			character(len = *), intent(in) :: fn_name
 		end subroutine check_ref_aliases
 
+		module subroutine check_format_call(parser, args, spans, call_span)
+			class(parser_t), intent(inout) :: parser
+			type(syntax_node_t), intent(in) :: args(:)
+			type(text_span_t), intent(in) :: spans(:), call_span
+		end subroutine check_format_call
+
 		! Shared by parse_dot (explicit `recv.method()`) and parse_fn_call's
 		! self-method fallback (bare `method()` inside another method of the
 		! same struct): validates explicit args against method_fn's signature

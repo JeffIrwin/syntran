@@ -14,6 +14,8 @@ submodule (syntran__vm_m) syntran__vm_intr
 	! readln() (stdin) has no slot to write back to, so it IS routed here
 
 	use syntran__linalg_m
+	use syntran_rt, only: rt_str_t, rt_fmt_split, rt_fmt_join, rt_fmt_bool, &
+		rt_fmt_i32, rt_fmt_i64, rt_fmt_f32, rt_fmt_f64, rt_fmt_str
 
 	implicit none
 
@@ -41,11 +43,13 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 	integer :: solve_n, solve_nrhs, solve_info
 	integer(kind = 8) :: ir, ic
 
-	logical :: exists_, red_ok
+	logical :: exists_, red_ok, ok_
 
 	character(len = :), allocatable :: env_val
 
 	type(char_vector_t) :: str_
+
+	type(rt_str_t), allocatable :: fmt_pieces(:), fmt_specs(:)
 
 	double precision, parameter :: LOG_E_2  = log(2.d0)
 	real,             parameter :: LOG_E_2F = log(2.0)
@@ -446,6 +450,29 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 		end do
 		write(output_unit, *)
 
+	case (INTR_PRINT)
+		! Same as println(), without the newline.  Flush so that a prompt shows
+		! up before a following readln() blocks
+		res%type = void_type
+		do i = 1, nargs
+			write(output_unit, '(a)', advance = 'no') args(i)%to_str()
+		end do
+		flush(output_unit)
+
+	case (INTR_FORMAT)
+		! The format string was checked against the args by check_format_call()
+		! when the call was parsed, so splitting it can't fail
+		res%type = str_type
+		call rt_fmt_split(args(1)%str%s, fmt_pieces, fmt_specs, io)
+		str_ = new_char_vector()
+		do i = 1, size(fmt_specs)
+			call str_%push(fmt_pieces(i)%s)
+			call str_%push(format_value(args(i+1), fmt_specs(i)%s))
+		end do
+		call str_%push(fmt_pieces(size(fmt_pieces))%s)
+		if (.not. allocated(res%str)) allocate(res%str)
+		res%str%s = str_%trim()
+
 	case (INTR_STR)
 		res%type = str_type
 		str_ = new_char_vector()
@@ -555,6 +582,11 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 				args(1)%file_%name_//""" which was not opened in write mode ""w"""))
 			return
 		end if
+		if (args(1)%file_%binary) then
+			call rt_throw(state, err_rt(RC_BINARY_TEXT_OP, "writeln() was called for file """// &
+				args(1)%file_%name_//""" which was opened in binary mode ""b"".  Use write() instead"))
+			return
+		end if
 		do i = 2, nargs
 			write(args(1)%file_%unit_, '(a)', advance = 'no', iostat = io) args(i)%to_str()
 			if (io /= 0) then
@@ -569,6 +601,46 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 				args(1)%file_%name_//""" (iostat = "//str(io)//")"))
 			return
 		end if
+
+	case (INTR_WRITE)
+		! args(1) = file handle, args(2:) = values to write.  Same as writeln(),
+		! without the newline
+		res%type = void_type
+		if (.not. args(1)%file_%is_open) then
+			call rt_throw(state, err_rt(RC_WRITELN_NOT_OPEN, "write() was called for file """// &
+				args(1)%file_%name_//""" which is not open"))
+			return
+		end if
+		if (.not. args(1)%file_%mode_write) then
+			call rt_throw(state, err_rt(RC_WRITELN_NOT_WRITE_MODE, "write() was called for file """// &
+				args(1)%file_%name_//""" which was not opened in write mode ""w"""))
+			return
+		end if
+		if (args(1)%file_%binary) then
+			do i = 2, nargs
+				call write_binary(args(1)%file_%unit_, args(i), io, ok_)
+				if (.not. ok_) then
+					call rt_throw(state, err_rt(RC_BINARY_WRITE_TYPE, "write() can not write " &
+						//"a value of type `"//type_name(args(i))//"` to file """// &
+						args(1)%file_%name_//""" which was opened in binary mode ""b"""))
+					return
+				end if
+				if (io /= 0) then
+					call rt_throw(state, err_rt(RC_WRITELN_FAIL, "cannot write() to file """// &
+						args(1)%file_%name_//""" (iostat = "//str(io)//")"))
+					return
+				end if
+			end do
+			return
+		end if
+		do i = 2, nargs
+			write(args(1)%file_%unit_, '(a)', advance = 'no', iostat = io) args(i)%to_str()
+			if (io /= 0) then
+				call rt_throw(state, err_rt(RC_WRITELN_FAIL, "cannot write() to file """// &
+					args(1)%file_%name_//""" (iostat = "//str(io)//")"))
+				return
+			end if
+		end do
 
 	case (INTR_READLN)
 		! No-arg readln(): read a line from stdin.  (readln(file_handle) needs
@@ -609,6 +681,11 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 				args(1)%file_%name_//""" which was not opened in read mode ""r"""))
 			return
 		end if
+		if (args(1)%file_%binary) then
+			call rt_throw(state, err_rt(RC_BINARY_TEXT_OP, "eof() was called for file """// &
+				args(1)%file_%name_//""" which was opened in binary mode ""b"""))
+			return
+		end if
 		if (args(1)%file_%is_std) then
 			! stdin's eof lives on state%stdin_eof, kept in sync with the
 			! no-arg eof()/readln() forms, not on the (never-set) file handle
@@ -616,6 +693,9 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 		else
 			res%sca%bool = args(1)%file_%eof
 		end if
+
+	case (INTR_READ_I32, INTR_READ_I64, INTR_READ_F32, INTR_READ_F64)
+		call read_values(intr_id, nargs, args, state, res)
 
 	!==== Misc ==================================================================
 
@@ -1524,6 +1604,277 @@ subroutine reduce_mask_scalar(state, op, a, m, res, ok)
 	end select
 
 end subroutine reduce_mask_scalar
+
+!===============================================================================
+
+function format_value(val, spec) result(s)
+
+	! One value of format(), with the spec of its placeholder.  An array is its
+	! elements separated by spaces, with a line break after each row.  An enum or
+	! a struct is formatted as the string that str() makes of it
+
+	type(value_t), intent(in) :: val
+	character(len = *), intent(in) :: spec
+	character(len = :), allocatable :: s
+
+	!********
+
+	integer :: i
+	type(rt_str_t), allocatable :: items(:)
+
+	if (val%type == array_type) then
+
+		allocate(items(val%array%len_))
+		do i = 1, size(items)
+			select case (val%array%type)
+			case (i32_type)
+				items(i)%s = rt_fmt_i32(val%array%i32(i), spec)
+			case (i64_type)
+				items(i)%s = rt_fmt_i64(val%array%i64(i), spec)
+			case (f32_type)
+				items(i)%s = rt_fmt_f32(val%array%f32(i), spec)
+			case (f64_type)
+				items(i)%s = rt_fmt_f64(val%array%f64(i), spec)
+			case (bool_type)
+				items(i)%s = rt_fmt_bool(logical(val%array%bool(i)), spec)
+			case default
+				items(i)%s = rt_fmt_str(val%array%str(i)%s, spec)
+			end select
+		end do
+		s = rt_fmt_join(items, int(val%array%size(1)))
+		return
+
+	end if
+
+	select case (val%type)
+	case (i32_type)
+		s = rt_fmt_i32(val%sca%i32, spec)
+	case (i64_type)
+		s = rt_fmt_i64(val%sca%i64, spec)
+	case (f32_type)
+		s = rt_fmt_f32(val%sca%f32, spec)
+	case (f64_type)
+		s = rt_fmt_f64(val%sca%f64, spec)
+	case (bool_type)
+		s = rt_fmt_bool(logical(val%sca%bool), spec)
+	case (str_type)
+		s = rt_fmt_str(val%str%s, spec)
+	case default
+		s = rt_fmt_str(val%to_str(), spec)
+	end select
+
+end function format_value
+
+!===============================================================================
+
+subroutine write_binary(unit_, val, io, ok)
+
+	! Write the raw bytes of a value to a binary file.  A bool is 1 byte, a string
+	! is its characters, and an array is its elements in storage order.  `ok` is
+	! false for a value of any other type, which has no raw form
+
+	integer, intent(in) :: unit_
+	type(value_t), intent(in) :: val
+	integer, intent(out) :: io
+	logical, intent(out) :: ok
+
+	!********
+
+	integer(kind = 8) :: n
+
+	ok = .true.
+	io = 0
+
+	if (val%type == array_type) then
+		n = val%array%len_
+		select case (val%array%type)
+		case (i32_type)
+			write(unit_, iostat = io) val%array%i32(1: n)
+		case (i64_type)
+			write(unit_, iostat = io) val%array%i64(1: n)
+		case (f32_type)
+			write(unit_, iostat = io) val%array%f32(1: n)
+		case (f64_type)
+			write(unit_, iostat = io) val%array%f64(1: n)
+		case (bool_type)
+			write(unit_, iostat = io) merge(1_1, 0_1, val%array%bool(1: n))
+		case default
+			ok = .false.
+		end select
+		return
+	end if
+
+	select case (val%type)
+	case (i32_type)
+		write(unit_, iostat = io) val%sca%i32
+	case (i64_type)
+		write(unit_, iostat = io) val%sca%i64
+	case (f32_type)
+		write(unit_, iostat = io) val%sca%f32
+	case (f64_type)
+		write(unit_, iostat = io) val%sca%f64
+	case (bool_type)
+		write(unit_, iostat = io) merge(1_1, 0_1, val%sca%bool)
+	case (str_type)
+		write(unit_, iostat = io) val%str%s
+	case default
+		ok = .false.
+	end select
+
+end subroutine write_binary
+
+!===============================================================================
+
+subroutine read_values(intr_id, nargs, args, state, res)
+
+	! std::read_i32(), read_i64(), read_f32(), and read_f64().  With only a file
+	! handle, one value is read, and with a count `n` an array of n values is.
+	! A text file is read as list-directed input, so the values are separated by
+	! blanks, commas, or line breaks, and the rest of the line that the last
+	! value is on is skipped.  A binary file is read as raw bytes
+
+	integer, intent(in) :: intr_id, nargs
+	type(value_t), intent(in) :: args(:)
+	type(state_t), intent(inout) :: state
+	type(value_t), intent(out) :: res
+
+	!********
+
+	character(len = :), allocatable :: fn_name, what
+	integer :: io, elem
+	integer(kind = 8) :: n
+
+	res%type = unknown_type
+
+	select case (intr_id)
+	case (INTR_READ_I32)
+		fn_name = "read_i32"
+		elem = i32_type
+	case (INTR_READ_I64)
+		fn_name = "read_i64"
+		elem = i64_type
+	case (INTR_READ_F32)
+		fn_name = "read_f32"
+		elem = f32_type
+	case default
+		fn_name = "read_f64"
+		elem = f64_type
+	end select
+
+	if (.not. args(1)%file_%is_open) then
+		call rt_throw(state, err_rt(RC_READLN_NOT_OPEN, fn_name//"() was called for file """// &
+			args(1)%file_%name_//""" which is not open"))
+		return
+	end if
+	if (.not. args(1)%file_%mode_read) then
+		call rt_throw(state, err_rt(RC_READLN_NOT_READ_MODE, fn_name// &
+			"() was called for file """//args(1)%file_%name_// &
+			""" which was not opened in read mode ""r"""))
+		return
+	end if
+
+	n = 1
+	if (nargs >= 2) then
+		n = args(2)%sca%i32
+		if (n < 0) then
+			call rt_throw(state, err_rt(RC_READ_FAIL, "cannot "//fn_name// &
+				"() a negative number of values (n = "//str(int(n))//")"))
+			return
+		end if
+	end if
+
+	if (nargs < 2) then
+		! One value
+		res%type = elem
+		associate (unit_ => args(1)%file_%unit_)
+			if (args(1)%file_%binary) then
+				select case (elem)
+				case (i32_type)
+					read(unit_, iostat = io) res%sca%i32
+				case (i64_type)
+					read(unit_, iostat = io) res%sca%i64
+				case (f32_type)
+					read(unit_, iostat = io) res%sca%f32
+				case default
+					read(unit_, iostat = io) res%sca%f64
+				end select
+			else
+				select case (elem)
+				case (i32_type)
+					read(unit_, *, iostat = io) res%sca%i32
+				case (i64_type)
+					read(unit_, *, iostat = io) res%sca%i64
+				case (f32_type)
+					read(unit_, *, iostat = io) res%sca%f32
+				case default
+					read(unit_, *, iostat = io) res%sca%f64
+				end select
+			end if
+		end associate
+
+	else
+		! An array of n values
+		res%type = array_type
+		allocate(res%array)
+		res%array%type = elem
+		res%array%rank = 1
+		res%array%len_ = n
+		allocate(res%array%size(1))
+		res%array%size(1) = n
+
+		select case (elem)
+		case (i32_type)
+			allocate(res%array%i32(n))
+		case (i64_type)
+			allocate(res%array%i64(n))
+		case (f32_type)
+			allocate(res%array%f32(n))
+		case default
+			allocate(res%array%f64(n))
+		end select
+
+		io = 0
+		if (n > 0) then
+			associate (unit_ => args(1)%file_%unit_)
+				if (args(1)%file_%binary) then
+					select case (elem)
+					case (i32_type)
+						read(unit_, iostat = io) res%array%i32
+					case (i64_type)
+						read(unit_, iostat = io) res%array%i64
+					case (f32_type)
+						read(unit_, iostat = io) res%array%f32
+					case default
+						read(unit_, iostat = io) res%array%f64
+					end select
+				else
+					select case (elem)
+					case (i32_type)
+						read(unit_, *, iostat = io) res%array%i32
+					case (i64_type)
+						read(unit_, *, iostat = io) res%array%i64
+					case (f32_type)
+						read(unit_, *, iostat = io) res%array%f32
+					case default
+						read(unit_, *, iostat = io) res%array%f64
+					end select
+				end if
+			end associate
+		end if
+	end if
+
+	if (io /= 0) then
+		if (io == iostat_end) then
+			what = "past the end of the file"
+		else
+			what = "(iostat = "//str(io)//")"
+		end if
+		call rt_throw(state, err_rt(RC_READ_FAIL, "cannot "//fn_name//"() from file """// &
+			args(1)%file_%name_//""" "//what))
+		res%type = unknown_type
+	end if
+
+end subroutine read_values
 
 !===============================================================================
 

@@ -1,0 +1,10 @@
+// R44: read-fail
+// std::read_i32() or one of its siblings failed to read from an open file,
+// because it reached the end of the file or the data wasn't a number
+
+let f = open("build/rt_file_r44.bin", "wb");
+write(f, 1, 2);
+close(f);
+
+let g = open("build/rt_file_r44.bin", "rb");
+let values = std::read_i32(g, 3);

@@ -132,6 +132,10 @@ module syntran__errors_m
 		EC_MISSING_LET_NAME = "E114", &
 		EC_TRANSPILE_UNSUPPORTED = "E115", &
 		EC_REF_ALIAS = "E116", &
+		EC_FORMAT_NOT_LITERAL = "E117", &
+		EC_BAD_FORMAT = "E118", &
+		EC_FORMAT_TYPE = "E119", &
+		EC_FORMAT_COUNT = "E120", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -217,6 +221,9 @@ module syntran__errors_m
 		RC_SOLVE_SHAPE = "R40", &
 		RC_SOLVE_SINGULAR = "R41", &
 		RC_LU_BAD_PIVOTS = "R42", &
+		RC_BINARY_TEXT_OP = "R43", &
+		RC_READ_FAIL = "R44", &
+		RC_BINARY_WRITE_TYPE = "R45", &
 		WC_MISSING_RETURN = "W1"
 
 	! A text span indicates which characters to underline in a faulty line of
@@ -781,6 +788,33 @@ module syntran__errors_m
 			character(len = :), allocatable :: err
 			character(len = *), intent(in) :: var, fn
 		end function err_ref_alias
+
+		module function err_format_not_literal(context, span) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+		end function err_format_not_literal
+
+		module function err_bad_format(context, span, what) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+			character(len = *), intent(in) :: what
+		end function err_bad_format
+
+		module function err_format_type(context, span, spec, type_, why) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+			character(len = *), intent(in) :: spec, type_, why
+		end function err_format_type
+
+		module function err_format_count(context, span, nspecs, nargs) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+			integer, intent(in) :: nspecs, nargs
+		end function err_format_count
 
 		module function err_not_callable(context, span, var, type) result(err)
 			type(text_context_t) :: context

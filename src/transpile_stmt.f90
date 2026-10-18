@@ -87,9 +87,9 @@ end subroutine emit_result_invalid
 
 !===============================================================================
 
-recursive function print_args(em, node, first) result(s)
+recursive function print_args(em, node, first, last) result(s)
 
-	! The string that println() or writeln() writes: its arguments from the
+	! The string that println(), print(), writeln(), or write() writes: its arguments from the
 	! `first`, as one Fortran expression of their strings, joined with `//`.
 	! Literals that are next to each other are one literal
 	!
@@ -99,19 +99,22 @@ recursive function print_args(em, node, first) result(s)
 	type(emitter_t), intent(inout) :: em
 	type(syntax_node_t), intent(in) :: node
 	integer, intent(in) :: first
+	integer, intent(in), optional :: last
 	character(len = :), allocatable :: s
 
 	!********
 
 	character(len = :), allocatable :: cur, v, pend
 
-	integer :: i
+	integer :: i, last_
 
 	s = ''
 	pend = ''
 
 	if (allocated(node%args)) then
-		do i = first, size(node%args)
+		last_ = size(node%args)
+		if (present(last)) last_ = last
+		do i = first, last_
 			cur = str_of(em, node%args(i)%val, emit_expr(em, node%args(i)))
 			if (literal_value(cur, v)) then
 				pend = pend//v
@@ -168,6 +171,110 @@ end subroutine emit_writeln
 
 !===============================================================================
 
+recursive subroutine emit_write(em, node)
+
+	! write(f, a, b, ...) is writeln() without ending the line.  Strings, and the
+	! values which are written as text, like enums and structs, are joined into
+	! one call.  A number, a bool, or an array of them has a call of its own, since
+	! a binary file gets its raw bytes instead of its text
+
+	type(emitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+
+	character(len = :), allocatable :: f, tmp
+
+	integer :: i, j, n
+
+	n = size(node%args)
+
+	f = emit_expr(em, node%args(1))
+	if (.not. is_file_var(node%args(1))) then
+		! Evaluate it once
+		tmp = new_tmp(em, 'type(rt_file_t)', 'fh')
+		call em_line(em, tmp//' = '//f)
+		f = tmp
+	end if
+
+	if (n == 1) then
+		call em_line(em, 'call rt_write('//f//", '')")
+		return
+	end if
+
+	i = 2
+	do while (i <= n)
+		if (is_raw_writable(node%args(i)%val)) then
+			if (is_arr(node%args(i)%val)) then
+				if (node%args(i)%val%array%rank > 4) call em_unsupported(em, &
+					'writing an array of rank > 4', node%identifier%pos)
+			end if
+			call em_line(em, 'call '//raw_writer(node%args(i)%val)//'('//f//', '// &
+				unparen(emit_expr(em, node%args(i)))//')')
+			i = i + 1
+		else
+			j = i
+			do while (j < n)
+				if (is_raw_writable(node%args(j+1)%val)) exit
+				j = j + 1
+			end do
+			call em_line(em, 'call rt_write('//f//', '//print_args(em, node, i, j)//')')
+			i = j + 1
+		end if
+	end do
+
+end subroutine emit_write
+
+!===============================================================================
+
+function is_raw_writable(val) result(r)
+
+	! Does write() give a value to a binary file as its raw bytes, so that it has
+	! a writer of its own?  That is a number or a bool, or an array of them
+
+	type(value_t), intent(in) :: val
+	logical :: r
+
+	select case (elem_type(val))
+	case (bool_type, i32_type, i64_type, f32_type, f64_type)
+		r = .true.
+	case default
+		r = .false.
+	end select
+
+end function is_raw_writable
+
+!===============================================================================
+
+function raw_writer(val) result(r)
+
+	! The name of the runtime fn which writes a value for which
+	! is_raw_writable() is true
+
+	type(value_t), intent(in) :: val
+	character(len = :), allocatable :: r
+
+	select case (elem_type(val))
+	case (bool_type)
+		r = 'bool'
+	case (i32_type)
+		r = 'i32'
+	case (i64_type)
+		r = 'i64'
+	case (f32_type)
+		r = 'f32'
+	case default
+		r = 'f64'
+	end select
+
+	if (is_arr(val)) then
+		r = 'rt_write_a_'//r//'_'//str(val%array%rank)
+	else
+		r = 'rt_write_'//r
+	end if
+
+end function raw_writer
+
+!===============================================================================
+
 recursive subroutine emit_call_stmt(em, node)
 
 	! A call whose value, if any, is discarded
@@ -181,6 +288,14 @@ recursive subroutine emit_call_stmt(em, node)
 		select case (node%identifier%text)
 		case ('println')
 			call emit_print(em, node)
+			return
+
+		case ('print')
+			call em_line(em, 'call rt_print_raw('//print_args(em, node, 1)//')')
+			return
+
+		case ('write')
+			call emit_write(em, node)
 			return
 
 		case ('exit')

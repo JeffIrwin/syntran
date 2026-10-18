@@ -731,6 +731,45 @@ a copy.  To fix the error, copy the variable first: `let t = h; f(&h, t);`
 
 [Example](../src/tests/test-src/errors/E116-ref-alias.syntran)
 
+### E117 -- format-not-literal
+
+The format string of [`format()`](intrinsics.md#format) is not a string literal,
+e.g. it is a variable or the result of an expression.  The format string is
+checked against the values after it when the program is parsed, so it has to be
+written out in the call.  To build a format string, build the result with
+[`str()`](intrinsics.md#str) or a few calls of `format()` instead.
+
+[Example](../src/tests/test-src/errors/E117-format-not-literal.syntran)
+
+### E118 -- bad-format
+
+The format string of [`format()`](intrinsics.md#format) is not valid.  Either a
+`{` is not closed or isn't followed by `}` or `:`, e.g. `{0}` and `{name}`, which
+are not supported; or a `}` has no `{` before it, in which case a literal brace is
+written as `}}`; or the spec after the `:` of a placeholder is not
+`[[fill]align][+][#][0][width][.precision][type]` with a type of `x`, `X`, `o`,
+`b`, `e`, or `E`.  A width has at most 6 digits and a precision has at most 3.
+
+[Example](../src/tests/test-src/errors/E118-bad-format.syntran)
+
+### E119 -- format-type
+
+The spec of a placeholder of [`format()`](intrinsics.md#format) doesn't fit the type
+of its value.  Integers can have the types `x`, `X`, `o`, and `b`, but no
+precision.  Real numbers can have `e` and `E`.  Strings, bools, enums, and structs
+have no type, sign, `#`, or `0`, and only a string has a precision.  A file, a
+function pointer, and an array of structs or enums can't be formatted at all.
+
+[Example](../src/tests/test-src/errors/E119-format-type.syntran)
+
+### E120 -- format-count
+
+The format string of [`format()`](intrinsics.md#format) has a different number of
+placeholders (`{}` and `{:spec}`) than there are values after it.  There must be
+exactly one value for each placeholder.
+
+[Example](../src/tests/test-src/errors/E120-format-count.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type
@@ -1182,6 +1221,34 @@ The matrix `A` passed to [`std::solve()`](intrinsics.md#solve), [`std::lu_factor
 The pivots `ipiv` passed to [`std::lu_solve()`](intrinsics.md#lu_solve) are not valid for its `n x n` factors `A`.  Either `ipiv` doesn't have `n` elements, or an entry is outside of `[0, n)`.  Pass the pivots returned by [`std::lu_factor()`](intrinsics.md#lu_factor) as they are.
 
 [Example](../src/tests/test-src/errors/R42-lu-bad-pivots.syntran)
+
+### R43 -- text-op-on-binary-file
+
+[`readln()`](intrinsics.md#readln), [`writeln()`](intrinsics.md#writeln), or
+[`eof()`](intrinsics.md#eof) was called for a file which was opened in binary mode
+(a `b` in the mode of [`open()`](intrinsics.md#open)).  A binary file has raw bytes
+and no lines.  Write one with [`write()`](intrinsics.md#write) and read one with
+[`std::read_i32()`](intrinsics.md#read_i32) and its siblings.
+
+[Example](../src/tests/test-src/errors/R43-text-op-on-binary-file.syntran)
+
+### R44 -- read-fail
+
+[`std::read_i32()`](intrinsics.md#read_i32) or one of its siblings failed to read
+from an open file.  Either the end of the file was reached before all of the values
+were read, or the text of a text file was not a number, or `n` is negative.  The
+message has the `iostat` of the failed read when it isn't the end of the file.
+
+[Example](../src/tests/test-src/errors/R44-read-fail.syntran)
+
+### R45 -- binary-write-type
+
+[`write()`](intrinsics.md#write) was given a value that has no raw bytes, for a file
+that was opened in binary mode.  Numbers, bools, strings, and arrays of numbers and
+bools can be written to a binary file, but not structs, enums, files, functions, or
+arrays of strings.
+
+[Example](../src/tests/test-src/errors/R45-binary-write-type.syntran)
 
 ## Warnings
 

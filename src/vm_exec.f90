@@ -1665,6 +1665,12 @@ module subroutine vm_run(prog, state, res)
 						//iargs_pool(1)%file_%name_//'" which was not opened in read mode "r"'))
 					exit
 				end if
+				if (iargs_pool(1)%file_%binary) then
+					call rt_throw(state, err_rt(RC_BINARY_TEXT_OP, 'readln() was called for file "' &
+						//iargs_pool(1)%file_%name_//'" which was opened in binary mode "b".  ' &
+						//'Use std::read_i32() etc. instead'))
+					exit
+				end if
 				if (iargs_pool(1)%file_%eof) then
 					! Reading again after the eof flag was already set is
 					! non-portable across compiler runtimes (some return a

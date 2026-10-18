@@ -1,0 +1,34 @@
+// Write an array as text with format(), without brackets or commas, and read
+// it back with std::read_f64().  Then do the same for integers across lines,
+// and reshape what was read
+
+fn main(): bool
+{
+	let filename = "build/test-15.txt";
+
+	let u = [1.5, 2.5, 3.5, 4.5, 5.5, 6.5; 3, 2];
+
+	let fo = open(filename, "w");
+	writeln(fo, format("{:.3}", u));
+	writeln(fo, format("{}", [7, 8, 9, 10]));
+	close(fo);
+
+	// The first line has the 3 elements of a row, and the second has the other 3
+	let fi = open(filename, "r");
+	let first = readln(fi);
+	let second = readln(fi);
+	let third = readln(fi);
+	close(fi);
+
+	let fr = open(filename, "r");
+	let v = std::read_f64(fr, 6);
+	let w = std::read_i32(fr, 4);
+	close(fr);
+
+	let u2 = std::reshape(v, [3, 2]);
+
+	return first == "1.500 2.500 3.500" and second == "4.500 5.500 6.500" and
+		third == "7 8 9 10" and all(u2 == u) and all(w == [7, 8, 9, 10]);
+}
+
+return main();

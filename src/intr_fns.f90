@@ -1037,6 +1037,20 @@ recursive subroutine resolve_overload(args, fn_call, has_rank, has_arr_type, arr
 			end if
 		end if
 
+	case ("read_i32", "read_i64", "read_f32", "read_f64")
+
+		! std::read_<type>(file_handle[, n]) -- reads one value, or an array of n.
+		! Only fires for the std:: version, like std::solve above
+		if (allocated(fn_call%module_prefix)) then
+			if (fn_call%module_prefix == "std") then
+				if (args%len_ >= 2) then
+					fn_call%identifier%text = "0"//fn_call%identifier%text//"_arr"
+				else
+					fn_call%identifier%text = "0"//fn_call%identifier%text//"_sca"
+				end if
+			end if
+		end if
+
 	case ("lu_factor", "lu_solve")
 
 		! std::lu_factor(&A[, &info]) and std::lu_solve(A, ipiv, &b) -- like

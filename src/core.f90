@@ -264,14 +264,23 @@ module syntran__core_m
 	!  - using `in` (a keyword) as a fn arg name crashes the parser
 	!    * when? check blame for this comment. can't repro in 1.0.1
 	!  - print improvements:
-	!    * hex format printing
-	!    * formatted printf?
-	!      + fully general formatting sounds hard
-	!    * print (without newline)
-	!      + can be worked around with str() to build a line and then println
-	!    * maybe strhex() as a stopgap?
-	!    * bin/oct too
-	!    * c.f. "binary file" note below
+	!    * still might need file_stat? what happens after write errors e.g. with
+	!      a full disk
+	!    * print(), write(), and format() with Rust-style `{:spec}` placeholders
+	!      (hex/bin/oct, width, fill, precision, sci notation) are done
+	!    * format() only takes a literal format string for now, so it is checked
+	!      at parse time.  Non-literal formats, positional `{0}` and named
+	!      `{name}` placeholders, and padding with a fill char that is not ascii
+	!      could be added later
+	!    * format() of a struct or enum only pads its str(), and can't format
+	!      the members.  Arrays of structs and enums can't be formatted
+	!  - file reading/writing
+	!    * binary files ("rb", "wb"), write(), std::read_i32() etc. are done.
+	!      There is no seek(), so a binary file can't be read to its end without
+	!      knowing the number of values, and no way to read bytes or a str
+	!    * vectorized writes are done by writeln(f, format("{}", a)).  Vectorized
+	!      reads are std::read_f64(f, n) etc., which only make a rank 1 array
+	!    * readln(), eof() done
 	!  - installer packaging:
 	!    * bin exists.  nest it in a `bin` folder
 	!    * add build os to `--version` output, to distinguish between rocky vs
@@ -393,15 +402,6 @@ module syntran__core_m
 	!      because that's how fortran works :(
 	!    * ==, !=:  done
 	!  - fuzz testing
-	!  - file reading/writing
-	!    * binary file i/o
-	!    * vectorized writes (and reads) for arrays without syntran loops. c.f.
-	!      vectorized wave sample (all math is vectorized but writes are not).
-	!      need to strip bracket [] wrapping and comma delimiters
-	!    * readln(), eof() done
-	!    * also add a file_stat() fn which checks IO of previous file operation.
-	!      this way I don't need to add structs, multiple return vals, or out
-	!      args yet
 	!  - compound assignment: logical &=, |=, etc.
 	!    * maybe make &&= to avoid confusion with bitwise compound assignment &=
 	!    * +=, -=, *=, /=, %=, **= done

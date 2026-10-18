@@ -1,0 +1,14 @@
+// R45: binary-write-type
+// write() was called with a value that has no raw bytes, for a file that was
+// opened in binary mode "b".  Only numbers, bools, strings, and arrays of
+// numbers and bools can be written to a binary file
+
+struct Point
+{
+	x: i32,
+	y: i32,
+}
+
+let f = open("build/rt_file_r45.bin", "wb");
+let p = Point{x = 1, y = 2};
+write(f, p);

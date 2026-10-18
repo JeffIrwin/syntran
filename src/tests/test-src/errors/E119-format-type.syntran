@@ -1,0 +1,6 @@
+// E119: format-type
+// The spec of a placeholder of format() doesn't fit the type of its value.
+// `x` is for integers, and here the value is a float
+
+let temperature = 98.6;
+println(format("temperature: {:x}", temperature));
