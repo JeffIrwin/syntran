@@ -6,4 +6,4 @@
 let width = 5;
 let fmt = "{:" + str(width) + "}";
 let n = 42;
-println(format(fmt, n));
+println(std::format(fmt, n));

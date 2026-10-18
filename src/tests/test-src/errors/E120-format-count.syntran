@@ -4,4 +4,4 @@
 
 let a = 1;
 let b = 2;
-println(format("{} + {} = {}", a, b));
+println(std::format("{} + {} = {}", a, b));

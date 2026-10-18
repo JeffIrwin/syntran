@@ -7,10 +7,10 @@ fn main(): bool
 	let filename = "build/test-13.txt";
 
 	let fo = open(filename, "w");
-	write(fo, "a=", 1);
-	write(fo, " b=", 2.5f, " ");
-	write(fo, [1, 2, 3]);
-	write(fo, true);
+	std::write(fo, "a=", 1);
+	std::write(fo, " b=", 2.5f, " ");
+	std::write(fo, [1, 2, 3]);
+	std::write(fo, true);
 	writeln(fo, "!");
 	writeln(fo, "second line");
 	close(fo);
@@ -22,8 +22,8 @@ fn main(): bool
 
 	// print() can't be checked by reading stdout, but it shouldn't print a
 	// newline, so this line has to be finished by println()
-	print("print() ");
-	print("test ", 13, " ");
+	std::print("print() ");
+	std::print("test ", 13, " ");
 	println("done");
 
 	return line1 == "a=1 b=    2.500000E+00 [1, 2, 3]true!" and

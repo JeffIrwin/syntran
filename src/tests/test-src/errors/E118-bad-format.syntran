@@ -5,4 +5,4 @@
 // spec is not one of `x`, `X`, `o`, `b`, `e` or `E`
 
 let count = 3;
-println(format("count: {:5q} items", count));
+println(std::format("count: {:5q} items", count));

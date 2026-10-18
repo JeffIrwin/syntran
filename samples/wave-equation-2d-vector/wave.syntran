@@ -44,7 +44,7 @@ fn write_vtk(filename: str, u: [f64; :,:])
 	// separated by spaces and without brackets, one line per row of 3 components
 	let uvec = [0.0; 3, size(u,0), size(u,1)];
 	uvec[2,:,:] = u;
-	writeln(file, format("{}", uvec));
+	writeln(file, std::format("{}", uvec));
 
 	close(file);
 	return;

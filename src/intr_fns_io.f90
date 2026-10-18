@@ -39,7 +39,7 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 
 	!********
 
-	! format(fmt, values...) is a string built from a literal format string, with
+	! std::format(fmt, values...) is a string built from a literal format string, with
 	! a `{}` or `{:spec}` for each value.  Its placeholders are checked against
 	! the values by check_format_call() in parse_fn.f90
 	format_fn%type%type = str_type
@@ -53,11 +53,11 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 	format_fn%variadic_type = any_type
 	format_fn%variadic_name = "value"
 
-	call fns%insert("format", format_fn, id_index)
+	call fns%insert("std::format", format_fn, id_index)
 
 	!********
 
-	! print() is println() without the trailing newline
+	! std::print() is println() without the trailing newline
 	print_fn%type%type = void_type
 
 	allocate(print_fn%params(0))
@@ -67,7 +67,7 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 	print_fn%variadic_type = any_type
 	print_fn%variadic_name = "value"
 
-	call fns%insert("print", print_fn, id_index)
+	call fns%insert("std::print", print_fn, id_index)
 
 	!********
 
@@ -298,7 +298,7 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 
 	!********
 
-	! write() is writeln() without the trailing newline
+	! std::write() is writeln() without the trailing newline
 	write_fn%type%type = void_type
 	allocate(write_fn%params(1))
 	allocate(write_fn%param_names%v(1))
@@ -309,13 +309,14 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 	write_fn%variadic_type = any_type
 	write_fn%variadic_name = "value"
 
-	call fns%insert("write", write_fn, id_index)
+	call fns%insert("std::write", write_fn, id_index)
 
 	!********
 
-	! printf(fmt, values...) is print(format(fmt, values...)), and writef(f, fmt,
-	! values...) is write(f, format(fmt, values...)).  The parser rewrites them
-	! into those calls, after checking the format string like format() does
+	! std::printf(fmt, values...) is std::print(std::format(fmt, values...)), and
+	! std::writef(f, fmt, values...) is std::write(f, std::format(fmt, values...)).
+	! The parser rewrites them into those calls, after checking the format string
+	! like format() does
 	printf_fn%type%type = void_type
 	allocate(printf_fn%params(1))
 	allocate(printf_fn%param_names%v(1))
@@ -326,7 +327,7 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 	printf_fn%variadic_type = any_type
 	printf_fn%variadic_name = "value"
 
-	call fns%insert("printf", printf_fn, id_index)
+	call fns%insert("std::printf", printf_fn, id_index)
 
 	writef_fn%type%type = void_type
 	allocate(writef_fn%params(2))
@@ -340,7 +341,7 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 	writef_fn%variadic_type = any_type
 	writef_fn%variadic_name = "value"
 
-	call fns%insert("writef", writef_fn, id_index)
+	call fns%insert("std::writef", writef_fn, id_index)
 
 	!********
 

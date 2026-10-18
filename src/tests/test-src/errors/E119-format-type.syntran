@@ -3,4 +3,4 @@
 // `x` is for integers, and here the value is a float
 
 let temperature = 98.6;
-println(format("temperature: {:x}", temperature));
+println(std::format("temperature: {:x}", temperature));

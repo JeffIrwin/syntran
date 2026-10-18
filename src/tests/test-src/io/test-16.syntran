@@ -7,14 +7,14 @@ fn main(): bool
 	let filename = "build/test-16.txt";
 
 	let fo = open(filename, "w");
-	writef(fo, "{:3}|{:<4}|", 7, "ab");
-	writef(fo, "{:.2}", 2.5);
+	std::writef(fo, "{:3}|{:<4}|", 7, "ab");
+	std::writef(fo, "{:.2}", 2.5);
 	writeln(fo, "!");
-	writef(fo, "no placeholders {{}}");
+	std::writef(fo, "no placeholders {{}}");
 	writeln(fo);
-	writef(fo, "{:x} {}", [10, 11, 255], true);
+	std::writef(fo, "{:x} {}", [10, 11, 255], true);
 	writeln(fo);
-	writef(fo, "{:2}", [1, 2, 3, 4, 5, 6; 3, 2]);
+	std::writef(fo, "{:2}", [1, 2, 3, 4, 5, 6; 3, 2]);
 	writeln(fo);
 	close(fo);
 
@@ -28,8 +28,8 @@ fn main(): bool
 
 	// printf() can't be checked by reading stdout, but it shouldn't print a
 	// newline, so this line has to be finished by println()
-	printf("printf() ");
-	printf("test {} {:03}", 16, 7);
+	std::printf("printf() ");
+	std::printf("test {} {:03}", 16, 7);
 	println(" done");
 
 	return line1 == "  7|ab  |2.50!" and

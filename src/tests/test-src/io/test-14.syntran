@@ -6,16 +6,16 @@ fn main(): bool
 	let filename = "build/test-14.bin";
 
 	let fo = open(filename, "wb");
-	write(fo, 42);
-	write(fo, -7'i64);
-	write(fo, 1.5f);
-	write(fo, 2.25);
-	write(fo, [10, 20, 30]);
-	write(fo, [0.5, 0.25, 0.125, 0.0625]);
-	write(fo, [1'i64, 2'i64]);
-	write(fo, [1.5f, 2.5f]);
-	write(fo, 1, 2);
-	write(fo, true);
+	std::write(fo, 42);
+	std::write(fo, -7'i64);
+	std::write(fo, 1.5f);
+	std::write(fo, 2.25);
+	std::write(fo, [10, 20, 30]);
+	std::write(fo, [0.5, 0.25, 0.125, 0.0625]);
+	std::write(fo, [1'i64, 2'i64]);
+	std::write(fo, [1.5f, 2.5f]);
+	std::write(fo, 1, 2);
+	std::write(fo, true);
 	close(fo);
 
 	let fi = open(filename, "rb");
@@ -40,7 +40,7 @@ fn main(): bool
 	// Writing a shorter file replaces the longer one, instead of overwriting its
 	// start.  The file has to have a single value left to read to its end
 	let ft = open(filename, "wb");
-	write(ft, 5);
+	std::write(ft, 5);
 	close(ft);
 	let fr = open(filename, "rb");
 	let k = std::read_i32(fr);

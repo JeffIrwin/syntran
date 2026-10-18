@@ -1215,7 +1215,7 @@ module procedure err_format_not_literal
 		//line_feed//fg_bright_green//"help"//color_reset &
 		//": the format string is checked against the arguments when the program " &
 		//"is parsed, so it must be written out as a string literal like " &
-		//'`format("{:5}", x)`'
+		//'`std::format("{:5}", x)`'
 
 end procedure err_format_not_literal
 

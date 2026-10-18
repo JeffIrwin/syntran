@@ -518,7 +518,7 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 
 		! A bare enum name is a special form, only allowed as a value to a
 		! small allowlist of intrinsics that consume the array and return a
-		! non-array (size/str/print/println/write/writeln) -- everywhere else, including
+		! non-array (size/str/std::print/println/std::write/writeln) -- everywhere else, including
 		! user fns and any other intrinsic (e.g. std::reshape, which would
 		! just hand the variant array back out), reject it as E99
 		if (args%v(i)%is_enum_name) then
@@ -2682,7 +2682,7 @@ subroutine desugar_printf(parser, fn_call, new_name, ifmt)
 	fmt_call%identifier = fn_call%identifier
 	fmt_call%identifier%text = "format"
 	fmt_call%val%type   = str_type
-	fmt_call%id_index   = parser%fns%id_at(parser%fns%find("format"))
+	fmt_call%id_index   = parser%fns%id_at(parser%fns%find("std::format"))
 
 	allocate(fmt_call%args(nargs - ifmt + 1))
 	allocate(fmt_call%is_ref(nargs - ifmt + 1))
@@ -2702,7 +2702,7 @@ subroutine desugar_printf(parser, fn_call, new_name, ifmt)
 	call move_alloc(args, fn_call%args)
 
 	fn_call%identifier%text = new_name
-	fn_call%id_index = parser%fns%id_at(parser%fns%find(new_name))
+	fn_call%id_index = parser%fns%id_at(parser%fns%find("std::"//new_name))
 
 	if (ifmt > 1) then
 		fn_call%is_ref = [fn_call%is_ref(1: ifmt - 1), .false.]

@@ -4,7 +4,7 @@
 // std::read_i32() and friends
 
 let f = open("build/rt_file_r43.bin", "wb");
-write(f, 1, 2, 3);
+std::write(f, 1, 2, 3);
 close(f);
 
 let g = open("build/rt_file_r43.bin", "rb");

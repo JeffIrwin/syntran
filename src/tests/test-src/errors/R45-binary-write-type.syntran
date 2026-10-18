@@ -11,4 +11,4 @@ struct Point
 
 let f = open("build/rt_file_r45.bin", "wb");
 let p = Point{x = 1, y = 2};
-write(f, p);
+std::write(f, p);

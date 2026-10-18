@@ -352,7 +352,7 @@ placeholder in it for each value.  Anything else in `fmt` is copied as it is, an
 `{{` and `}}` are literal braces.
 
 ```rust
-println(format("{} has {:3} items, {:.2} avg", "bag", 12, 4.5));
+println(std::format("{} has {:3} items, {:.2} avg", "bag", 12, 4.5));
 // bag has  12 items, 4.50 avg
 ```
 
@@ -386,17 +386,17 @@ The types are for integers (`i32` and `i64`) and reals (`f32` and `f64`) only:
 
 | Type | Example | Result |
 |------|---------|--------|
-| (none) | `format("{:5}", 42)` | `   42` |
-| (none) | `format("{:.3}", 3.14159)` | `3.142` |
-| `x` | `format("{:#06x}", 255)` | `0x00ff` |
-| `X` | `format("{:X}", 255)` | `FF` |
-| `o` | `format("{:o}", 64)` | `100` |
-| `b` | `format("{:08b}", 5)` | `00000101` |
-| `e` | `format("{:.2e}", 1234.5)` | `1.23e3` |
-| `E` | `format("{:E}", 5.0e10)` | `5.000000E10` |
+| (none) | `std::format("{:5}", 42)` | `   42` |
+| (none) | `std::format("{:.3}", 3.14159)` | `3.142` |
+| `x` | `std::format("{:#06x}", 255)` | `0x00ff` |
+| `X` | `std::format("{:X}", 255)` | `FF` |
+| `o` | `std::format("{:o}", 64)` | `100` |
+| `b` | `std::format("{:08b}", 5)` | `00000101` |
+| `e` | `std::format("{:.2e}", 1234.5)` | `1.23e3` |
+| `E` | `std::format("{:E}", 5.0e10)` | `5.000000E10` |
 
 A negative integer in `x`, `o`, or `b` is written as its two's complement in its
-own size, so `format("{:x}", -1)` is `ffffffff` for an `i32`, and
+own size, so `std::format("{:x}", -1)` is `ffffffff` for an `i32`, and
 `ffffffffffffffff` for an `i64`.  The scientific notation has no `+` and no
 leading zeros in its exponent, and 6 digits after the point unless there is a
 precision.  A real number which is `NaN` or infinite is written as `NaN` or `inf`.
@@ -410,8 +410,10 @@ An array is its elements, formatted one by one with the same spec, separated by
 spaces and with no brackets or commas.  A line break comes after each row, which
 is the number of elements in the first dimension, so a rank 1 array is a single
 line.  The result has no line break at the end.  This is meant for writing arrays
-to a file in one call, e.g. `writeln(f, format("{:.6e}", a))`.  An array of
+to a file in one call, e.g. `writeln(f, std::format("{:.6e}", a))`.  An array of
 structs, an array of enums, a file, or a function can't be formatted.
+
+Must be called with the `std::` prefix, e.g. `std::format("{:5}", 42)`.
 
 Related functions: [`str`](#str), [`println`](#println), [`writeln`](#writeln), [`printf`](#printf), [`writef`](#writef)
 
@@ -816,6 +818,8 @@ fn print(s0: any, s1: any, s2: any, ...)
 Print to the standard output, without a newline.  Output is flushed, so a prompt
 shows up before a following [`readln()`](#readln) waits for input.
 
+Must be called with the `std::` prefix, e.g. `std::print("a")`.
+
 Related functions: [`println`](#println), [`write`](#write), [`format`](#format), [`printf`](#printf)
 
 ## `printf`
@@ -824,14 +828,16 @@ fn printf(fmt: str, value0: any, value1: any, value2: any, ...)
 ```
 
 Print to the standard output, without a newline, a string made by
-[`format`](#format).  `printf(fmt, a, b)` is the same as `print(format(fmt, a, b))`.
+[`format`](#format).  `std::printf(fmt, a, b)` is the same as `std::print(std::format(fmt, a, b))`.
 The format string must be a string literal, and it is checked when the program is
-parsed, with the same errors as `format()`.
+parsed, with the same errors as `std::format()`.
 
 ```rust
-printf("{} has {:3} items", "bag", 12);
+std::printf("{} has {:3} items", "bag", 12);
 println();
 ```
+
+Must be called with the `std::` prefix, e.g. `std::printf("{}", 1)`.
 
 Related functions: [`format`](#format), [`print`](#print), [`writef`](#writef)
 
@@ -1210,6 +1216,8 @@ bytes, a `bool` is 1 byte, a `str` is its characters, and an array is its
 elements in storage order.  Any other value, e.g. a struct or an array of strings,
 can't be written to a binary file ([R45](errors.md#r45----binary-write-type)).
 
+Must be called with the `std::` prefix, e.g. `std::write(f, 1)`.
+
 Related functions: [`writeln`](#writeln), [`print`](#print), [`writef`](#writef), [`read_i32`](#read_i32), [`open`](#open)
 
 ## `writef`
@@ -1218,12 +1226,14 @@ fn writef(file_handle: file, fmt: str, value0: any, value1: any, value2: any, ..
 ```
 
 Write to `file_handle`, without a newline, a string made by [`format`](#format).
-`writef(f, fmt, a, b)` is the same as `write(f, format(fmt, a, b))`.  The format
+`std::writef(f, fmt, a, b)` is the same as `std::write(f, std::format(fmt, a, b))`.  The format
 string must be a string literal, and it is checked when the program is parsed,
-with the same errors as `format()`.
+with the same errors as `std::format()`.
 
 As with [`write`](#write), it is a runtime error for a file opened in
 [binary mode](#open) ([R43](errors.md#r43----text-op-on-binary-file)).
+
+Must be called with the `std::` prefix, e.g. `std::writef(f, "{}", 1)`.
 
 Related functions: [`format`](#format), [`write`](#write), [`writeln`](#writeln), [`printf`](#printf)
 

@@ -3,7 +3,7 @@
 // because it reached the end of the file or the data wasn't a number
 
 let f = open("build/rt_file_r44.bin", "wb");
-write(f, 1, 2);
+std::write(f, 1, 2);
 close(f);
 
 let g = open("build/rt_file_r44.bin", "rb");

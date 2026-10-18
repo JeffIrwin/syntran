@@ -2100,14 +2100,14 @@ here's a second line of text with a number 42
 -->
 <!-- syntran-end -->
 
-Use [`format()`](doc/intrinsics.md#format) to make a string from a literal format string.  Each `{}` is replaced with a value, and a `{:spec}` also sets the width, alignment, precision, or base of the value, like in Rust:
+Use [`std::format()`](doc/intrinsics.md#format) to make a string from a literal format string.  Each `{}` is replaced with a value, and a `{:spec}` also sets the width, alignment, precision, or base of the value, like in Rust:
 
 <!-- syntran-begin mode=file group=str-format -->
 ```rust
-println(format("[{:5}] [{:<5}] [{:^5}] [{:05}]", 42, 42, 42, 42));
-println(format("{:.3} {:e} {:08.2}", std::PI, 1234.5, -3.14159));
-println(format("{:x} {:#b} {:o}", 255, 5, 64));
-println(format("{:3}", [1, 2, 3, 4, 5, 6; 3, 2]));
+println(std::format("[{:5}] [{:<5}] [{:^5}] [{:05}]", 42, 42, 42, 42));
+println(std::format("{:.3} {:e} {:08.2}", std::PI, 1234.5, -3.14159));
+println(std::format("{:x} {:#b} {:o}", 255, 5, 64));
+println(std::format("{:3}", [1, 2, 3, 4, 5, 6; 3, 2]));
 ```
 <!-- syntran-expect
 [   42] [42   ] [ 42  ] [00042]
@@ -2120,7 +2120,7 @@ ff 0b101 100
 
 <!-- syntran-begin mode=file group=str-printf -->
 ```rust
-printf("{} has {:3} items", "bag", 12);
+std::printf("{} has {:3} items", "bag", 12);
 println();
 ```
 <!-- syntran-expect
@@ -2128,16 +2128,16 @@ bag has  12 items
 -->
 <!-- syntran-end -->
 
-[`printf()`](doc/intrinsics.md#printf) is `print(format(...))`, and [`writef()`](doc/intrinsics.md#writef) is `write(f, format(...))` for files.  They don't add a newline.
+[`std::printf()`](doc/intrinsics.md#printf) is `std::print(std::format(...))`, and [`std::writef()`](doc/intrinsics.md#writef) is `std::write(f, std::format(...))` for files.  They don't add a newline.
 
 The format string is checked when the program is parsed.  An array is written as its elements without brackets or commas, which is useful for writing a whole array to a file with one call.
 
-Add a `b` to the mode of `open()` to read and write the raw bytes of values, instead of lines of text.  [`write()`](doc/intrinsics.md#write) is like `writeln()` without a newline, and [`std::read_i32()`](doc/intrinsics.md#read_i32) and its siblings read a value, or an array of `n` values, back:
+Add a `b` to the mode of `open()` to read and write the raw bytes of values, instead of lines of text.  [`std::write()`](doc/intrinsics.md#write) is like `writeln()` without a newline, and [`std::read_i32()`](doc/intrinsics.md#read_i32) and its siblings read a value, or an array of `n` values, back:
 
 <!-- syntran-begin mode=file group=file-binary -->
 ```rust
 let fb = open("test.bin", "wb");
-write(fb, 42, 1.5, [1, 2, 3]);
+std::write(fb, 42, 1.5, [1, 2, 3]);
 close(fb);
 
 let fr = open("test.bin", "rb");
@@ -2145,7 +2145,7 @@ let n = std::read_i32(fr);
 let x = std::read_f64(fr);
 let v = std::read_i32(fr, 3);
 close(fr);
-println(format("{} {:.1} {}", n, x, v));
+println(std::format("{} {:.1} {}", n, x, v));
 ```
 <!-- syntran-expect
 42 1.5 1 2 3
@@ -2787,8 +2787,8 @@ Note that `len()` is not overloaded for enums (or arrays in general) -- it's
 reserved for `str`.  Use `size()` for a container's length, same as for any
 other array.
 
-Outside of `for`'s iterable and an argument to `size()`/`str()`/`print()`/
-`println()`/`write()`/`writeln()`, a bare enum name is *not* a value: it can't be bound with
+Outside of `for`'s iterable and an argument to `size()`/`str()`/`std::print()`/
+`println()`/`std::write()`/`writeln()`, a bare enum name is *not* a value: it can't be bound with
 `let`/`const`, assigned, returned, passed to a user function, or stored in an
 array or struct literal (`E99`).  Write out the variants explicitly wherever
 an actual array value is needed:
