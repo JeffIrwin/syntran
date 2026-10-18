@@ -303,7 +303,10 @@ end subroutine rt_print_raw
 subroutine rt_exit(code)
     integer(int32), intent(in) :: code
     write(output_unit, *) 'Exiting syntran with status '//rt_str_i32(code)
-    stop code, quiet = .true.
+    flush(output_unit)
+    ! `stop code, quiet = .true.` is F2018 and gfortran 10 rejects it, while
+    ! plain `stop code` prints a "STOP n" banner
+    call exit(code)
 end subroutine rt_exit
 
 !===============================================================================
