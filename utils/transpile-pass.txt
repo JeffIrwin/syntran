@@ -259,6 +259,8 @@ src/tests/test-src/modules/test-modvar-arrstruct.syntran
 src/tests/test-src/modules/test-qual-assign-ok.syntran
 src/tests/test-src/modules/test-std-glob-module.syntran
 src/tests/test-src/modules/test-std-glob.syntran
+src/tests/test-src/modules/test-std-name-module.syntran
+src/tests/test-src/modules/test-std-name.syntran
 src/tests/test-src/modules/test-struct-collision-rev.syntran
 src/tests/test-src/modules/test-struct-collision.syntran
 src/tests/test-src/modules/test-struct-mod-qualified-annot.syntran

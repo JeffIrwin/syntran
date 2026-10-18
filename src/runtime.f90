@@ -69,6 +69,9 @@ module syntran__runtime_m
 		! `use std::*;` seen on a previous REPL line, c.f. parser_t%std_glob
 		logical :: std_glob = .false.
 
+		! `use std::name;` seen on previous REPL lines, c.f. parser_t%std_names
+		character(len = :), allocatable :: std_names
+
 		type(vars_t) :: vars, locs
 
 		! Script arguments passed after `--` on the command line

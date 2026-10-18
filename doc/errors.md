@@ -197,8 +197,9 @@ A function was called before being defined.  May include a "did you mean" sugges
 ### E30 -- std-only-fn
 
 A standard-library function was called without its required `std::` prefix.
-Write `std::name()`, or add `use std::*;` earlier in the file to call every such
-function without the prefix.
+Write `std::name()`, add `use std::name;` earlier in the file to call that one
+function without the prefix, or add `use std::*;` to do so for every such
+function.
 
 [Example](../src/tests/test-src/errors/E30-std-only-fn.syntran)
 
@@ -461,7 +462,8 @@ A module name is a reserved language keyword.
 
 ### E74 -- mod-reserved-std
 
-The module name `std` is reserved for the standard library.
+The module name `std` is reserved for the standard library.  The only forms of
+`use` that are allowed for it are `use std::*;` and `use std::name;`.
 
 [Example](../src/tests/test-src/errors/E74-mod-reserved-std.syntran)
 
@@ -780,6 +782,13 @@ known when the program is parsed, so it must be written like `[nx, ny]`.  A
 variable, a function parameter, or a function result can't be used.
 
 [Example](../src/tests/test-src/errors/E121-reshape-shape-lit.syntran)
+
+### E122 -- std-unknown-name
+
+`use std::name;` named something that is not a function of the standard library.
+May include a "did you mean" suggestion.
+
+[Example](../src/tests/test-src/errors/E122-std-unknown-name.syntran)
 
 ## Internal errors
 

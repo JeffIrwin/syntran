@@ -1,0 +1,6 @@
+// `use std::name;` only affects that name, so `transpose` is still E30
+
+use std::reshape;
+
+let m = reshape([1, 2, 3, 4], [2, 2]);
+let t = transpose(m);

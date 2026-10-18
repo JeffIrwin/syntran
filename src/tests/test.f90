@@ -4198,6 +4198,12 @@ subroutine unit_test_repl_fns(npass, nfail)
 			interpret('use std::*;'//line_feed// &
 				'let m = reshape([1, 2, 3, 4], [2, 2]);'//line_feed// &
 				'm[1, 0];', quiet) == '2', &
+			! Likewise for `use std::name;`, and only for that name
+			interpret('use std::reshape;'//line_feed// &
+				'let m = reshape([1, 2, 3, 4], [2, 2]);'//line_feed// &
+				'm[1, 0];', quiet) == '2', &
+			interpret('use std::reshape;'//line_feed// &
+				'transpose(reshape([1, 2, 3, 4], [2, 2]));', quiet) == '', &
 			! Two fns declared on separate lines: the 2nd declaration must not
 			! clobber the 1st's slot in the flat fn array
 			interpret('fn f(): i32 { return 42; }'//line_feed// &
@@ -7376,15 +7382,20 @@ subroutine unit_test_modules(npass, nfail)
 			interpret_file(path//'test-duplicate-mixed.syntran', quiet) == '', &
 			interpret_file(path//'test-hyphen-ban.syntran', quiet) == '', &
 			interpret_file(path//'test-std-ban.syntran', quiet) == '', &
-			interpret_file(path//'test-std-ban-name.syntran', quiet) == '', &
-			diag_has_code(get_diags_file(path//'test-std-ban-name.syntran'), &
-				EC_MOD_RESERVED_STD), &
-			! `use std::*;` is the one allowed form of `use std`
+			! `use std::*;` and `use std::name;` are the allowed forms of `use std`
 			interpret_file(path//'test-std-glob.syntran', quiet) == 'true', &
 			interpret_file(path//'test-std-glob-module.syntran', quiet) == 'true', &
 			diag_has_code(get_diags_file(path//'test-std-glob-noleak.syntran'), &
 				EC_STD_ONLY_FN), &
 			diag_has_code(get_diags_file(path//'test-std-glob-before.syntran'), &
+				EC_STD_ONLY_FN), &
+			interpret_file(path//'test-std-name.syntran', quiet) == 'true', &
+			interpret_file(path//'test-std-name-module.syntran', quiet) == 'true', &
+			diag_has_code(get_diags_file(path//'test-std-name-only.syntran'), &
+				EC_STD_ONLY_FN), &
+			diag_has_code(get_diags_file(path//'test-std-name-before.syntran'), &
+				EC_STD_ONLY_FN), &
+			diag_has_code(get_diags_file(path//'test-std-name-noleak.syntran'), &
 				EC_STD_ONLY_FN), &
 			interpret_file(path//'test-std-ban-path.syntran', quiet) == '', &
 			interpret_file(path//'test-keyword-ban.syntran', quiet) == '', &
@@ -8185,7 +8196,9 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_has_code(get_diags('use foo-bar;', MODSRC), EC_MOD_HYPHEN), &
 			diag_has_code(get_diags('use let;', MODSRC), EC_MOD_KEYWORD), &
 			diag_has_code(get_diags('use std;', MODSRC), EC_MOD_RESERVED_STD), &
-			diag_has_code(get_diags('use std::reshape;', MODSRC), EC_MOD_RESERVED_STD), &
+			.not. diag_has_code(get_diags('use std::reshape;', MODSRC), EC_MOD_RESERVED_STD), &
+			diag_has_code(get_diags('use std::reshap;', MODSRC), EC_STD_UNKNOWN_NAME), &
+			diag_has_code(get_diags('use std::1;', MODSRC), EC_MOD_RESERVED_STD), &
 			diag_has_code(get_diags('use std as s;', MODSRC), EC_MOD_RESERVED_STD), &
 			.not. diag_has_code(get_diags('use std::*;', MODSRC), EC_MOD_RESERVED_STD), &
 			diag_has_code(get_diags('use foo bar;', MODSRC), EC_MOD_SPACE), &
@@ -9024,6 +9037,12 @@ subroutine unit_test_error_codes(npass, nfail)
 				diag_has_code(get_diags( &
 					'use std::*; fn f(s: [i32; :]): i32 { let r = reshape([1,2,3], s); return 0; }'), &
 					EC_RESHAPE_SHAPE_LIT), &
+
+				! E122: `use std::name;` needs a real std fn
+				diag_count_code(get_diags_file(P//'E122-std-unknown-name.syntran'), &
+					EC_STD_UNKNOWN_NAME) == 1, &
+				diag_has_code(get_diags('use std::nope;'), EC_STD_UNKNOWN_NAME), &
+				.not. diag_has_code(get_diags('use std::reshape;'), EC_STD_UNKNOWN_NAME), &
 
 				! printf() and writef() check their format strings like format()
 				diag_has_code(get_diags('std::printf("{}");'), EC_FORMAT_COUNT), &
@@ -10413,7 +10432,9 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E120-format-count.syntran'), &
 				EC_FORMAT_COUNT, P//'E120-format-count.syntran', 7, 20, 22), &
 			diag_loc_ok(get_diags_file(P//'E121-reshape-shape-lit.syntran'), &
-				EC_RESHAPE_SHAPE_LIT, P//'E121-reshape-shape-lit.syntran', 7, 26, 5) &
+				EC_RESHAPE_SHAPE_LIT, P//'E121-reshape-shape-lit.syntran', 7, 26, 5), &
+			diag_loc_ok(get_diags_file(P//'E122-std-unknown-name.syntran'), &
+				EC_STD_UNKNOWN_NAME, P//'E122-std-unknown-name.syntran', 6, 10, 6) &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
@@ -11759,6 +11780,14 @@ subroutine unit_test_reshape(npass, nfail)
 			eval('use std::*; size(transpose(reshape([0,1,2,3,4,5], [2,3])), 0);', quiet) == '3', &
 			eval('use std::*; fn shape(): i32 { return 7; } shape();', quiet) == '7', &
 			eval('use std::*; abs(-3);', quiet) == '3', &
+
+			! `use std::name;` is the same, but for one name only
+			eval('use std::reshape; size(reshape([0,1,2,3,4,5], [2,3]), 1);', quiet) == '3', &
+			eval('use std::reshape; use std::transpose; ' &
+				//'size(transpose(reshape([0,1,2,3,4,5], [2,3])), 0);', quiet) == '3', &
+			eval('use std::shape; fn shape(): i32 { return 7; } shape();', quiet) == '7', &
+			diag_has_code(get_diags( &
+				'use std::reshape; let t = transpose([1,2,3,4]);'), EC_STD_ONLY_FN), &
 
 			! sum() of reshaped array (sum works on a temporary directly)
 			eval('sum(std::reshape([0,1,2,3,4,5], [3,2]));', quiet) == '15', &

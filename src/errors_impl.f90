@@ -323,6 +323,7 @@ module procedure get_all_error_codes
 	call codes%push(EC_FORMAT_TYPE)
 	call codes%push(EC_FORMAT_COUNT)
 	call codes%push(EC_RESHAPE_SHAPE_LIT)
+	call codes%push(EC_STD_UNKNOWN_NAME)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -1270,6 +1271,25 @@ module procedure err_reshape_shape_lit
 		//": the number of dimensions of the result must be known at compile time, e.g. `[nx, ny]`"
 
 end procedure err_reshape_shape_lit
+
+!===============================================================================
+
+module procedure err_std_unknown_name
+
+	err = err_pre(EC_STD_UNKNOWN_NAME) &
+		//'`std::'//name//'` is not a function in the standard library' &
+		//underline(context, span)//" unknown std function"//color_reset
+
+	if (present(suggest)) then
+		if (len(suggest) > 0) then
+			err = err//line_feed &
+				//fg_bright_green//"help"//color_reset &
+				//": did you mean `" &
+				//fg_bright_green//suggest//color_reset//"`?"
+		end if
+	end if
+
+end procedure err_std_unknown_name
 
 !===============================================================================
 

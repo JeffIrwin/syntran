@@ -155,7 +155,7 @@ recursive module subroutine parse_use_statement(parser, statement)
 	type(enum_t), pointer :: enum_val
 	integer :: i, io, iostat, mod_unit_, id_index, struct_slot, fn_slot, enum_slot
 	logical :: qualified_import, is_const_var
-	character(len = :), allocatable :: qualified_prefix
+	character(len = :), allocatable :: qualified_prefix, suggest
 
 	call parser%match(use_keyword, use_token)
 
@@ -199,11 +199,13 @@ recursive module subroutine parse_use_statement(parser, statement)
 	end if
 
 	! Ban "std" as a user-defined module name (reserved for standard library).
-	! The only form allowed is the glob `use std::*;`, which lets std-only fns
-	! be called without the `std::` prefix
+	! The only forms allowed are the glob `use std::*;` and a single name
+	! `use std::name;`, which let std-only fns be called without the `std::`
+	! prefix
 	if (module_name == "std" .and. .not. ( &
 		parser%current_kind() == double_colon_token .and. &
-		parser%peek_kind(1) == star_token)) then
+		(parser%peek_kind(1) == star_token .or. &
+		parser%peek_kind(1) == identifier_token))) then
 		span = new_span(mod_identifier%pos, len(mod_identifier%text))
 		call parser%diagnostics%push( &
 			err_mod_reserved_std(parser%context(), span))
@@ -349,10 +351,26 @@ recursive module subroutine parse_use_statement(parser, statement)
 	statement%kind = expr_statement
 	statement%is_empty = .true.
 
-	! For `use std::*;`, there's no file to load.  Just let the parser resolve
-	! bare names to std-only fns from here on
+	! For `use std::*;` and `use std::name;`, there's no file to load.  Just let
+	! the parser resolve bare names to std-only fns from here on
 	if (module_name == "std") then
-		parser%std_glob = .true.
+		if (import_name == "*") then
+			parser%std_glob = .true.
+		else
+			if (parser%fns%find("std::" // import_name) == 0) then
+				suggest = parser%fns%closest("std::" // import_name)
+				if (index(suggest, "std::") == 1) suggest = suggest(6:)
+				span = new_span(name_identifier%pos, len(name_identifier%text))
+				call parser%diagnostics%push( &
+					err_std_unknown_name(parser%context(), span, import_name, suggest))
+				return
+			end if
+
+			if (.not. allocated(parser%std_names)) parser%std_names = " "
+			if (index(parser%std_names, " " // import_name // " ") == 0) then
+				parser%std_names = parser%std_names // import_name // " "
+			end if
+		end if
 
 		! A use_statement with no member compiles to just a unit value, c.f.
 		! compile_node().  The generic empty expr_statement above isn't handled

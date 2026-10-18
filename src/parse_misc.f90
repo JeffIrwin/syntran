@@ -610,8 +610,10 @@ recursive module subroutine parse_unit(parser, unit)
 	integer :: i, j, num_vars0, num_fns0, num_structs0, num_enums0
 	integer :: ndiag_pre
 
-	! `use std::*;` from an earlier REPL line, restored before pass 2
+	! `use std::*;` and `use std::name;` from an earlier REPL line, restored
+	! before pass 2
 	logical :: std_glob0
+	character(len = :), allocatable :: std_names0
 
 	! Pass-0 diagnostics, saved so the pass-0-only families among them can be
 	! merged back in after pass 1 (see the comment at the merge below)
@@ -625,6 +627,7 @@ recursive module subroutine parse_unit(parser, unit)
 	parser%ipass = 0
 	parser%last_e20_pos = 0
 	std_glob0 = parser%std_glob
+	if (allocated(parser%std_names)) std_names0 = parser%std_names
 
 	! Diagnostics that exist before either pass: lexer errors and #include
 	! preprocessor errors, both pushed by new_parser().  Pass 0's own output
@@ -693,6 +696,11 @@ recursive module subroutine parse_unit(parser, unit)
 		! Pass 2 re-parses `use std::*;` too, so a bare call before it must
 		! not see the flag that pass 1 set
 		parser%std_glob = std_glob0
+		if (allocated(std_names0)) then
+			parser%std_names = std_names0
+		else if (allocated(parser%std_names)) then
+			deallocate(parser%std_names)
+		end if
 
 		parser%num_vars = num_vars0
 		parser%num_fns = num_fns0

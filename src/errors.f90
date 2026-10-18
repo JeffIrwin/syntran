@@ -137,6 +137,7 @@ module syntran__errors_m
 		EC_FORMAT_TYPE = "E119", &
 		EC_FORMAT_COUNT = "E120", &
 		EC_RESHAPE_SHAPE_LIT = "E121", &
+		EC_STD_UNKNOWN_NAME = "E122", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -822,6 +823,14 @@ module syntran__errors_m
 			type(text_span_t), intent(in) :: span
 			character(len = :), allocatable :: err
 		end function err_reshape_shape_lit
+
+		module function err_std_unknown_name(context, span, name, suggest) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+			character(len = *), intent(in) :: name
+			character(len = *), intent(in), optional :: suggest
+		end function err_std_unknown_name
 
 		module function err_not_callable(context, span, var, type) result(err)
 			type(text_context_t) :: context

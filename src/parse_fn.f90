@@ -67,7 +67,7 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 	! but is a std-only fn is parsed exactly like the explicit `std::name()`
 	! call.  User fns and legacy intrinsics take precedence over the std-only fn,
 	! and a variable of that name is left to the handling below
-	if (.not. present(module_prefix) .and. parser%std_glob) then
+	if (.not. present(module_prefix) .and. parser%std_imported(identifier_%text)) then
 		if (parser%fns%find(identifier_%text) == 0 .and. &
 			parser%fns%find("std::" // identifier_%text) /= 0) then
 			call parser%search(identifier_%text, var_id_index, var_io, var_val, &

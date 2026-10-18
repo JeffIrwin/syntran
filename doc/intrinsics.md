@@ -19,13 +19,17 @@ is also an array, with the same rank and size as the argument, with values as if
 the function had been called element-wise on each member of the array.
 
 A function that is documented as "must be called with the `std::` prefix" is
-only available as e.g. `std::reshape()`.  `use std::*;` makes these available
-without the prefix for the rest of the file, e.g. `reshape()`.  A function that
+only available as e.g. `std::reshape()`.  `use std::reshape;` makes that one
+function available without the prefix for the rest of the file, e.g.
+`reshape()`, and `use std::*;` does so for all of them.  A function that
 you declare yourself, or an intrinsic function that never needed the prefix, is
 never shadowed by this.  The risk is that a later version of syntran adds a new
 `std::` function with the same name as one of yours, which can change which
 function a call resolves to or make a name ambiguous.  `std::` is the stable
 choice, and `use std::*;` is a convenience for scripts where that doesn't matter.
+Importing only the names that you list, like `use std::printf;`, limits that
+risk to those names.  Each `use std::name;` imports a single function, and the
+name must exist in `std`, otherwise it's an error.
 The `use` of a file doesn't carry over to the modules that it imports, or to the
 files that import it.
 
