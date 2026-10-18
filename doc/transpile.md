@@ -58,7 +58,7 @@ This is a subset of the language so far:
 - Enums: declarations (with explicit values and aliases), `Suit.Hearts`, the
   casts `i32(Suit.Hearts)` and `Suit(2)`, comparison, printing, arrays of
   enums, a bare enum name as in `for v in Suit`, and `switch` on an enum
-- File I/O: `open`, `std::try_open`, `close`, `write`, `writeln`, `readln`, `eof`,
+- File I/O: `open`, `std::try_open`, `close`, `write`, `writef`, `writeln`, `readln`, `eof`,
   `std::exists`, the members `f.is_open`, `f.eof`, and `f.name`, and `readln()`
   and `eof()` of standard input.  Binary files, with a `b` in the mode of `open`,
   and `std::read_i32`, `std::read_i64`, `std::read_f32`, and `std::read_f64`.
@@ -69,7 +69,7 @@ This is a subset of the language so far:
 - Modules: `use`, qualified and glob imports, aliases, subdirectories, and the
   fns and variables of a module, including modules that import others.  The
   statements of a module run where it is imported
-- These intrinsic functions: `println`, `print`, `str`, `format`, `len`,
+- These intrinsic functions: `println`, `print`, `printf`, `str`, `format`, `len`,
   `repeat`, `char`, `size`, `count`, `all`, `any`, `sum`, `product`, `minval`,
   `maxval` (with `dim` and `mask` too), `norm2`, `dot`, `min`, `max`, `abs`,
   `exp`, `log`, `log2`, `log10`, `sqrt`, the trigonometric functions and their

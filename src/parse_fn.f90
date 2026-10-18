@@ -542,6 +542,13 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 	if (fn%is_intr .and. identifier_%text == "format") then
 		span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
 		call check_format_call(parser, args%v(1: args%len_), alias_spans, span)
+	else if (fn%is_intr .and. identifier_%text == "printf") then
+		span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
+		call check_format_call(parser, args%v(1: args%len_), alias_spans, span)
+	else if (fn%is_intr .and. identifier_%text == "writef") then
+		! The file handle is the first arg, so the format string is the second
+		span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
+		call check_format_call(parser, args%v(2: args%len_), alias_spans(2:), span)
 	end if
 
 	fn_call%id_index = id_index
@@ -551,6 +558,12 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 	do i = 1, args%len_
 		call syntax_node_move_into(args%v(i), fn_call%args(i))
 	end do
+
+	if (fn%is_intr .and. identifier_%text == "printf") then
+		call desugar_printf(parser, fn_call, "print", 1)
+	else if (fn%is_intr .and. identifier_%text == "writef") then
+		call desugar_printf(parser, fn_call, "write", 2)
+	end if
 
 	!print *, 'done parsing fn_call'
 
@@ -2641,6 +2654,63 @@ logical function has_ref_root(arg, arg_is_ref)
 end function has_ref_root
 
 end subroutine check_ref_aliases
+
+!===============================================================================
+
+subroutine desugar_printf(parser, fn_call, new_name, ifmt)
+
+	! Rewrite printf(fmt, values...) as print(format(fmt, values...)), and
+	! writef(f, fmt, values...) as write(f, format(fmt, values...)).  ifmt is the
+	! index of the format string arg, which is 1 for printf and 2 for writef.
+	! The format has already been checked, and everything after parsing only
+	! sees print() and write()
+
+	class(parser_t), intent(in) :: parser
+	type(syntax_node_t), intent(inout) :: fn_call
+	character(len = *), intent(in) :: new_name
+	integer, intent(in) :: ifmt
+
+	!********
+
+	integer :: i, nargs
+	type(syntax_node_t) :: fmt_call
+	type(syntax_node_t), allocatable :: args(:)
+
+	nargs = size(fn_call%args)
+
+	fmt_call%kind       = fn_call_intr_expr
+	fmt_call%identifier = fn_call%identifier
+	fmt_call%identifier%text = "format"
+	fmt_call%val%type   = str_type
+	fmt_call%id_index   = parser%fns%id_at(parser%fns%find("format"))
+
+	allocate(fmt_call%args(nargs - ifmt + 1))
+	allocate(fmt_call%is_ref(nargs - ifmt + 1))
+	do i = ifmt, nargs
+		call syntax_node_move_into(fn_call%args(i), fmt_call%args(i - ifmt + 1))
+	end do
+	fmt_call%is_ref = .false.
+
+	! The file handle of writef() stays where it is, and the format() call is
+	! the last arg
+	allocate(args(ifmt))
+	do i = 1, ifmt - 1
+		call syntax_node_move_into(fn_call%args(i), args(i))
+	end do
+	call syntax_node_move_into(fmt_call, args(ifmt))
+
+	call move_alloc(args, fn_call%args)
+
+	fn_call%identifier%text = new_name
+	fn_call%id_index = parser%fns%id_at(parser%fns%find(new_name))
+
+	if (ifmt > 1) then
+		fn_call%is_ref = [fn_call%is_ref(1: ifmt - 1), .false.]
+	else
+		fn_call%is_ref = [.false.]
+	end if
+
+end subroutine desugar_printf
 
 !===============================================================================
 

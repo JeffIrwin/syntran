@@ -413,7 +413,7 @@ line.  The result has no line break at the end.  This is meant for writing array
 to a file in one call, e.g. `writeln(f, format("{:.6e}", a))`.  An array of
 structs, an array of enums, a file, or a function can't be formatted.
 
-Related functions: [`str`](#str), [`println`](#println), [`writeln`](#writeln)
+Related functions: [`str`](#str), [`println`](#println), [`writeln`](#writeln), [`printf`](#printf), [`writef`](#writef)
 
 ## `getenv`
 ```rust
@@ -816,7 +816,24 @@ fn print(s0: any, s1: any, s2: any, ...)
 Print to the standard output, without a newline.  Output is flushed, so a prompt
 shows up before a following [`readln()`](#readln) waits for input.
 
-Related functions: [`println`](#println), [`write`](#write), [`format`](#format)
+Related functions: [`println`](#println), [`write`](#write), [`format`](#format), [`printf`](#printf)
+
+## `printf`
+```rust
+fn printf(fmt: str, value0: any, value1: any, value2: any, ...)
+```
+
+Print to the standard output, without a newline, a string made by
+[`format`](#format).  `printf(fmt, a, b)` is the same as `print(format(fmt, a, b))`.
+The format string must be a string literal, and it is checked when the program is
+parsed, with the same errors as `format()`.
+
+```rust
+printf("{} has {:3} items", "bag", 12);
+println();
+```
+
+Related functions: [`format`](#format), [`print`](#print), [`writef`](#writef)
 
 ## `print_trace`
 ```rust
@@ -1193,7 +1210,22 @@ bytes, a `bool` is 1 byte, a `str` is its characters, and an array is its
 elements in storage order.  Any other value, e.g. a struct or an array of strings,
 can't be written to a binary file ([R45](errors.md#r45----binary-write-type)).
 
-Related functions: [`writeln`](#writeln), [`print`](#print), [`read_i32`](#read_i32), [`open`](#open)
+Related functions: [`writeln`](#writeln), [`print`](#print), [`writef`](#writef), [`read_i32`](#read_i32), [`open`](#open)
+
+## `writef`
+```rust
+fn writef(file_handle: file, fmt: str, value0: any, value1: any, value2: any, ...)
+```
+
+Write to `file_handle`, without a newline, a string made by [`format`](#format).
+`writef(f, fmt, a, b)` is the same as `write(f, format(fmt, a, b))`.  The format
+string must be a string literal, and it is checked when the program is parsed,
+with the same errors as `format()`.
+
+As with [`write`](#write), it is a runtime error for a file opened in
+[binary mode](#open) ([R43](errors.md#r43----text-op-on-binary-file)).
+
+Related functions: [`format`](#format), [`write`](#write), [`writeln`](#writeln), [`printf`](#printf)
 
 ## `writeln`
 ```rust

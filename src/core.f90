@@ -266,7 +266,8 @@ module syntran__core_m
 	!  - print improvements:
 	!    * still might need file_stat? what happens after write errors e.g. with
 	!      a full disk
-	!    * print(), write(), and format() with Rust-style `{:spec}` placeholders
+	!    * print(), write(), format(), printf(), and writef() with Rust-style
+	!      `{:spec}` placeholders
 	!      (hex/bin/oct, width, fill, precision, sci notation) are done
 	!    * format() only takes a literal format string for now, so it is checked
 	!      at parse time.  Non-literal formats, positional `{0}` and named

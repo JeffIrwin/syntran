@@ -4870,6 +4870,7 @@ subroutine unit_test_io(npass, nfail)
 			interpret_file(path//'test-13.syntran', quiet) == 'true', &
 			interpret_file(path//'test-14.syntran', quiet) == 'true', &
 			interpret_file(path//'test-15.syntran', quiet) == 'true', &
+			interpret_file(path//'test-16.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -8969,6 +8970,22 @@ subroutine unit_test_error_codes(npass, nfail)
 				diag_has_code(get_diags('println(format("{} {}", 1));'), EC_FORMAT_COUNT), &
 				diag_has_code(get_diags('println(format("{}", 1, 2));'), EC_FORMAT_COUNT), &
 				.not. diag_has_code(get_diags('println(format("{{}}"));'), EC_FORMAT_COUNT), &
+
+				! printf() and writef() check their format strings like format()
+				diag_has_code(get_diags('printf("{}");'), EC_FORMAT_COUNT), &
+				diag_has_code(get_diags('printf("{} {}", 1);'), EC_FORMAT_COUNT), &
+				diag_has_code(get_diags('printf("{:x}", 1.5);'), EC_FORMAT_TYPE), &
+				diag_has_code(get_diags('printf("{", 1);'), EC_BAD_FORMAT), &
+				diag_has_code(get_diags('let s = "{}"; printf(s, 1);'), EC_FORMAT_NOT_LITERAL), &
+				diag_has_code(get_diags( &
+					'let f = open("build/x.txt", "w"); writef(f, "{}");'), EC_FORMAT_COUNT), &
+				diag_has_code(get_diags( &
+					'let f = open("build/x.txt", "w"); writef(f, "{:x}", 1.5);'), EC_FORMAT_TYPE), &
+				diag_has_code(get_diags( &
+					'let f = open("build/x.txt", "w"); writef(f, "}", 1);'), EC_BAD_FORMAT), &
+				.not. diag_has_code(get_diags('printf("{{}} {:x}", 255);'), EC_FORMAT_COUNT), &
+				.not. diag_has_code(get_diags( &
+					'let f = open("build/x.txt", "w"); writef(f, "{:3}", 1);'), EC_FORMAT_COUNT), &
 
 				! Int/float assignment is rejected at parse time (E48).  This
 				! used to be marked by a "TODO: test int/float casting" note

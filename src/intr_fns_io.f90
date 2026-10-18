@@ -28,7 +28,7 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 		char_fn, i32_sca_fn, i32_arr_fn, i64_sca_fn, i64_arr_fn, &
 		open_fn, readln_fn, writeln_fn, eof_fn, close_fn, exit_fn, &
 		getenv_fn, hasenv_fn, exists_fn, try_open_fn, &
-		print_trace_fn, stack_trace_fn, caller_fn, print_fn, write_fn, format_fn
+		print_trace_fn, stack_trace_fn, caller_fn, print_fn, write_fn, format_fn, printf_fn, writef_fn
 
 	! std::read_<type>(): the stub that is registered as the std-only name, then
 	! the scalar overload and the array overload, for each of 4 types
@@ -313,6 +313,37 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 
 	!********
 
+	! printf(fmt, values...) is print(format(fmt, values...)), and writef(f, fmt,
+	! values...) is write(f, format(fmt, values...)).  The parser rewrites them
+	! into those calls, after checking the format string like format() does
+	printf_fn%type%type = void_type
+	allocate(printf_fn%params(1))
+	allocate(printf_fn%param_names%v(1))
+	printf_fn%params(1)%type = str_type
+	printf_fn%param_names%v(1)%s = "fmt"
+
+	printf_fn%variadic_min  = 0
+	printf_fn%variadic_type = any_type
+	printf_fn%variadic_name = "value"
+
+	call fns%insert("printf", printf_fn, id_index)
+
+	writef_fn%type%type = void_type
+	allocate(writef_fn%params(2))
+	allocate(writef_fn%param_names%v(2))
+	writef_fn%params(1)%type = file_type
+	writef_fn%param_names%v(1)%s = "file_handle"
+	writef_fn%params(2)%type = str_type
+	writef_fn%param_names%v(2)%s = "fmt"
+
+	writef_fn%variadic_min  = 0
+	writef_fn%variadic_type = any_type
+	writef_fn%variadic_name = "value"
+
+	call fns%insert("writef", writef_fn, id_index)
+
+	!********
+
 	! std::read_<type>(file_handle) reads one value from a file, and
 	! std::read_<type>(file_handle, n) reads an array of n values.  A text file
 	! has whitespace-separated values, possibly across lines.  A binary file has
@@ -509,7 +540,7 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 			char_fn, i32_sca_fn, i32_arr_fn, i64_sca_fn, i64_arr_fn, &
 			open_fn, readln_fn, writeln_fn, eof_fn, close_fn, exit_fn, &
 			getenv_fn, hasenv_fn, exists_fn, try_open_fn, &
-			print_trace_fn, stack_trace_fn, caller_fn, print_fn, write_fn, format_fn, read_fns &
+			print_trace_fn, stack_trace_fn, caller_fn, print_fn, write_fn, format_fn, printf_fn, writef_fn, read_fns &
 		]
 
 end subroutine declare_io_fns

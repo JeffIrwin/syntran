@@ -949,6 +949,11 @@ pure integer function intr_id_from_name(name) result(id)
 	case ("readln");         id = INTR_READLN
 	case ("writeln");        id = INTR_WRITELN
 	case ("write");          id = INTR_WRITE
+	! The parser rewrites printf() and writef() into print(format()) and
+	! write(f, format()), so they never reach the compiler.  They are only here
+	! to keep every registered name mapped to an id
+	case ("printf");         id = INTR_PRINT
+	case ("writef");         id = INTR_WRITE
 	case ("eof");            id = INTR_EOF
 	case ("close");          id = INTR_CLOSE
 	! Misc + reduction

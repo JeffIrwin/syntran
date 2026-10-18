@@ -2118,6 +2118,18 @@ ff 0b101 100
 -->
 <!-- syntran-end -->
 
+<!-- syntran-begin mode=file group=str-printf -->
+```rust
+printf("{} has {:3} items", "bag", 12);
+println();
+```
+<!-- syntran-expect
+bag has  12 items
+-->
+<!-- syntran-end -->
+
+[`printf()`](doc/intrinsics.md#printf) is `print(format(...))`, and [`writef()`](doc/intrinsics.md#writef) is `write(f, format(...))` for files.  They don't add a newline.
+
 The format string is checked when the program is parsed.  An array is written as its elements without brackets or commas, which is useful for writing a whole array to a file with one call.
 
 Add a `b` to the mode of `open()` to read and write the raw bytes of values, instead of lines of text.  [`write()`](doc/intrinsics.md#write) is like `writeln()` without a newline, and [`std::read_i32()`](doc/intrinsics.md#read_i32) and its siblings read a value, or an array of `n` values, back:
