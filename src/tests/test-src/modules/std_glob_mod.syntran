@@ -1,0 +1,8 @@
+// A module that uses `use std::*;` for itself
+
+use std::*;
+
+fn reshaped_len(): i64
+{
+	return size(reshape([0: 6], [2, 3]), 1);
+}

@@ -63,6 +63,22 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 
 	!print *, "identifier_ = ", identifier_%text
 
+	! After `use std::*;`, a bare name that isn't a user fn or legacy intrinsic
+	! but is a std-only fn is parsed exactly like the explicit `std::name()`
+	! call.  User fns and legacy intrinsics take precedence over the std-only fn,
+	! and a variable of that name is left to the handling below
+	if (.not. present(module_prefix) .and. parser%std_glob) then
+		if (parser%fns%find(identifier_%text) == 0 .and. &
+			parser%fns%find("std::" // identifier_%text) /= 0) then
+			call parser%search(identifier_%text, var_id_index, var_io, var_val, &
+				var_is_loc)
+			if (var_io /= exit_success) then
+				call parser%parse_fn_call("std", identifier_, fn_call)
+				return
+			end if
+		end if
+	end if
+
 	args     = new_syntax_node_vector()
 	pos_args = new_integer_vector()
 	is_ref   = new_logical_vector()
@@ -138,6 +154,17 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 			return
 		end if
 	end do
+
+	! The rank of std::reshape()'s result is the length of its shape argument,
+	! which is only known at parse time for an array literal
+	if (parser%ipass /= 0 .and. present(module_prefix) .and. args%len_ >= 2) then
+		if (module_prefix == "std" .and. identifier_%text == "reshape" .and. &
+			.not. is_expl_array_lit(args%v(2))) then
+			span = new_span(pos_args%v(2), pos_args%v(3) - pos_args%v(2) - 1)
+			call parser%diagnostics%push( &
+				err_reshape_shape_lit(parser%context(), span))
+		end if
+	end if
 
 	! Lookup by fn_call%identifier%text (e.g. "0min_i32"), but log
 	! diagnostics based on identifier_%text (e.g. "min")
@@ -398,7 +425,10 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		! For functions like std::reshape whose element type depends on their
 		! arguments, restore the element type that resolve_overload determined.
 		! fn_call%val = fn%type above would otherwise overwrite it with any_type.
-		if (has_arr_type) then
+		if (has_arr_type .and. .not. allocated(fn_call%val%array)) then
+			! The rank-0 case above already deallocated the array info
+			fn_call%val%type = arr_type_result
+		else if (has_arr_type) then
 			fn_call%val%array%type = arr_type_result
 
 			! %array%type alone doesn't fully describe a struct/enum element

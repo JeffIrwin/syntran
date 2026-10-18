@@ -89,6 +89,11 @@ module syntran__parse_m
 
 		logical :: repl = .false.
 
+		! Set by `use std::*;`.  Lets a bare call `reshape(...)` fall back to
+		! the std-only fn `std::reshape(...)` when no user fn or legacy
+		! intrinsic of that name exists
+		logical :: std_glob = .false.
+
 		type(map_i32_t) :: import_stack
 		type(map_i32_t) :: imported_modules
 

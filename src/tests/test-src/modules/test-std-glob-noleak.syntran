@@ -1,0 +1,6 @@
+// `use std::*;` in an imported module doesn't leak into the importer, so this
+// bare call is still E30
+
+use std_glob_mod;
+
+let m = reshape([1, 2, 3, 4], [2, 2]);

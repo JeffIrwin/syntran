@@ -66,6 +66,9 @@ module syntran__runtime_m
 		type(structs_t) :: structs
 		type(enums_t) :: enums
 
+		! `use std::*;` seen on a previous REPL line, c.f. parser_t%std_glob
+		logical :: std_glob = .false.
+
 		type(vars_t) :: vars, locs
 
 		! Script arguments passed after `--` on the command line

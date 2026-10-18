@@ -4194,6 +4194,10 @@ subroutine unit_test_repl_fns(npass, nfail)
 			! Declare then call on a later line
 			interpret('fn f(): i32 { return 42; }'//line_feed// &
 				'f();', quiet) == '42', &
+			! `use std::*;` on one line applies to the lines after it
+			interpret('use std::*;'//line_feed// &
+				'let m = reshape([1, 2, 3, 4], [2, 2]);'//line_feed// &
+				'm[1, 0];', quiet) == '2', &
 			! Two fns declared on separate lines: the 2nd declaration must not
 			! clobber the 1st's slot in the flat fn array
 			interpret('fn f(): i32 { return 42; }'//line_feed// &
@@ -7372,7 +7376,16 @@ subroutine unit_test_modules(npass, nfail)
 			interpret_file(path//'test-duplicate-mixed.syntran', quiet) == '', &
 			interpret_file(path//'test-hyphen-ban.syntran', quiet) == '', &
 			interpret_file(path//'test-std-ban.syntran', quiet) == '', &
-			interpret_file(path//'test-std-ban-glob.syntran', quiet) == '', &
+			interpret_file(path//'test-std-ban-name.syntran', quiet) == '', &
+			diag_has_code(get_diags_file(path//'test-std-ban-name.syntran'), &
+				EC_MOD_RESERVED_STD), &
+			! `use std::*;` is the one allowed form of `use std`
+			interpret_file(path//'test-std-glob.syntran', quiet) == 'true', &
+			interpret_file(path//'test-std-glob-module.syntran', quiet) == 'true', &
+			diag_has_code(get_diags_file(path//'test-std-glob-noleak.syntran'), &
+				EC_STD_ONLY_FN), &
+			diag_has_code(get_diags_file(path//'test-std-glob-before.syntran'), &
+				EC_STD_ONLY_FN), &
 			interpret_file(path//'test-std-ban-path.syntran', quiet) == '', &
 			interpret_file(path//'test-keyword-ban.syntran', quiet) == '', &
 			interpret_file(path//'test-alias-01.syntran', quiet) == 'true', &
@@ -8172,6 +8185,9 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_has_code(get_diags('use foo-bar;', MODSRC), EC_MOD_HYPHEN), &
 			diag_has_code(get_diags('use let;', MODSRC), EC_MOD_KEYWORD), &
 			diag_has_code(get_diags('use std;', MODSRC), EC_MOD_RESERVED_STD), &
+			diag_has_code(get_diags('use std::reshape;', MODSRC), EC_MOD_RESERVED_STD), &
+			diag_has_code(get_diags('use std as s;', MODSRC), EC_MOD_RESERVED_STD), &
+			.not. diag_has_code(get_diags('use std::*;', MODSRC), EC_MOD_RESERVED_STD), &
 			diag_has_code(get_diags('use foo bar;', MODSRC), EC_MOD_SPACE), &
 			diag_has_code(get_diags('use foo as let;', MODSRC), EC_ALIAS_KEYWORD), &
 			diag_has_code(get_diags('use foo as std;', MODSRC), EC_ALIAS_RESERVED_STD), &
@@ -8980,6 +8996,34 @@ subroutine unit_test_error_codes(npass, nfail)
 				diag_has_code(get_diags('println(std::format("{} {}", 1));'), EC_FORMAT_COUNT), &
 				diag_has_code(get_diags('println(std::format("{}", 1, 2));'), EC_FORMAT_COUNT), &
 				.not. diag_has_code(get_diags('println(std::format("{{}}"));'), EC_FORMAT_COUNT), &
+
+				! E121: std::reshape() needs an array literal for its shape
+				diag_count_code(get_diags_file(P//'E121-reshape-shape-lit.syntran'), &
+					EC_RESHAPE_SHAPE_LIT) == 1, &
+				diag_has_code(get_diags( &
+					'fn f(s: [i32; :]): i32 { let r = std::reshape([1,2,3,4], s); return 0; }'), &
+					EC_RESHAPE_SHAPE_LIT), &
+				diag_has_code(get_diags( &
+					'fn f(): [i32; :] { return [2,2]; } println(std::reshape([1,2,3,4], f()));'), &
+					EC_RESHAPE_SHAPE_LIT), &
+				diag_has_code(get_diags( &
+					'let m = std::reshape([1,2,3,4], [2,2]); '// &
+					'println(std::reshape([1,2,3,4], std::shape(m)));'), &
+					EC_RESHAPE_SHAPE_LIT), &
+				diag_has_code(get_diags( &
+					'let s = [2,2]; println(std::reshape([1,2,3,4], s));'), &
+					EC_RESHAPE_SHAPE_LIT), &
+				diag_has_code(get_diags( &
+					'println(std::reshape([1,2,3,4], [0: 4]));'), EC_RESHAPE_SHAPE_LIT), &
+				.not. diag_has_code(get_diags( &
+					'let n = 2; println(std::reshape([1,2,3,4], [n, 2]));'), &
+					EC_RESHAPE_SHAPE_LIT), &
+				.not. diag_has_code(get_diags( &
+					'use std::*; println(reshape([1,2,3,4], [2, 2]));'), &
+					EC_RESHAPE_SHAPE_LIT), &
+				diag_has_code(get_diags( &
+					'use std::*; fn f(s: [i32; :]): i32 { let r = reshape([1,2,3], s); return 0; }'), &
+					EC_RESHAPE_SHAPE_LIT), &
 
 				! printf() and writef() check their format strings like format()
 				diag_has_code(get_diags('std::printf("{}");'), EC_FORMAT_COUNT), &
@@ -10367,7 +10411,9 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E119-format-type.syntran'), &
 				EC_FORMAT_TYPE, P//'E119-format-type.syntran', 6, 42, 11), &
 			diag_loc_ok(get_diags_file(P//'E120-format-count.syntran'), &
-				EC_FORMAT_COUNT, P//'E120-format-count.syntran', 7, 20, 22) &
+				EC_FORMAT_COUNT, P//'E120-format-count.syntran', 7, 20, 22), &
+			diag_loc_ok(get_diags_file(P//'E121-reshape-shape-lit.syntran'), &
+				EC_RESHAPE_SHAPE_LIT, P//'E121-reshape-shape-lit.syntran', 7, 26, 5) &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
@@ -11703,6 +11749,16 @@ subroutine unit_test_reshape(npass, nfail)
 			! Identity reshape (1-D to 1-D, same length)
 			eval('let v = std::reshape([0,1,2,3,4,5], [6]); v[5];', quiet) == '5', &
 			eval('size(std::reshape([0,1,2,3,4,5], [6]), 0);', quiet) == '6', &
+
+			! A runtime value inside the shape literal is fine
+			eval('let n = 3; size(std::reshape([0,1,2,3,4,5], [2, n]), 1);', quiet) == '3', &
+
+			! With `use std::*;`, the prefix is optional.  User fns and legacy
+			! intrinsics are not shadowed by it
+			eval('use std::*; size(reshape([0,1,2,3,4,5], [2,3]), 1);', quiet) == '3', &
+			eval('use std::*; size(transpose(reshape([0,1,2,3,4,5], [2,3])), 0);', quiet) == '3', &
+			eval('use std::*; fn shape(): i32 { return 7; } shape();', quiet) == '7', &
+			eval('use std::*; abs(-3);', quiet) == '3', &
 
 			! sum() of reshaped array (sum works on a temporary directly)
 			eval('sum(std::reshape([0,1,2,3,4,5], [3,2]));', quiet) == '15', &

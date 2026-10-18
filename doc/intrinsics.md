@@ -18,6 +18,17 @@ scalar argument or an array argument.  When given an array argument, the result
 is also an array, with the same rank and size as the argument, with values as if
 the function had been called element-wise on each member of the array.
 
+A function that is documented as "must be called with the `std::` prefix" is
+only available as e.g. `std::reshape()`.  `use std::*;` makes these available
+without the prefix for the rest of the file, e.g. `reshape()`.  A function that
+you declare yourself, or an intrinsic function that never needed the prefix, is
+never shadowed by this.  The risk is that a later version of syntran adds a new
+`std::` function with the same name as one of yours, which can change which
+function a call resolves to or make a name ambiguous.  `std::` is the stable
+choice, and `use std::*;` is a convenience for scripts where that doesn't matter.
+The `use` of a file doesn't carry over to the modules that it imports, or to the
+files that import it.
+
 These are the special polymorphic types used in documentation:
 - `any`: any unlimitted primitive, built-in syntran type
 - `any_num`: any numeric type, i.e. `i32`, `i64`, `f32`, or `f64`
@@ -954,8 +965,15 @@ let m = std::reshape([1, 2, 3, 4, 5, 6], [2, 3]);
 
 The product of the extents in `shape` must equal the number of elements in
 `source`, otherwise it is a runtime error
-([R19](errors.md#r19----reshape-mismatch)).  Must be called with the `std::`
-prefix, e.g. `std::reshape()`.
+([R19](errors.md#r19----reshape-mismatch)).
+
+The `shape` argument must be an array literal like `[2, 3]` or `[nx, ny]`, whose
+elements can be any expression.  Its length is the rank of the result, which
+has to be known when the program is parsed, so a variable, a function parameter,
+or the result of a function like `std::shape()` is an error
+([E121](errors.md#e121----reshape-shape-lit)).
+
+Must be called with the `std::` prefix, e.g. `std::reshape()`.
 
 Related functions: [`shape`](#shape), [`size`](#size), [`transpose`](#transpose)
 

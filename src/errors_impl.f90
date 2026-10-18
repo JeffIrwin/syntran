@@ -322,6 +322,7 @@ module procedure get_all_error_codes
 	call codes%push(EC_BAD_FORMAT)
 	call codes%push(EC_FORMAT_TYPE)
 	call codes%push(EC_FORMAT_COUNT)
+	call codes%push(EC_RESHAPE_SHAPE_LIT)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -1257,6 +1258,18 @@ module procedure err_format_count
 		//": there must be exactly one argument for each `{}` or `{:spec}`"
 
 end procedure err_format_count
+
+!===============================================================================
+
+module procedure err_reshape_shape_lit
+
+	err = err_pre(EC_RESHAPE_SHAPE_LIT) &
+		//'the shape argument of `std::reshape()` must be an array literal' &
+		//underline(context, span)//" not an array literal"//color_reset &
+		//line_feed//fg_bright_green//"help"//color_reset &
+		//": the number of dimensions of the result must be known at compile time, e.g. `[nx, ny]`"
+
+end procedure err_reshape_shape_lit
 
 !===============================================================================
 

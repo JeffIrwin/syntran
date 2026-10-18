@@ -1,0 +1,5 @@
+// `use std::*;` only affects calls after it, so this is still E30
+
+let m = reshape([1, 2, 3, 4], [2, 2]);
+
+use std::*;

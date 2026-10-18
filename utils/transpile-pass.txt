@@ -229,6 +229,7 @@ src/tests/test-src/modules/mymath.syntran
 src/tests/test-src/modules/pointmod.syntran
 src/tests/test-src/modules/qual_assign_mod.syntran
 src/tests/test-src/modules/shapes.syntran
+src/tests/test-src/modules/std_glob_mod.syntran
 src/tests/test-src/modules/struct_mod.syntran
 src/tests/test-src/modules/subdir/deep/test-grandparent-qualified.syntran
 src/tests/test-src/modules/subdir/deep/test-grandparent.syntran
@@ -256,6 +257,8 @@ src/tests/test-src/modules/test-modvar-array-qualified.syntran
 src/tests/test-src/modules/test-modvar-array.syntran
 src/tests/test-src/modules/test-modvar-arrstruct.syntran
 src/tests/test-src/modules/test-qual-assign-ok.syntran
+src/tests/test-src/modules/test-std-glob-module.syntran
+src/tests/test-src/modules/test-std-glob.syntran
 src/tests/test-src/modules/test-struct-collision-rev.syntran
 src/tests/test-src/modules/test-struct-collision.syntran
 src/tests/test-src/modules/test-struct-mod-qualified-annot.syntran

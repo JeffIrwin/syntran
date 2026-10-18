@@ -1,0 +1,6 @@
+// The module's own `use std::*;` doesn't make bare names work here, but its
+// fns that use bare names work fine
+
+use std_glob_mod;
+
+return std_glob_mod::reshaped_len() == 3;

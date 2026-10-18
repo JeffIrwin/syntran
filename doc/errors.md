@@ -197,6 +197,8 @@ A function was called before being defined.  May include a "did you mean" sugges
 ### E30 -- std-only-fn
 
 A standard-library function was called without its required `std::` prefix.
+Write `std::name()`, or add `use std::*;` earlier in the file to call every such
+function without the prefix.
 
 [Example](../src/tests/test-src/errors/E30-std-only-fn.syntran)
 
@@ -769,6 +771,15 @@ placeholders (`{}` and `{:spec}`) than there are values after it.  There must be
 exactly one value for each placeholder.
 
 [Example](../src/tests/test-src/errors/E120-format-count.syntran)
+
+### E121 -- reshape-shape-lit
+
+The `shape` argument of [`std::reshape()`](intrinsics.md#reshape) is not an array
+literal.  The length of the shape is the rank of the result, which has to be
+known when the program is parsed, so it must be written like `[nx, ny]`.  A
+variable, a function parameter, or a function result can't be used.
+
+[Example](../src/tests/test-src/errors/E121-reshape-shape-lit.syntran)
 
 ## Internal errors
 

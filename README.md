@@ -2383,7 +2383,12 @@ suit_mod::Suit.Spades
 Module names follow the same rules as identifiers: they may contain letters,
 digits, and underscores, but must not start with a digit.  Hyphens, spaces, and
 language keywords are not allowed as module names or aliases.  The name `std` is
-additionally reserved for the syntran standard library.
+additionally reserved for the syntran standard library.  The only `use` of it
+that is allowed is `use std::*;`, which lets you call the functions of the
+standard library without the `std::` prefix, e.g. `reshape()` instead of
+`std::reshape()`.  Beware that this accepts the risk of a name clash with
+functions that are added to a future version of syntran, so the prefix is the
+stable choice.
 
 <!-- syntran-begin mode=skip reason="illustrates module-naming-rule errors; the first `ok` import depends on a my_math module file not shown in this excerpt" -->
 ```rust

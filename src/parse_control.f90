@@ -198,8 +198,12 @@ recursive module subroutine parse_use_statement(parser, statement)
 		return
 	end if
 
-	! Ban "std" as a user-defined module name (reserved for standard library)
-	if (module_name == "std") then
+	! Ban "std" as a user-defined module name (reserved for standard library).
+	! The only form allowed is the glob `use std::*;`, which lets std-only fns
+	! be called without the `std::` prefix
+	if (module_name == "std" .and. .not. ( &
+		parser%current_kind() == double_colon_token .and. &
+		parser%peek_kind(1) == star_token)) then
 		span = new_span(mod_identifier%pos, len(mod_identifier%text))
 		call parser%diagnostics%push( &
 			err_mod_reserved_std(parser%context(), span))
@@ -345,8 +349,18 @@ recursive module subroutine parse_use_statement(parser, statement)
 	statement%kind = expr_statement
 	statement%is_empty = .true.
 
-	! For std::, all intrinsics are already globally available
-	if (module_name == "std") return
+	! For `use std::*;`, there's no file to load.  Just let the parser resolve
+	! bare names to std-only fns from here on
+	if (module_name == "std") then
+		parser%std_glob = .true.
+
+		! A use_statement with no member compiles to just a unit value, c.f.
+		! compile_node().  The generic empty expr_statement above isn't handled
+		! by the compiler
+		statement%kind = use_statement
+		statement%is_empty = .false.
+		return
+	end if
 
 	! Get the directory of the current source file
 	src_dir = get_dir(parser%contexts%v(parser%current_unit())%src_file)

@@ -734,6 +734,7 @@ function syntax_parse(str_, state, src_file, allow_continue, repl) result(tree)
 
 	parser%num_structs = num_structs0
 	parser%num_enums   = num_enums0
+	parser%std_glob    = state%std_glob
 
 	if (allocated(state%structs%table)) then
 		call move_alloc(state%structs%table, parser%structs%table)
@@ -859,6 +860,7 @@ function syntax_parse(str_, state, src_file, allow_continue, repl) result(tree)
 		state%structs%count    = parser%structs%count
 	end if
 	state%structs%num_structs = parser%num_structs
+	state%std_glob = parser%std_glob
 
 	if (allocated(parser%enums%table)) then
 		call move_alloc(parser%enums%table, state%enums%table)

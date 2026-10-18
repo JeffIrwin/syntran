@@ -136,6 +136,7 @@ module syntran__errors_m
 		EC_BAD_FORMAT = "E118", &
 		EC_FORMAT_TYPE = "E119", &
 		EC_FORMAT_COUNT = "E120", &
+		EC_RESHAPE_SHAPE_LIT = "E121", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -815,6 +816,12 @@ module syntran__errors_m
 			character(len = :), allocatable :: err
 			integer, intent(in) :: nspecs, nargs
 		end function err_format_count
+
+		module function err_reshape_shape_lit(context, span) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+		end function err_reshape_shape_lit
 
 		module function err_not_callable(context, span, var, type) result(err)
 			type(text_context_t) :: context
