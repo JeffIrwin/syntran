@@ -60,6 +60,14 @@ module syntran_rt
         character(len = :), allocatable :: s
     end type rt_str_t
 
+    ! The parsed spec of a placeholder of a format string, so that it is parsed
+    ! once instead of for every value that it formats
+    type :: rt_fmt_spec_t
+        character(len = 1) :: fill = ' ', align = ' ', ty = ' '
+        logical :: plus = .false., alt = .false., zero = .false.
+        integer :: width = 0, prec = -1
+    end type rt_fmt_spec_t
+
     ! A file handle.  Like the interpreter's, it is a value: reading from it
     ! updates the variable that it was read through, not other copies
     type :: rt_file_t
@@ -1486,55 +1494,46 @@ end subroutine rt_fmt_split
 ! and `ty` is a blank, `x`, `X`, `o`, `b`, `e` or `E`.  The fill is one byte.
 ! `width` is 0 and `prec` is -1 if they are not given.  If the spec is bad, `ierr`
 ! is the position in it of the bad character, and otherwise it is 0
-subroutine rt_fmt_parse(spec, fill, align, plus, alt, zero, width, prec, ty, ierr)
+subroutine rt_fmt_parse(spec, sp, ierr)
     character(len = *), intent(in) :: spec
-    character(len = 1), intent(out) :: fill, align, ty
-    logical, intent(out) :: plus, alt, zero
-    integer, intent(out) :: width, prec, ierr
+    type(rt_fmt_spec_t), intent(out) :: sp
+    integer, intent(out) :: ierr
 
     integer :: i, j, n
 
-    fill = ' '
-    align = ' '
-    ty = ' '
-    plus = .false.
-    alt = .false.
-    zero = .false.
-    width = 0
-    prec = -1
     ierr = 0
     n = len(spec)
     i = 1
 
     if (n >= 2) then
         if (index('<>^', spec(2: 2)) > 0) then
-            fill = spec(1: 1)
-            align = spec(2: 2)
+            sp%fill = spec(1: 1)
+            sp%align = spec(2: 2)
             i = 3
         end if
     end if
     if (i == 1 .and. n >= 1) then
         if (index('<>^', spec(1: 1)) > 0) then
-            align = spec(1: 1)
+            sp%align = spec(1: 1)
             i = 2
         end if
     end if
 
     if (i <= n) then
         if (spec(i: i) == '+') then
-            plus = .true.
+            sp%plus = .true.
             i = i + 1
         end if
     end if
     if (i <= n) then
         if (spec(i: i) == '#') then
-            alt = .true.
+            sp%alt = .true.
             i = i + 1
         end if
     end if
     if (i <= n) then
         if (spec(i: i) == '0') then
-            zero = .true.
+            sp%zero = .true.
             i = i + 1
         end if
     end if
@@ -1546,7 +1545,7 @@ subroutine rt_fmt_parse(spec, fill, align, plus, alt, zero, width, prec, ty, ier
             ierr = i
             return
         end if
-        width = 10 * width + iachar(spec(i: i)) - iachar('0')
+        sp%width = 10 * sp%width + iachar(spec(i: i)) - iachar('0')
         i = i + 1
     end do
 
@@ -1554,14 +1553,14 @@ subroutine rt_fmt_parse(spec, fill, align, plus, alt, zero, width, prec, ty, ier
         if (spec(i: i) == '.') then
             i = i + 1
             j = i
-            prec = 0
+            sp%prec = 0
             do while (i <= n)
                 if (spec(i: i) < '0' .or. spec(i: i) > '9') exit
                 if (i - j >= 3) then
                     ierr = i
                     return
                 end if
-                prec = 10 * prec + iachar(spec(i: i)) - iachar('0')
+                sp%prec = 10 * sp%prec + iachar(spec(i: i)) - iachar('0')
                 i = i + 1
             end do
             if (i == j) then
@@ -1576,7 +1575,7 @@ subroutine rt_fmt_parse(spec, fill, align, plus, alt, zero, width, prec, ty, ier
             ierr = i
             return
         end if
-        ty = spec(i: i)
+        sp%ty = spec(i: i)
         i = i + 1
     end if
 
@@ -1585,27 +1584,47 @@ end subroutine rt_fmt_parse
 
 !===============================================================================
 
+! The parsed spec of a placeholder, which is the text after the `:` of a `{:spec}`
+function rt_fmt_spec(spec) result(sp)
+    character(len = *), intent(in) :: spec
+    type(rt_fmt_spec_t) :: sp
+
+    integer :: ierr
+
+    call rt_fmt_parse(spec, sp, ierr)
+    if (ierr /= 0) call rt_fatal('invalid format spec "' // spec // '"')
+end function rt_fmt_spec
+
+!===============================================================================
+
 ! Format one value with the spec of a placeholder.  `kind_` is `i` for an integer
 ! of `bits` bits in `ival`, `r` for a real of `bits` bits in `rval`, `b` for a
 ! bool which is `ival` /= 0, and `s` for the string `sval`
-function rt_fmt_val(kind_, ival, bits, rval, sval, spec) result(out)
+function rt_fmt_val(kind_, ival, bits, rval, sval, sp) result(out)
     character(len = 1), intent(in) :: kind_
     integer(int64), intent(in) :: ival
     integer, intent(in) :: bits
     real(real64), intent(in) :: rval
-    character(len = *), intent(in) :: sval, spec
+    character(len = *), intent(in) :: sval
+    type(rt_fmt_spec_t), intent(in) :: sp
     character(len = :), allocatable :: out
 
     character(len = 1) :: fill, align, ty, al
     logical :: plus, alt, zero, numeric, zero_ok
-    integer :: width, prec, ierr, n, pad, left
+    integer :: width, prec, n, pad, left
     character(len = :), allocatable :: prefix, digits
     character(len = 32) :: buf
     real(real64) :: a
     integer(int64) :: rbits
 
-    call rt_fmt_parse(spec, fill, align, plus, alt, zero, width, prec, ty, ierr)
-    if (ierr /= 0) call rt_fatal('invalid format spec "' // spec // '"')
+    fill = sp%fill
+    align = sp%align
+    ty = sp%ty
+    plus = sp%plus
+    alt = sp%alt
+    zero = sp%zero
+    width = sp%width
+    prec = sp%prec
 
     prefix = ''
     numeric = .false.
@@ -1824,42 +1843,42 @@ function rt_fmt_bool(x, spec) result(s)
     logical, intent(in) :: x
     character(len = *), intent(in) :: spec
     character(len = :), allocatable :: s
-    s = rt_fmt_val('b', merge(1_int64, 0_int64, x), 32, 0.0_real64, '', spec)
+    s = rt_fmt_val('b', merge(1_int64, 0_int64, x), 32, 0.0_real64, '', rt_fmt_spec(spec))
 end function rt_fmt_bool
 
 function rt_fmt_i32(x, spec) result(s)
     integer(int32), intent(in) :: x
     character(len = *), intent(in) :: spec
     character(len = :), allocatable :: s
-    s = rt_fmt_val('i', int(x, int64), 32, 0.0_real64, '', spec)
+    s = rt_fmt_val('i', int(x, int64), 32, 0.0_real64, '', rt_fmt_spec(spec))
 end function rt_fmt_i32
 
 function rt_fmt_i64(x, spec) result(s)
     integer(int64), intent(in) :: x
     character(len = *), intent(in) :: spec
     character(len = :), allocatable :: s
-    s = rt_fmt_val('i', x, 64, 0.0_real64, '', spec)
+    s = rt_fmt_val('i', x, 64, 0.0_real64, '', rt_fmt_spec(spec))
 end function rt_fmt_i64
 
 function rt_fmt_f32(x, spec) result(s)
     real(real32), intent(in) :: x
     character(len = *), intent(in) :: spec
     character(len = :), allocatable :: s
-    s = rt_fmt_val('r', 0_int64, 32, real(x, real64), '', spec)
+    s = rt_fmt_val('r', 0_int64, 32, real(x, real64), '', rt_fmt_spec(spec))
 end function rt_fmt_f32
 
 function rt_fmt_f64(x, spec) result(s)
     real(real64), intent(in) :: x
     character(len = *), intent(in) :: spec
     character(len = :), allocatable :: s
-    s = rt_fmt_val('r', 0_int64, 64, x, '', spec)
+    s = rt_fmt_val('r', 0_int64, 64, x, '', rt_fmt_spec(spec))
 end function rt_fmt_f64
 
 function rt_fmt_str(x, spec) result(s)
     character(len = *), intent(in) :: x
     character(len = *), intent(in) :: spec
     character(len = :), allocatable :: s
-    s = rt_fmt_val('s', 0_int64, 64, 0.0_real64, x, spec)
+    s = rt_fmt_val('s', 0_int64, 64, 0.0_real64, x, rt_fmt_spec(spec))
 end function rt_fmt_str
 
 !===============================================================================
@@ -1869,10 +1888,12 @@ function rt_fmt_items_bool(a, spec) result(r)
     logical, intent(in) :: a(:)
     character(len = *), intent(in) :: spec
     type(rt_str_t), allocatable :: r(:)
+    type(rt_fmt_spec_t) :: sp
     integer :: i
+    sp = rt_fmt_spec(spec)
     allocate(r(size(a)))
     do i = 1, size(a)
-        r(i)%s = rt_fmt_bool(a(i), spec)
+        r(i)%s = rt_fmt_val('b', merge(1_int64, 0_int64, a(i)), 32, 0.0_real64, '', sp)
     end do
 end function rt_fmt_items_bool
 
@@ -1911,10 +1932,12 @@ function rt_fmt_items_i32(a, spec) result(r)
     integer(int32), intent(in) :: a(:)
     character(len = *), intent(in) :: spec
     type(rt_str_t), allocatable :: r(:)
+    type(rt_fmt_spec_t) :: sp
     integer :: i
+    sp = rt_fmt_spec(spec)
     allocate(r(size(a)))
     do i = 1, size(a)
-        r(i)%s = rt_fmt_i32(a(i), spec)
+        r(i)%s = rt_fmt_val('i', int(a(i), int64), 32, 0.0_real64, '', sp)
     end do
 end function rt_fmt_items_i32
 
@@ -1953,10 +1976,12 @@ function rt_fmt_items_i64(a, spec) result(r)
     integer(int64), intent(in) :: a(:)
     character(len = *), intent(in) :: spec
     type(rt_str_t), allocatable :: r(:)
+    type(rt_fmt_spec_t) :: sp
     integer :: i
+    sp = rt_fmt_spec(spec)
     allocate(r(size(a)))
     do i = 1, size(a)
-        r(i)%s = rt_fmt_i64(a(i), spec)
+        r(i)%s = rt_fmt_val('i', a(i), 64, 0.0_real64, '', sp)
     end do
 end function rt_fmt_items_i64
 
@@ -1995,10 +2020,12 @@ function rt_fmt_items_f32(a, spec) result(r)
     real(real32), intent(in) :: a(:)
     character(len = *), intent(in) :: spec
     type(rt_str_t), allocatable :: r(:)
+    type(rt_fmt_spec_t) :: sp
     integer :: i
+    sp = rt_fmt_spec(spec)
     allocate(r(size(a)))
     do i = 1, size(a)
-        r(i)%s = rt_fmt_f32(a(i), spec)
+        r(i)%s = rt_fmt_val('r', 0_int64, 32, real(a(i), real64), '', sp)
     end do
 end function rt_fmt_items_f32
 
@@ -2037,10 +2064,12 @@ function rt_fmt_items_f64(a, spec) result(r)
     real(real64), intent(in) :: a(:)
     character(len = *), intent(in) :: spec
     type(rt_str_t), allocatable :: r(:)
+    type(rt_fmt_spec_t) :: sp
     integer :: i
+    sp = rt_fmt_spec(spec)
     allocate(r(size(a)))
     do i = 1, size(a)
-        r(i)%s = rt_fmt_f64(a(i), spec)
+        r(i)%s = rt_fmt_val('r', 0_int64, 64, a(i), '', sp)
     end do
 end function rt_fmt_items_f64
 
@@ -2082,12 +2111,14 @@ function rt_fmt_a_str_1(x, spec) result(s)
     character(len = *), intent(in) :: spec
     character(len = :), allocatable :: s
     type(rt_str_t), allocatable :: r(:)
+    type(rt_fmt_spec_t) :: sp
     integer :: i, n
+    sp = rt_fmt_spec(spec)
     allocate(r(size(x)))
     n = 0
     do i = 1, size(x, 1)
         n = n + 1
-        r(n)%s = rt_fmt_str(x(i)%s, spec)
+        r(n)%s = rt_fmt_val('s', 0_int64, 64, 0.0_real64, x(i)%s, sp)
     end do
     s = rt_fmt_join(r, size(x, 1))
 end function rt_fmt_a_str_1
@@ -2097,13 +2128,15 @@ function rt_fmt_a_str_2(x, spec) result(s)
     character(len = *), intent(in) :: spec
     character(len = :), allocatable :: s
     type(rt_str_t), allocatable :: r(:)
+    type(rt_fmt_spec_t) :: sp
     integer :: i, j, n
+    sp = rt_fmt_spec(spec)
     allocate(r(size(x)))
     n = 0
     do j = 1, size(x, 2)
         do i = 1, size(x, 1)
             n = n + 1
-            r(n)%s = rt_fmt_str(x(i,j)%s, spec)
+            r(n)%s = rt_fmt_val('s', 0_int64, 64, 0.0_real64, x(i,j)%s, sp)
         end do
     end do
     s = rt_fmt_join(r, size(x, 1))
@@ -2114,14 +2147,16 @@ function rt_fmt_a_str_3(x, spec) result(s)
     character(len = *), intent(in) :: spec
     character(len = :), allocatable :: s
     type(rt_str_t), allocatable :: r(:)
+    type(rt_fmt_spec_t) :: sp
     integer :: i, j, k, n
+    sp = rt_fmt_spec(spec)
     allocate(r(size(x)))
     n = 0
     do k = 1, size(x, 3)
         do j = 1, size(x, 2)
             do i = 1, size(x, 1)
                 n = n + 1
-                r(n)%s = rt_fmt_str(x(i,j,k)%s, spec)
+                r(n)%s = rt_fmt_val('s', 0_int64, 64, 0.0_real64, x(i,j,k)%s, sp)
             end do
         end do
     end do
@@ -2133,7 +2168,9 @@ function rt_fmt_a_str_4(x, spec) result(s)
     character(len = *), intent(in) :: spec
     character(len = :), allocatable :: s
     type(rt_str_t), allocatable :: r(:)
+    type(rt_fmt_spec_t) :: sp
     integer :: i, j, k, l, n
+    sp = rt_fmt_spec(spec)
     allocate(r(size(x)))
     n = 0
     do l = 1, size(x, 4)
@@ -2141,7 +2178,7 @@ function rt_fmt_a_str_4(x, spec) result(s)
             do j = 1, size(x, 2)
                 do i = 1, size(x, 1)
                     n = n + 1
-                    r(n)%s = rt_fmt_str(x(i,j,k,l)%s, spec)
+                    r(n)%s = rt_fmt_val('s', 0_int64, 64, 0.0_real64, x(i,j,k,l)%s, sp)
                 end do
             end do
         end do

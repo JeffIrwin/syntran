@@ -4,7 +4,7 @@
 submodule (syntran__parse_m) syntran__parse_fn
 
 	use syntran__intr_fns_m
-	use syntran_rt, only: rt_str_t, rt_fmt_split, rt_fmt_parse
+	use syntran_rt, only: rt_str_t, rt_fmt_spec_t, rt_fmt_split, rt_fmt_parse
 
 	implicit none
 
@@ -2771,13 +2771,11 @@ module subroutine check_format_call(parser, fn_name, args, spans, call_span)
 
 	!********
 
-	character(len = 1) :: fill, align, ty
 	character(len = :), allocatable :: fmt, spec, why, tname
 
-	integer :: i, ierr, width, prec, nspecs, nargs, cat
+	integer :: i, ierr, nspecs, nargs, cat
 
-	logical :: plus, alt, zero
-
+	type(rt_fmt_spec_t) :: sp
 	type(rt_str_t), allocatable :: pieces(:), specs(:)
 
 	if (size(args) < 1) return
@@ -2816,7 +2814,7 @@ module subroutine check_format_call(parser, fn_name, args, spans, call_span)
 		spec = '{:'//specs(i)%s//'}'
 		if (len(specs(i)%s) == 0) spec = '{}'
 
-		call rt_fmt_parse(specs(i)%s, fill, align, plus, alt, zero, width, prec, ty, ierr)
+		call rt_fmt_parse(specs(i)%s, sp, ierr)
 		if (ierr /= 0) then
 			if (ierr <= len(specs(i)%s)) then
 				why = 'unexpected `'//specs(i)%s(ierr: ierr)//'` at position '//str(ierr) &
@@ -2842,30 +2840,30 @@ module subroutine check_format_call(parser, fn_name, args, spans, call_span)
 
 			case (1)
 				! Integers
-				if (ty == 'e' .or. ty == 'E') then
+				if (sp%ty == 'e' .or. sp%ty == 'E') then
 					why = '`e` is for floats.  Integers can use `x`, `X`, `o`, or `b`'
-				else if (prec >= 0) then
+				else if (sp%prec >= 0) then
 					why = 'an integer has no precision'
-				else if (alt .and. ty == ' ') then
+				else if (sp%alt .and. sp%ty == ' ') then
 					why = '`#` adds a prefix to `x`, `X`, `o`, or `b`'
 				end if
 
 			case (2)
 				! Floats
-				if (ty /= ' ' .and. ty /= 'e' .and. ty /= 'E') then
+				if (sp%ty /= ' ' .and. sp%ty /= 'e' .and. sp%ty /= 'E') then
 					why = '`x`, `X`, `o`, and `b` are for integers.  Floats can use `e` or `E`'
-				else if (alt) then
+				else if (sp%alt) then
 					why = '`#` adds a prefix to integers in `x`, `X`, `o`, or `b`'
 				end if
 
 			case default
 				! Bools, strings, enums, and structs are padded, and only strings
 				! can be truncated by a precision
-				if (ty /= ' ') then
-					why = '`'//ty//'` is for numbers'
-				else if (plus .or. alt .or. zero) then
+				if (sp%ty /= ' ') then
+					why = '`'//sp%ty//'` is for numbers'
+				else if (sp%plus .or. sp%alt .or. sp%zero) then
 					why = '`+`, `#`, and `0` are for numbers'
-				else if (prec >= 0 .and. cat /= 3) then
+				else if (sp%prec >= 0 .and. cat /= 3) then
 					why = 'only a string has a precision, to truncate it'
 				end if
 			end select

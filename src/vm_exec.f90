@@ -1803,6 +1803,10 @@ module subroutine vm_run(prog, state, res)
 				val%str%s = res_
 				end block
 
+			else if (instr%a == INTR_FORMAT) then
+				! The format string was split and parsed at compile time
+				call vm_format(prog%fmts(instr%c), iargs_pool(1:nintr), val)
+
 			else
 				call vm_call_intr(instr%a, nintr, iargs_pool(1:nintr), state, val)
 				if (state%rt_halt) exit

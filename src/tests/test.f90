@@ -4851,6 +4851,20 @@ subroutine unit_test_format(npass, nfail)
 			eval('let s = std::format("{:3}", 1) + std::format("{:<3}", 2); s;') == '  12  ', &
 			eval('len(std::format("{:10}", 1));') == '10', &
 
+			! The format string is split and parsed once per call site, so a site
+			! that runs many times, several sites with different formats, and a
+			! site in a fn must all keep their own pieces and specs
+			eval('let s = ""; for i in [1: 4] { s = s + std::format("<{:>3}>", i); } s;') == &
+				'<  1><  2><  3>', &
+			eval('std::format("{:03}", 5) + std::format("{:<3}|", 5) + std::format("{}{}", 1, 2);') == &
+				'005' // '5  |' // '12', &
+			eval('fn f(x: i32): str { return std::format("[{:*^5}]", x); } f(1) + f(22);') == &
+				'[**1**]' // '[*22**]', &
+			eval('let a = [1.5, 2.25, 3.0]; std::format("{:.1}|{:6.2}", a, a);') == &
+				'1.5 2.2 3.0|  1.50   2.25   3.00', &
+			eval('std::format("{:x}|{:#b}", [10, 255], 5);') == 'a ff|0b101', &
+			eval('std::format("{:>3}", ["a", "bb"]);') == '  a  bb', &
+
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -10869,7 +10883,7 @@ subroutine unit_test_transpile(npass, nfail)
 			index(transpile_src('let f = open("x.txt", "wb"); std::write(f, 1); close(f);'), &
 				"'wb'") > 0, &
 			index(transpile_src('println(1);'), 'rt_write') == 0, &
-			index(transpile_src('println(1);'), 'rt_fmt') == 0, &
+			index(transpile_src('println(1);'), 'function rt_fmt') == 0, &
 
 			! format() is a concatenation of the text around its placeholders and the
 			! call of the runtime fn of each value, which is only there if it is used

@@ -4,6 +4,7 @@
 module syntran__bytecode_m
 
 	use syntran__types_m
+	use syntran_rt, only: rt_str_t, rt_fmt_spec_t, rt_fmt_split, rt_fmt_parse
 
 	implicit none
 
@@ -517,6 +518,17 @@ module syntran__bytecode_m
 
 	!********
 
+	! The literal format string of one format() call, split and parsed once by
+	! add_fmt() at compile time instead of on every call.  There is one more
+	! piece (the text around the placeholders) than there are specs
+
+	type fmt_t
+		type(rt_str_t), allocatable :: pieces(:)
+		type(rt_fmt_spec_t), allocatable :: specs(:)
+	end type fmt_t
+
+	!********
+
 	! A compiled program.  All function bodies and the top-level code are
 	! concatenated into a single flat code(:) array; per-function entry offsets
 	! are stored in fn_entry(:).
@@ -548,6 +560,11 @@ module syntran__bytecode_m
 
 		type(value_t), allocatable :: consts(:)
 		integer :: nconsts = 0
+
+		! Pre-split format strings referenced by OP_CALL_INTR for INTR_FORMAT
+		! (c = index)
+		type(fmt_t), allocatable :: fmts(:)
+		integer :: nfmts = 0
 
 		! AST node pool for opcodes that delegate to the AST layer
 		type(syntax_node_t), allocatable :: nodes(:)
@@ -698,6 +715,52 @@ end function add_const
 
 !===============================================================================
 
+function add_fmt(prog, fmt) result(idx)
+
+	! Split and parse the literal format string of a format() call, add it to
+	! the format pool, and return its 1-based index.  The parser already checked
+	! the string and its specs (check_format_call()), so neither can fail here
+
+	type(program_t), intent(inout) :: prog
+	character(len = *), intent(in) :: fmt
+	integer :: idx
+
+	!*******
+
+	integer :: i, ierr
+	type(fmt_t), allocatable :: tmp(:)
+	type(rt_str_t), allocatable :: specs(:)
+
+	integer, parameter :: INIT_FMT_CAP = 4
+
+	prog%nfmts = prog%nfmts + 1
+	idx = prog%nfmts
+
+	if (.not. allocated(prog%fmts)) then
+		allocate(prog%fmts(INIT_FMT_CAP))
+
+	else if (prog%nfmts > size(prog%fmts)) then
+		allocate(tmp(2 * prog%nfmts))
+		do i = 1, prog%nfmts - 1
+			call move_alloc(prog%fmts(i)%pieces, tmp(i)%pieces)
+			call move_alloc(prog%fmts(i)%specs, tmp(i)%specs)
+		end do
+		call move_alloc(tmp, prog%fmts)
+	end if
+
+	call rt_fmt_split(fmt, prog%fmts(idx)%pieces, specs, ierr)
+	if (ierr /= 0) call internal_error()
+
+	allocate(prog%fmts(idx)%specs(size(specs)))
+	do i = 1, size(specs)
+		call rt_fmt_parse(specs(i)%s, prog%fmts(idx)%specs(i), ierr)
+		if (ierr /= 0) call internal_error()
+	end do
+
+end function add_fmt
+
+!===============================================================================
+
 function new_program() result(prog)
 
 	type(program_t) :: prog
@@ -709,6 +772,7 @@ function new_program() result(prog)
 	prog%cap     = INIT_CAP
 	prog%len_    = 0
 	prog%nconsts = 0
+	prog%nfmts   = 0
 	prog%nnodes  = 0
 	prog%entry_main = 1
 	prog%cur_id  = 0

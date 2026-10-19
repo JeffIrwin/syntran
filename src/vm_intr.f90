@@ -14,8 +14,8 @@ submodule (syntran__vm_m) syntran__vm_intr
 	! readln() (stdin) has no slot to write back to, so it IS routed here
 
 	use syntran__linalg_m
-	use syntran_rt, only: rt_str_t, rt_fmt_split, rt_fmt_join, rt_fmt_bool, &
-		rt_fmt_i32, rt_fmt_i64, rt_fmt_f32, rt_fmt_f64, rt_fmt_str, rt_read_tokens
+	use syntran_rt, only: rt_str_t, rt_fmt_spec_t, rt_fmt_join, rt_fmt_val, &
+		rt_read_tokens
 
 	implicit none
 
@@ -48,8 +48,6 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 	character(len = :), allocatable :: env_val
 
 	type(char_vector_t) :: str_
-
-	type(rt_str_t), allocatable :: fmt_pieces(:), fmt_specs(:)
 
 	double precision, parameter :: LOG_E_2  = log(2.d0)
 	real,             parameter :: LOG_E_2F = log(2.0)
@@ -458,20 +456,6 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 			write(output_unit, '(a)', advance = 'no') args(i)%to_str()
 		end do
 		flush(output_unit)
-
-	case (INTR_FORMAT)
-		! The format string was checked against the args by check_format_call()
-		! when the call was parsed, so splitting it can't fail
-		res%type = str_type
-		call rt_fmt_split(args(1)%str%s, fmt_pieces, fmt_specs, io)
-		str_ = new_char_vector()
-		do i = 1, size(fmt_specs)
-			call str_%push(fmt_pieces(i)%s)
-			call str_%push(format_value(args(i+1), fmt_specs(i)%s))
-		end do
-		call str_%push(fmt_pieces(size(fmt_pieces))%s)
-		if (.not. allocated(res%str)) allocate(res%str)
-		res%str%s = str_%trim()
 
 	case (INTR_STR)
 		res%type = str_type
@@ -1607,14 +1591,45 @@ end subroutine reduce_mask_scalar
 
 !===============================================================================
 
-function format_value(val, spec) result(s)
+module subroutine vm_format(fmt, args, res)
+
+	! format(): the pieces of the literal format string between the values, each
+	! of which is formatted with the parsed spec of its placeholder.  The string
+	! was checked against the args by check_format_call() when the call was
+	! parsed, and was split and parsed by add_fmt() when it was compiled
+
+	type(fmt_t), intent(in) :: fmt
+	type(value_t), intent(in) :: args(:)
+	type(value_t), intent(out) :: res
+
+	!*******
+
+	integer :: i
+
+	type(char_vector_t) :: str_
+
+	res%type = str_type
+	str_ = new_char_vector()
+	do i = 1, size(fmt%specs)
+		call str_%push(fmt%pieces(i)%s)
+		call str_%push(format_value(args(i), fmt%specs(i)))
+	end do
+	call str_%push(fmt%pieces(size(fmt%pieces))%s)
+	if (.not. allocated(res%str)) allocate(res%str)
+	res%str%s = str_%trim()
+
+end subroutine vm_format
+
+!===============================================================================
+
+function format_value(val, sp) result(s)
 
 	! One value of format(), with the spec of its placeholder.  An array is its
 	! elements separated by spaces, with a line break after each row.  An enum or
 	! a struct is formatted as the string that str() makes of it
 
 	type(value_t), intent(in) :: val
-	character(len = *), intent(in) :: spec
+	type(rt_fmt_spec_t), intent(in) :: sp
 	character(len = :), allocatable :: s
 
 	!********
@@ -1628,17 +1643,17 @@ function format_value(val, spec) result(s)
 		do i = 1, size(items)
 			select case (val%array%type)
 			case (i32_type)
-				items(i)%s = rt_fmt_i32(val%array%i32(i), spec)
+				items(i)%s = rt_fmt_val('i', int(val%array%i32(i), 8), 32, 0.0d0, '', sp)
 			case (i64_type)
-				items(i)%s = rt_fmt_i64(val%array%i64(i), spec)
+				items(i)%s = rt_fmt_val('i', val%array%i64(i), 64, 0.0d0, '', sp)
 			case (f32_type)
-				items(i)%s = rt_fmt_f32(val%array%f32(i), spec)
+				items(i)%s = rt_fmt_val('r', 0_8, 32, real(val%array%f32(i), 8), '', sp)
 			case (f64_type)
-				items(i)%s = rt_fmt_f64(val%array%f64(i), spec)
+				items(i)%s = rt_fmt_val('r', 0_8, 64, val%array%f64(i), '', sp)
 			case (bool_type)
-				items(i)%s = rt_fmt_bool(logical(val%array%bool(i)), spec)
+				items(i)%s = rt_fmt_val('b', merge(1_8, 0_8, logical(val%array%bool(i))), 32, 0.0d0, '', sp)
 			case default
-				items(i)%s = rt_fmt_str(val%array%str(i)%s, spec)
+				items(i)%s = rt_fmt_val('s', 0_8, 64, 0.0d0, val%array%str(i)%s, sp)
 			end select
 		end do
 		s = rt_fmt_join(items, int(val%array%size(1)))
@@ -1648,19 +1663,19 @@ function format_value(val, spec) result(s)
 
 	select case (val%type)
 	case (i32_type)
-		s = rt_fmt_i32(val%sca%i32, spec)
+		s = rt_fmt_val('i', int(val%sca%i32, 8), 32, 0.0d0, '', sp)
 	case (i64_type)
-		s = rt_fmt_i64(val%sca%i64, spec)
+		s = rt_fmt_val('i', val%sca%i64, 64, 0.0d0, '', sp)
 	case (f32_type)
-		s = rt_fmt_f32(val%sca%f32, spec)
+		s = rt_fmt_val('r', 0_8, 32, real(val%sca%f32, 8), '', sp)
 	case (f64_type)
-		s = rt_fmt_f64(val%sca%f64, spec)
+		s = rt_fmt_val('r', 0_8, 64, val%sca%f64, '', sp)
 	case (bool_type)
-		s = rt_fmt_bool(logical(val%sca%bool), spec)
+		s = rt_fmt_val('b', merge(1_8, 0_8, logical(val%sca%bool)), 32, 0.0d0, '', sp)
 	case (str_type)
-		s = rt_fmt_str(val%str%s, spec)
+		s = rt_fmt_val('s', 0_8, 64, 0.0d0, val%str%s, sp)
 	case default
-		s = rt_fmt_str(val%to_str(), spec)
+		s = rt_fmt_val('s', 0_8, 64, 0.0d0, val%to_str(), sp)
 	end select
 
 end function format_value

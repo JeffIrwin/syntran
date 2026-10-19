@@ -1668,6 +1668,17 @@ recursive subroutine compile_node_impl(prog, cs, node)
 					call emit(prog, OP_CALL_INTR, a = intr_id_, b = 1, c = slot_c)
 				end if
 
+			case (INTR_FORMAT)
+				! The literal format string is split and parsed once here, not on
+				! every call.  It isn't pushed, so only the values are args
+				nargs_ = size(node%args) - 1
+				idx = add_fmt(prog, node%args(1)%val%str%s)
+				do i = 2, size(node%args)
+					call compile_node(prog, cs, node%args(i))
+				end do
+				call emit(prog, OP_CALL_INTR, a = INTR_FORMAT, b = nargs_, &
+					c = int(idx, 8))
+
 			case (INTR_SIZE)
 				! OP_SIZE_NAT: read array size directly from slot without deep-copying.
 				! Only fires when args(1) is a plain variable and (if 2-arg) dim is a
