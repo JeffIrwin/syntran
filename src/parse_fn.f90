@@ -28,9 +28,9 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 
 	integer :: i, io, io_std, id_index, id_index_tmp, pos0, rank, arr_type_result, arr_type_src, slot
 	integer :: var_io, var_id_index, method_slot, method_fn_id
-	integer :: field_id, field_io
+	integer :: field_id, field_io, ifmt
 
-	logical :: has_rank, has_arr_type, param_is_ref, param_is_const_ref, &
+	logical :: has_rank, has_arr_type, param_is_ref, param_is_const_ref, self_name, &
 		arg_is_ref, is_ok, is_const_var, var_is_loc
 
 	logical(kind = 1) :: eff_is_ref
@@ -63,11 +63,24 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 
 	!print *, "identifier_ = ", identifier_%text
 
+	! Inside a method body, is a bare name a member or a sibling method of the
+	! struct being parsed?  Then the call is an implicit-self call, c.f. the
+	! fallbacks below, and a std-only fn of the same name must not take it
+	self_name = .false.
+	if (.not. present(module_prefix) .and. parser%in_method) then
+		call parser%method_struct%vars%search(identifier_%text, &
+			field_id, field_io, field_val)
+		method_slot = parser%fns%find( &
+			"0" // unqualified_name(parser%method_struct_name) // "::" // identifier_%text)
+		self_name = field_io == exit_success .or. method_slot /= 0
+	end if
+
 	! After `use std::*;`, a bare name that isn't a user fn or legacy intrinsic
 	! but is a std-only fn is parsed exactly like the explicit `std::name()`
 	! call.  User fns and legacy intrinsics take precedence over the std-only fn,
-	! and a variable of that name is left to the handling below
-	if (.not. present(module_prefix) .and. parser%std_imported(identifier_%text)) then
+	! and a variable or a member of that name is left to the handling below
+	if (.not. present(module_prefix) .and. .not. self_name .and. &
+		parser%std_imported(identifier_%text)) then
 		if (parser%fns%find(identifier_%text) == 0 .and. &
 			parser%fns%find("std::" // identifier_%text) /= 0) then
 			call parser%search(identifier_%text, var_id_index, var_io, var_val, &
@@ -208,8 +221,9 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 
 		! Check if this is an std-only function that requires the std:: prefix.
 		! Do this before the ipass==0 early return so the type is set correctly
-		! in both passes, preventing cascading errors.
-		if (.not. present(module_prefix)) then
+		! in both passes, preventing cascading errors.  A member or a sibling
+		! method of the same name is called through self instead
+		if (.not. present(module_prefix) .and. .not. self_name) then
 			slot = parser%fns%find("std::" // fn_call%identifier%text)
 			if (slot == 0) then
 				io_std = exit_failure
@@ -569,16 +583,14 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 	call check_ref_aliases(parser, args%v(1: args%len_), fn_call%is_ref, &
 		alias_mut, alias_spans, identifier_%text)
 
-	if (fn%is_intr .and. identifier_%text == "format") then
+	if (fn%is_intr .and. any(identifier_%text == ["format", "printf", "writef"])) then
+		! The format string is the first arg, except for writef(), where the file
+		! handle comes first
+		ifmt = 1
+		if (identifier_%text == "writef") ifmt = 2
 		span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
-		call check_format_call(parser, identifier_%text, args%v(1: args%len_), alias_spans, span)
-	else if (fn%is_intr .and. identifier_%text == "printf") then
-		span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
-		call check_format_call(parser, identifier_%text, args%v(1: args%len_), alias_spans, span)
-	else if (fn%is_intr .and. identifier_%text == "writef") then
-		! The file handle is the first arg, so the format string is the second
-		span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
-		call check_format_call(parser, identifier_%text, args%v(2: args%len_), alias_spans(2:), span)
+		call check_format_call(parser, identifier_%text, args%v(ifmt: args%len_), &
+			alias_spans(ifmt:), span)
 	end if
 
 	fn_call%id_index = id_index

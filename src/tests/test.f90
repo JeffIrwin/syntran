@@ -4118,6 +4118,9 @@ subroutine unit_test_fns(npass, nfail)
 			! (the Fortran transpiler only skips the copy when it can prove
 			! there's no such aliasing)
 			interpret_file(path//'test-45.syntran', quiet) == '0', &
+			! A method or member named like a std-only fn (print, write, transpose)
+			! is an implicit-self call, with or without `use std::*;`
+			interpret_file(path//'test-46.syntran', quiet) == 'true', &
 			! Printing a struct with a fn-pointer member renders the
 			! member's signature via value_to_str()'s fn_type case, same as
 			! a bare fn-pointer value (test-33 above)
@@ -4898,6 +4901,7 @@ subroutine unit_test_io(npass, nfail)
 			interpret_file(path//'test-14.syntran', quiet) == 'true', &
 			interpret_file(path//'test-15.syntran', quiet) == 'true', &
 			interpret_file(path//'test-16.syntran', quiet) == 'true', &
+			interpret_file(path//'test-17.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -9054,6 +9058,11 @@ subroutine unit_test_error_codes(npass, nfail)
 					EC_STD_UNKNOWN_NAME) == 1, &
 				diag_has_code(get_diags('use std::nope;'), EC_STD_UNKNOWN_NAME), &
 				.not. diag_has_code(get_diags('use std::reshape;'), EC_STD_UNKNOWN_NAME), &
+				! ... and the suggestion is a std fn, not a user fn with a close name
+				diag_has_text(get_diags('fn reshap2(): i32 { return 1; }'//char(10) &
+					//'use std::reshap;'), 'reshape'), &
+				.not. diag_has_text(get_diags('fn reshap2(): i32 { return 1; }'//char(10) &
+					//'use std::reshap;'), 'did you mean `reshap2`'), &
 
 				! E123: only `std` can be imported one name at a time
 				diag_count_code(get_diags_file(P//'E123-mod-import-name.syntran'), &
@@ -9610,6 +9619,12 @@ subroutine unit_test_runtime_errors(npass, nfail)
 
 			! R44: a failed std::read_i32() etc.
 			rt_code_both_file(P//'R44-read-fail.syntran', RC_READ_FAIL), &
+			! ... including a read after readln() already hit the end of the file
+			diag_has_code(get_diags( &
+				'let f = open("build/rt_file_r44l.txt", "w"); writeln(f, "1"); ' &
+				//'close(f); let g = open("build/rt_file_r44l.txt", "r"); ' &
+				//'let a = readln(g); let b = readln(g); let c = std::read_i32(g);'), &
+				RC_READ_FAIL), &
 			diag_has_code(get_diags( &
 				'let f = open("build/rt_file_r44b.txt", "w"); writeln(f, "1 x"); ' &
 				//'close(f); let g = open("build/rt_file_r44b.txt", "r"); ' &
@@ -11106,6 +11121,21 @@ subroutine unit_test_transpile(npass, nfail)
 			! A program with a parse error is reported as usual, instead
 			.not. diag_has_code(get_diags_transpile('let x = ;'), EC_TRANSPILE_UNSUPPORTED), &
 			transpile_is_empty('let x = ;'), &
+
+			! format() emits its first value once, so a hoisted fn call temp isn't
+			! repeated and the fn doesn't run twice
+			index(transpile_src('fn f(): [i32; :] { return [1, 2]; } ' &
+				//'let s = std::format("{}", f()[0]);'), 'sc_t1 = f()') > 0, &
+			index(transpile_src('fn f(): [i32; :] { return [1, 2]; } ' &
+				//'let s = std::format("{}", f()[0]);'), 'sc_t2 = f()') == 0, &
+
+			! write() of a value that is only text goes through rt_write_text(), which
+			! a binary file refuses like the interpreter does.  A scalar string is
+			! the same in either kind of file
+			index(transpile_src('let f = open("a.bin", "wb"); std::write(f, ["a", "b"]);'), &
+				'call rt_write_text(f, ') > 0, &
+			index(transpile_src('let f = open("a.bin", "wb"); std::write(f, "a", "b");'), &
+				'rt_write_text') == 0, &
 
 			! Nothing is generated for a program with diagnostics
 			transpile_is_empty('let c = std::caller();') &

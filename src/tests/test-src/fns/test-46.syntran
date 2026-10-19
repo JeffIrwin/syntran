@@ -1,0 +1,43 @@
+// A method or a member that has the same name as a std-only fn, like print(),
+// write(), or transpose(), is called through the implicit self.  The fn of std
+// is only called with the std:: prefix, or by a bare name after `use std::*;`.
+// Neither of them can take a call away from a method of the same name
+
+use std::*;
+
+struct Printer
+{
+	n: i32,
+	scale: fn(i32): i32,
+
+	fn print(x: i32): i32
+	{
+		return x + n;
+	}
+
+	fn write(x: i32): i32
+	{
+		return print(x) * 2;
+	}
+
+	fn transpose(x: i32): i32
+	{
+		return x - n;
+	}
+
+	fn go(): i32
+	{
+		return write(5) + transpose(5) + scale(1);
+	}
+}
+
+fn triple(x: i32): i32
+{
+	return 3 * x;
+}
+
+let p = Printer{n = 1, scale = triple};
+let m = std::transpose([1, 2, 3, 4; 2, 2]);
+
+// 12 + 4 + 3.  The std fn is still there for the other calls
+return p.go() == 19 and m[0, 1] == 2;

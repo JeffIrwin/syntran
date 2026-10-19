@@ -929,6 +929,12 @@ like the one in `1,,3` is not a null value, so they are all R44 too.  After the
 last value that is read, the rest of its line is skipped.  Don't mix these with
 [`readln`](#readln) on the same line.
 
+Reading past the end of a file is a runtime error rather than something to check
+for first, so [`eof()`](#eof) doesn't tell a loop when to stop reading values: it
+only becomes `true` after a `readln()` reaches the end.  Know the count of values
+instead, e.g. by writing it first.  A read from a file whose `readln()` already
+reached the end is the same error.
+
 In a binary file, opened in [`"rb"` mode](#open), they read the raw bytes that
 [`write`](#write) wrote.  The count of values has to be known, e.g. by writing it
 first.
@@ -1255,8 +1261,9 @@ Write to `file_handle`, without a newline, a string made by [`format`](#format).
 string must be a string literal, and it is checked when the program is parsed,
 with the same errors as `std::format()`.
 
-As with [`write`](#write), it is a runtime error for a file opened in
-[binary mode](#open) ([R43](errors.md#r43----text-op-on-binary-file)).
+As with [`write`](#write), a file opened in [binary mode](#open) gets the bytes
+of the formatted text, with nothing between them.  Use [`write`](#write) to write
+the raw bytes of a number instead.
 
 Must be called with the `std::` prefix, e.g. `std::writef(f, "{}", 1)`.
 

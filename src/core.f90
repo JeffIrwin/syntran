@@ -278,6 +278,9 @@ module syntran__core_m
 	!      could be added later
 	!    * format() of a struct or enum only pads its str(), and can't format
 	!      the members.  Arrays of structs and enums can't be formatted
+	!    * the VM splits the literal format string on every format() call, and
+	!      rt_fmt_val() re-parses the spec for every array element.  Both could
+	!      be done once per call site, at compile time
 	!  - file reading/writing
 	!    * binary files ("rb", "wb"), write(), std::read_i32() etc. are done.
 	!      There is no seek(), so a binary file can't be read to its end without

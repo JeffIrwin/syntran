@@ -173,10 +173,11 @@ end subroutine emit_writeln
 
 recursive subroutine emit_write(em, node)
 
-	! write(f, a, b, ...) is writeln() without ending the line.  Strings, and the
-	! values which are written as text, like enums and structs, are joined into
-	! one call.  A number, a bool, or an array of them has a call of its own, since
-	! a binary file gets its raw bytes instead of its text
+	! write(f, a, b, ...) is writeln() without ending the line.  Scalar strings are
+	! joined into one call.  A number, a bool, or an array of them has a call of its
+	! own, since a binary file gets its raw bytes instead of its text.  So does a
+	! value that is only text, like an enum, a struct, or an array of strings, since
+	! a binary file refuses it (R45)
 
 	type(emitter_t), intent(inout) :: em
 	type(syntax_node_t), intent(in) :: node
@@ -210,14 +211,22 @@ recursive subroutine emit_write(em, node)
 			call em_line(em, 'call '//raw_writer(node%args(i)%val)//'('//f//', '// &
 				unparen(emit_expr(em, node%args(i)))//')')
 			i = i + 1
-		else
+		else if (node%args(i)%val%type == str_type) then
+			! Scalar strings are the same bytes in either kind of file
 			j = i
 			do while (j < n)
-				if (is_raw_writable(node%args(j+1)%val)) exit
+				if (node%args(j+1)%val%type /= str_type) exit
 				j = j + 1
 			end do
 			call em_line(em, 'call rt_write('//f//', '//print_args(em, node, i, j)//')')
 			i = j + 1
+		else
+			! An array of strings, an enum, or a struct is only text, which a binary
+			! file refuses
+			! A type name has no quote in it, so it is a valid Fortran literal as is
+			call em_line(em, 'call rt_write_text('//f//', '//print_args(em, node, i, i)// &
+				", '"//type_name(node%args(i)%val)//"')")
+			i = i + 1
 		end if
 	end do
 

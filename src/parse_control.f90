@@ -382,7 +382,7 @@ recursive module subroutine parse_use_statement(parser, statement)
 				end if
 
 				if (.not. is_legacy) then
-					suggest = parser%fns%closest("std::" // import_name)
+					suggest = parser%fns%closest("std::" // import_name, std_only = .true.)
 					if (index(suggest, "std::") == 1) suggest = suggest(6:)
 					if (suggest == import_name) suggest = ""
 					span = new_span(name_identifier%pos, len(name_identifier%text))

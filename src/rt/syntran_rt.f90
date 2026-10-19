@@ -1253,6 +1253,20 @@ subroutine rt_write(f, s)
     if (io /= 0) call rt_fatal('cannot write() to file "' // f%name // '"')
 end subroutine rt_write
 
+! write() of a value which is only text, like an enum, a struct, or an array of
+! strings.  A text file gets `s`, and a binary file has no raw form of it.  `tname`
+! is the syntran type of the value, for the message
+subroutine rt_write_text(f, s, tname)
+    type(rt_file_t), intent(in) :: f
+    character(len = *), intent(in) :: s, tname
+    call rt_write(f, '')
+    if (f%binary) then
+        call rt_fatal('write() can not write a value of type `' // tname // '` to file "' // &
+            f%name // '" which was opened in binary mode "b"')
+    end if
+    call rt_write(f, s)
+end subroutine rt_write_text
+
 function rt_exists(path) result(r)
     character(len = *), intent(in) :: path
     logical :: r
@@ -2426,7 +2440,7 @@ end subroutine rt_write_a_f64_4
 ! an empty field like the one in `1,,3` is not a null value: they are all errors,
 ! so a bad value is never skipped or repeated.  `io` is 0 on success, iostat_end if
 ! the file ends before n values, and 1 for a bad field, which is in `bad` (empty
-! for an empty field)
+! for an empty field).  `bad` is not allocated for any other failure
 subroutine rt_read_tokens(iu, n, toks, io, bad)
     integer, intent(in) :: iu, n
     type(rt_str_t), allocatable, intent(out) :: toks(:)
@@ -2438,7 +2452,6 @@ subroutine rt_read_tokens(iu, n, toks, io, bad)
     logical :: after_tok
 
     allocate(toks(n))
-    bad = ''
     io = 0
     k = 0
     after_tok = .false.
@@ -2456,6 +2469,7 @@ subroutine rt_read_tokens(iu, n, toks, io, bad)
             case (',')
                 if (.not. after_tok) then
                     io = 1
+                    bad = ''
                     return
                 end if
                 after_tok = .false.
@@ -2490,6 +2504,10 @@ subroutine rt_read_check(f, fn)
     if (.not. f%mode_read) then
         call rt_fatal(fn // '() was called for file "' // f%name // &
             '" which was not opened in read mode "r"')
+    end if
+    ! Reading again after readln() hit the end is non-portable across compilers
+    if (f%eof .or. (f%is_std .and. rt_stdin_eof)) then
+        call rt_read_fail(f, fn, iostat_end)
     end if
 end subroutine rt_read_check
 

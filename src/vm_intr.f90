@@ -1775,6 +1775,13 @@ subroutine read_values(intr_id, nargs, args, state, res)
 		return
 	end if
 
+	! Reading again after readln() hit the end is non-portable across compilers
+	if (args(1)%file_%eof .or. (args(1)%file_%is_std .and. state%stdin_eof)) then
+		call rt_throw(state, err_rt(RC_READ_FAIL, "cannot "//fn_name//"() from file """// &
+			args(1)%file_%name_//""" past the end of the file"))
+		return
+	end if
+
 	n = 1
 	if (nargs >= 2) then
 		n = args(2)%sca%i32
@@ -1825,6 +1832,7 @@ subroutine read_values(intr_id, nargs, args, state, res)
 		res%array%type = elem
 		res%array%rank = 1
 		res%array%len_ = n
+		res%array%cap  = n
 		allocate(res%array%size(1))
 		res%array%size(1) = n
 

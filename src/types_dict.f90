@@ -1404,14 +1404,16 @@ end function var_closest
 
 !===============================================================================
 
-module function fn_closest(dict, key) result(closest)
+module function fn_closest(dict, key, std_only) result(closest)
 
 	! Return the closest declared function name to `key`, or "" when none is
 	! close enough.  See var_closest() for the unqualified-name ranking with
-	! qualified-name tie-breaker.
+	! qualified-name tie-breaker.  With `std_only`, user fns and fns from user
+	! modules are not candidates, only `std::` fns and intrinsics
 
 	class(fns_t), intent(in) :: dict
 	character(len = *), intent(in) :: key
+	logical, intent(in), optional :: std_only
 	character(len = :), allocatable :: closest
 
 	!********
@@ -1432,6 +1434,12 @@ module function fn_closest(dict, key) result(closest)
 		key_ = dict%table(i)%key
 		key_low = to_lower(key_)
 		if (key_low == target_low) cycle
+
+		if (present(std_only)) then
+			if (std_only) then
+				if (index(key_, "std::") /= 1 .and. .not. dict%table(i)%val%is_intr) cycle
+			end if
+		end if
 
 		! De-mangle internal overload keys (e.g. "0tan_f32" -> "tan") so we
 		! never surface a "0"-prefixed name in a suggestion.

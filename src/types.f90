@@ -658,9 +658,10 @@ module syntran__types_m
 			character(len = :), allocatable :: closest
 		end function var_closest
 
-		module function fn_closest(dict, key) result(closest)
+		module function fn_closest(dict, key, std_only) result(closest)
 			class(fns_t), intent(in) :: dict
 			character(len = *), intent(in) :: key
+			logical, intent(in), optional :: std_only
 			character(len = :), allocatable :: closest
 		end function fn_closest
 

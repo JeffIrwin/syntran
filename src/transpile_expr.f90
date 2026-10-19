@@ -3093,7 +3093,13 @@ recursive function emit_intr_call(em, node) result(s)
 			end if
 
 			associate (val => node%args(i+1)%val)
-				arg_i  = unparen(emit_expr(em, node%args(i+1)))
+				! a2 is already the first value.  Emitting it again would repeat
+				! any statement that emit_expr() hoists, e.g. a fn call temp
+				if (i == 1) then
+					arg_i = a2
+				else
+					arg_i = unparen(emit_expr(em, node%args(i+1)))
+				end if
 				spec_i = str_literal(fspecs(i)%s)
 				t = elem_type(val)
 

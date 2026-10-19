@@ -100,4 +100,14 @@ println(std::read_i32(fz));
 println(std::read_i32(fz, 0));
 close(fz);
 
+// The first value of format() is evaluated once, even when it needs a temp
+let calls = 0;
+fn counted(): [i32; :]
+{
+	calls += 1;
+	return [7, 8];
+}
+println(std::format("{:3}", counted()[1]));
+println(calls);
+
 return 0;
