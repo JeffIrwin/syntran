@@ -1583,7 +1583,7 @@ function rt_fmt_val(kind_, ival, bits, rval, sval, spec) result(out)
     character(len = :), allocatable :: out
 
     character(len = 1) :: fill, align, ty, al
-    logical :: plus, alt, zero, numeric
+    logical :: plus, alt, zero, numeric, zero_ok
     integer :: width, prec, ierr, n, pad, left
     character(len = :), allocatable :: prefix, digits
     character(len = 32) :: buf
@@ -1594,6 +1594,7 @@ function rt_fmt_val(kind_, ival, bits, rval, sval, spec) result(out)
 
     prefix = ''
     numeric = .false.
+    zero_ok = .true.
 
     select case (kind_)
     case ('i')
@@ -1617,7 +1618,8 @@ function rt_fmt_val(kind_, ival, bits, rval, sval, spec) result(out)
         numeric = .true.
         a = abs(rval)
         if (rval /= rval) then
-            numeric = .false.
+            ! NaN and inf are aligned like numbers, but are never padded with 0
+            zero_ok = .false.
             digits = 'NaN'
         else
             if (sign(1.0_real64, rval) < 0) then
@@ -1626,7 +1628,7 @@ function rt_fmt_val(kind_, ival, bits, rval, sval, spec) result(out)
                 prefix = '+'
             end if
             if (a > huge(a)) then
-                numeric = .false.
+                zero_ok = .false.
                 digits = 'inf'
             else if (ty == 'e' .or. ty == 'E') then
                 digits = sci(a, prec, ty)
@@ -1651,7 +1653,7 @@ function rt_fmt_val(kind_, ival, bits, rval, sval, spec) result(out)
     pad = width - n
     if (pad <= 0) then
         out = prefix // digits
-    else if (zero .and. numeric) then
+    else if (zero .and. numeric .and. zero_ok) then
         out = prefix // repeat('0', pad) // digits
     else
         al = align
@@ -2418,6 +2420,66 @@ end subroutine rt_write_a_f64_4
 
 !===============================================================================
 
+! Read the next n values of a text file, which are separated by blanks, tabs, or
+! commas and can be on different lines.  The rest of the line of the last value is
+! skipped.  Unlike a list-directed read, `/`, `*`, and quotes are not special and
+! an empty field like the one in `1,,3` is not a null value: they are all errors,
+! so a bad value is never skipped or repeated.  `io` is 0 on success, iostat_end if
+! the file ends before n values, and 1 for a bad field, which is in `bad` (empty
+! for an empty field)
+subroutine rt_read_tokens(iu, n, toks, io, bad)
+    integer, intent(in) :: iu, n
+    type(rt_str_t), allocatable, intent(out) :: toks(:)
+    integer, intent(out) :: io
+    character(len = :), allocatable, intent(out) :: bad
+
+    character(len = :), allocatable :: line
+    integer :: i, j, k, nl
+    logical :: after_tok
+
+    allocate(toks(n))
+    bad = ''
+    io = 0
+    k = 0
+    after_tok = .false.
+    do while (k < n)
+        line = rt_read_line(iu, io)
+        if (io == iostat_end .and. len(line) == 0) return
+        if (io /= 0 .and. io /= iostat_end .and. io /= iostat_eor) return
+        io = 0
+        nl = len(line)
+        i = 1
+        do while (i <= nl .and. k < n)
+            select case (line(i: i))
+            case (' ', achar(9), achar(13))
+                i = i + 1
+            case (',')
+                if (.not. after_tok) then
+                    io = 1
+                    return
+                end if
+                after_tok = .false.
+                i = i + 1
+            case default
+                j = i
+                do while (j <= nl)
+                    if (index(' ,' // achar(9) // achar(13), line(j: j)) > 0) exit
+                    j = j + 1
+                end do
+                k = k + 1
+                toks(k)%s = line(i: j-1)
+                if (scan(toks(k)%s, '/*''"') > 0) then
+                    io = 1
+                    bad = toks(k)%s
+                    return
+                end if
+                after_tok = .true.
+                i = j
+            end select
+        end do
+    end do
+end subroutine rt_read_tokens
+
 ! The check of the file that std::read_<type>() reads from
 subroutine rt_read_check(f, fn)
     type(rt_file_t), intent(in) :: f
@@ -2431,15 +2493,25 @@ subroutine rt_read_check(f, fn)
     end if
 end subroutine rt_read_check
 
-! The failure of a read of std::read_<type>()
-subroutine rt_read_fail(f, fn, io)
+! The failure of a read of std::read_<type>().  `bad` is the text of a value that
+! is not a number, and is empty for an empty field like the one in `1,,3`
+subroutine rt_read_fail(f, fn, io, bad)
     type(rt_file_t), intent(in) :: f
     character(len = *), intent(in) :: fn
     integer, intent(in) :: io
+    character(len = *), intent(in), optional :: bad
     character(len = 16) :: buf
     if (io == iostat_end) then
         call rt_fatal('cannot ' // fn // '() from file "' // f%name // &
             '" past the end of the file')
+    end if
+    if (present(bad)) then
+        if (len(bad) == 0) then
+            call rt_fatal('cannot ' // fn // '() from file "' // f%name // &
+                '" (empty value)')
+        end if
+        call rt_fatal('cannot ' // fn // '() from file "' // f%name // &
+            '" (invalid value "' // bad // '")')
     end if
     write(buf, '(i0)') io
     call rt_fatal('cannot ' // fn // '() from file "' // f%name // '" (iostat = ' // &
@@ -2451,13 +2523,19 @@ function rt_read_i32(f) result(x)
     type(rt_file_t), intent(in) :: f
     integer(int32) :: x
     integer :: io
+    type(rt_str_t), allocatable :: toks(:)
+    character(len = :), allocatable :: bad
     call rt_read_check(f, 'read_i32')
     if (f%binary) then
         read(f%unit, iostat = io) x
     else
-        read(f%unit, *, iostat = io) x
+        call rt_read_tokens(f%unit, 1, toks, io, bad)
+        if (io == 0) then
+            read(toks(1)%s, *, iostat = io) x
+            if (io /= 0) bad = toks(1)%s
+        end if
     end if
-    if (io /= 0) call rt_read_fail(f, 'read_i32', io)
+    if (io /= 0) call rt_read_fail(f, 'read_i32', io, bad)
 end function rt_read_i32
 
 ! std::read_i32(f, n), which reads an array of n values
@@ -2465,7 +2543,9 @@ function rt_read_a_i32(f, n) result(x)
     type(rt_file_t), intent(in) :: f
     integer(int32), intent(in) :: n
     integer(int32), allocatable :: x(:)
-    integer :: io
+    integer :: io, i
+    type(rt_str_t), allocatable :: toks(:)
+    character(len = :), allocatable :: bad
     call rt_read_check(f, 'read_i32')
     if (n < 0) call rt_fatal('cannot read_i32() a negative number of values')
     allocate(x(n))
@@ -2473,9 +2553,18 @@ function rt_read_a_i32(f, n) result(x)
     if (f%binary) then
         read(f%unit, iostat = io) x
     else
-        read(f%unit, *, iostat = io) x
+        call rt_read_tokens(f%unit, int(n), toks, io, bad)
+        if (io == 0) then
+            do i = 1, int(n)
+                read(toks(i)%s, *, iostat = io) x(i)
+                if (io /= 0) then
+                    bad = toks(i)%s
+                    exit
+                end if
+            end do
+        end if
     end if
-    if (io /= 0) call rt_read_fail(f, 'read_i32', io)
+    if (io /= 0) call rt_read_fail(f, 'read_i32', io, bad)
 end function rt_read_a_i32
 
 ! std::read_i64(f), which reads one value
@@ -2483,13 +2572,19 @@ function rt_read_i64(f) result(x)
     type(rt_file_t), intent(in) :: f
     integer(int64) :: x
     integer :: io
+    type(rt_str_t), allocatable :: toks(:)
+    character(len = :), allocatable :: bad
     call rt_read_check(f, 'read_i64')
     if (f%binary) then
         read(f%unit, iostat = io) x
     else
-        read(f%unit, *, iostat = io) x
+        call rt_read_tokens(f%unit, 1, toks, io, bad)
+        if (io == 0) then
+            read(toks(1)%s, *, iostat = io) x
+            if (io /= 0) bad = toks(1)%s
+        end if
     end if
-    if (io /= 0) call rt_read_fail(f, 'read_i64', io)
+    if (io /= 0) call rt_read_fail(f, 'read_i64', io, bad)
 end function rt_read_i64
 
 ! std::read_i64(f, n), which reads an array of n values
@@ -2497,7 +2592,9 @@ function rt_read_a_i64(f, n) result(x)
     type(rt_file_t), intent(in) :: f
     integer(int32), intent(in) :: n
     integer(int64), allocatable :: x(:)
-    integer :: io
+    integer :: io, i
+    type(rt_str_t), allocatable :: toks(:)
+    character(len = :), allocatable :: bad
     call rt_read_check(f, 'read_i64')
     if (n < 0) call rt_fatal('cannot read_i64() a negative number of values')
     allocate(x(n))
@@ -2505,9 +2602,18 @@ function rt_read_a_i64(f, n) result(x)
     if (f%binary) then
         read(f%unit, iostat = io) x
     else
-        read(f%unit, *, iostat = io) x
+        call rt_read_tokens(f%unit, int(n), toks, io, bad)
+        if (io == 0) then
+            do i = 1, int(n)
+                read(toks(i)%s, *, iostat = io) x(i)
+                if (io /= 0) then
+                    bad = toks(i)%s
+                    exit
+                end if
+            end do
+        end if
     end if
-    if (io /= 0) call rt_read_fail(f, 'read_i64', io)
+    if (io /= 0) call rt_read_fail(f, 'read_i64', io, bad)
 end function rt_read_a_i64
 
 ! std::read_f32(f), which reads one value
@@ -2515,13 +2621,19 @@ function rt_read_f32(f) result(x)
     type(rt_file_t), intent(in) :: f
     real(real32) :: x
     integer :: io
+    type(rt_str_t), allocatable :: toks(:)
+    character(len = :), allocatable :: bad
     call rt_read_check(f, 'read_f32')
     if (f%binary) then
         read(f%unit, iostat = io) x
     else
-        read(f%unit, *, iostat = io) x
+        call rt_read_tokens(f%unit, 1, toks, io, bad)
+        if (io == 0) then
+            read(toks(1)%s, *, iostat = io) x
+            if (io /= 0) bad = toks(1)%s
+        end if
     end if
-    if (io /= 0) call rt_read_fail(f, 'read_f32', io)
+    if (io /= 0) call rt_read_fail(f, 'read_f32', io, bad)
 end function rt_read_f32
 
 ! std::read_f32(f, n), which reads an array of n values
@@ -2529,7 +2641,9 @@ function rt_read_a_f32(f, n) result(x)
     type(rt_file_t), intent(in) :: f
     integer(int32), intent(in) :: n
     real(real32), allocatable :: x(:)
-    integer :: io
+    integer :: io, i
+    type(rt_str_t), allocatable :: toks(:)
+    character(len = :), allocatable :: bad
     call rt_read_check(f, 'read_f32')
     if (n < 0) call rt_fatal('cannot read_f32() a negative number of values')
     allocate(x(n))
@@ -2537,9 +2651,18 @@ function rt_read_a_f32(f, n) result(x)
     if (f%binary) then
         read(f%unit, iostat = io) x
     else
-        read(f%unit, *, iostat = io) x
+        call rt_read_tokens(f%unit, int(n), toks, io, bad)
+        if (io == 0) then
+            do i = 1, int(n)
+                read(toks(i)%s, *, iostat = io) x(i)
+                if (io /= 0) then
+                    bad = toks(i)%s
+                    exit
+                end if
+            end do
+        end if
     end if
-    if (io /= 0) call rt_read_fail(f, 'read_f32', io)
+    if (io /= 0) call rt_read_fail(f, 'read_f32', io, bad)
 end function rt_read_a_f32
 
 ! std::read_f64(f), which reads one value
@@ -2547,13 +2670,19 @@ function rt_read_f64(f) result(x)
     type(rt_file_t), intent(in) :: f
     real(real64) :: x
     integer :: io
+    type(rt_str_t), allocatable :: toks(:)
+    character(len = :), allocatable :: bad
     call rt_read_check(f, 'read_f64')
     if (f%binary) then
         read(f%unit, iostat = io) x
     else
-        read(f%unit, *, iostat = io) x
+        call rt_read_tokens(f%unit, 1, toks, io, bad)
+        if (io == 0) then
+            read(toks(1)%s, *, iostat = io) x
+            if (io /= 0) bad = toks(1)%s
+        end if
     end if
-    if (io /= 0) call rt_read_fail(f, 'read_f64', io)
+    if (io /= 0) call rt_read_fail(f, 'read_f64', io, bad)
 end function rt_read_f64
 
 ! std::read_f64(f, n), which reads an array of n values
@@ -2561,7 +2690,9 @@ function rt_read_a_f64(f, n) result(x)
     type(rt_file_t), intent(in) :: f
     integer(int32), intent(in) :: n
     real(real64), allocatable :: x(:)
-    integer :: io
+    integer :: io, i
+    type(rt_str_t), allocatable :: toks(:)
+    character(len = :), allocatable :: bad
     call rt_read_check(f, 'read_f64')
     if (n < 0) call rt_fatal('cannot read_f64() a negative number of values')
     allocate(x(n))
@@ -2569,9 +2700,18 @@ function rt_read_a_f64(f, n) result(x)
     if (f%binary) then
         read(f%unit, iostat = io) x
     else
-        read(f%unit, *, iostat = io) x
+        call rt_read_tokens(f%unit, int(n), toks, io, bad)
+        if (io == 0) then
+            do i = 1, int(n)
+                read(toks(i)%s, *, iostat = io) x(i)
+                if (io /= 0) then
+                    bad = toks(i)%s
+                    exit
+                end if
+            end do
+        end if
     end if
-    if (io /= 0) call rt_read_fail(f, 'read_f64', io)
+    if (io /= 0) call rt_read_fail(f, 'read_f64', io, bad)
 end function rt_read_a_f64
 
 !===============================================================================

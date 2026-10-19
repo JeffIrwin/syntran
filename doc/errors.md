@@ -737,8 +737,9 @@ a copy.  To fix the error, copy the variable first: `let t = h; f(&h, t);`
 
 ### E117 -- format-not-literal
 
-The format string of [`std::format()`](intrinsics.md#format) is not a string literal,
-e.g. it is a variable or the result of an expression.  The format string is
+The format string of [`std::format()`](intrinsics.md#format),
+[`std::printf()`](intrinsics.md#printf), or [`std::writef()`](intrinsics.md#writef)
+is not a string literal, e.g. it is a variable or the result of an expression.  The format string is
 checked against the values after it when the program is parsed, so it has to be
 written out in the call.  To build a format string, build the result with
 [`str()`](intrinsics.md#str) or a few calls of `std::format()` instead.

@@ -154,7 +154,7 @@ recursive module subroutine parse_use_statement(parser, statement)
 	type(struct_t), pointer :: struct_val
 	type(enum_t), pointer :: enum_val
 	integer :: i, io, iostat, mod_unit_, id_index, struct_slot, fn_slot, enum_slot
-	logical :: qualified_import, is_const_var
+	logical :: qualified_import, is_const_var, is_legacy
 	character(len = :), allocatable :: qualified_prefix, suggest
 
 	call parser%match(use_keyword, use_token)
@@ -366,18 +366,30 @@ recursive module subroutine parse_use_statement(parser, statement)
 		if (import_name == "*") then
 			parser%std_glob = .true.
 		else
-			if (parser%fns%find("std::" // import_name) == 0) then
-				suggest = parser%fns%closest("std::" // import_name)
-				if (index(suggest, "std::") == 1) suggest = suggest(6:)
-				span = new_span(name_identifier%pos, len(name_identifier%text))
-				call parser%diagnostics%push( &
-					err_std_unknown_name(parser%context(), span, import_name, suggest))
-				return
-			end if
+			if (parser%fns%find("std::" // import_name) /= 0) then
+				if (.not. allocated(parser%std_names)) parser%std_names = " "
+				if (index(parser%std_names, " " // import_name // " ") == 0) then
+					parser%std_names = parser%std_names // import_name // " "
+				end if
+			else
+				! A legacy intrinsic like `println` is already callable without the
+				! prefix, so importing it is a no-op.  Anything else isn't in std
+				fn_slot = parser%fns%find(import_name)
+				is_legacy = .false.
+				if (fn_slot /= 0) then
+					fn => parser%fns%get(fn_slot)
+					is_legacy = fn%is_intr
+				end if
 
-			if (.not. allocated(parser%std_names)) parser%std_names = " "
-			if (index(parser%std_names, " " // import_name // " ") == 0) then
-				parser%std_names = parser%std_names // import_name // " "
+				if (.not. is_legacy) then
+					suggest = parser%fns%closest("std::" // import_name)
+					if (index(suggest, "std::") == 1) suggest = suggest(6:)
+					if (suggest == import_name) suggest = ""
+					span = new_span(name_identifier%pos, len(name_identifier%text))
+					call parser%diagnostics%push( &
+						err_std_unknown_name(parser%context(), span, import_name, suggest))
+					return
+				end if
 			end if
 		end if
 

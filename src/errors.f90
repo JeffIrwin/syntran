@@ -792,10 +792,11 @@ module syntran__errors_m
 			character(len = *), intent(in) :: var, fn
 		end function err_ref_alias
 
-		module function err_format_not_literal(context, span) result(err)
+		module function err_format_not_literal(context, span, fn) result(err)
 			type(text_context_t) :: context
 			type(text_span_t), intent(in) :: span
 			character(len = :), allocatable :: err
+			character(len = *), intent(in) :: fn
 		end function err_format_not_literal
 
 		module function err_bad_format(context, span, what) result(err)

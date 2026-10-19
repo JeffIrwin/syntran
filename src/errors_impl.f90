@@ -1213,7 +1213,7 @@ end procedure err_ref_alias
 module procedure err_format_not_literal
 
 	err = err_pre(EC_FORMAT_NOT_LITERAL) &
-		//'the format string of `format()` is not a string literal' &
+		//'the format string of `'//fn//'()` is not a string literal' &
 		//underline(context, span)//" not a literal"//color_reset &
 		//line_feed//fg_bright_green//"help"//color_reset &
 		//": the format string is checked against the arguments when the program " &

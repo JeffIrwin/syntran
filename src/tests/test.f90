@@ -4710,6 +4710,13 @@ subroutine unit_test_format(npass, nfail)
 			! Default formatting is the same as str(), except that a real is
 			! trimmed, and there is no placeholder to format
 			eval('std::format("no placeholders");') == 'no placeholders', &
+
+			! NaN and inf are aligned like numbers, and never zero-padded
+			eval('std::format("<{:6}>", 0.0/0.0);') == '<   NaN>', &
+			eval('std::format("<{:<6}>", 0.0/0.0);') == '<NaN   >', &
+			eval('std::format("<{:06}>", 0.0/0.0);') == '<   NaN>', &
+			eval('std::format("<{:6}>", 1.0/0.0);') == '<   inf>', &
+			eval('std::format("<{:06}>", -1.0/0.0);') == '<  -inf>', &
 			eval('std::format("");') == '', &
 			eval('std::format("{}", 42);') == '42', &
 			eval('std::format("{}", -7''i64);') == '-7', &
@@ -8198,6 +8205,10 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_has_code(get_diags('use std;', MODSRC), EC_MOD_RESERVED_STD), &
 			.not. diag_has_code(get_diags('use std::reshape;', MODSRC), EC_MOD_RESERVED_STD), &
 			diag_has_code(get_diags('use std::reshap;', MODSRC), EC_STD_UNKNOWN_NAME), &
+			! A legacy intrinsic is already callable without the prefix, so importing
+			! it is fine, but its name must be a real fn
+			.not. diag_has_code(get_diags('use std::println;', MODSRC), EC_STD_UNKNOWN_NAME), &
+			diag_has_code(get_diags('use std::printl;', MODSRC), EC_STD_UNKNOWN_NAME), &
 			diag_has_code(get_diags('use std::1;', MODSRC), EC_MOD_RESERVED_STD), &
 			diag_has_code(get_diags('use std as s;', MODSRC), EC_MOD_RESERVED_STD), &
 			.not. diag_has_code(get_diags('use std::*;', MODSRC), EC_MOD_RESERVED_STD), &
@@ -9614,6 +9625,36 @@ subroutine unit_test_runtime_errors(npass, nfail)
 			diag_has_code(get_diags( &
 				'let f = open("build/rt_file_r44e.txt", "w"); ' &
 				//'let a = std::read_f64(f);'), RC_READLN_NOT_READ_MODE), &
+
+			! A text read is strict.  `/`, `*`, and an empty field are not special like
+			! they are in a list-directed read
+			diag_has_code(get_diags( &
+				'let f = open("build/rt_file_r44f.txt", "w"); writeln(f, "1 2 / 9"); ' &
+				//'close(f); let g = open("build/rt_file_r44f.txt", "r"); ' &
+				//'let a = std::read_i32(g, 4);'), RC_READ_FAIL), &
+			diag_has_code(get_diags( &
+				'let f = open("build/rt_file_r44g.txt", "w"); writeln(f, "1,,3,4"); ' &
+				//'close(f); let g = open("build/rt_file_r44g.txt", "r"); ' &
+				//'let a = std::read_i32(g, 4);'), RC_READ_FAIL), &
+			diag_has_code(get_diags( &
+				'let f = open("build/rt_file_r44h.txt", "w"); writeln(f, "3*7 9"); ' &
+				//'close(f); let g = open("build/rt_file_r44h.txt", "r"); ' &
+				//'let a = std::read_i32(g, 4);'), RC_READ_FAIL), &
+			diag_has_code(get_diags( &
+				'let f = open("build/rt_file_r44i.txt", "w"); writeln(f, ",1 2"); ' &
+				//'close(f); let g = open("build/rt_file_r44i.txt", "r"); ' &
+				//'let a = std::read_i32(g, 2);'), RC_READ_FAIL), &
+			! Commas, blanks, tabs, and line breaks all separate values
+			.not. diag_has_code(get_diags( &
+				'let f = open("build/rt_file_r44j.txt", "w"); writeln(f, "1, 2,"); ' &
+				//'writeln(f, "3 ,4"); close(f); ' &
+				//'let g = open("build/rt_file_r44j.txt", "r"); ' &
+				//'let a = std::read_i32(g, 4);'), RC_READ_FAIL), &
+			eval('let f = open("build/rt_file_r44k.txt", "w"); writeln(f, "1, 2,"); ' &
+				//'writeln(f, "3 ,4 5"); close(f); ' &
+				//'let g = open("build/rt_file_r44k.txt", "r"); ' &
+				//'let a = std::read_i32(g, 4); a[0] + 10*a[1] + 100*a[2] + 1000*a[3];') &
+				== '4321', &
 
 			! R45: a value with no raw bytes written to a binary file
 			rt_code_both_file(P//'R45-binary-write-type.syntran', RC_BINARY_WRITE_TYPE), &

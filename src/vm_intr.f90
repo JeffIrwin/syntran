@@ -15,7 +15,7 @@ submodule (syntran__vm_m) syntran__vm_intr
 
 	use syntran__linalg_m
 	use syntran_rt, only: rt_str_t, rt_fmt_split, rt_fmt_join, rt_fmt_bool, &
-		rt_fmt_i32, rt_fmt_i64, rt_fmt_f32, rt_fmt_f64, rt_fmt_str
+		rt_fmt_i32, rt_fmt_i64, rt_fmt_f32, rt_fmt_f64, rt_fmt_str, rt_read_tokens
 
 	implicit none
 
@@ -1729,9 +1729,9 @@ subroutine read_values(intr_id, nargs, args, state, res)
 
 	! std::read_i32(), read_i64(), read_f32(), and read_f64().  With only a file
 	! handle, one value is read, and with a count `n` an array of n values is.
-	! A text file is read as list-directed input, so the values are separated by
-	! blanks, commas, or line breaks, and the rest of the line that the last
-	! value is on is skipped.  A binary file is read as raw bytes
+	! In a text file the values are separated by blanks, tabs, commas, or line
+	! breaks, and the rest of the line that the last value is on is skipped, c.f.
+	! rt_read_tokens().  A binary file is read as raw bytes
 
 	integer, intent(in) :: intr_id, nargs
 	type(value_t), intent(in) :: args(:)
@@ -1740,9 +1740,11 @@ subroutine read_values(intr_id, nargs, args, state, res)
 
 	!********
 
-	character(len = :), allocatable :: fn_name, what
-	integer :: io, elem
+	character(len = :), allocatable :: fn_name, what, bad
+	integer :: io, elem, i
 	integer(kind = 8) :: n
+
+	type(rt_str_t), allocatable :: toks(:)
 
 	res%type = unknown_type
 
@@ -1799,16 +1801,20 @@ subroutine read_values(intr_id, nargs, args, state, res)
 					read(unit_, iostat = io) res%sca%f64
 				end select
 			else
-				select case (elem)
-				case (i32_type)
-					read(unit_, *, iostat = io) res%sca%i32
-				case (i64_type)
-					read(unit_, *, iostat = io) res%sca%i64
-				case (f32_type)
-					read(unit_, *, iostat = io) res%sca%f32
-				case default
-					read(unit_, *, iostat = io) res%sca%f64
-				end select
+				call rt_read_tokens(unit_, 1, toks, io, bad)
+				if (io == 0) then
+					select case (elem)
+					case (i32_type)
+						read(toks(1)%s, *, iostat = io) res%sca%i32
+					case (i64_type)
+						read(toks(1)%s, *, iostat = io) res%sca%i64
+					case (f32_type)
+						read(toks(1)%s, *, iostat = io) res%sca%f32
+					case default
+						read(toks(1)%s, *, iostat = io) res%sca%f64
+					end select
+					if (io /= 0) bad = toks(1)%s
+				end if
 			end if
 		end associate
 
@@ -1848,16 +1854,25 @@ subroutine read_values(intr_id, nargs, args, state, res)
 						read(unit_, iostat = io) res%array%f64
 					end select
 				else
-					select case (elem)
-					case (i32_type)
-						read(unit_, *, iostat = io) res%array%i32
-					case (i64_type)
-						read(unit_, *, iostat = io) res%array%i64
-					case (f32_type)
-						read(unit_, *, iostat = io) res%array%f32
-					case default
-						read(unit_, *, iostat = io) res%array%f64
-					end select
+					call rt_read_tokens(unit_, int(n), toks, io, bad)
+					if (io == 0) then
+						do i = 1, int(n)
+							select case (elem)
+							case (i32_type)
+								read(toks(i)%s, *, iostat = io) res%array%i32(i)
+							case (i64_type)
+								read(toks(i)%s, *, iostat = io) res%array%i64(i)
+							case (f32_type)
+								read(toks(i)%s, *, iostat = io) res%array%f32(i)
+							case default
+								read(toks(i)%s, *, iostat = io) res%array%f64(i)
+							end select
+							if (io /= 0) then
+								bad = toks(i)%s
+								exit
+							end if
+						end do
+					end if
 				end if
 			end associate
 		end if
@@ -1866,6 +1881,12 @@ subroutine read_values(intr_id, nargs, args, state, res)
 	if (io /= 0) then
 		if (io == iostat_end) then
 			what = "past the end of the file"
+		else if (allocated(bad)) then
+			if (len(bad) == 0) then
+				what = "(empty value)"
+			else
+				what = "(invalid value """//bad//""")"
+			end if
 		else
 			what = "(iostat = "//str(io)//")"
 		end if

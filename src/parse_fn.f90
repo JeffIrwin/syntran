@@ -571,14 +571,14 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 
 	if (fn%is_intr .and. identifier_%text == "format") then
 		span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
-		call check_format_call(parser, args%v(1: args%len_), alias_spans, span)
+		call check_format_call(parser, identifier_%text, args%v(1: args%len_), alias_spans, span)
 	else if (fn%is_intr .and. identifier_%text == "printf") then
 		span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
-		call check_format_call(parser, args%v(1: args%len_), alias_spans, span)
+		call check_format_call(parser, identifier_%text, args%v(1: args%len_), alias_spans, span)
 	else if (fn%is_intr .and. identifier_%text == "writef") then
 		! The file handle is the first arg, so the format string is the second
 		span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
-		call check_format_call(parser, args%v(2: args%len_), alias_spans(2:), span)
+		call check_format_call(parser, identifier_%text, args%v(2: args%len_), alias_spans(2:), span)
 	end if
 
 	fn_call%id_index = id_index
@@ -2744,7 +2744,7 @@ end subroutine desugar_printf
 
 !===============================================================================
 
-module subroutine check_format_call(parser, args, spans, call_span)
+module subroutine check_format_call(parser, fn_name, args, spans, call_span)
 
 	! The format string of format() is checked against the rest of its arguments
 	! when the call is parsed, so a literal is required.  Its placeholders are
@@ -2753,6 +2753,7 @@ module subroutine check_format_call(parser, args, spans, call_span)
 	! the Fortran backend then never see a bad format
 
 	class(parser_t), intent(inout) :: parser
+	character(len = *), intent(in) :: fn_name
 	type(syntax_node_t), intent(in) :: args(:)
 	type(text_span_t), intent(in) :: spans(:), call_span
 
@@ -2773,7 +2774,7 @@ module subroutine check_format_call(parser, args, spans, call_span)
 	if (args(1)%val%type /= str_type) return
 
 	if (args(1)%kind /= literal_expr) then
-		call parser%diagnostics%push(err_format_not_literal(parser%context(), spans(1)))
+		call parser%diagnostics%push(err_format_not_literal(parser%context(), spans(1), fn_name))
 		return
 	end if
 

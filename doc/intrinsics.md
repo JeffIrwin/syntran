@@ -919,12 +919,15 @@ Read one value from `file_handle`, or an array of `n` values if `n` is given.
 There is no `n` for a multi-dimensional array: read the elements with
 [`reshape`](#reshape) after, e.g. `std::reshape(std::read_f64(f, nx*ny), [nx, ny])`.
 
-In a text file, the values are separated by blanks, commas, or line breaks, so
+In a text file, the values are separated by blanks, tabs, commas, or line breaks, so
 they can be on different lines, like the ones that
 [`format`](#format) writes for an array.  Reading a value that is not a number is
 a runtime error, and so is reading past the end of the file
-([R44](errors.md#r44----read-fail)).  After the last value that is read, the rest of
-its line is skipped.  Don't mix these with [`readln`](#readln) on the same line.
+([R44](errors.md#r44----read-fail)).  Unlike Fortran's list-directed input, `/`,
+`*`, and quotes have no special meaning and are not numbers, and an empty field
+like the one in `1,,3` is not a null value, so they are all R44 too.  After the
+last value that is read, the rest of its line is skipped.  Don't mix these with
+[`readln`](#readln) on the same line.
 
 In a binary file, opened in [`"rb"` mode](#open), they read the raw bytes that
 [`write`](#write) wrote.  The count of values has to be known, e.g. by writing it
