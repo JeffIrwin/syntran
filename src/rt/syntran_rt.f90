@@ -1602,6 +1602,7 @@ function rt_fmt_val(kind_, ival, bits, rval, sval, spec) result(out)
     character(len = :), allocatable :: prefix, digits
     character(len = 32) :: buf
     real(real64) :: a
+    integer(int64) :: rbits
 
     call rt_fmt_parse(spec, fill, align, plus, alt, zero, width, prec, ty, ierr)
     if (ierr /= 0) call rt_fatal('invalid format spec "' // spec // '"')
@@ -1631,7 +1632,10 @@ function rt_fmt_val(kind_, ival, bits, rval, sval, spec) result(out)
     case ('r')
         numeric = .true.
         a = abs(rval)
-        if (rval /= rval) then
+        ! Test the bits instead of comparing, which -Ofast / -ffinite-math-only
+        ! can fold away
+        rbits = iand(transfer(rval, rbits), huge(rbits))
+        if (rbits > int(z'7FF0000000000000', int64)) then
             ! NaN and inf are aligned like numbers, but are never padded with 0
             zero_ok = .false.
             digits = 'NaN'
@@ -1641,7 +1645,7 @@ function rt_fmt_val(kind_, ival, bits, rval, sval, spec) result(out)
             else if (plus) then
                 prefix = '+'
             end if
-            if (a > huge(a)) then
+            if (rbits == int(z'7FF0000000000000', int64)) then
                 zero_ok = .false.
                 digits = 'inf'
             else if (ty == 'e' .or. ty == 'E') then
