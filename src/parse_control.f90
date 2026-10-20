@@ -34,6 +34,10 @@ module subroutine parse_return_statement(parser, statement)
 	call parser%match(return_keyword, return_token)
 	parser%returned = .true.
 
+	! The diagnostics below are pushed after the trailing `;` is matched, when
+	! the current token can belong to a `#include` spliced in right after, so
+	! parser%context() would report them against the wrong file.  c.f.
+	! parse_use_statement().  return_token%unit_ indexes parser%contexts
 	statement%kind = return_statement
 
 	if (parser%current_kind() == semicolon_token) then
@@ -56,7 +60,7 @@ module subroutine parse_return_statement(parser, statement)
 	if (parser%is_module .and. .not. parser%in_fn_body) then
 		span = new_span(return_token%pos, len(return_token%text))
 		call parser%diagnostics%push( &
-			err_module_return(parser%context(), span))
+			err_module_return(parser%contexts%v(return_token%unit_), span))
 	end if
 
 	! Check return type (unless we're at global level ifn == 1, in which case
@@ -83,7 +87,7 @@ module subroutine parse_return_statement(parser, statement)
 	if (.not. right_unknown) then  ! don't cascade
 		span = new_span(right_beg, right_end - right_beg + 1)
 		call parser%diagnostics%push( &
-			err_bad_ret_type(parser%context(), &
+			err_bad_ret_type(parser%contexts%v(return_token%unit_), &
 			span, parser%fn_name, &
 			type_name(parser%fn_type), &
 			type_name(statement%right%val)))
@@ -1409,6 +1413,14 @@ recursive module subroutine parse_statement(parser, statement)
 
 	type(text_span_t) :: span
 
+	! Unit (file) of the statement's first token, for diagnostics pushed after
+	! its trailing `;` is matched.  By then the current token can belong to a
+	! `#include` spliced in right after, so parser%context() would report them
+	! against the wrong file.  c.f. parse_use_statement().  This is an index,
+	! not a copy of the context, because that would copy the whole source text
+	! for every statement
+	integer :: stmt_unit
+
 	! Captured before dispatch so every statement kind gets a location --
 	! not just the `default` expr-statement case below -- for runtime-error
 	! stack traces (c.f. append_rt_trace(), vm_exec.f90).  parser%contexts
@@ -1418,7 +1430,8 @@ recursive module subroutine parse_statement(parser, statement)
 	integer :: stmt_src_id, stmt_src_pos
 
 	stmt_src_pos = parser%peek_pos(0)
-	stmt_src_id  = parser%contexts%v(parser%current_unit())%src_id
+	stmt_unit    = parser%current_unit()
+	stmt_src_id  = parser%contexts%v(stmt_unit)%src_id
 
 	select case (parser%current_kind())
 	case (lbrace_token)
@@ -1460,7 +1473,7 @@ recursive module subroutine parse_statement(parser, statement)
 		if (parser%ipass > 0 .and. statement%kind == fn_ref_expr) then
 			span = new_span(statement%identifier%pos, len(statement%identifier%text))
 			call parser%diagnostics%push( &
-				err_fn_missing_parens(parser%context(), &
+				err_fn_missing_parens(parser%contexts%v(stmt_unit), &
 				span, statement%identifier%text))
 		end if
 
@@ -1499,14 +1512,14 @@ recursive module subroutine parse_statement(parser, statement)
 					if (statement%val%type /= void_type) then
 						span = new_span(pos_beg, pos_end - pos_beg + 1)
 						call parser%diagnostics%push( &
-							err_bad_expr(parser%context(), &
+							err_bad_expr(parser%contexts%v(stmt_unit), &
 							span))
 					end if
 
 				case default
 					span = new_span(pos_beg, pos_end - pos_beg + 1)
 					call parser%diagnostics%push( &
-						err_bad_expr(parser%context(), &
+						err_bad_expr(parser%contexts%v(stmt_unit), &
 						span))
 				end select
 

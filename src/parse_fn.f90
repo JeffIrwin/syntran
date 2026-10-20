@@ -1320,8 +1320,10 @@ module subroutine parse_struct_declaration(parser, decl)
 	!print *, "io = ", io
 	if (io /= 0) then
 		span = new_span(identifier%pos, len(identifier%text))
+		! The closing `}` is matched, so the current token can be from a
+		! `#include` right after.  c.f. parse_use_statement()
 		call parser%diagnostics%push(err_redeclare_struct( &
-			parser%context(), &
+			parser%contexts%v(identifier%unit_), &
 			span, &
 			identifier%text))
 	end if
@@ -1548,7 +1550,7 @@ module subroutine parse_enum_declaration(parser, decl)
 	if (io /= 0) then
 		span = new_span(identifier%pos, len(identifier%text))
 		call parser%diagnostics%push(err_redeclare_enum( &
-			parser%context(), &
+			parser%contexts%v(identifier%unit_), &
 			span, &
 			identifier%text))
 	end if

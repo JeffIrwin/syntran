@@ -4975,6 +4975,19 @@ subroutine unit_test_include(npass, nfail)
 			abs_ok, &
 			! `use` followed by an #include from another dir
 			interpret_file(path//'subdir/use-then-inc.syntran', quiet) == '42', &
+			! A diagnostic about a statement that is directly followed by an
+			! #include must be located in the statement's file, not in the included
+			! one, which the current token belongs to after the statement's `;`/`}`
+			diag_loc_ok(get_diags_file(path//'subdir/ret-then-inc.syntran'), &
+				EC_BAD_RET_TYPE, path//'subdir/ret-then-inc.syntran', 5, 9, 5), &
+			diag_loc_ok(get_diags_file(path//'subdir/expr-then-inc.syntran'), &
+				EC_BAD_EXPR, path//'subdir/expr-then-inc.syntran', 3, 5, 6), &
+			diag_loc_ok(get_diags_file(path//'subdir/struct-then-inc.syntran'), &
+				EC_REDECLARE_STRUCT, path//'subdir/struct-then-inc.syntran', 3, 10, 1), &
+			diag_loc_ok(get_diags_file(path//'subdir/enum-then-inc.syntran'), &
+				EC_REDECLARE_ENUM, path//'subdir/enum-then-inc.syntran', 3, 9, 1), &
+			diag_loc_ok(get_diags_file(path//'subdir/use-retmod-then-inc.syntran'), &
+				EC_MODULE_RETURN, path//'subdir/retmod_then_inc.syntran', 4, 1, 6), &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

@@ -31,9 +31,6 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
-	!  - some cursed bug:
-	!    * jeff@air syntran % time fpm run -- ~/git/aoc-syntran/2019/18/main.syntran --cd -- -a -t -1
-	!    * non-sensical "file not found"
 	!  - transpiler improvements:
 	!    * cover more OS's and intel in addition to gnu in testing. currently
 	!      only gnu on ubuntu

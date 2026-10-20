@@ -39,6 +39,7 @@ module syntran__bytecode_m
 		OP_LOAD_MEMBER_TOS  = 1139, &	! M5: dot_expr read when root is a fn return: root on TOS, a=member-wrapper node_idx
 		OP_CALL_INTR        = 1022, &	! M6: intrinsic call; native: a=intr_id b=argc (args on stack);
 		                            	!   readln/close: a=intr_id b=1 c=(id_index*2+is_loc) for slot writeback
+		                            	!   format: a=INTR_FORMAT b=nvalues (the format string isn't pushed) c=prog%fmts index
 		OP_FOR_SETUP        = 1023, &	! M8: for-loop setup: a=node_idx; pushes iter onto for_iter stack
 		OP_FOR_NEXT         = 1024, &	! M8: for-loop advance: a=L_pop; exhausted->jump (no pop), else write loop var
 		OP_FOR_POP          = 1025, &	! M8: for-loop exit: pop for_iter stack (emitted at all loop exits)
