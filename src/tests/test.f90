@@ -4973,6 +4973,8 @@ subroutine unit_test_include(npass, nfail)
 			interpret_file(path//'test-03.syntran', quiet) == '7', &
 			interpret_file(path//'test-04.syntran', quiet) == '7', &
 			abs_ok, &
+			! `use` followed by an #include from another dir
+			interpret_file(path//'subdir/use-then-inc.syntran', quiet) == '42', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

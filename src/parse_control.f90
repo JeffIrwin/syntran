@@ -146,6 +146,7 @@ recursive module subroutine parse_use_statement(parser, statement)
 	type(syntax_token_t) :: use_token, mod_identifier, double_colon, &
 		name_identifier, semi, star, dummy, as_identifier, alias_identifier
 	type(text_span_t) :: span
+	type(text_context_t) :: use_ctx
 	type(parser_t), target :: mod_parser
 	type(syntax_node_t) :: mod_unit
 	type(text_context_vector_t) :: mod_contexts
@@ -158,6 +159,12 @@ recursive module subroutine parse_use_statement(parser, statement)
 	character(len = :), allocatable :: qualified_prefix, suggest
 
 	call parser%match(use_keyword, use_token)
+
+	! Capture the context of the `use` itself.  After the trailing `;` is
+	! matched, the current token can belong to a different unit if a `#include`
+	! is spliced in right after, so parser%context() would resolve the module
+	! path (and report diagnostics) against the wrong file
+	use_ctx = parser%contexts%v(use_token%unit_)
 
 	! Handle parent directory references (e.g., `use ../module;` or `use ../../module;`)
 	! module_path includes "../" for file resolution, module_name is for namespacing
@@ -342,7 +349,7 @@ recursive module subroutine parse_use_statement(parser, statement)
 	if (import_name /= "" .and. import_name /= "*" .and. module_name /= "std") then
 		span = new_span(name_identifier%pos, len(name_identifier%text))
 		call parser%diagnostics%push( &
-			err_mod_import_name(parser%context(), span, module_name, import_name))
+			err_mod_import_name(use_ctx, span, module_name, import_name))
 		return
 	end if
 
@@ -387,7 +394,7 @@ recursive module subroutine parse_use_statement(parser, statement)
 					if (suggest == import_name) suggest = ""
 					span = new_span(name_identifier%pos, len(name_identifier%text))
 					call parser%diagnostics%push( &
-						err_std_unknown_name(parser%context(), span, import_name, suggest))
+						err_std_unknown_name(use_ctx, span, import_name, suggest))
 					return
 				end if
 			end if
@@ -402,14 +409,14 @@ recursive module subroutine parse_use_statement(parser, statement)
 	end if
 
 	! Get the directory of the current source file
-	src_dir = get_dir(parser%contexts%v(parser%current_unit())%src_file)
+	src_dir = get_dir(use_ctx%src_file)
 	mod_filename = src_dir // module_path // ".syntran"
 
 	! Check if module file exists
 	if (.not. exists(mod_filename)) then
 		span = new_span(mod_identifier%pos, len(mod_identifier%text))
 		call parser%diagnostics%push( &
-			err_mod_404(parser%context(), span, mod_filename))
+			err_mod_404(use_ctx, span, mod_filename))
 		return
 	end if
 
@@ -417,7 +424,7 @@ recursive module subroutine parse_use_statement(parser, statement)
 	if (parser%import_stack%contains(mod_filename)) then
 		span = new_span(mod_identifier%pos, len(mod_identifier%text))
 		call parser%diagnostics%push( &
-			err_circular_import(parser%context(), span, module_name))
+			err_circular_import(use_ctx, span, module_name))
 		return
 	end if
 
@@ -435,7 +442,7 @@ recursive module subroutine parse_use_statement(parser, statement)
 	if (parser%imported_modules%contains(mod_filename)) then
 		span = new_span(mod_identifier%pos, len(mod_identifier%text))
 		call parser%diagnostics%push( &
-			err_duplicate_import(parser%context(), span, module_name))
+			err_duplicate_import(use_ctx, span, module_name))
 		return
 	end if
 
@@ -447,7 +454,7 @@ recursive module subroutine parse_use_statement(parser, statement)
 	if (iostat /= exit_success) then
 		span = new_span(mod_identifier%pos, len(mod_identifier%text))
 		call parser%diagnostics%push( &
-			err_mod_read(parser%context(), span, mod_filename))
+			err_mod_read(use_ctx, span, mod_filename))
 		return
 	end if
 
@@ -549,7 +556,7 @@ recursive module subroutine parse_use_statement(parser, statement)
 			if (is_overloaded_intr(fn_name)) then
 				span = new_span(mod_identifier%pos, len(mod_identifier%text))
 				call parser%diagnostics%push( &
-					err_redeclare_intr_fn(parser%context(), span, fn_name))
+					err_redeclare_intr_fn(use_ctx, span, fn_name))
 				cycle
 			end if
 		end if
