@@ -60,6 +60,14 @@ module syntran_rt
         character(len = :), allocatable :: s
     end type rt_str_t
 
+    ! The parsed spec of a placeholder of a format string, so that it is parsed
+    ! once instead of for every value that it formats
+    type :: rt_fmt_spec_t
+        character(len = 1) :: fill = ' ', align = ' ', ty = ' '
+        logical :: plus = .false., alt = .false., zero = .false.
+        integer :: width = 0, prec = -1
+    end type rt_fmt_spec_t
+
     ! A file handle.  Like the interpreter's, it is a value: reading from it
     ! updates the variable that it was read through, not other copies
     type :: rt_file_t
@@ -68,6 +76,8 @@ module syntran_rt
         logical :: is_open = .false., mode_read = .false., mode_write = .false.
         logical :: eof = .false.
         logical :: is_std = .false.
+        ! Opened with "rb" or "wb", so raw bytes instead of lines of text
+        logical :: binary = .false.
     end type rt_file_t
 
     ! Whether reading from stdin has hit the end of input, for the forms of
@@ -287,11 +297,24 @@ end subroutine rt_println
 
 !===============================================================================
 
+! print() is println() without ending the line.  It flushes, so that a prompt
+! is shown before a readln() blocks
+subroutine rt_print_raw(s)
+    character(len = *), intent(in) :: s
+    write(output_unit, '(a)', advance = 'no') s
+    flush(output_unit)
+end subroutine rt_print_raw
+
+!===============================================================================
+
 ! exit() says so, then terminates the program with the given status
 subroutine rt_exit(code)
     integer(int32), intent(in) :: code
     write(output_unit, *) 'Exiting syntran with status '//rt_str_i32(code)
-    stop code, quiet = .true.
+    flush(output_unit)
+    ! `stop code, quiet = .true.` is F2018 and gfortran 10 rejects it, while
+    ! plain `stop code` prints a "STOP n" banner
+    call exit(code)
 end subroutine rt_exit
 
 !===============================================================================
@@ -1066,6 +1089,8 @@ function rt_open(name, mode, must_open) result(f)
             f%mode_read = .true.
         case ('w')
             f%mode_write = .true.
+        case ('b')
+            f%binary = .true.
         case default
             call rt_fatal('bad file mode character "' // mode(i:i) // '"')
         end select
@@ -1079,7 +1104,13 @@ function rt_open(name, mode, must_open) result(f)
     else
         status = 'unknown'
     end if
-    open(newunit = f%unit, file = name, status = status, iostat = io)
+    if (f%binary) then
+        if (f%mode_write) status = 'replace'
+        open(newunit = f%unit, file = name, status = status, access = 'stream', &
+            form = 'unformatted', iostat = io)
+    else
+        open(newunit = f%unit, file = name, status = status, iostat = io)
+    end if
     if (io /= 0) then
         f%unit = -1
         if (must_open) call rt_fatal('cannot open file "' // name // '"')
@@ -1113,6 +1144,10 @@ function rt_readln(f) result(s)
     if (.not. f%mode_read) then
         call rt_fatal('readln() was called for file "' // f%name // &
             '" which was not opened in read mode "r"')
+    end if
+    if (f%binary) then
+        call rt_fatal('readln() was called for file "' // f%name // &
+            '" which was opened in binary mode "b".  Use std::read_i32() etc. instead')
     end if
     if (f%is_std) f%eof = rt_stdin_eof
     if (f%eof) then
@@ -1148,6 +1183,10 @@ function rt_eof(f) result(r)
     if (.not. f%mode_read) then
         call rt_fatal('eof() was called for file "' // f%name // &
             '" which was not opened in read mode "r"')
+    end if
+    if (f%binary) then
+        call rt_fatal('eof() was called for file "' // f%name // &
+            '" which was opened in binary mode "b"')
     end if
     r = f%eof
     if (f%is_std) r = rt_stdin_eof
@@ -1194,9 +1233,47 @@ subroutine rt_writeln(f, s)
         call rt_fatal('writeln() was called for file "' // f%name // &
             '" which was not opened in write mode "w"')
     end if
+    if (f%binary) then
+        call rt_fatal('writeln() was called for file "' // f%name // &
+            '" which was opened in binary mode "b".  Use write() instead')
+    end if
     write(f%unit, '(a)', iostat = io) s
     if (io /= 0) call rt_fatal('cannot writeln() to file "' // f%name // '"')
 end subroutine rt_writeln
+
+! write() is writeln() without ending the line
+subroutine rt_write(f, s)
+    type(rt_file_t), intent(in) :: f
+    character(len = *), intent(in) :: s
+    integer :: io
+    if (.not. f%is_open) then
+        call rt_fatal('write() was called for file "' // f%name // '" which is not open')
+    end if
+    if (.not. f%mode_write) then
+        call rt_fatal('write() was called for file "' // f%name // &
+            '" which was not opened in write mode "w"')
+    end if
+    if (f%binary) then
+        write(f%unit, iostat = io) s
+    else
+        write(f%unit, '(a)', advance = 'no', iostat = io) s
+    end if
+    if (io /= 0) call rt_fatal('cannot write() to file "' // f%name // '"')
+end subroutine rt_write
+
+! write() of a value which is only text, like an enum, a struct, or an array of
+! strings.  A text file gets `s`, and a binary file has no raw form of it.  `tname`
+! is the syntran type of the value, for the message
+subroutine rt_write_text(f, s, tname)
+    type(rt_file_t), intent(in) :: f
+    character(len = *), intent(in) :: s, tname
+    call rt_write(f, '')
+    if (f%binary) then
+        call rt_fatal('write() can not write a value of type `' // tname // '` to file "' // &
+            f%name // '" which was opened in binary mode "b"')
+    end if
+    call rt_write(f, s)
+end subroutine rt_write_text
 
 function rt_exists(path) result(r)
     character(len = *), intent(in) :: path
@@ -1336,6 +1413,1365 @@ function rt_arr_eq_str(sa, va, sb, vb) result(r)
     if (any(sa /= sb)) return
     r = all(rt_eq(va, vb))
 end function rt_arr_eq_str
+
+!===============================================================================
+
+! The literal text around the `{}` placeholders of the format string of format(),
+! and the spec of each placeholder, which is the text after the `:` of a `{:spec}`
+! and is empty for a `{}`.  `{{` and `}}` are literal braces.  There is one more
+! piece than there are specs.  If the format string is bad, `ierr` is the
+! position in it of the bad character, and otherwise it is 0
+subroutine rt_fmt_split(fmt, pieces, specs, ierr)
+    character(len = *), intent(in) :: fmt
+    type(rt_str_t), allocatable, intent(out) :: pieces(:), specs(:)
+    integer, intent(out) :: ierr
+
+    character(len = :), allocatable :: cur
+    integer :: i, j, n
+    type(rt_str_t) :: tp(len(fmt) + 1), ts(len(fmt) + 1)
+
+    ierr = 0
+    n = 0
+    cur = ''
+    i = 1
+    do while (i <= len(fmt))
+        select case (fmt(i: i))
+        case ('{')
+            if (i < len(fmt)) then
+                if (fmt(i+1: i+1) == '{') then
+                    cur = cur // '{'
+                    i = i + 2
+                    cycle
+                end if
+            end if
+            ! The `}` is at i + j
+            j = index(fmt(i+1:), '}')
+            if (j == 0) then
+                ierr = i
+                exit
+            end if
+            if (j > 1) then
+                if (fmt(i+1: i+1) /= ':' .or. index(fmt(i+1: i+j-1), '{') > 0) then
+                    ierr = i
+                    exit
+                end if
+            end if
+            n = n + 1
+            tp(n)%s = cur
+            ts(n)%s = ''
+            if (j > 2) ts(n)%s = fmt(i+2: i+j-1)
+            cur = ''
+            i = i + j + 1
+        case ('}')
+            if (i < len(fmt)) then
+                if (fmt(i+1: i+1) == '}') then
+                    cur = cur // '}'
+                    i = i + 2
+                    cycle
+                end if
+            end if
+            ierr = i
+            exit
+        case default
+            cur = cur // fmt(i: i)
+            i = i + 1
+        end select
+    end do
+
+    if (ierr /= 0) then
+        n = 0
+        cur = ''
+    end if
+    tp(n+1)%s = cur
+    pieces = tp(1: n+1)
+    specs = ts(1: n)
+end subroutine rt_fmt_split
+
+!===============================================================================
+
+! Parse the spec of a placeholder, `[[fill]align][+][#][0][width][.prec][type]`,
+! like Rust's.  `align` is `<`, `>`, `^`, or a blank for the default of its type,
+! and `ty` is a blank, `x`, `X`, `o`, `b`, `e` or `E`.  The fill is one byte.
+! `width` is 0 and `prec` is -1 if they are not given.  If the spec is bad, `ierr`
+! is the position in it of the bad character, and otherwise it is 0
+subroutine rt_fmt_parse(spec, sp, ierr)
+    character(len = *), intent(in) :: spec
+    type(rt_fmt_spec_t), intent(out) :: sp
+    integer, intent(out) :: ierr
+
+    integer :: i, j, n
+
+    ierr = 0
+    n = len(spec)
+    i = 1
+
+    if (n >= 2) then
+        if (index('<>^', spec(2: 2)) > 0) then
+            sp%fill = spec(1: 1)
+            sp%align = spec(2: 2)
+            i = 3
+        end if
+    end if
+    if (i == 1 .and. n >= 1) then
+        if (index('<>^', spec(1: 1)) > 0) then
+            sp%align = spec(1: 1)
+            i = 2
+        end if
+    end if
+
+    if (i <= n) then
+        if (spec(i: i) == '+') then
+            sp%plus = .true.
+            i = i + 1
+        end if
+    end if
+    if (i <= n) then
+        if (spec(i: i) == '#') then
+            sp%alt = .true.
+            i = i + 1
+        end if
+    end if
+    if (i <= n) then
+        if (spec(i: i) == '0') then
+            sp%zero = .true.
+            i = i + 1
+        end if
+    end if
+
+    j = i
+    do while (i <= n)
+        if (spec(i: i) < '0' .or. spec(i: i) > '9') exit
+        if (i - j >= 6) then
+            ierr = i
+            return
+        end if
+        sp%width = 10 * sp%width + iachar(spec(i: i)) - iachar('0')
+        i = i + 1
+    end do
+
+    if (i <= n) then
+        if (spec(i: i) == '.') then
+            i = i + 1
+            j = i
+            sp%prec = 0
+            do while (i <= n)
+                if (spec(i: i) < '0' .or. spec(i: i) > '9') exit
+                if (i - j >= 3) then
+                    ierr = i
+                    return
+                end if
+                sp%prec = 10 * sp%prec + iachar(spec(i: i)) - iachar('0')
+                i = i + 1
+            end do
+            if (i == j) then
+                ierr = i
+                return
+            end if
+        end if
+    end if
+
+    if (i <= n) then
+        if (index('xXobeE', spec(i: i)) == 0) then
+            ierr = i
+            return
+        end if
+        sp%ty = spec(i: i)
+        i = i + 1
+    end if
+
+    if (i <= n) ierr = i
+end subroutine rt_fmt_parse
+
+!===============================================================================
+
+! The parsed spec of a placeholder, which is the text after the `:` of a `{:spec}`
+function rt_fmt_spec(spec) result(sp)
+    character(len = *), intent(in) :: spec
+    type(rt_fmt_spec_t) :: sp
+
+    integer :: ierr
+
+    call rt_fmt_parse(spec, sp, ierr)
+    if (ierr /= 0) call rt_fatal('invalid format spec "' // spec // '"')
+end function rt_fmt_spec
+
+!===============================================================================
+
+! Format one value with the spec of a placeholder.  `kind_` is `i` for an integer
+! of `bits` bits in `ival`, `r` for a real of `bits` bits in `rval`, `b` for a
+! bool which is `ival` /= 0, and `s` for the string `sval`
+function rt_fmt_val(kind_, ival, bits, rval, sval, sp) result(out)
+    character(len = 1), intent(in) :: kind_
+    integer(int64), intent(in) :: ival
+    integer, intent(in) :: bits
+    real(real64), intent(in) :: rval
+    character(len = *), intent(in) :: sval
+    type(rt_fmt_spec_t), intent(in) :: sp
+    character(len = :), allocatable :: out
+
+    character(len = 1) :: fill, align, ty, al
+    logical :: plus, alt, zero, numeric, zero_ok
+    integer :: width, prec, n, pad, left
+    character(len = :), allocatable :: prefix, digits
+    character(len = 32) :: buf
+    real(real64) :: a
+    integer(int64) :: rbits
+
+    fill = sp%fill
+    align = sp%align
+    ty = sp%ty
+    plus = sp%plus
+    alt = sp%alt
+    zero = sp%zero
+    width = sp%width
+    prec = sp%prec
+
+    prefix = ''
+    numeric = .false.
+    zero_ok = .true.
+
+    select case (kind_)
+    case ('i')
+        numeric = .true.
+        if (ty == ' ') then
+            write(buf, '(i0)') ival
+            if (buf(1: 1) == '-') then
+                prefix = '-'
+                digits = trim(buf(2:))
+            else
+                digits = trim(buf)
+            end if
+        else
+            ! Two's complement of the integer's own size, like Rust's
+            digits = bits_str(ival, bits, ty)
+            if (alt) prefix = '0' // merge('b', merge('o', 'x', ty == 'o'), ty == 'b')
+        end if
+        if (plus .and. prefix /= '-') prefix = '+' // prefix
+
+    case ('r')
+        numeric = .true.
+        a = abs(rval)
+        ! Test the bits instead of comparing, which -Ofast / -ffinite-math-only
+        ! can fold away
+        rbits = iand(transfer(rval, rbits), huge(rbits))
+        if (rbits > int(z'7FF0000000000000', int64)) then
+            ! NaN and inf are aligned like numbers, but are never padded with 0
+            zero_ok = .false.
+            digits = 'NaN'
+        else
+            if (sign(1.0_real64, rval) < 0) then
+                prefix = '-'
+            else if (plus) then
+                prefix = '+'
+            end if
+            if (rbits == int(z'7FF0000000000000', int64)) then
+                zero_ok = .false.
+                digits = 'inf'
+            else if (ty == 'e' .or. ty == 'E') then
+                digits = sci(a, prec, ty)
+            else if (prec >= 0) then
+                digits = fixed(a, prec)
+            else if (bits == 32) then
+                digits = trim(adjustl(rt_str_f32(real(a, real32))))
+            else
+                digits = trim(adjustl(rt_str_f64(a)))
+            end if
+        end if
+
+    case ('b')
+        digits = rt_str_bool(ival /= 0)
+
+    case default
+        digits = sval
+        if (prec >= 0 .and. prec < len(digits)) digits = digits(1: prec)
+    end select
+
+    n = len(prefix) + len(digits)
+    pad = width - n
+    if (pad <= 0) then
+        out = prefix // digits
+    else if (zero .and. numeric .and. zero_ok) then
+        out = prefix // repeat('0', pad) // digits
+    else
+        al = align
+        if (al == ' ') al = merge('>', '<', numeric)
+        select case (al)
+        case ('<')
+            out = prefix // digits // repeat(fill, pad)
+        case ('>')
+            out = repeat(fill, pad) // prefix // digits
+        case default
+            left = pad / 2
+            out = repeat(fill, left) // prefix // digits // repeat(fill, pad - left)
+        end select
+    end if
+
+contains
+
+    ! An integer in hex, octal or binary, which is that of its two's complement
+    ! if it is negative
+    function bits_str(v, nbits, t) result(d)
+        integer(int64), intent(in) :: v
+        integer, intent(in) :: nbits
+        character(len = 1), intent(in) :: t
+        character(len = :), allocatable :: d
+        character(len = 70) :: b
+        select case (t)
+        case ('o')
+            if (nbits == 32) then
+                write(b, '(o0)') int(v, int32)
+            else
+                write(b, '(o0)') v
+            end if
+        case ('b')
+            if (nbits == 32) then
+                write(b, '(b0)') int(v, int32)
+            else
+                write(b, '(b0)') v
+            end if
+        case default
+            if (nbits == 32) then
+                write(b, '(z0)') int(v, int32)
+            else
+                write(b, '(z0)') v
+            end if
+        end select
+        d = trim(b)
+        if (t == 'x') d = to_lower_ascii(d)
+    end function bits_str
+
+    function to_lower_ascii(s) result(r)
+        character(len = *), intent(in) :: s
+        character(len = len(s)) :: r
+        integer :: k
+        r = s
+        do k = 1, len(s)
+            if (r(k: k) >= 'A' .and. r(k: k) <= 'Z') then
+                r(k: k) = achar(iachar(r(k: k)) + 32)
+            end if
+        end do
+    end function to_lower_ascii
+
+    ! A fixed-point number with p digits after the point, which is always preceded
+    ! by a digit
+    function fixed(v, p) result(d)
+        real(real64), intent(in) :: v
+        integer, intent(in) :: p
+        character(len = :), allocatable :: d
+        character(len = :), allocatable :: b
+        character(len = 32) :: f
+        integer :: w
+        w = 330 + p
+        allocate(character(len = w) :: b)
+        write(f, '("(f",i0,".",i0,")")') w, p
+        write(b, f) v
+        d = trim(adjustl(b))
+        if (d(1: 1) == '.') d = '0' // d
+        if (p == 0 .and. d(len(d): len(d)) == '.') d = d(1: len(d) - 1)
+    end function fixed
+
+    ! A number in scientific notation like Rust's, such as `1.234560e-1` or `1e3`.
+    ! The default precision is 6 digits after the point
+    function sci(v, p, t) result(d)
+        real(real64), intent(in) :: v
+        integer, intent(in) :: p
+        character(len = 1), intent(in) :: t
+        character(len = :), allocatable :: d
+        character(len = :), allocatable :: b, m
+        character(len = 32) :: f
+        character(len = 8) :: es
+        integer :: pp, w, k, ex
+        pp = p
+        if (pp < 0) pp = 6
+        w = pp + 12
+        allocate(character(len = w) :: b)
+        write(f, '("(es",i0,".",i0,"e3)")') w, pp
+        write(b, f) v
+        b = trim(adjustl(b))
+        k = index(b, 'E')
+        m = b(1: k-1)
+        read(b(k+1:), *) ex
+        if (m(len(m): len(m)) == '.') m = m(1: len(m) - 1)
+        write(es, '(i0)') ex
+        d = m // merge('E', 'e', t == 'E') // trim(es)
+    end function sci
+
+end function rt_fmt_val
+
+!===============================================================================
+
+! Join the elements of an array that were formatted one by one, which are in
+! storage order, with a space, and a line break after every `row` elements
+function rt_fmt_join(items, row) result(s)
+    type(rt_str_t), intent(in) :: items(:)
+    integer, intent(in) :: row
+    character(len = :), allocatable :: s
+
+    integer :: i, n, pos, l, total
+
+    n = size(items)
+    if (n == 0) then
+        s = ''
+        return
+    end if
+
+    total = n - 1
+    do i = 1, n
+        total = total + len(items(i)%s)
+    end do
+    allocate(character(len = total) :: s)
+
+    pos = 0
+    do i = 1, n
+        l = len(items(i)%s)
+        s(pos+1: pos+l) = items(i)%s
+        pos = pos + l
+        if (i < n) then
+            pos = pos + 1
+            if (mod(i, max(row, 1)) == 0) then
+                s(pos: pos) = achar(10)
+            else
+                s(pos: pos) = ' '
+            end if
+        end if
+    end do
+end function rt_fmt_join
+
+!===============================================================================
+
+function rt_fmt_bool(x, spec) result(s)
+    logical, intent(in) :: x
+    character(len = *), intent(in) :: spec
+    character(len = :), allocatable :: s
+    s = rt_fmt_val('b', merge(1_int64, 0_int64, x), 32, 0.0_real64, '', rt_fmt_spec(spec))
+end function rt_fmt_bool
+
+function rt_fmt_i32(x, spec) result(s)
+    integer(int32), intent(in) :: x
+    character(len = *), intent(in) :: spec
+    character(len = :), allocatable :: s
+    s = rt_fmt_val('i', int(x, int64), 32, 0.0_real64, '', rt_fmt_spec(spec))
+end function rt_fmt_i32
+
+function rt_fmt_i64(x, spec) result(s)
+    integer(int64), intent(in) :: x
+    character(len = *), intent(in) :: spec
+    character(len = :), allocatable :: s
+    s = rt_fmt_val('i', x, 64, 0.0_real64, '', rt_fmt_spec(spec))
+end function rt_fmt_i64
+
+function rt_fmt_f32(x, spec) result(s)
+    real(real32), intent(in) :: x
+    character(len = *), intent(in) :: spec
+    character(len = :), allocatable :: s
+    s = rt_fmt_val('r', 0_int64, 32, real(x, real64), '', rt_fmt_spec(spec))
+end function rt_fmt_f32
+
+function rt_fmt_f64(x, spec) result(s)
+    real(real64), intent(in) :: x
+    character(len = *), intent(in) :: spec
+    character(len = :), allocatable :: s
+    s = rt_fmt_val('r', 0_int64, 64, x, '', rt_fmt_spec(spec))
+end function rt_fmt_f64
+
+function rt_fmt_str(x, spec) result(s)
+    character(len = *), intent(in) :: x
+    character(len = *), intent(in) :: spec
+    character(len = :), allocatable :: s
+    s = rt_fmt_val('s', 0_int64, 64, 0.0_real64, x, rt_fmt_spec(spec))
+end function rt_fmt_str
+
+!===============================================================================
+
+! The elements of an array of bool, formatted one by one
+function rt_fmt_items_bool(a, spec) result(r)
+    logical, intent(in) :: a(:)
+    character(len = *), intent(in) :: spec
+    type(rt_str_t), allocatable :: r(:)
+    type(rt_fmt_spec_t) :: sp
+    integer :: i
+    sp = rt_fmt_spec(spec)
+    allocate(r(size(a)))
+    do i = 1, size(a)
+        r(i)%s = rt_fmt_val('b', merge(1_int64, 0_int64, a(i)), 32, 0.0_real64, '', sp)
+    end do
+end function rt_fmt_items_bool
+
+function rt_fmt_a_bool_1(x, spec) result(s)
+    logical, intent(in) :: x(:)
+    character(len = *), intent(in) :: spec
+    character(len = :), allocatable :: s
+    s = rt_fmt_join(rt_fmt_items_bool(x, spec), size(x, 1))
+end function rt_fmt_a_bool_1
+
+function rt_fmt_a_bool_2(x, spec) result(s)
+    logical, intent(in) :: x(:,:)
+    character(len = *), intent(in) :: spec
+    character(len = :), allocatable :: s
+    s = rt_fmt_join(rt_fmt_items_bool(reshape(x, [size(x)]), spec), size(x, 1))
+end function rt_fmt_a_bool_2
+
+function rt_fmt_a_bool_3(x, spec) result(s)
+    logical, intent(in) :: x(:,:,:)
+    character(len = *), intent(in) :: spec
+    character(len = :), allocatable :: s
+    s = rt_fmt_join(rt_fmt_items_bool(reshape(x, [size(x)]), spec), size(x, 1))
+end function rt_fmt_a_bool_3
+
+function rt_fmt_a_bool_4(x, spec) result(s)
+    logical, intent(in) :: x(:,:,:,:)
+    character(len = *), intent(in) :: spec
+    character(len = :), allocatable :: s
+    s = rt_fmt_join(rt_fmt_items_bool(reshape(x, [size(x)]), spec), size(x, 1))
+end function rt_fmt_a_bool_4
+
+!===============================================================================
+
+! The elements of an array of i32, formatted one by one
+function rt_fmt_items_i32(a, spec) result(r)
+    integer(int32), intent(in) :: a(:)
+    character(len = *), intent(in) :: spec
+    type(rt_str_t), allocatable :: r(:)
+    type(rt_fmt_spec_t) :: sp
+    integer :: i
+    sp = rt_fmt_spec(spec)
+    allocate(r(size(a)))
+    do i = 1, size(a)
+        r(i)%s = rt_fmt_val('i', int(a(i), int64), 32, 0.0_real64, '', sp)
+    end do
+end function rt_fmt_items_i32
+
+function rt_fmt_a_i32_1(x, spec) result(s)
+    integer(int32), intent(in) :: x(:)
+    character(len = *), intent(in) :: spec
+    character(len = :), allocatable :: s
+    s = rt_fmt_join(rt_fmt_items_i32(x, spec), size(x, 1))
+end function rt_fmt_a_i32_1
+
+function rt_fmt_a_i32_2(x, spec) result(s)
+    integer(int32), intent(in) :: x(:,:)
+    character(len = *), intent(in) :: spec
+    character(len = :), allocatable :: s
+    s = rt_fmt_join(rt_fmt_items_i32(reshape(x, [size(x)]), spec), size(x, 1))
+end function rt_fmt_a_i32_2
+
+function rt_fmt_a_i32_3(x, spec) result(s)
+    integer(int32), intent(in) :: x(:,:,:)
+    character(len = *), intent(in) :: spec
+    character(len = :), allocatable :: s
+    s = rt_fmt_join(rt_fmt_items_i32(reshape(x, [size(x)]), spec), size(x, 1))
+end function rt_fmt_a_i32_3
+
+function rt_fmt_a_i32_4(x, spec) result(s)
+    integer(int32), intent(in) :: x(:,:,:,:)
+    character(len = *), intent(in) :: spec
+    character(len = :), allocatable :: s
+    s = rt_fmt_join(rt_fmt_items_i32(reshape(x, [size(x)]), spec), size(x, 1))
+end function rt_fmt_a_i32_4
+
+!===============================================================================
+
+! The elements of an array of i64, formatted one by one
+function rt_fmt_items_i64(a, spec) result(r)
+    integer(int64), intent(in) :: a(:)
+    character(len = *), intent(in) :: spec
+    type(rt_str_t), allocatable :: r(:)
+    type(rt_fmt_spec_t) :: sp
+    integer :: i
+    sp = rt_fmt_spec(spec)
+    allocate(r(size(a)))
+    do i = 1, size(a)
+        r(i)%s = rt_fmt_val('i', a(i), 64, 0.0_real64, '', sp)
+    end do
+end function rt_fmt_items_i64
+
+function rt_fmt_a_i64_1(x, spec) result(s)
+    integer(int64), intent(in) :: x(:)
+    character(len = *), intent(in) :: spec
+    character(len = :), allocatable :: s
+    s = rt_fmt_join(rt_fmt_items_i64(x, spec), size(x, 1))
+end function rt_fmt_a_i64_1
+
+function rt_fmt_a_i64_2(x, spec) result(s)
+    integer(int64), intent(in) :: x(:,:)
+    character(len = *), intent(in) :: spec
+    character(len = :), allocatable :: s
+    s = rt_fmt_join(rt_fmt_items_i64(reshape(x, [size(x)]), spec), size(x, 1))
+end function rt_fmt_a_i64_2
+
+function rt_fmt_a_i64_3(x, spec) result(s)
+    integer(int64), intent(in) :: x(:,:,:)
+    character(len = *), intent(in) :: spec
+    character(len = :), allocatable :: s
+    s = rt_fmt_join(rt_fmt_items_i64(reshape(x, [size(x)]), spec), size(x, 1))
+end function rt_fmt_a_i64_3
+
+function rt_fmt_a_i64_4(x, spec) result(s)
+    integer(int64), intent(in) :: x(:,:,:,:)
+    character(len = *), intent(in) :: spec
+    character(len = :), allocatable :: s
+    s = rt_fmt_join(rt_fmt_items_i64(reshape(x, [size(x)]), spec), size(x, 1))
+end function rt_fmt_a_i64_4
+
+!===============================================================================
+
+! The elements of an array of f32, formatted one by one
+function rt_fmt_items_f32(a, spec) result(r)
+    real(real32), intent(in) :: a(:)
+    character(len = *), intent(in) :: spec
+    type(rt_str_t), allocatable :: r(:)
+    type(rt_fmt_spec_t) :: sp
+    integer :: i
+    sp = rt_fmt_spec(spec)
+    allocate(r(size(a)))
+    do i = 1, size(a)
+        r(i)%s = rt_fmt_val('r', 0_int64, 32, real(a(i), real64), '', sp)
+    end do
+end function rt_fmt_items_f32
+
+function rt_fmt_a_f32_1(x, spec) result(s)
+    real(real32), intent(in) :: x(:)
+    character(len = *), intent(in) :: spec
+    character(len = :), allocatable :: s
+    s = rt_fmt_join(rt_fmt_items_f32(x, spec), size(x, 1))
+end function rt_fmt_a_f32_1
+
+function rt_fmt_a_f32_2(x, spec) result(s)
+    real(real32), intent(in) :: x(:,:)
+    character(len = *), intent(in) :: spec
+    character(len = :), allocatable :: s
+    s = rt_fmt_join(rt_fmt_items_f32(reshape(x, [size(x)]), spec), size(x, 1))
+end function rt_fmt_a_f32_2
+
+function rt_fmt_a_f32_3(x, spec) result(s)
+    real(real32), intent(in) :: x(:,:,:)
+    character(len = *), intent(in) :: spec
+    character(len = :), allocatable :: s
+    s = rt_fmt_join(rt_fmt_items_f32(reshape(x, [size(x)]), spec), size(x, 1))
+end function rt_fmt_a_f32_3
+
+function rt_fmt_a_f32_4(x, spec) result(s)
+    real(real32), intent(in) :: x(:,:,:,:)
+    character(len = *), intent(in) :: spec
+    character(len = :), allocatable :: s
+    s = rt_fmt_join(rt_fmt_items_f32(reshape(x, [size(x)]), spec), size(x, 1))
+end function rt_fmt_a_f32_4
+
+!===============================================================================
+
+! The elements of an array of f64, formatted one by one
+function rt_fmt_items_f64(a, spec) result(r)
+    real(real64), intent(in) :: a(:)
+    character(len = *), intent(in) :: spec
+    type(rt_str_t), allocatable :: r(:)
+    type(rt_fmt_spec_t) :: sp
+    integer :: i
+    sp = rt_fmt_spec(spec)
+    allocate(r(size(a)))
+    do i = 1, size(a)
+        r(i)%s = rt_fmt_val('r', 0_int64, 64, a(i), '', sp)
+    end do
+end function rt_fmt_items_f64
+
+function rt_fmt_a_f64_1(x, spec) result(s)
+    real(real64), intent(in) :: x(:)
+    character(len = *), intent(in) :: spec
+    character(len = :), allocatable :: s
+    s = rt_fmt_join(rt_fmt_items_f64(x, spec), size(x, 1))
+end function rt_fmt_a_f64_1
+
+function rt_fmt_a_f64_2(x, spec) result(s)
+    real(real64), intent(in) :: x(:,:)
+    character(len = *), intent(in) :: spec
+    character(len = :), allocatable :: s
+    s = rt_fmt_join(rt_fmt_items_f64(reshape(x, [size(x)]), spec), size(x, 1))
+end function rt_fmt_a_f64_2
+
+function rt_fmt_a_f64_3(x, spec) result(s)
+    real(real64), intent(in) :: x(:,:,:)
+    character(len = *), intent(in) :: spec
+    character(len = :), allocatable :: s
+    s = rt_fmt_join(rt_fmt_items_f64(reshape(x, [size(x)]), spec), size(x, 1))
+end function rt_fmt_a_f64_3
+
+function rt_fmt_a_f64_4(x, spec) result(s)
+    real(real64), intent(in) :: x(:,:,:,:)
+    character(len = *), intent(in) :: spec
+    character(len = :), allocatable :: s
+    s = rt_fmt_join(rt_fmt_items_f64(reshape(x, [size(x)]), spec), size(x, 1))
+end function rt_fmt_a_f64_4
+
+!===============================================================================
+
+! Arrays of strings are formatted by looping, instead of with reshape(), which
+! copies the strings of an array shallowly
+
+function rt_fmt_a_str_1(x, spec) result(s)
+    type(rt_str_t), intent(in) :: x(:)
+    character(len = *), intent(in) :: spec
+    character(len = :), allocatable :: s
+    type(rt_str_t), allocatable :: r(:)
+    type(rt_fmt_spec_t) :: sp
+    integer :: i, n
+    sp = rt_fmt_spec(spec)
+    allocate(r(size(x)))
+    n = 0
+    do i = 1, size(x, 1)
+        n = n + 1
+        r(n)%s = rt_fmt_val('s', 0_int64, 64, 0.0_real64, x(i)%s, sp)
+    end do
+    s = rt_fmt_join(r, size(x, 1))
+end function rt_fmt_a_str_1
+
+function rt_fmt_a_str_2(x, spec) result(s)
+    type(rt_str_t), intent(in) :: x(:,:)
+    character(len = *), intent(in) :: spec
+    character(len = :), allocatable :: s
+    type(rt_str_t), allocatable :: r(:)
+    type(rt_fmt_spec_t) :: sp
+    integer :: i, j, n
+    sp = rt_fmt_spec(spec)
+    allocate(r(size(x)))
+    n = 0
+    do j = 1, size(x, 2)
+        do i = 1, size(x, 1)
+            n = n + 1
+            r(n)%s = rt_fmt_val('s', 0_int64, 64, 0.0_real64, x(i,j)%s, sp)
+        end do
+    end do
+    s = rt_fmt_join(r, size(x, 1))
+end function rt_fmt_a_str_2
+
+function rt_fmt_a_str_3(x, spec) result(s)
+    type(rt_str_t), intent(in) :: x(:,:,:)
+    character(len = *), intent(in) :: spec
+    character(len = :), allocatable :: s
+    type(rt_str_t), allocatable :: r(:)
+    type(rt_fmt_spec_t) :: sp
+    integer :: i, j, k, n
+    sp = rt_fmt_spec(spec)
+    allocate(r(size(x)))
+    n = 0
+    do k = 1, size(x, 3)
+        do j = 1, size(x, 2)
+            do i = 1, size(x, 1)
+                n = n + 1
+                r(n)%s = rt_fmt_val('s', 0_int64, 64, 0.0_real64, x(i,j,k)%s, sp)
+            end do
+        end do
+    end do
+    s = rt_fmt_join(r, size(x, 1))
+end function rt_fmt_a_str_3
+
+function rt_fmt_a_str_4(x, spec) result(s)
+    type(rt_str_t), intent(in) :: x(:,:,:,:)
+    character(len = *), intent(in) :: spec
+    character(len = :), allocatable :: s
+    type(rt_str_t), allocatable :: r(:)
+    type(rt_fmt_spec_t) :: sp
+    integer :: i, j, k, l, n
+    sp = rt_fmt_spec(spec)
+    allocate(r(size(x)))
+    n = 0
+    do l = 1, size(x, 4)
+        do k = 1, size(x, 3)
+            do j = 1, size(x, 2)
+                do i = 1, size(x, 1)
+                    n = n + 1
+                    r(n)%s = rt_fmt_val('s', 0_int64, 64, 0.0_real64, x(i,j,k,l)%s, sp)
+                end do
+            end do
+        end do
+    end do
+    s = rt_fmt_join(r, size(x, 1))
+end function rt_fmt_a_str_4
+
+!===============================================================================
+
+! write() of a value which isn't a string.  A text file gets the same text that
+! println() would write.  A binary file gets the raw bytes, and a bool is 1 byte.
+! The empty rt_write() only checks that the file can be written to
+
+subroutine rt_write_bool(f, x)
+    type(rt_file_t), intent(in) :: f
+    logical, intent(in) :: x(..)
+    integer, parameter :: k = selected_int_kind(2)
+    integer :: io
+    if (f%binary) then
+        call rt_write(f, '')
+        io = 0
+        select rank (x)
+        rank (0)
+            write(f%unit, iostat = io) merge(1_k, 0_k, x)
+        rank (1)
+            write(f%unit, iostat = io) merge(1_k, 0_k, x)
+        rank (2)
+            write(f%unit, iostat = io) merge(1_k, 0_k, x)
+        rank (3)
+            write(f%unit, iostat = io) merge(1_k, 0_k, x)
+        rank (4)
+            write(f%unit, iostat = io) merge(1_k, 0_k, x)
+        rank default
+            call rt_fatal('arrays of rank > 4 are not supported by write()')
+        end select
+        if (io /= 0) call rt_fatal('cannot write() to file "' // f%name // '"')
+    else
+        select rank (x)
+        rank (0)
+            call rt_write(f, rt_str_bool(x))
+        rank default
+            call rt_write(f, rt_str_a_bool(x))
+        end select
+    end if
+end subroutine rt_write_bool
+
+subroutine rt_write_a_bool_1(f, x)
+    type(rt_file_t), intent(in) :: f
+    logical, intent(in) :: x(:)
+    call rt_write_bool(f, x)
+end subroutine rt_write_a_bool_1
+
+subroutine rt_write_a_bool_2(f, x)
+    type(rt_file_t), intent(in) :: f
+    logical, intent(in) :: x(:,:)
+    call rt_write_bool(f, x)
+end subroutine rt_write_a_bool_2
+
+subroutine rt_write_a_bool_3(f, x)
+    type(rt_file_t), intent(in) :: f
+    logical, intent(in) :: x(:,:,:)
+    call rt_write_bool(f, x)
+end subroutine rt_write_a_bool_3
+
+subroutine rt_write_a_bool_4(f, x)
+    type(rt_file_t), intent(in) :: f
+    logical, intent(in) :: x(:,:,:,:)
+    call rt_write_bool(f, x)
+end subroutine rt_write_a_bool_4
+
+subroutine rt_write_i32(f, x)
+    type(rt_file_t), intent(in) :: f
+    integer(int32), intent(in) :: x(..)
+    integer :: io
+    if (f%binary) then
+        call rt_write(f, '')
+        io = 0
+        select rank (x)
+        rank (0)
+            write(f%unit, iostat = io) x
+        rank (1)
+            write(f%unit, iostat = io) x
+        rank (2)
+            write(f%unit, iostat = io) x
+        rank (3)
+            write(f%unit, iostat = io) x
+        rank (4)
+            write(f%unit, iostat = io) x
+        rank default
+            call rt_fatal('arrays of rank > 4 are not supported by write()')
+        end select
+        if (io /= 0) call rt_fatal('cannot write() to file "' // f%name // '"')
+    else
+        select rank (x)
+        rank (0)
+            call rt_write(f, rt_str_i32(x))
+        rank default
+            call rt_write(f, rt_str_a_i32(x))
+        end select
+    end if
+end subroutine rt_write_i32
+
+subroutine rt_write_a_i32_1(f, x)
+    type(rt_file_t), intent(in) :: f
+    integer(int32), intent(in) :: x(:)
+    call rt_write_i32(f, x)
+end subroutine rt_write_a_i32_1
+
+subroutine rt_write_a_i32_2(f, x)
+    type(rt_file_t), intent(in) :: f
+    integer(int32), intent(in) :: x(:,:)
+    call rt_write_i32(f, x)
+end subroutine rt_write_a_i32_2
+
+subroutine rt_write_a_i32_3(f, x)
+    type(rt_file_t), intent(in) :: f
+    integer(int32), intent(in) :: x(:,:,:)
+    call rt_write_i32(f, x)
+end subroutine rt_write_a_i32_3
+
+subroutine rt_write_a_i32_4(f, x)
+    type(rt_file_t), intent(in) :: f
+    integer(int32), intent(in) :: x(:,:,:,:)
+    call rt_write_i32(f, x)
+end subroutine rt_write_a_i32_4
+
+subroutine rt_write_i64(f, x)
+    type(rt_file_t), intent(in) :: f
+    integer(int64), intent(in) :: x(..)
+    integer :: io
+    if (f%binary) then
+        call rt_write(f, '')
+        io = 0
+        select rank (x)
+        rank (0)
+            write(f%unit, iostat = io) x
+        rank (1)
+            write(f%unit, iostat = io) x
+        rank (2)
+            write(f%unit, iostat = io) x
+        rank (3)
+            write(f%unit, iostat = io) x
+        rank (4)
+            write(f%unit, iostat = io) x
+        rank default
+            call rt_fatal('arrays of rank > 4 are not supported by write()')
+        end select
+        if (io /= 0) call rt_fatal('cannot write() to file "' // f%name // '"')
+    else
+        select rank (x)
+        rank (0)
+            call rt_write(f, rt_str_i64(x))
+        rank default
+            call rt_write(f, rt_str_a_i64(x))
+        end select
+    end if
+end subroutine rt_write_i64
+
+subroutine rt_write_a_i64_1(f, x)
+    type(rt_file_t), intent(in) :: f
+    integer(int64), intent(in) :: x(:)
+    call rt_write_i64(f, x)
+end subroutine rt_write_a_i64_1
+
+subroutine rt_write_a_i64_2(f, x)
+    type(rt_file_t), intent(in) :: f
+    integer(int64), intent(in) :: x(:,:)
+    call rt_write_i64(f, x)
+end subroutine rt_write_a_i64_2
+
+subroutine rt_write_a_i64_3(f, x)
+    type(rt_file_t), intent(in) :: f
+    integer(int64), intent(in) :: x(:,:,:)
+    call rt_write_i64(f, x)
+end subroutine rt_write_a_i64_3
+
+subroutine rt_write_a_i64_4(f, x)
+    type(rt_file_t), intent(in) :: f
+    integer(int64), intent(in) :: x(:,:,:,:)
+    call rt_write_i64(f, x)
+end subroutine rt_write_a_i64_4
+
+subroutine rt_write_f32(f, x)
+    type(rt_file_t), intent(in) :: f
+    real(real32), intent(in) :: x(..)
+    integer :: io
+    if (f%binary) then
+        call rt_write(f, '')
+        io = 0
+        select rank (x)
+        rank (0)
+            write(f%unit, iostat = io) x
+        rank (1)
+            write(f%unit, iostat = io) x
+        rank (2)
+            write(f%unit, iostat = io) x
+        rank (3)
+            write(f%unit, iostat = io) x
+        rank (4)
+            write(f%unit, iostat = io) x
+        rank default
+            call rt_fatal('arrays of rank > 4 are not supported by write()')
+        end select
+        if (io /= 0) call rt_fatal('cannot write() to file "' // f%name // '"')
+    else
+        select rank (x)
+        rank (0)
+            call rt_write(f, rt_str_f32(x))
+        rank default
+            call rt_write(f, rt_str_a_f32(x))
+        end select
+    end if
+end subroutine rt_write_f32
+
+subroutine rt_write_a_f32_1(f, x)
+    type(rt_file_t), intent(in) :: f
+    real(real32), intent(in) :: x(:)
+    call rt_write_f32(f, x)
+end subroutine rt_write_a_f32_1
+
+subroutine rt_write_a_f32_2(f, x)
+    type(rt_file_t), intent(in) :: f
+    real(real32), intent(in) :: x(:,:)
+    call rt_write_f32(f, x)
+end subroutine rt_write_a_f32_2
+
+subroutine rt_write_a_f32_3(f, x)
+    type(rt_file_t), intent(in) :: f
+    real(real32), intent(in) :: x(:,:,:)
+    call rt_write_f32(f, x)
+end subroutine rt_write_a_f32_3
+
+subroutine rt_write_a_f32_4(f, x)
+    type(rt_file_t), intent(in) :: f
+    real(real32), intent(in) :: x(:,:,:,:)
+    call rt_write_f32(f, x)
+end subroutine rt_write_a_f32_4
+
+subroutine rt_write_f64(f, x)
+    type(rt_file_t), intent(in) :: f
+    real(real64), intent(in) :: x(..)
+    integer :: io
+    if (f%binary) then
+        call rt_write(f, '')
+        io = 0
+        select rank (x)
+        rank (0)
+            write(f%unit, iostat = io) x
+        rank (1)
+            write(f%unit, iostat = io) x
+        rank (2)
+            write(f%unit, iostat = io) x
+        rank (3)
+            write(f%unit, iostat = io) x
+        rank (4)
+            write(f%unit, iostat = io) x
+        rank default
+            call rt_fatal('arrays of rank > 4 are not supported by write()')
+        end select
+        if (io /= 0) call rt_fatal('cannot write() to file "' // f%name // '"')
+    else
+        select rank (x)
+        rank (0)
+            call rt_write(f, rt_str_f64(x))
+        rank default
+            call rt_write(f, rt_str_a_f64(x))
+        end select
+    end if
+end subroutine rt_write_f64
+
+subroutine rt_write_a_f64_1(f, x)
+    type(rt_file_t), intent(in) :: f
+    real(real64), intent(in) :: x(:)
+    call rt_write_f64(f, x)
+end subroutine rt_write_a_f64_1
+
+subroutine rt_write_a_f64_2(f, x)
+    type(rt_file_t), intent(in) :: f
+    real(real64), intent(in) :: x(:,:)
+    call rt_write_f64(f, x)
+end subroutine rt_write_a_f64_2
+
+subroutine rt_write_a_f64_3(f, x)
+    type(rt_file_t), intent(in) :: f
+    real(real64), intent(in) :: x(:,:,:)
+    call rt_write_f64(f, x)
+end subroutine rt_write_a_f64_3
+
+subroutine rt_write_a_f64_4(f, x)
+    type(rt_file_t), intent(in) :: f
+    real(real64), intent(in) :: x(:,:,:,:)
+    call rt_write_f64(f, x)
+end subroutine rt_write_a_f64_4
+
+!===============================================================================
+
+! Read the next n values of a text file, which are separated by blanks, tabs, or
+! commas and can be on different lines.  The rest of the line of the last value is
+! skipped.  Unlike a list-directed read, `/`, `*`, and quotes are not special and
+! an empty field like the one in `1,,3` is not a null value: they are all errors,
+! so a bad value is never skipped or repeated.  `io` is 0 on success, iostat_end if
+! the file ends before n values, and 1 for a bad field, which is in `bad` (empty
+! for an empty field).  `bad` is not allocated for any other failure
+subroutine rt_read_tokens(iu, n, toks, io, bad)
+    integer, intent(in) :: iu, n
+    type(rt_str_t), allocatable, intent(out) :: toks(:)
+    integer, intent(out) :: io
+    character(len = :), allocatable, intent(out) :: bad
+
+    character(len = :), allocatable :: line
+    integer :: i, j, k, nl
+    logical :: after_tok
+
+    allocate(toks(n))
+    io = 0
+    k = 0
+    after_tok = .false.
+    do while (k < n)
+        line = rt_read_line(iu, io)
+        if (io == iostat_end .and. len(line) == 0) return
+        if (io /= 0 .and. io /= iostat_end .and. io /= iostat_eor) return
+        io = 0
+        nl = len(line)
+        i = 1
+        do while (i <= nl .and. k < n)
+            select case (line(i: i))
+            case (' ', achar(9), achar(13))
+                i = i + 1
+            case (',')
+                if (.not. after_tok) then
+                    io = 1
+                    bad = ''
+                    return
+                end if
+                after_tok = .false.
+                i = i + 1
+            case default
+                j = i
+                do while (j <= nl)
+                    if (index(' ,' // achar(9) // achar(13), line(j: j)) > 0) exit
+                    j = j + 1
+                end do
+                k = k + 1
+                toks(k)%s = line(i: j-1)
+                if (scan(toks(k)%s, '/*''"') > 0) then
+                    io = 1
+                    bad = toks(k)%s
+                    return
+                end if
+                after_tok = .true.
+                i = j
+            end select
+        end do
+    end do
+end subroutine rt_read_tokens
+
+! The check of the file that std::read_<type>() reads from
+subroutine rt_read_check(f, fn)
+    type(rt_file_t), intent(in) :: f
+    character(len = *), intent(in) :: fn
+    if (.not. f%is_open) then
+        call rt_fatal(fn // '() was called for file "' // f%name // '" which is not open')
+    end if
+    if (.not. f%mode_read) then
+        call rt_fatal(fn // '() was called for file "' // f%name // &
+            '" which was not opened in read mode "r"')
+    end if
+    ! Reading again after readln() hit the end is non-portable across compilers
+    if (f%eof .or. (f%is_std .and. rt_stdin_eof)) then
+        call rt_read_fail(f, fn, iostat_end)
+    end if
+end subroutine rt_read_check
+
+! The failure of a read of std::read_<type>().  `bad` is the text of a value that
+! is not a number, and is empty for an empty field like the one in `1,,3`
+subroutine rt_read_fail(f, fn, io, bad)
+    type(rt_file_t), intent(in) :: f
+    character(len = *), intent(in) :: fn
+    integer, intent(in) :: io
+    character(len = *), intent(in), optional :: bad
+    character(len = 16) :: buf
+    if (io == iostat_end) then
+        call rt_fatal('cannot ' // fn // '() from file "' // f%name // &
+            '" past the end of the file')
+    end if
+    if (present(bad)) then
+        if (len(bad) == 0) then
+            call rt_fatal('cannot ' // fn // '() from file "' // f%name // &
+                '" (empty value)')
+        end if
+        call rt_fatal('cannot ' // fn // '() from file "' // f%name // &
+            '" (invalid value "' // bad // '")')
+    end if
+    write(buf, '(i0)') io
+    call rt_fatal('cannot ' // fn // '() from file "' // f%name // '" (iostat = ' // &
+        trim(buf) // ')')
+end subroutine rt_read_fail
+
+! std::read_i32(f), which reads one value
+function rt_read_i32(f) result(x)
+    type(rt_file_t), intent(in) :: f
+    integer(int32) :: x
+    integer :: io
+    type(rt_str_t), allocatable :: toks(:)
+    character(len = :), allocatable :: bad
+    call rt_read_check(f, 'read_i32')
+    if (f%binary) then
+        read(f%unit, iostat = io) x
+    else
+        call rt_read_tokens(f%unit, 1, toks, io, bad)
+        if (io == 0) then
+            read(toks(1)%s, *, iostat = io) x
+            if (io /= 0) bad = toks(1)%s
+        end if
+    end if
+    if (io /= 0) call rt_read_fail(f, 'read_i32', io, bad)
+end function rt_read_i32
+
+! std::read_i32(f, n), which reads an array of n values
+function rt_read_a_i32(f, n) result(x)
+    type(rt_file_t), intent(in) :: f
+    integer(int32), intent(in) :: n
+    integer(int32), allocatable :: x(:)
+    integer :: io, i
+    type(rt_str_t), allocatable :: toks(:)
+    character(len = :), allocatable :: bad
+    call rt_read_check(f, 'read_i32')
+    if (n < 0) call rt_fatal('cannot read_i32() a negative number of values')
+    allocate(x(n))
+    if (n == 0) return
+    if (f%binary) then
+        read(f%unit, iostat = io) x
+    else
+        call rt_read_tokens(f%unit, int(n), toks, io, bad)
+        if (io == 0) then
+            do i = 1, int(n)
+                read(toks(i)%s, *, iostat = io) x(i)
+                if (io /= 0) then
+                    bad = toks(i)%s
+                    exit
+                end if
+            end do
+        end if
+    end if
+    if (io /= 0) call rt_read_fail(f, 'read_i32', io, bad)
+end function rt_read_a_i32
+
+! std::read_i64(f), which reads one value
+function rt_read_i64(f) result(x)
+    type(rt_file_t), intent(in) :: f
+    integer(int64) :: x
+    integer :: io
+    type(rt_str_t), allocatable :: toks(:)
+    character(len = :), allocatable :: bad
+    call rt_read_check(f, 'read_i64')
+    if (f%binary) then
+        read(f%unit, iostat = io) x
+    else
+        call rt_read_tokens(f%unit, 1, toks, io, bad)
+        if (io == 0) then
+            read(toks(1)%s, *, iostat = io) x
+            if (io /= 0) bad = toks(1)%s
+        end if
+    end if
+    if (io /= 0) call rt_read_fail(f, 'read_i64', io, bad)
+end function rt_read_i64
+
+! std::read_i64(f, n), which reads an array of n values
+function rt_read_a_i64(f, n) result(x)
+    type(rt_file_t), intent(in) :: f
+    integer(int32), intent(in) :: n
+    integer(int64), allocatable :: x(:)
+    integer :: io, i
+    type(rt_str_t), allocatable :: toks(:)
+    character(len = :), allocatable :: bad
+    call rt_read_check(f, 'read_i64')
+    if (n < 0) call rt_fatal('cannot read_i64() a negative number of values')
+    allocate(x(n))
+    if (n == 0) return
+    if (f%binary) then
+        read(f%unit, iostat = io) x
+    else
+        call rt_read_tokens(f%unit, int(n), toks, io, bad)
+        if (io == 0) then
+            do i = 1, int(n)
+                read(toks(i)%s, *, iostat = io) x(i)
+                if (io /= 0) then
+                    bad = toks(i)%s
+                    exit
+                end if
+            end do
+        end if
+    end if
+    if (io /= 0) call rt_read_fail(f, 'read_i64', io, bad)
+end function rt_read_a_i64
+
+! std::read_f32(f), which reads one value
+function rt_read_f32(f) result(x)
+    type(rt_file_t), intent(in) :: f
+    real(real32) :: x
+    integer :: io
+    type(rt_str_t), allocatable :: toks(:)
+    character(len = :), allocatable :: bad
+    call rt_read_check(f, 'read_f32')
+    if (f%binary) then
+        read(f%unit, iostat = io) x
+    else
+        call rt_read_tokens(f%unit, 1, toks, io, bad)
+        if (io == 0) then
+            read(toks(1)%s, *, iostat = io) x
+            if (io /= 0) bad = toks(1)%s
+        end if
+    end if
+    if (io /= 0) call rt_read_fail(f, 'read_f32', io, bad)
+end function rt_read_f32
+
+! std::read_f32(f, n), which reads an array of n values
+function rt_read_a_f32(f, n) result(x)
+    type(rt_file_t), intent(in) :: f
+    integer(int32), intent(in) :: n
+    real(real32), allocatable :: x(:)
+    integer :: io, i
+    type(rt_str_t), allocatable :: toks(:)
+    character(len = :), allocatable :: bad
+    call rt_read_check(f, 'read_f32')
+    if (n < 0) call rt_fatal('cannot read_f32() a negative number of values')
+    allocate(x(n))
+    if (n == 0) return
+    if (f%binary) then
+        read(f%unit, iostat = io) x
+    else
+        call rt_read_tokens(f%unit, int(n), toks, io, bad)
+        if (io == 0) then
+            do i = 1, int(n)
+                read(toks(i)%s, *, iostat = io) x(i)
+                if (io /= 0) then
+                    bad = toks(i)%s
+                    exit
+                end if
+            end do
+        end if
+    end if
+    if (io /= 0) call rt_read_fail(f, 'read_f32', io, bad)
+end function rt_read_a_f32
+
+! std::read_f64(f), which reads one value
+function rt_read_f64(f) result(x)
+    type(rt_file_t), intent(in) :: f
+    real(real64) :: x
+    integer :: io
+    type(rt_str_t), allocatable :: toks(:)
+    character(len = :), allocatable :: bad
+    call rt_read_check(f, 'read_f64')
+    if (f%binary) then
+        read(f%unit, iostat = io) x
+    else
+        call rt_read_tokens(f%unit, 1, toks, io, bad)
+        if (io == 0) then
+            read(toks(1)%s, *, iostat = io) x
+            if (io /= 0) bad = toks(1)%s
+        end if
+    end if
+    if (io /= 0) call rt_read_fail(f, 'read_f64', io, bad)
+end function rt_read_f64
+
+! std::read_f64(f, n), which reads an array of n values
+function rt_read_a_f64(f, n) result(x)
+    type(rt_file_t), intent(in) :: f
+    integer(int32), intent(in) :: n
+    real(real64), allocatable :: x(:)
+    integer :: io, i
+    type(rt_str_t), allocatable :: toks(:)
+    character(len = :), allocatable :: bad
+    call rt_read_check(f, 'read_f64')
+    if (n < 0) call rt_fatal('cannot read_f64() a negative number of values')
+    allocate(x(n))
+    if (n == 0) return
+    if (f%binary) then
+        read(f%unit, iostat = io) x
+    else
+        call rt_read_tokens(f%unit, int(n), toks, io, bad)
+        if (io == 0) then
+            do i = 1, int(n)
+                read(toks(i)%s, *, iostat = io) x(i)
+                if (io /= 0) then
+                    bad = toks(i)%s
+                    exit
+                end if
+            end do
+        end if
+    end if
+    if (io /= 0) call rt_read_fail(f, 'read_f64', io, bad)
+end function rt_read_a_f64
 
 !===============================================================================
 

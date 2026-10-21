@@ -4,6 +4,7 @@
 submodule (syntran__parse_m) syntran__parse_fn
 
 	use syntran__intr_fns_m
+	use syntran_rt, only: rt_str_t, rt_fmt_spec_t, rt_fmt_split, rt_fmt_parse
 
 	implicit none
 
@@ -27,9 +28,9 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 
 	integer :: i, io, io_std, id_index, id_index_tmp, pos0, rank, arr_type_result, arr_type_src, slot
 	integer :: var_io, var_id_index, method_slot, method_fn_id
-	integer :: field_id, field_io
+	integer :: field_id, field_io, ifmt
 
-	logical :: has_rank, has_arr_type, param_is_ref, param_is_const_ref, &
+	logical :: has_rank, has_arr_type, param_is_ref, param_is_const_ref, self_name, &
 		arg_is_ref, is_ok, is_const_var, var_is_loc
 
 	logical(kind = 1) :: eff_is_ref
@@ -61,6 +62,35 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 	end if
 
 	!print *, "identifier_ = ", identifier_%text
+
+	! Inside a method body, is a bare name a member or a sibling method of the
+	! struct being parsed?  Then the call is an implicit-self call, c.f. the
+	! fallbacks below, and a std-only fn of the same name must not take it
+	self_name = .false.
+	if (.not. present(module_prefix) .and. parser%in_method) then
+		call parser%method_struct%vars%search(identifier_%text, &
+			field_id, field_io, field_val)
+		method_slot = parser%fns%find( &
+			"0" // unqualified_name(parser%method_struct_name) // "::" // identifier_%text)
+		self_name = field_io == exit_success .or. method_slot /= 0
+	end if
+
+	! After `use std::*;`, a bare name that isn't a user fn or legacy intrinsic
+	! but is a std-only fn is parsed exactly like the explicit `std::name()`
+	! call.  User fns and legacy intrinsics take precedence over the std-only fn,
+	! and a variable or a member of that name is left to the handling below
+	if (.not. present(module_prefix) .and. .not. self_name .and. &
+		parser%std_imported(identifier_%text)) then
+		if (parser%fns%find(identifier_%text) == 0 .and. &
+			parser%fns%find("std::" // identifier_%text) /= 0) then
+			call parser%search(identifier_%text, var_id_index, var_io, var_val, &
+				var_is_loc)
+			if (var_io /= exit_success) then
+				call parser%parse_fn_call("std", identifier_, fn_call)
+				return
+			end if
+		end if
+	end if
 
 	args     = new_syntax_node_vector()
 	pos_args = new_integer_vector()
@@ -138,6 +168,17 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		end if
 	end do
 
+	! The rank of std::reshape()'s result is the length of its shape argument,
+	! which is only known at parse time for an array literal
+	if (parser%ipass /= 0 .and. present(module_prefix) .and. args%len_ >= 2) then
+		if (module_prefix == "std" .and. identifier_%text == "reshape" .and. &
+			.not. is_expl_array_lit(args%v(2))) then
+			span = new_span(pos_args%v(2), pos_args%v(3) - pos_args%v(2) - 1)
+			call parser%diagnostics%push( &
+				err_reshape_shape_lit(parser%context(), span))
+		end if
+	end if
+
 	! Lookup by fn_call%identifier%text (e.g. "0min_i32"), but log
 	! diagnostics based on identifier_%text (e.g. "min")
 	!
@@ -180,8 +221,9 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 
 		! Check if this is an std-only function that requires the std:: prefix.
 		! Do this before the ipass==0 early return so the type is set correctly
-		! in both passes, preventing cascading errors.
-		if (.not. present(module_prefix)) then
+		! in both passes, preventing cascading errors.  A member or a sibling
+		! method of the same name is called through self instead
+		if (.not. present(module_prefix) .and. .not. self_name) then
 			slot = parser%fns%find("std::" // fn_call%identifier%text)
 			if (slot == 0) then
 				io_std = exit_failure
@@ -397,7 +439,10 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		! For functions like std::reshape whose element type depends on their
 		! arguments, restore the element type that resolve_overload determined.
 		! fn_call%val = fn%type above would otherwise overwrite it with any_type.
-		if (has_arr_type) then
+		if (has_arr_type .and. .not. allocated(fn_call%val%array)) then
+			! The rank-0 case above already deallocated the array info
+			fn_call%val%type = arr_type_result
+		else if (has_arr_type) then
 			fn_call%val%array%type = arr_type_result
 
 			! %array%type alone doesn't fully describe a struct/enum element
@@ -517,7 +562,7 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 
 		! A bare enum name is a special form, only allowed as a value to a
 		! small allowlist of intrinsics that consume the array and return a
-		! non-array (size/str/println/writeln) -- everywhere else, including
+		! non-array (size/str/std::print/println/std::write/writeln) -- everywhere else, including
 		! user fns and any other intrinsic (e.g. std::reshape, which would
 		! just hand the variant array back out), reject it as E99
 		if (args%v(i)%is_enum_name) then
@@ -525,7 +570,9 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 				identifier_%text == "size"    .or. &
 				identifier_%text == "str"     .or. &
 				identifier_%text == "println" .or. &
-				identifier_%text == "writeln"))) then
+				identifier_%text == "print"   .or. &
+				identifier_%text == "writeln" .or. &
+				identifier_%text == "write"))) then
 
 				call parser%check_enum_name_value(args%v(i))
 			end if
@@ -536,6 +583,16 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 	call check_ref_aliases(parser, args%v(1: args%len_), fn_call%is_ref, &
 		alias_mut, alias_spans, identifier_%text)
 
+	if (fn%is_intr .and. any(identifier_%text == ["format", "printf", "writef"])) then
+		! The format string is the first arg, except for writef(), where the file
+		! handle comes first
+		ifmt = 1
+		if (identifier_%text == "writef") ifmt = 2
+		span = new_span(lparen%pos, rparen%pos - lparen%pos + 1)
+		call check_format_call(parser, identifier_%text, args%v(ifmt: args%len_), &
+			alias_spans(ifmt:), span)
+	end if
+
 	fn_call%id_index = id_index
 
 	! Move args from vector (avoids deep copy)
@@ -543,6 +600,12 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 	do i = 1, args%len_
 		call syntax_node_move_into(args%v(i), fn_call%args(i))
 	end do
+
+	if (fn%is_intr .and. identifier_%text == "printf") then
+		call desugar_printf(parser, fn_call, "print", 1)
+	else if (fn%is_intr .and. identifier_%text == "writef") then
+		call desugar_printf(parser, fn_call, "write", 2)
+	end if
 
 	!print *, 'done parsing fn_call'
 
@@ -1257,8 +1320,10 @@ module subroutine parse_struct_declaration(parser, decl)
 	!print *, "io = ", io
 	if (io /= 0) then
 		span = new_span(identifier%pos, len(identifier%text))
+		! The closing `}` is matched, so the current token can be from a
+		! `#include` right after.  c.f. parse_use_statement()
 		call parser%diagnostics%push(err_redeclare_struct( &
-			parser%context(), &
+			parser%contexts%v(identifier%unit_), &
 			span, &
 			identifier%text))
 	end if
@@ -1485,7 +1550,7 @@ module subroutine parse_enum_declaration(parser, decl)
 	if (io /= 0) then
 		span = new_span(identifier%pos, len(identifier%text))
 		call parser%diagnostics%push(err_redeclare_enum( &
-			parser%context(), &
+			parser%contexts%v(identifier%unit_), &
 			span, &
 			identifier%text))
 	end if
@@ -2633,6 +2698,230 @@ logical function has_ref_root(arg, arg_is_ref)
 end function has_ref_root
 
 end subroutine check_ref_aliases
+
+!===============================================================================
+
+subroutine desugar_printf(parser, fn_call, new_name, ifmt)
+
+	! Rewrite printf(fmt, values...) as print(format(fmt, values...)), and
+	! writef(f, fmt, values...) as write(f, format(fmt, values...)).  ifmt is the
+	! index of the format string arg, which is 1 for printf and 2 for writef.
+	! The format has already been checked, and everything after parsing only
+	! sees print() and write()
+
+	class(parser_t), intent(in) :: parser
+	type(syntax_node_t), intent(inout) :: fn_call
+	character(len = *), intent(in) :: new_name
+	integer, intent(in) :: ifmt
+
+	!********
+
+	integer :: i, nargs
+	type(syntax_node_t) :: fmt_call
+	type(syntax_node_t), allocatable :: args(:)
+
+	nargs = size(fn_call%args)
+
+	fmt_call%kind       = fn_call_intr_expr
+	fmt_call%identifier = fn_call%identifier
+	fmt_call%identifier%text = "format"
+	fmt_call%val%type   = str_type
+	fmt_call%id_index   = parser%fns%id_at(parser%fns%find("std::format"))
+
+	allocate(fmt_call%args(nargs - ifmt + 1))
+	allocate(fmt_call%is_ref(nargs - ifmt + 1))
+	do i = ifmt, nargs
+		call syntax_node_move_into(fn_call%args(i), fmt_call%args(i - ifmt + 1))
+	end do
+	fmt_call%is_ref = .false.
+
+	! The file handle of writef() stays where it is, and the format() call is
+	! the last arg
+	allocate(args(ifmt))
+	do i = 1, ifmt - 1
+		call syntax_node_move_into(fn_call%args(i), args(i))
+	end do
+	call syntax_node_move_into(fmt_call, args(ifmt))
+
+	call move_alloc(args, fn_call%args)
+
+	fn_call%identifier%text = new_name
+	fn_call%id_index = parser%fns%id_at(parser%fns%find("std::"//new_name))
+
+	if (ifmt > 1) then
+		fn_call%is_ref = [fn_call%is_ref(1: ifmt - 1), .false.]
+	else
+		fn_call%is_ref = [.false.]
+	end if
+
+end subroutine desugar_printf
+
+!===============================================================================
+
+module subroutine check_format_call(parser, fn_name, args, spans, call_span)
+
+	! The format string of format() is checked against the rest of its arguments
+	! when the call is parsed, so a literal is required.  Its placeholders are
+	! `{}` or `{:spec}`, with one argument each.  The spec has to make sense for
+	! the type of its argument, e.g. `x` is for integers.  The interpreter and
+	! the Fortran backend then never see a bad format
+
+	class(parser_t), intent(inout) :: parser
+	character(len = *), intent(in) :: fn_name
+	type(syntax_node_t), intent(in) :: args(:)
+	type(text_span_t), intent(in) :: spans(:), call_span
+
+	!********
+
+	character(len = :), allocatable :: fmt, spec, why, tname
+
+	integer :: i, ierr, nspecs, nargs, cat
+
+	type(rt_fmt_spec_t) :: sp
+	type(rt_str_t), allocatable :: pieces(:), specs(:)
+
+	if (size(args) < 1) return
+
+	! A format that isn't a string has already been reported as a type error
+	if (args(1)%val%type /= str_type) return
+
+	if (args(1)%kind /= literal_expr) then
+		call parser%diagnostics%push(err_format_not_literal(parser%context(), spans(1), fn_name))
+		return
+	end if
+
+	fmt = args(1)%val%str%s
+	call rt_fmt_split(fmt, pieces, specs, ierr)
+	if (ierr /= 0) then
+		if (fmt(ierr: ierr) == '}') then
+			why = 'unmatched `}` at position '//str(ierr)//' of the format string'
+		else
+			why = 'the `{` at position '//str(ierr)//' of the format string is ' &
+				//'not closed, or is not `{}` or `{:spec}`'
+		end if
+		call parser%diagnostics%push(err_bad_format(parser%context(), spans(1), why))
+		return
+	end if
+
+	nspecs = size(specs)
+	nargs  = size(args) - 1
+	if (nspecs /= nargs) then
+		call parser%diagnostics%push(err_format_count(parser%context(), call_span, &
+			nspecs, nargs))
+		return
+	end if
+
+	do i = 1, nspecs
+
+		spec = '{:'//specs(i)%s//'}'
+		if (len(specs(i)%s) == 0) spec = '{}'
+
+		call rt_fmt_parse(specs(i)%s, sp, ierr)
+		if (ierr /= 0) then
+			if (ierr <= len(specs(i)%s)) then
+				why = 'unexpected `'//specs(i)%s(ierr: ierr)//'` at position '//str(ierr) &
+					//' of the spec `'//spec//'`'
+			else
+				why = 'the spec `'//spec//'` ends where a digit is expected'
+			end if
+			call parser%diagnostics%push(err_bad_format(parser%context(), &
+				spans(1), why))
+			cycle
+		end if
+
+		associate (val => args(i+1)%val)
+
+			tname = type_name(val)
+			cat = format_category(val)
+
+			why = ''
+			select case (cat)
+			case (0)
+				why = 'only numbers, bools, strings, structs, enums, and arrays of ' &
+					//'numbers, bools, and strings can be formatted'
+
+			case (1)
+				! Integers
+				if (sp%ty == 'e' .or. sp%ty == 'E') then
+					why = '`e` is for floats.  Integers can use `x`, `X`, `o`, or `b`'
+				else if (sp%prec >= 0) then
+					why = 'an integer has no precision'
+				else if (sp%alt .and. sp%ty == ' ') then
+					why = '`#` adds a prefix to `x`, `X`, `o`, or `b`'
+				end if
+
+			case (2)
+				! Floats
+				if (sp%ty /= ' ' .and. sp%ty /= 'e' .and. sp%ty /= 'E') then
+					why = '`x`, `X`, `o`, and `b` are for integers.  Floats can use `e` or `E`'
+				else if (sp%alt) then
+					why = '`#` adds a prefix to integers in `x`, `X`, `o`, or `b`'
+				end if
+
+			case default
+				! Bools, strings, enums, and structs are padded, and only strings
+				! can be truncated by a precision
+				if (sp%ty /= ' ') then
+					why = '`'//sp%ty//'` is for numbers'
+				else if (sp%plus .or. sp%alt .or. sp%zero) then
+					why = '`+`, `#`, and `0` are for numbers'
+				else if (sp%prec >= 0 .and. cat /= 3) then
+					why = 'only a string has a precision, to truncate it'
+				end if
+			end select
+
+			if (len(why) > 0) then
+				call parser%diagnostics%push(err_format_type(parser%context(), &
+					spans(i+1), spec, tname, why))
+			end if
+
+		end associate
+	end do
+
+contains
+
+	function format_category(val) result(cat_)
+
+		! 0  can not be formatted
+		! 1  integer
+		! 2  float
+		! 3  string
+		! 4  bool, enum, or struct
+
+		type(value_t), intent(in) :: val
+		integer :: cat_
+
+		integer :: t
+
+		t = val%type
+		if (t == array_type) then
+			if (.not. allocated(val%array)) then
+				cat_ = 0
+				return
+			end if
+			t = val%array%type
+			if (t == struct_type .or. t == enum_type) then
+				cat_ = 0
+				return
+			end if
+		end if
+
+		select case (t)
+		case (i32_type, i64_type)
+			cat_ = 1
+		case (f32_type, f64_type)
+			cat_ = 2
+		case (str_type)
+			cat_ = 3
+		case (bool_type, enum_type, struct_type)
+			cat_ = 4
+		case default
+			cat_ = 0
+		end select
+
+	end function format_category
+
+end subroutine check_format_call
 
 !===============================================================================
 

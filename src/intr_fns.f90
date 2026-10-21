@@ -988,11 +988,16 @@ recursive subroutine resolve_overload(args, fn_call, has_rank, has_arr_type, arr
 				has_rank = .true.
 				if (.not. allocated(fn_call%val%array)) allocate(fn_call%val%array)
 
-				! Result rank = number of elements in the shape array (second argument)
-				if (args%len_ >= 2 .and. args%v(2)%val%type == array_type) then
-					fn_call%val%array%rank = int(args%v(2)%val%array%len_)
-				else
-					fn_call%val%array%rank = -1  ! unknown at parse time
+				! Result rank = number of elements in the shape array (second
+				! argument).  That count is only known at parse time for an
+				! explicit list literal like [nx, ny].  Any other array, e.g. a
+				! variable or a fn param, has a len_ of 0 or a stale value, so the
+				! rank is unknown here and parse_fn_call() reports E121
+				fn_call%val%array%rank = -1
+				if (args%len_ >= 2) then
+					if (is_expl_array_lit(args%v(2))) then
+						fn_call%val%array%rank = int(args%v(2)%val%array%len_)
+					end if
 				end if
 
 				! Element type follows the source array (first argument).
@@ -1034,6 +1039,20 @@ recursive subroutine resolve_overload(args, fn_call, has_rank, has_arr_type, arr
 				if (.not. arg_is_rank1(args, 2)) &
 					fn_call%identifier%text = fn_call%identifier%text//"_mat"
 
+			end if
+		end if
+
+	case ("read_i32", "read_i64", "read_f32", "read_f64")
+
+		! std::read_<type>(file_handle[, n]) -- reads one value, or an array of n.
+		! Only fires for the std:: version, like std::solve above
+		if (allocated(fn_call%module_prefix)) then
+			if (fn_call%module_prefix == "std") then
+				if (args%len_ >= 2) then
+					fn_call%identifier%text = "0"//fn_call%identifier%text//"_arr"
+				else
+					fn_call%identifier%text = "0"//fn_call%identifier%text//"_sca"
+				end if
 			end if
 		end if
 
@@ -1114,6 +1133,25 @@ logical function arg_is_rank1(args, i)
 	arg_is_rank1 = args%v(i)%val%array%rank == 1
 
 end function arg_is_rank1
+
+!===============================================================================
+
+function is_expl_array_lit(node) result(is_lit)
+
+	! Is this node an explicit-element rank-1 array literal like [a, b, c]?  Its
+	! element count is known at parse time, unlike a variable, a call, a range
+	! [lo: hi], or a repeat/sized form [x; n]
+
+	type(syntax_node_t), intent(in) :: node
+	logical :: is_lit
+
+	is_lit = .false.
+	if (node%kind /= array_expr) return
+	if (.not. allocated(node%val%array)) return
+
+	is_lit = node%val%array%kind == expl_array
+
+end function is_expl_array_lit
 
 !===============================================================================
 

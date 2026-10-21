@@ -264,14 +264,27 @@ module syntran__core_m
 	!  - using `in` (a keyword) as a fn arg name crashes the parser
 	!    * when? check blame for this comment. can't repro in 1.0.1
 	!  - print improvements:
-	!    * hex format printing
-	!    * formatted printf?
-	!      + fully general formatting sounds hard
-	!    * print (without newline)
-	!      + can be worked around with str() to build a line and then println
-	!    * maybe strhex() as a stopgap?
-	!    * bin/oct too
-	!    * c.f. "binary file" note below
+	!    * newline shortcut in fmt str? char(10) can be interpolated into "{}"
+	!      fmt at end but it's a bit awkward
+	!    * still might need file_stat? what happens after write errors e.g. with
+	!      a full disk
+	!    * std::print(), std::write(), std::format(), std::printf(), and
+	!      std::writef() (std::-only so they don't clash with user fns) with
+	!      Rust-style `{:spec}` placeholders
+	!      (hex/bin/oct, width, fill, precision, sci notation) are done
+	!    * std::format() only takes a literal format string for now, so it is checked
+	!      at parse time.  Non-literal formats, positional `{0}` and named
+	!      `{name}` placeholders, and padding with a fill char that is not ascii
+	!      could be added later
+	!    * format() of a struct or enum only pads its str(), and can't format
+	!      the members.  Arrays of structs and enums can't be formatted
+	!  - file reading/writing
+	!    * binary files ("rb", "wb"), write(), std::read_i32() etc. are done.
+	!      There is no seek(), so a binary file can't be read to its end without
+	!      knowing the number of values, and no way to read bytes or a str
+	!    * vectorized writes are done by writeln(f, format("{}", a)).  Vectorized
+	!      reads are std::read_f64(f, n) etc., which only make a rank 1 array
+	!    * readln(), eof() done
 	!  - installer packaging:
 	!    * bin exists.  nest it in a `bin` folder
 	!    * add build os to `--version` output, to distinguish between rocky vs
@@ -393,15 +406,6 @@ module syntran__core_m
 	!      because that's how fortran works :(
 	!    * ==, !=:  done
 	!  - fuzz testing
-	!  - file reading/writing
-	!    * binary file i/o
-	!    * vectorized writes (and reads) for arrays without syntran loops. c.f.
-	!      vectorized wave sample (all math is vectorized but writes are not).
-	!      need to strip bracket [] wrapping and comma delimiters
-	!    * readln(), eof() done
-	!    * also add a file_stat() fn which checks IO of previous file operation.
-	!      this way I don't need to add structs, multiple return vals, or out
-	!      args yet
 	!  - compound assignment: logical &=, |=, etc.
 	!    * maybe make &&= to avoid confusion with bitwise compound assignment &=
 	!    * +=, -=, *=, /=, %=, **= done
@@ -732,6 +736,8 @@ function syntax_parse(str_, state, src_file, allow_continue, repl) result(tree)
 
 	parser%num_structs = num_structs0
 	parser%num_enums   = num_enums0
+	parser%std_glob    = state%std_glob
+	if (allocated(state%std_names)) parser%std_names = state%std_names
 
 	if (allocated(state%structs%table)) then
 		call move_alloc(state%structs%table, parser%structs%table)
@@ -857,6 +863,8 @@ function syntax_parse(str_, state, src_file, allow_continue, repl) result(tree)
 		state%structs%count    = parser%structs%count
 	end if
 	state%structs%num_structs = parser%num_structs
+	state%std_glob = parser%std_glob
+	if (allocated(parser%std_names)) state%std_names = parser%std_names
 
 	if (allocated(parser%enums%table)) then
 		call move_alloc(parser%enums%table, state%enums%table)

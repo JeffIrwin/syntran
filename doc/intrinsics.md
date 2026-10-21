@@ -18,6 +18,21 @@ scalar argument or an array argument.  When given an array argument, the result
 is also an array, with the same rank and size as the argument, with values as if
 the function had been called element-wise on each member of the array.
 
+A function that is documented as "must be called with the `std::` prefix" is
+only available as e.g. `std::reshape()`.  `use std::reshape;` makes that one
+function available without the prefix for the rest of the file, e.g.
+`reshape()`, and `use std::*;` does so for all of them.  A function that
+you declare yourself, or an intrinsic function that never needed the prefix, is
+never shadowed by this.  The risk is that a later version of syntran adds a new
+`std::` function with the same name as one of yours, which can change which
+function a call resolves to or make a name ambiguous.  `std::` is the stable
+choice, and `use std::*;` is a convenience for scripts where that doesn't matter.
+Importing only the names that you list, like `use std::printf;`, limits that
+risk to those names.  Each `use std::name;` imports a single function, and the
+name must exist in `std`, otherwise it's an error.
+The `use` of a file doesn't carry over to the modules that it imports, or to the
+files that import it.
+
 These are the special polymorphic types used in documentation:
 - `any`: any unlimitted primitive, built-in syntran type
 - `any_num`: any numeric type, i.e. `i32`, `i64`, `f32`, or `f64`
@@ -296,6 +311,8 @@ fn eof(file_handle: file): bool
 
 Has the end of file (EOF) been reached yet while reading from `file_handle`, or from stdin if called with no argument?  The return value is `false` until and including the last line is read and does not become `true` until reading *past* the EOF is attempted, for which [`readln()`](#readln) will return an empty string
 
+A file opened in [binary mode](#open) has no lines, so `eof()` of one is a runtime error ([R43](errors.md#r43----text-op-on-binary-file)).
+
 Related functions: [`close`](#close), [`readln`](#readln), [`open`](#open)
 
 ## `exists`
@@ -339,6 +356,81 @@ The `exp` function is _elemental_, i.e. it can operate on both scalars and
 arrays.
 
 Related functions: [`log`](#log)
+
+## `format`
+```rust
+fn format(fmt: str, value0: any, value1: any, value2: any, ...): str
+```
+
+Return a string made from the format string `fmt`, with a `{}` or `{:spec}`
+placeholder in it for each value.  Anything else in `fmt` is copied as it is, and
+`{{` and `}}` are literal braces.
+
+```rust
+println(std::format("{} has {:3} items, {:.2} avg", "bag", 12, 4.5));
+// bag has  12 items, 4.50 avg
+```
+
+The format string must be a string literal, not a variable or an expression.
+That way it is checked against the values when the program is parsed, instead of
+when it runs: an invalid format string is [E118](errors.md#e118----bad-format),
+a spec that doesn't fit the type of its value is
+[E119](errors.md#e119----format-type), and a different number of placeholders
+than values is [E120](errors.md#e120----format-count).  A format string that isn't
+a literal is [E117](errors.md#e117----format-not-literal).
+
+A `{}` formats its value the way [`str`](#str) does, except that a real number is
+not padded with leading blanks.  The spec of `{:spec}` is like Rust's:
+
+```
+[[fill]align][+][#][0][width][.precision][type]
+```
+
+| Part | Meaning |
+|------|---------|
+| `fill` | Any one ASCII character to pad with, which is a blank by default.  It is only recognized in front of `align` |
+| `align` | `<` left, `^` center, or `>` right.  The default is right for numbers and left for everything else.  When a center can't be exact, the extra pad goes on the right |
+| `+` | Always write the sign of a number |
+| `#` | Write a `0x`, `0o`, or `0b` prefix in front of an integer in `x`, `X`, `o`, or `b` |
+| `0` | Pad a number with zeros after its sign and prefix, instead of with the fill and alignment |
+| `width` | The minimum width of the whole value.  A value which is wider is not cut |
+| `.precision` | The number of digits after the point of a real number, or the maximum number of characters of a string |
+| `type` | None for the default, `x` or `X` for hexadecimal, `o` for octal, or `b` for binary integers, and `e` or `E` for scientific notation of reals |
+
+The types are for integers (`i32` and `i64`) and reals (`f32` and `f64`) only:
+
+| Type | Example | Result |
+|------|---------|--------|
+| (none) | `std::format("{:5}", 42)` | `   42` |
+| (none) | `std::format("{:.3}", 3.14159)` | `3.142` |
+| `x` | `std::format("{:#06x}", 255)` | `0x00ff` |
+| `X` | `std::format("{:X}", 255)` | `FF` |
+| `o` | `std::format("{:o}", 64)` | `100` |
+| `b` | `std::format("{:08b}", 5)` | `00000101` |
+| `e` | `std::format("{:.2e}", 1234.5)` | `1.23e3` |
+| `E` | `std::format("{:E}", 5.0e10)` | `5.000000E10` |
+
+A negative integer in `x`, `o`, or `b` is written as its two's complement in its
+own size, so `std::format("{:x}", -1)` is `ffffffff` for an `i32`, and
+`ffffffffffffffff` for an `i64`.  The scientific notation has no `+` and no
+leading zeros in its exponent, and 6 digits after the point unless there is a
+precision.  A real number which is `NaN` or infinite is written as `NaN` or `inf`.
+
+A `bool`, an `enum`, or a `struct` is padded like a string.  An enum or a struct
+is formatted by [`str`](#str) first, so only the alignment and width apply to it.
+A string, a bool, an enum, or a struct can't have a sign, `#`, `0`, or a number
+type.
+
+An array is its elements, formatted one by one with the same spec, separated by
+spaces and with no brackets or commas.  A line break comes after each row, which
+is the number of elements in the first dimension, so a rank 1 array is a single
+line.  The result has no line break at the end.  This is meant for writing arrays
+to a file in one call, e.g. `writeln(f, std::format("{:.6e}", a))`.  An array of
+structs, an array of enums, a file, or a function can't be formatted.
+
+Must be called with the `std::` prefix, e.g. `std::format("{:5}", 42)`.
+
+Related functions: [`str`](#str), [`println`](#println), [`writeln`](#writeln), [`printf`](#printf), [`writef`](#writef)
 
 ## `getenv`
 ```rust
@@ -649,7 +741,16 @@ cannot be opened, e.g. if it does not exist in read mode -- guard with
 [`exists`](#exists) first, or use [`try_open`](#try_open) to get a closed
 handle back instead of a runtime error.
 
-Related functions: [`close`](#close), [`writeln`](#writeln), [`exists`](#exists), [`try_open`](#try_open)
+A `b` in the mode, as in `"rb"` or `"wb"`, opens a binary file instead of a text
+file.  The values of a binary file are the raw bytes that are in memory, with no
+separators: they are written with [`write`](#write) and read back with
+[`read_i32`](#read_i32) and its siblings.  Binary files are not portable between
+machines with different byte orders.  The text operations [`readln`](#readln),
+[`writeln`](#writeln), and [`eof`](#eof) are a runtime error for them
+([R43](errors.md#r43----text-op-on-binary-file)).  Writing a binary file replaces
+what was in the file before.
+
+Related functions: [`close`](#close), [`writeln`](#writeln), [`write`](#write), [`exists`](#exists), [`try_open`](#try_open)
 
 ## File handle members
 
@@ -724,6 +825,37 @@ Any invalid numbers will cause a runtime error.
 
 Related functions: [`parse_i32`](#parse_i32), [`str`](#str)
 
+## `print`
+```rust
+fn print(s0: any, s1: any, s2: any, ...)
+```
+
+Print to the standard output, without a newline.  Output is flushed, so a prompt
+shows up before a following [`readln()`](#readln) waits for input.
+
+Must be called with the `std::` prefix, e.g. `std::print("a")`.
+
+Related functions: [`println`](#println), [`write`](#write), [`format`](#format), [`printf`](#printf)
+
+## `printf`
+```rust
+fn printf(fmt: str, value0: any, value1: any, value2: any, ...)
+```
+
+Print to the standard output, without a newline, a string made by
+[`format`](#format).  `std::printf(fmt, a, b)` is the same as `std::print(std::format(fmt, a, b))`.
+The format string must be a string literal, and it is checked when the program is
+parsed, with the same errors as `std::format()`.
+
+```rust
+std::printf("{} has {:3} items", "bag", 12);
+println();
+```
+
+Must be called with the `std::` prefix, e.g. `std::printf("{}", 1)`.
+
+Related functions: [`format`](#format), [`print`](#print), [`writef`](#writef)
+
 ## `print_trace`
 ```rust
 fn print_trace()
@@ -748,7 +880,7 @@ fn println(s0: any, s1: any, s2: any, ...)
 
 Print to the standard output, with a newline
 
-Related functions: [`str`](#str), [`writeln`](#writeln)
+Related functions: [`print`](#print), [`str`](#str), [`writeln`](#writeln), [`format`](#format)
 
 ## `product`
 ```rust
@@ -770,6 +902,45 @@ zero-indexed, and a `dim` outside of `0 <= dim < rank` is a runtime error
 
 Related functions: [`sum`](#sum)
 
+## `read_f32`
+## `read_f64`
+## `read_i32`
+## `read_i64`
+```rust
+fn read_i32(file_handle: file): i32
+fn read_i32(file_handle: file, n: i32): [i32; :]
+```
+
+`read_f32`, `read_f64`, `read_i32`, and `read_i64` have the same forms with
+their own type.  They must be called with the `std::` prefix, e.g.
+`std::read_f64(f)`.
+
+Read one value from `file_handle`, or an array of `n` values if `n` is given.
+There is no `n` for a multi-dimensional array: read the elements with
+[`reshape`](#reshape) after, e.g. `std::reshape(std::read_f64(f, nx*ny), [nx, ny])`.
+
+In a text file, the values are separated by blanks, tabs, commas, or line breaks, so
+they can be on different lines, like the ones that
+[`format`](#format) writes for an array.  Reading a value that is not a number is
+a runtime error, and so is reading past the end of the file
+([R44](errors.md#r44----read-fail)).  Unlike Fortran's list-directed input, `/`,
+`*`, and quotes have no special meaning and are not numbers, and an empty field
+like the one in `1,,3` is not a null value, so they are all R44 too.  After the
+last value that is read, the rest of its line is skipped.  Don't mix these with
+[`readln`](#readln) on the same line.
+
+Reading past the end of a file is a runtime error rather than something to check
+for first, so [`eof()`](#eof) doesn't tell a loop when to stop reading values: it
+only becomes `true` after a `readln()` reaches the end.  Know the count of values
+instead, e.g. by writing it first.  A read from a file whose `readln()` already
+reached the end is the same error.
+
+In a binary file, opened in [`"rb"` mode](#open), they read the raw bytes that
+[`write`](#write) wrote.  The count of values has to be known, e.g. by writing it
+first.
+
+Related functions: [`open`](#open), [`write`](#write), [`readln`](#readln), [`format`](#format)
+
 ## `readln`
 ```rust
 fn readln(): str
@@ -778,7 +949,7 @@ fn readln(file_handle: file): str
 
 Read a single line from `file_handle`, or from stdin if called with no argument
 
-Related functions: [`close`](#close), [`eof`](#eof), [`open`](#open)
+Related functions: [`close`](#close), [`eof`](#eof), [`open`](#open), [`read_i32`](#read_i32)
 
 ## `repeat`
 ```rust
@@ -807,8 +978,15 @@ let m = std::reshape([1, 2, 3, 4, 5, 6], [2, 3]);
 
 The product of the extents in `shape` must equal the number of elements in
 `source`, otherwise it is a runtime error
-([R19](errors.md#r19----reshape-mismatch)).  Must be called with the `std::`
-prefix, e.g. `std::reshape()`.
+([R19](errors.md#r19----reshape-mismatch)).
+
+The `shape` argument must be an array literal like `[2, 3]` or `[nx, ny]`, whose
+elements can be any expression.  Its length is the rank of the result, which
+has to be known when the program is parsed, so a variable, a function parameter,
+or the result of a function like `std::shape()` is an error
+([E121](errors.md#e121----reshape-shape-lit)).
+
+Must be called with the `std::` prefix, e.g. `std::reshape()`.
 
 Related functions: [`shape`](#shape), [`size`](#size), [`transpose`](#transpose)
 
@@ -1054,14 +1232,52 @@ See also [File handle members](#file-handle-members) for `f.is_open`,
 
 Related functions: [`open`](#open), [`exists`](#exists), [`close`](#close)
 
+## `write`
+```rust
+fn write(file_handle: file, s0: any, s1: any, s2: any, ...)
+```
+
+Write to `file_handle`, without a newline.  Several calls can write a line piece by
+piece, and [`writeln`](#writeln) can end it.
+
+If `file_handle` is a text file, the values are written as text, the same as
+[`writeln`](#writeln) writes them.  If it is a [binary file](#open), the raw bytes
+of the values are written instead, with nothing between them.  A number is 4 or 8
+bytes, a `bool` is 1 byte, a `str` is its characters, and an array is its
+elements in storage order.  Any other value, e.g. a struct or an array of strings,
+can't be written to a binary file ([R45](errors.md#r45----binary-write-type)).
+
+Must be called with the `std::` prefix, e.g. `std::write(f, 1)`.
+
+Related functions: [`writeln`](#writeln), [`print`](#print), [`writef`](#writef), [`read_i32`](#read_i32), [`open`](#open)
+
+## `writef`
+```rust
+fn writef(file_handle: file, fmt: str, value0: any, value1: any, value2: any, ...)
+```
+
+Write to `file_handle`, without a newline, a string made by [`format`](#format).
+`std::writef(f, fmt, a, b)` is the same as `std::write(f, std::format(fmt, a, b))`.  The format
+string must be a string literal, and it is checked when the program is parsed,
+with the same errors as `std::format()`.
+
+As with [`write`](#write), a file opened in [binary mode](#open) gets the bytes
+of the formatted text, with nothing between them.  Use [`write`](#write) to write
+the raw bytes of a number instead.
+
+Must be called with the `std::` prefix, e.g. `std::writef(f, "{}", 1)`.
+
+Related functions: [`format`](#format), [`write`](#write), [`writeln`](#writeln), [`printf`](#printf)
+
 ## `writeln`
 ```rust
 fn writeln(file_handle: file, s0: any, s1: any, s2: any, ...)
 ```
 
-Write to `file_handle`, with a newline
+Write to `file_handle`, with a newline.  It is a runtime error for a file opened
+in [binary mode](#open) ([R43](errors.md#r43----text-op-on-binary-file)).
 
-Related functions: [`close`](#close), [`readln`](#readln), [`println`](#println), [`open`](#open)
+Related functions: [`close`](#close), [`readln`](#readln), [`println`](#println), [`write`](#write), [`open`](#open), [`format`](#format)
 
 # Intrinsic constants
 
@@ -1072,8 +1288,8 @@ and they cannot be assigned to ([E82](errors.md#e82----immutable-var)).
 |----------|------|---------|
 | `std::PI` | `f64` | The ratio of a circle's circumference to its diameter, π ≈ 3.14159. |
 | `std::IN` | `file` | Standard input, for [`readln`](#readln) and [`eof`](#eof). |
-| `std::OUT` | `file` | Standard output, for [`writeln`](#writeln). |
-| `std::ERR` | `file` | Standard error, for [`writeln`](#writeln). |
+| `std::OUT` | `file` | Standard output, for [`writeln`](#writeln) and [`write`](#write). |
+| `std::ERR` | `file` | Standard error, for [`writeln`](#writeln) and [`write`](#write). |
 
 The standard file handles have the same [members](#file-handle-members) as any
 other `file`, but closing one is a runtime error

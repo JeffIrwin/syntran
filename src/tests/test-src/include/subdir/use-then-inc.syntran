@@ -1,0 +1,7 @@
+
+use ../use_inc_mod as m;
+
+#include("../test-01-inc.syntran");
+
+return m::f() + fn_inc();
+

@@ -89,6 +89,16 @@ module syntran__parse_m
 
 		logical :: repl = .false.
 
+		! Set by `use std::*;`.  Lets a bare call `reshape(...)` fall back to
+		! the std-only fn `std::reshape(...)` when no user fn or legacy
+		! intrinsic of that name exists
+		logical :: std_glob = .false.
+
+		! Names imported one at a time by `use std::name;`, each surrounded by
+		! spaces, e.g. " reshape transpose ".  Same fallback as std_glob, but
+		! only for these names.  Unallocated until the first such `use`
+		character(len = :), allocatable :: std_names
+
 		type(map_i32_t) :: import_stack
 		type(map_i32_t) :: imported_modules
 
@@ -99,6 +109,7 @@ module syntran__parse_m
 				current_kind, &
 				current_pos, &
 				current_unit, &
+				std_imported, &
 				match, &
 				match_pre, &
 				next => next_token, &
@@ -248,6 +259,13 @@ module syntran__parse_m
 			type(text_span_t), intent(in) :: spans(:)
 			character(len = *), intent(in) :: fn_name
 		end subroutine check_ref_aliases
+
+		module subroutine check_format_call(parser, fn_name, args, spans, call_span)
+			class(parser_t), intent(inout) :: parser
+			character(len = *), intent(in) :: fn_name
+			type(syntax_node_t), intent(in) :: args(:)
+			type(text_span_t), intent(in) :: spans(:), call_span
+		end subroutine check_format_call
 
 		! Shared by parse_dot (explicit `recv.method()`) and parse_fn_call's
 		! self-method fallback (bare `method()` inside another method of the
@@ -531,6 +549,24 @@ integer function current_kind(parser)
 	class(parser_t) :: parser
 	current_kind = parser%peek_kind(0)
 end function current_kind
+
+!********
+
+logical function std_imported(parser, name)
+
+	! Has `name` been brought in as a bare name by `use std::*;` or by
+	! `use std::name;`?  See parser_t%std_glob and parser_t%std_names
+
+	class(parser_t), intent(in) :: parser
+	character(len = *), intent(in) :: name
+
+	std_imported = parser%std_glob
+	if (std_imported) return
+	if (.not. allocated(parser%std_names)) return
+
+	std_imported = index(parser%std_names, " "//name//" ") > 0
+
+end function std_imported
 
 !********
 

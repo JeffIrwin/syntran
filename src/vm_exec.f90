@@ -1665,6 +1665,12 @@ module subroutine vm_run(prog, state, res)
 						//iargs_pool(1)%file_%name_//'" which was not opened in read mode "r"'))
 					exit
 				end if
+				if (iargs_pool(1)%file_%binary) then
+					call rt_throw(state, err_rt(RC_BINARY_TEXT_OP, 'readln() was called for file "' &
+						//iargs_pool(1)%file_%name_//'" which was opened in binary mode "b".  ' &
+						//'Use std::read_i32() etc. instead'))
+					exit
+				end if
 				if (iargs_pool(1)%file_%eof) then
 					! Reading again after the eof flag was already set is
 					! non-portable across compiler runtimes (some return a
@@ -1796,6 +1802,10 @@ module subroutine vm_run(prog, state, res)
 				if (.not. allocated(val%str)) allocate(val%str)
 				val%str%s = res_
 				end block
+
+			else if (instr%a == INTR_FORMAT) then
+				! The format string was split and parsed at compile time
+				call vm_format(prog%fmts(instr%c), iargs_pool(1:nintr), val)
 
 			else
 				call vm_call_intr(instr%a, nintr, iargs_pool(1:nintr), state, val)

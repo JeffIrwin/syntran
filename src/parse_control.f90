@@ -34,6 +34,10 @@ module subroutine parse_return_statement(parser, statement)
 	call parser%match(return_keyword, return_token)
 	parser%returned = .true.
 
+	! The diagnostics below are pushed after the trailing `;` is matched, when
+	! the current token can belong to a `#include` spliced in right after, so
+	! parser%context() would report them against the wrong file.  c.f.
+	! parse_use_statement().  return_token%unit_ indexes parser%contexts
 	statement%kind = return_statement
 
 	if (parser%current_kind() == semicolon_token) then
@@ -56,7 +60,7 @@ module subroutine parse_return_statement(parser, statement)
 	if (parser%is_module .and. .not. parser%in_fn_body) then
 		span = new_span(return_token%pos, len(return_token%text))
 		call parser%diagnostics%push( &
-			err_module_return(parser%context(), span))
+			err_module_return(parser%contexts%v(return_token%unit_), span))
 	end if
 
 	! Check return type (unless we're at global level ifn == 1, in which case
@@ -83,7 +87,7 @@ module subroutine parse_return_statement(parser, statement)
 	if (.not. right_unknown) then  ! don't cascade
 		span = new_span(right_beg, right_end - right_beg + 1)
 		call parser%diagnostics%push( &
-			err_bad_ret_type(parser%context(), &
+			err_bad_ret_type(parser%contexts%v(return_token%unit_), &
 			span, parser%fn_name, &
 			type_name(parser%fn_type), &
 			type_name(statement%right%val)))
@@ -146,6 +150,7 @@ recursive module subroutine parse_use_statement(parser, statement)
 	type(syntax_token_t) :: use_token, mod_identifier, double_colon, &
 		name_identifier, semi, star, dummy, as_identifier, alias_identifier
 	type(text_span_t) :: span
+	type(text_context_t) :: use_ctx
 	type(parser_t), target :: mod_parser
 	type(syntax_node_t) :: mod_unit
 	type(text_context_vector_t) :: mod_contexts
@@ -154,10 +159,16 @@ recursive module subroutine parse_use_statement(parser, statement)
 	type(struct_t), pointer :: struct_val
 	type(enum_t), pointer :: enum_val
 	integer :: i, io, iostat, mod_unit_, id_index, struct_slot, fn_slot, enum_slot
-	logical :: qualified_import, is_const_var
-	character(len = :), allocatable :: qualified_prefix
+	logical :: qualified_import, is_const_var, is_legacy
+	character(len = :), allocatable :: qualified_prefix, suggest
 
 	call parser%match(use_keyword, use_token)
+
+	! Capture the context of the `use` itself.  After the trailing `;` is
+	! matched, the current token can belong to a different unit if a `#include`
+	! is spliced in right after, so parser%context() would resolve the module
+	! path (and report diagnostics) against the wrong file
+	use_ctx = parser%contexts%v(use_token%unit_)
 
 	! Handle parent directory references (e.g., `use ../module;` or `use ../../module;`)
 	! module_path includes "../" for file resolution, module_name is for namespacing
@@ -198,8 +209,14 @@ recursive module subroutine parse_use_statement(parser, statement)
 		return
 	end if
 
-	! Ban "std" as a user-defined module name (reserved for standard library)
-	if (module_name == "std") then
+	! Ban "std" as a user-defined module name (reserved for standard library).
+	! The only forms allowed are the glob `use std::*;` and a single name
+	! `use std::name;`, which let std-only fns be called without the `std::`
+	! prefix
+	if (module_name == "std" .and. .not. ( &
+		parser%current_kind() == double_colon_token .and. &
+		(parser%peek_kind(1) == star_token .or. &
+		parser%peek_kind(1) == identifier_token))) then
 		span = new_span(mod_identifier%pos, len(mod_identifier%text))
 		call parser%diagnostics%push( &
 			err_mod_reserved_std(parser%context(), span))
@@ -331,6 +348,15 @@ recursive module subroutine parse_use_statement(parser, statement)
 
 	call parser%match(semicolon_token, semi)
 
+	! `use mod::name;` is only supported for `std`, which has no file to load.
+	! For a user module it used to silently import everything, like the glob
+	if (import_name /= "" .and. import_name /= "*" .and. module_name /= "std") then
+		span = new_span(name_identifier%pos, len(name_identifier%text))
+		call parser%diagnostics%push( &
+			err_mod_import_name(use_ctx, span, module_name, import_name))
+		return
+	end if
+
 	! Compute qualified_prefix once for qualified imports
 	! Use alias if provided, otherwise convert module_name (with "/" -> "::")
 	if (qualified_import) then
@@ -345,18 +371,56 @@ recursive module subroutine parse_use_statement(parser, statement)
 	statement%kind = expr_statement
 	statement%is_empty = .true.
 
-	! For std::, all intrinsics are already globally available
-	if (module_name == "std") return
+	! For `use std::*;` and `use std::name;`, there's no file to load.  Just let
+	! the parser resolve bare names to std-only fns from here on
+	if (module_name == "std") then
+		if (import_name == "*") then
+			parser%std_glob = .true.
+		else
+			if (parser%fns%find("std::" // import_name) /= 0) then
+				if (.not. allocated(parser%std_names)) parser%std_names = " "
+				if (index(parser%std_names, " " // import_name // " ") == 0) then
+					parser%std_names = parser%std_names // import_name // " "
+				end if
+			else
+				! A legacy intrinsic like `println` is already callable without the
+				! prefix, so importing it is a no-op.  Anything else isn't in std
+				fn_slot = parser%fns%find(import_name)
+				is_legacy = .false.
+				if (fn_slot /= 0) then
+					fn => parser%fns%get(fn_slot)
+					is_legacy = fn%is_intr
+				end if
+
+				if (.not. is_legacy) then
+					suggest = parser%fns%closest("std::" // import_name, std_only = .true.)
+					if (index(suggest, "std::") == 1) suggest = suggest(6:)
+					if (suggest == import_name) suggest = ""
+					span = new_span(name_identifier%pos, len(name_identifier%text))
+					call parser%diagnostics%push( &
+						err_std_unknown_name(use_ctx, span, import_name, suggest))
+					return
+				end if
+			end if
+		end if
+
+		! A use_statement with no member compiles to just a unit value, c.f.
+		! compile_node().  The generic empty expr_statement above isn't handled
+		! by the compiler
+		statement%kind = use_statement
+		statement%is_empty = .false.
+		return
+	end if
 
 	! Get the directory of the current source file
-	src_dir = get_dir(parser%contexts%v(parser%current_unit())%src_file)
+	src_dir = get_dir(use_ctx%src_file)
 	mod_filename = src_dir // module_path // ".syntran"
 
 	! Check if module file exists
 	if (.not. exists(mod_filename)) then
 		span = new_span(mod_identifier%pos, len(mod_identifier%text))
 		call parser%diagnostics%push( &
-			err_mod_404(parser%context(), span, mod_filename))
+			err_mod_404(use_ctx, span, mod_filename))
 		return
 	end if
 
@@ -364,7 +428,7 @@ recursive module subroutine parse_use_statement(parser, statement)
 	if (parser%import_stack%contains(mod_filename)) then
 		span = new_span(mod_identifier%pos, len(mod_identifier%text))
 		call parser%diagnostics%push( &
-			err_circular_import(parser%context(), span, module_name))
+			err_circular_import(use_ctx, span, module_name))
 		return
 	end if
 
@@ -382,7 +446,7 @@ recursive module subroutine parse_use_statement(parser, statement)
 	if (parser%imported_modules%contains(mod_filename)) then
 		span = new_span(mod_identifier%pos, len(mod_identifier%text))
 		call parser%diagnostics%push( &
-			err_duplicate_import(parser%context(), span, module_name))
+			err_duplicate_import(use_ctx, span, module_name))
 		return
 	end if
 
@@ -394,7 +458,7 @@ recursive module subroutine parse_use_statement(parser, statement)
 	if (iostat /= exit_success) then
 		span = new_span(mod_identifier%pos, len(mod_identifier%text))
 		call parser%diagnostics%push( &
-			err_mod_read(parser%context(), span, mod_filename))
+			err_mod_read(use_ctx, span, mod_filename))
 		return
 	end if
 
@@ -496,7 +560,7 @@ recursive module subroutine parse_use_statement(parser, statement)
 			if (is_overloaded_intr(fn_name)) then
 				span = new_span(mod_identifier%pos, len(mod_identifier%text))
 				call parser%diagnostics%push( &
-					err_redeclare_intr_fn(parser%context(), span, fn_name))
+					err_redeclare_intr_fn(use_ctx, span, fn_name))
 				cycle
 			end if
 		end if
@@ -1349,6 +1413,14 @@ recursive module subroutine parse_statement(parser, statement)
 
 	type(text_span_t) :: span
 
+	! Unit (file) of the statement's first token, for diagnostics pushed after
+	! its trailing `;` is matched.  By then the current token can belong to a
+	! `#include` spliced in right after, so parser%context() would report them
+	! against the wrong file.  c.f. parse_use_statement().  This is an index,
+	! not a copy of the context, because that would copy the whole source text
+	! for every statement
+	integer :: stmt_unit
+
 	! Captured before dispatch so every statement kind gets a location --
 	! not just the `default` expr-statement case below -- for runtime-error
 	! stack traces (c.f. append_rt_trace(), vm_exec.f90).  parser%contexts
@@ -1358,7 +1430,8 @@ recursive module subroutine parse_statement(parser, statement)
 	integer :: stmt_src_id, stmt_src_pos
 
 	stmt_src_pos = parser%peek_pos(0)
-	stmt_src_id  = parser%contexts%v(parser%current_unit())%src_id
+	stmt_unit    = parser%current_unit()
+	stmt_src_id  = parser%contexts%v(stmt_unit)%src_id
 
 	select case (parser%current_kind())
 	case (lbrace_token)
@@ -1400,7 +1473,7 @@ recursive module subroutine parse_statement(parser, statement)
 		if (parser%ipass > 0 .and. statement%kind == fn_ref_expr) then
 			span = new_span(statement%identifier%pos, len(statement%identifier%text))
 			call parser%diagnostics%push( &
-				err_fn_missing_parens(parser%context(), &
+				err_fn_missing_parens(parser%contexts%v(stmt_unit), &
 				span, statement%identifier%text))
 		end if
 
@@ -1439,14 +1512,14 @@ recursive module subroutine parse_statement(parser, statement)
 					if (statement%val%type /= void_type) then
 						span = new_span(pos_beg, pos_end - pos_beg + 1)
 						call parser%diagnostics%push( &
-							err_bad_expr(parser%context(), &
+							err_bad_expr(parser%contexts%v(stmt_unit), &
 							span))
 					end if
 
 				case default
 					span = new_span(pos_beg, pos_end - pos_beg + 1)
 					call parser%diagnostics%push( &
-						err_bad_expr(parser%context(), &
+						err_bad_expr(parser%contexts%v(stmt_unit), &
 						span))
 				end select
 

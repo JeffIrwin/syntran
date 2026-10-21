@@ -16,6 +16,8 @@ test.exe
 
 # Written by src/tests/test-src/transpile/test-07.syntran
 test-07-scratch.tmp
+test-14-scratch.tmp
+test-14-scratch2.tmp
 
 /docker/artifact-download/
 /docker/artifact-download-*/

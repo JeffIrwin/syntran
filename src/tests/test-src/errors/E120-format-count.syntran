@@ -1,0 +1,7 @@
+// E120: format-count
+// The format string of format() has a different number of placeholders than
+// there are values after it
+
+let a = 1;
+let b = 2;
+println(std::format("{} + {} = {}", a, b));

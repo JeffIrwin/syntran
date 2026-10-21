@@ -1,0 +1,113 @@
+// print(), write(), format(), binary files, and std::read_*().  These programs
+// are run by both the interpreter and the Fortran transpiler
+// (utils/test-transpile.sh), which must print the same thing.  It writes scratch
+// files next to itself, which are git-ignored
+
+enum Suit
+{
+	Hearts,
+	Spades,
+}
+
+struct Point
+{
+	x: i32,
+	y: f64,
+}
+
+// print() doesn't end the line
+std::print("a");
+std::print("b", 1, " ", true);
+println();
+std::print();
+println("c", 2);
+
+// format() with every kind of spec
+println(std::format("[{}] [{:5}] [{:<5}] [{:^5}] [{:>5}] [{:*^7}]", 42, 42, 42, 42, 42, 42));
+println(std::format("[{:05}] [{:+}] [{:+05}] [{:05}]", 42, 42, 42, -42));
+println(std::format("[{:x}] [{:X}] [{:#x}] [{:o}] [{:#b}] [{:#010b}]", 255, 255, 255, 64, 5, 5));
+println(std::format("[{:x}] [{:b}] [{:x}]", -1, -2, -1'i64));
+println(std::format("[{:.3}] [{:08.3}] [{:+.1}] [{:10.2}]", 3.14159, -3.14159, 2.5, 1.0));
+println(std::format("[{:e}] [{:.2e}] [{:E}] [{:.0e}]", 1234.5, 0.00123, 5.0e10, 1000.0));
+println(std::format("[{}] [{}] [{:.2}]", 1.5, 1.5f, 2.5f));
+println(std::format("[{}] [{:6}] [{:>6}] [{:.2}] [{:-<6}]", "text", "ab", "ab", "abcdef", "ab"));
+println(std::format("[{}] [{:7}] [{:>7}]", true, false, true));
+println(std::format("[{:>8}] [{:<8}] [{}]", Suit.Hearts, Suit.Spades, Point{x = 1, y = 2.5}));
+println(std::format("{{literal}} {} {{{}}}", 1, 2));
+
+// Arrays have no brackets or commas, and a line break after each row
+println(std::format("{}", [1, 2, 3]));
+println(std::format("{:3}", [1, 2, 3, 4, 5, 6; 3, 2]));
+println(std::format("{:.1}", [1.25, 2.5, 3.75]));
+println(std::format("{}", [true, false, true]));
+println(std::format("{:>3}", ["a", "b", "c", "d"; 2, 2]));
+println(std::format("{:x}", [10, 11, 12, 13, 14, 15, 16, 17; 2, 2, 2]));
+
+// Text files, written without ending the line, and read back
+let ft = open("test-14-scratch.tmp", "w");
+std::write(ft, "x=", 1);
+std::write(ft, " y=", 2.5f, " ", [1, 2], " ", true);
+writeln(ft, "!");
+writeln(ft, std::format("{:.2}", [1.0, 2.0, 3.0, 4.0; 2, 2]));
+writeln(ft, "7 8 9");
+close(ft);
+
+let fr = open("test-14-scratch.tmp", "r");
+println(readln(fr));
+println(readln(fr));
+println(readln(fr));
+println(readln(fr));
+close(fr);
+
+let fv = open("test-14-scratch.tmp", "r");
+println(readln(fv));
+println(std::read_f64(fv, 4));
+println(std::read_i32(fv, 3));
+close(fv);
+
+// Binary files
+let fb = open("test-14-scratch2.tmp", "wb");
+std::write(fb, 42);
+std::write(fb, -7'i64);
+std::write(fb, 1.5f);
+std::write(fb, 2.25);
+std::write(fb, [10, 20, 30]);
+std::write(fb, [0.5, 0.25, 0.125, 0.0625; 2, 2]);
+std::write(fb, [1'i64, 2'i64]);
+std::write(fb, [1.5f, 2.5f]);
+std::write(fb, 1, 2);
+std::write(fb, true);
+close(fb);
+
+let fi = open("test-14-scratch2.tmp", "rb");
+println(std::read_i32(fi));
+println(std::read_i64(fi));
+println(std::read_f32(fi));
+println(std::read_f64(fi));
+println(std::read_i32(fi, 3));
+println(std::reshape(std::read_f64(fi, 4), [2, 2]));
+println(std::read_i64(fi, 2));
+println(std::read_f32(fi, 2));
+println(std::read_i32(fi, 2));
+close(fi);
+
+// Writing a shorter binary file replaces the longer one
+let fs = open("test-14-scratch2.tmp", "wb");
+std::write(fs, 5);
+close(fs);
+let fz = open("test-14-scratch2.tmp", "rb");
+println(std::read_i32(fz));
+println(std::read_i32(fz, 0));
+close(fz);
+
+// The first value of format() is evaluated once, even when it needs a temp
+let calls = 0;
+fn counted(): [i32; :]
+{
+	calls += 1;
+	return [7, 8];
+}
+println(std::format("{:3}", counted()[1]));
+println(calls);
+
+return 0;

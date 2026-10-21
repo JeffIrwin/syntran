@@ -58,21 +58,23 @@ This is a subset of the language so far:
 - Enums: declarations (with explicit values and aliases), `Suit.Hearts`, the
   casts `i32(Suit.Hearts)` and `Suit(2)`, comparison, printing, arrays of
   enums, a bare enum name as in `for v in Suit`, and `switch` on an enum
-- File I/O: `open`, `std::try_open`, `close`, `writeln`, `readln`, `eof`,
+- File I/O: `open`, `std::try_open`, `close`, `std::write`, `std::writef`, `writeln`, `readln`, `eof`,
   `std::exists`, the members `f.is_open`, `f.eof`, and `f.name`, and `readln()`
-  and `eof()` of standard input.  `std::IN`, `std::OUT`, `std::ERR`, `std::PI`,
-  `std::getenv`, `std::hasenv`, and `std::args()`
+  and `eof()` of standard input.  Binary files, with a `b` in the mode of `open`,
+  and `std::read_i32`, `std::read_i64`, `std::read_f32`, and `std::read_f64`.
+  `std::IN`, `std::OUT`, `std::ERR`, `std::PI`, `std::getenv`, `std::hasenv`, and
+  `std::args()`
 - Function pointers: a variable of a fn type, passing and returning one, a member
   of a struct that is one, calling one, and comparing two with `==` and `!=`
 - Modules: `use`, qualified and glob imports, aliases, subdirectories, and the
   fns and variables of a module, including modules that import others.  The
   statements of a module run where it is imported
-- These intrinsic functions: `println`, `str`, `len`, `repeat`, `char`, `size`,
-  `count`, `all`, `any`, `sum`, `product`, `minval`, `maxval` (with `dim` and
-  `mask` too), `norm2`, `dot`, `min`, `max`, `abs`, `exp`, `log`, `log2`,
-  `log10`, `sqrt`, the trigonometric functions and their inverses in radians and
-  in degrees, `i32`, `i64`, `parse_i32`, `parse_i64`, `parse_f32`, `parse_f64`,
-  `exit`
+- These intrinsic functions: `println`, `std::print`, `std::printf`, `str`, `std::format`, `len`,
+  `repeat`, `char`, `size`, `count`, `all`, `any`, `sum`, `product`, `minval`,
+  `maxval` (with `dim` and `mask` too), `norm2`, `dot`, `min`, `max`, `abs`,
+  `exp`, `log`, `log2`, `log10`, `sqrt`, the trigonometric functions and their
+  inverses in radians and in degrees, `i32`, `i64`, `parse_i32`, `parse_i64`,
+  `parse_f32`, `parse_f64`, `exit`
 
 ## What isn't supported yet
 
@@ -113,6 +115,9 @@ things are different:
   ignored, so pass them to the compiled program instead.  Likewise `--cd` has no
   effect on the generated program, whose relative file paths are resolved
   against the directory that it is run from.
+- Writing a value that has no raw bytes, like a struct or an array of strings, to
+  a binary file is [R45](errors.md#r45----binary-write-type) in the interpreter,
+  while the generated program writes its text.
 - A function that doesn't return a value on some path isn't detected at run
   time.
 - The `Exiting syntran with status` message of `exit()` is never colored.

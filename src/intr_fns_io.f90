@@ -28,7 +28,46 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 		char_fn, i32_sca_fn, i32_arr_fn, i64_sca_fn, i64_arr_fn, &
 		open_fn, readln_fn, writeln_fn, eof_fn, close_fn, exit_fn, &
 		getenv_fn, hasenv_fn, exists_fn, try_open_fn, &
-		print_trace_fn, stack_trace_fn, caller_fn
+		print_trace_fn, stack_trace_fn, caller_fn, print_fn, write_fn, format_fn, printf_fn, writef_fn
+
+	! std::read_<type>(): the stub that is registered as the std-only name, then
+	! the scalar overload and the array overload, for each of 4 types
+	type(fn_t) :: read_fns(12)
+
+	integer :: k, elem_type
+	character(len = :), allocatable :: type_name_
+
+	!********
+
+	! std::format(fmt, values...) is a string built from a literal format string, with
+	! a `{}` or `{:spec}` for each value.  Its placeholders are checked against
+	! the values by check_format_call() in parse_fn.f90
+	format_fn%type%type = str_type
+
+	allocate(format_fn%params(1))
+	allocate(format_fn%param_names%v(1))
+	format_fn%params(1)%type = str_type
+	format_fn%param_names%v(1)%s = "fmt"
+
+	format_fn%variadic_min  = 0
+	format_fn%variadic_type = any_type
+	format_fn%variadic_name = "value"
+
+	call fns%insert("std::format", format_fn, id_index)
+
+	!********
+
+	! std::print() is println() without the trailing newline
+	print_fn%type%type = void_type
+
+	allocate(print_fn%params(0))
+	allocate(print_fn%param_names%v(0))
+
+	print_fn%variadic_min  = 0
+	print_fn%variadic_type = any_type
+	print_fn%variadic_name = "value"
+
+	call fns%insert("std::print", print_fn, id_index)
 
 	!********
 
@@ -259,6 +298,87 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 
 	!********
 
+	! std::write() is writeln() without the trailing newline
+	write_fn%type%type = void_type
+	allocate(write_fn%params(1))
+	allocate(write_fn%param_names%v(1))
+	write_fn%params(1)%type = file_type
+	write_fn%param_names%v(1)%s = "file_handle"
+
+	write_fn%variadic_min  = 0
+	write_fn%variadic_type = any_type
+	write_fn%variadic_name = "value"
+
+	call fns%insert("std::write", write_fn, id_index)
+
+	!********
+
+	! std::printf(fmt, values...) is std::print(std::format(fmt, values...)), and
+	! std::writef(f, fmt, values...) is std::write(f, std::format(fmt, values...)).
+	! The parser rewrites them into those calls, after checking the format string
+	! like format() does
+	printf_fn%type%type = void_type
+	allocate(printf_fn%params(1))
+	allocate(printf_fn%param_names%v(1))
+	printf_fn%params(1)%type = str_type
+	printf_fn%param_names%v(1)%s = "fmt"
+
+	printf_fn%variadic_min  = 0
+	printf_fn%variadic_type = any_type
+	printf_fn%variadic_name = "value"
+
+	call fns%insert("std::printf", printf_fn, id_index)
+
+	writef_fn%type%type = void_type
+	allocate(writef_fn%params(2))
+	allocate(writef_fn%param_names%v(2))
+	writef_fn%params(1)%type = file_type
+	writef_fn%param_names%v(1)%s = "file_handle"
+	writef_fn%params(2)%type = str_type
+	writef_fn%param_names%v(2)%s = "fmt"
+
+	writef_fn%variadic_min  = 0
+	writef_fn%variadic_type = any_type
+	writef_fn%variadic_name = "value"
+
+	call fns%insert("std::writef", writef_fn, id_index)
+
+	!********
+
+	! std::read_<type>(file_handle) reads one value from a file, and
+	! std::read_<type>(file_handle, n) reads an array of n values.  A text file
+	! has whitespace-separated values, possibly across lines.  A binary file has
+	! the raw bytes of the values.  Like std::solve(), the std::-only name is a
+	! stub that diagnoses an unqualified call, and resolve_overload() picks the
+	! mangled overload
+	do k = 1, 4
+		select case (k)
+		case (1)
+			elem_type = i32_type
+			type_name_ = "i32"
+		case (2)
+			elem_type = i64_type
+			type_name_ = "i64"
+		case (3)
+			elem_type = f32_type
+			type_name_ = "f32"
+		case default
+			elem_type = f64_type
+			type_name_ = "f64"
+		end select
+
+		read_fns(3*k - 2) = new_read_fn(elem_type, .false.)
+		call fns%insert("std::read_"//type_name_, read_fns(3*k - 2), id_index)
+
+		read_fns(3*k - 1) = new_read_fn(elem_type, .false.)
+		call fns%insert("0read_"//type_name_//"_sca", read_fns(3*k - 1), id_index)
+
+		read_fns(3*k) = new_read_fn(elem_type, .true.)
+		call fns%insert("0read_"//type_name_//"_arr", read_fns(3*k), id_index)
+	end do
+
+	!********
+
 	eof_fn%type%type = bool_type
 	allocate(eof_fn%params(0))
 	allocate(eof_fn%param_names%v(0))
@@ -421,10 +541,48 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 			char_fn, i32_sca_fn, i32_arr_fn, i64_sca_fn, i64_arr_fn, &
 			open_fn, readln_fn, writeln_fn, eof_fn, close_fn, exit_fn, &
 			getenv_fn, hasenv_fn, exists_fn, try_open_fn, &
-			print_trace_fn, stack_trace_fn, caller_fn &
+			print_trace_fn, stack_trace_fn, caller_fn, print_fn, write_fn, format_fn, printf_fn, writef_fn, read_fns &
 		]
 
 end subroutine declare_io_fns
+
+!===============================================================================
+
+function new_read_fn(elem_type, is_arr) result(fn)
+
+	! The signature of std::read_<type>() for one element type:
+	!
+	!     read_<t>(file_handle: file):          t
+	!     read_<t>(file_handle: file, n: i32):  [t; :]
+
+	integer, intent(in) :: elem_type
+	logical, intent(in) :: is_arr
+
+	type(fn_t) :: fn
+
+	!********
+
+	if (is_arr) then
+		fn%type%type = array_type
+		allocate(fn%type%array)
+		fn%type%array%type = elem_type
+		fn%type%array%rank = 1
+
+		allocate(fn%params(2))
+		allocate(fn%param_names%v(2))
+		fn%params(2)%type = i32_type
+		fn%param_names%v(2)%s = "n"
+	else
+		fn%type%type = elem_type
+
+		allocate(fn%params(1))
+		allocate(fn%param_names%v(1))
+	end if
+
+	fn%params(1)%type = file_type
+	fn%param_names%v(1)%s = "file_handle"
+
+end function new_read_fn
 
 !===============================================================================
 

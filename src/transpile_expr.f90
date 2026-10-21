@@ -26,6 +26,8 @@ submodule (syntran__transpile_m) syntran__transpile_expr
 	!
 	! An array of strings is an array of rt_str_t, which wraps a string
 
+	use syntran_rt, only: rt_str_t, rt_fmt_split
+
 	implicit none
 
 !===============================================================================
@@ -3025,9 +3027,11 @@ recursive function emit_intr_call(em, node) result(s)
 	!********
 
 	character(len = :), allocatable :: name, base, suffix, a1, a2, args, kind_str, &
-		arg_i
+		arg_i, spec_i, fmt_call
 
-	integer :: i, n, iu, t
+	integer :: i, n, iu, t, ferr
+
+	type(rt_str_t), allocatable :: fpieces(:), fspecs(:)
 
 	name = node%identifier%text
 	n = 0
@@ -3074,6 +3078,70 @@ recursive function emit_intr_call(em, node) result(s)
 		end do
 		if (len(s) == 0) s = "''"
 		s = '('//s//')'
+
+	case ('format')
+		! The format string is a literal that the parser checked against the
+		! other arguments.  The text between the placeholders stays as it is, and
+		! each placeholder is the call of the runtime fn that formats its value
+		call rt_fmt_split(node%args(1)%val%str%s, fpieces, fspecs, ferr)
+		s = ''
+		do i = 1, size(fspecs)
+
+			if (len(fpieces(i)%s) > 0) then
+				if (len(s) > 0) s = s//' // '
+				s = s//str_literal(fpieces(i)%s)
+			end if
+
+			associate (val => node%args(i+1)%val)
+				! a2 is already the first value.  Emitting it again would repeat
+				! any statement that emit_expr() hoists, e.g. a fn call temp
+				if (i == 1) then
+					arg_i = a2
+				else
+					arg_i = unparen(emit_expr(em, node%args(i+1)))
+				end if
+				spec_i = str_literal(fspecs(i)%s)
+				t = elem_type(val)
+
+				if (is_arr(val)) then
+					if (val%array%rank > 4) call em_unsupported(em, &
+						'formatting an array of rank > 4', node%identifier%pos)
+					fmt_call = 'rt_fmt_a_'//fmt_type_name(t)//'_'//str(val%array%rank)// &
+						'('//arg_i//', '//spec_i//')'
+				else if (len(fspecs(i)%s) == 0 .and. .not. &
+						(t == f32_type .or. t == f64_type)) then
+					! Same as str(), except that a real is trimmed
+					fmt_call = str_of(em, val, arg_i)
+				else if (t == enum_type .or. t == struct_type) then
+					fmt_call = 'rt_fmt_str('//str_of(em, val, arg_i)//', '//spec_i//')'
+				else
+					fmt_call = 'rt_fmt_'//fmt_type_name(t)//'('//arg_i//', '//spec_i//')'
+				end if
+			end associate
+
+			if (len(s) > 0) s = s//' // '
+			s = s//fmt_call
+
+		end do
+
+		n = size(fpieces)
+		if (len(fpieces(n)%s) > 0) then
+			if (len(s) > 0) s = s//' // '
+			s = s//str_literal(fpieces(n)%s)
+		end if
+		if (len(s) == 0) s = "''"
+		! Only a concatenation needs the parentheses
+		if (index(s, ' // ') > 0) s = '('//s//')'
+
+	case ('read')
+		! std::read_<type>(f) reads one value, and std::read_<type>(f, n) an array
+		! of n values.  The overload was picked by the parser, as in `i32_arr`
+		if (index(suffix, '_arr') > 0) then
+			s = 'rt_read_a_'//suffix(1: index(suffix, '_arr') - 1)//'('//a1//', '// &
+				convert(a2, elem_type(node%args(2)%val), i32_type)//')'
+		else
+			s = 'rt_read_'//suffix(1: index(suffix, '_sca') - 1)//'('//a1//')'
+		end if
 
 	case ('len')
 		s = convert('len('//a1//', kind = int64)', i64_type, elem_type(node%val))
@@ -3693,6 +3761,32 @@ recursive function emit_assign_expr(em, node) result(s)
 	s = emit_name_ref(em, node)
 
 end function emit_assign_expr
+
+!===============================================================================
+
+function fmt_type_name(t) result(r)
+
+	! The suffix of the runtime fns rt_fmt_<type>() and rt_fmt_a_<type>_<rank>()
+
+	integer, intent(in) :: t
+	character(len = :), allocatable :: r
+
+	select case (t)
+	case (bool_type)
+		r = 'bool'
+	case (i32_type)
+		r = 'i32'
+	case (i64_type)
+		r = 'i64'
+	case (f32_type)
+		r = 'f32'
+	case (f64_type)
+		r = 'f64'
+	case default
+		r = 'str'
+	end select
+
+end function fmt_type_name
 
 !===============================================================================
 

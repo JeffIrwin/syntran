@@ -1,0 +1,9 @@
+// E121: reshape-shape-lit
+// The shape argument of `std::reshape()` must be an array literal, since the
+// number of dimensions of the result has to be known at compile time
+
+fn to_matrix(v: [i32; :], shape: [i32; :]): i32
+{
+	let m = std::reshape(v, shape);
+	return 0;
+}

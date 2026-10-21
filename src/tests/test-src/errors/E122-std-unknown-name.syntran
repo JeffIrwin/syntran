@@ -1,0 +1,6 @@
+// E122: std-unknown-name
+// `use std::name;` needs the name of a function in the standard library
+
+let x = 1;
+
+use std::reshap;

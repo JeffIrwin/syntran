@@ -1,0 +1,42 @@
+// printf() and writef() are print(format(...)) and write(f, format(...)).  They
+// don't write a newline, so several of them can build a line, which readln()
+// then reads back in one piece
+
+fn main(): bool
+{
+	let filename = "build/test-16.txt";
+
+	let fo = open(filename, "w");
+	std::writef(fo, "{:3}|{:<4}|", 7, "ab");
+	std::writef(fo, "{:.2}", 2.5);
+	writeln(fo, "!");
+	std::writef(fo, "no placeholders {{}}");
+	writeln(fo);
+	std::writef(fo, "{:x} {}", [10, 11, 255], true);
+	writeln(fo);
+	std::writef(fo, "{:2}", [1, 2, 3, 4, 5, 6; 3, 2]);
+	writeln(fo);
+	close(fo);
+
+	let fi = open(filename, "r");
+	let line1 = readln(fi);
+	let line2 = readln(fi);
+	let line3 = readln(fi);
+	let line4 = readln(fi);
+	let line5 = readln(fi);
+	close(fi);
+
+	// printf() can't be checked by reading stdout, but it shouldn't print a
+	// newline, so this line has to be finished by println()
+	std::printf("printf() ");
+	std::printf("test {} {:03}", 16, 7);
+	println(" done");
+
+	return line1 == "  7|ab  |2.50!" and
+		line2 == "no placeholders {}" and
+		line3 == "a b ff true" and
+		line4 == " 1  2  3" and
+		line5 == " 4  5  6";
+}
+
+return main();

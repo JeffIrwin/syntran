@@ -1,0 +1,6 @@
+
+struct A { x: i32, }
+  struct A { y: i32, }
+#include("../test-01-inc.syntran");
+
+return fn_inc();

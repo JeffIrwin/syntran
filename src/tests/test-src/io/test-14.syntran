@@ -1,0 +1,59 @@
+// Write the raw bytes of values to a binary file and read them back.  A binary
+// file is opened with "wb" or "rb"
+
+fn main(): bool
+{
+	let filename = "build/test-14.bin";
+
+	let fo = open(filename, "wb");
+	std::write(fo, 42);
+	std::write(fo, -7'i64);
+	std::write(fo, 1.5f);
+	std::write(fo, 2.25);
+	std::write(fo, [10, 20, 30]);
+	std::write(fo, [0.5, 0.25, 0.125, 0.0625]);
+	std::write(fo, [1'i64, 2'i64]);
+	std::write(fo, [1.5f, 2.5f]);
+	std::write(fo, 1, 2);
+	std::write(fo, true);
+	close(fo);
+
+	let fi = open(filename, "rb");
+	let a = std::read_i32(fi);
+	let b = std::read_i64(fi);
+	let c = std::read_f32(fi);
+	let d = std::read_f64(fi);
+	let e = std::read_i32(fi, 3);
+	let g = std::read_f64(fi, 4);
+	let h = std::read_i64(fi, 2);
+	let i = std::read_f32(fi, 2);
+	let j = std::read_i32(fi, 2);
+	close(fi);
+
+	// A bool is 1 byte, and an i32 is 4, so the file has this many bytes.  Read
+	// everything but the last byte back as i32s to check
+	let nbytes = 4 + 8 + 4 + 8 + 3*4 + 4*8 + 2*8 + 2*4 + 2*4 + 1;
+	let fs = open(filename, "rb");
+	let words = std::read_i32(fs, (nbytes - 1) / 4);
+	close(fs);
+
+	// Writing a shorter file replaces the longer one, instead of overwriting its
+	// start.  The file has to have a single value left to read to its end
+	let ft = open(filename, "wb");
+	std::write(ft, 5);
+	close(ft);
+	let fr = open(filename, "rb");
+	let k = std::read_i32(fr);
+	let fz = std::try_open(filename, "rb");
+	let two = std::read_i32(fz);
+	close(fr);
+	close(fz);
+
+	return a == 42 and b == -7'i64 and c == 1.5f and d == 2.25 and
+		all(e == [10, 20, 30]) and all(g == [0.5, 0.25, 0.125, 0.0625]) and
+		all(h == [1'i64, 2'i64]) and all(i == [1.5f, 2.5f]) and
+		all(j == [1, 2]) and size(words, 0) == (nbytes - 1) / 4 and k == 5 and
+		two == 5;
+}
+
+return main();

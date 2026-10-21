@@ -1749,6 +1749,16 @@ subroutine unit_test_intr_fns(npass, nfail)
 			diag_has_code(get_diags('print_trace();'), EC_STD_ONLY_FN), &
 			diag_has_code(get_diags('stack_trace();'), EC_STD_ONLY_FN), &
 			diag_has_code(get_diags('caller();'), EC_STD_ONLY_FN), &
+			! print(), write(), format(), printf(), and writef() are std::-only too
+			diag_has_code(get_diags('print("x");'), EC_STD_ONLY_FN), &
+			diag_has_code(get_diags('let f = open("build/x.txt", "w"); write(f, 1);'), EC_STD_ONLY_FN), &
+			diag_has_code(get_diags('let s = format("{}", 1);'), EC_STD_ONLY_FN), &
+			diag_has_code(get_diags('printf("{}", 1);'), EC_STD_ONLY_FN), &
+			diag_has_code(get_diags('let f = open("build/x.txt", "w"); writef(f, "{}", 1);'), EC_STD_ONLY_FN), &
+			! ... so a user can define fns with those names
+			eval('fn print(s: str): str { return s + "!"; } print("hi");') == 'hi!', &
+			eval('fn write(a: i32): i32 { return a + 1; } write(1);') == '2', &
+			eval('fn format(a: i32): i32 { return a * 2; } format(4);') == '8', &
 			diag_has_code(get_diags('std::print_trace(1);'), EC_BAD_ARG_TYPE), &
 			diag_has_code(get_diags('let x = std::stack_trace("a");'), EC_BAD_ARG_TYPE), &
 			diag_has_code(get_diags('let x = std::stack_trace(1, 2);'), EC_TOO_MANY_ARGS), &
@@ -4108,6 +4118,9 @@ subroutine unit_test_fns(npass, nfail)
 			! (the Fortran transpiler only skips the copy when it can prove
 			! there's no such aliasing)
 			interpret_file(path//'test-45.syntran', quiet) == '0', &
+			! A method or member named like a std-only fn (print, write, transpose)
+			! is an implicit-self call, with or without `use std::*;`
+			interpret_file(path//'test-46.syntran', quiet) == 'true', &
 			! Printing a struct with a fn-pointer member renders the
 			! member's signature via value_to_str()'s fn_type case, same as
 			! a bare fn-pointer value (test-33 above)
@@ -4184,6 +4197,16 @@ subroutine unit_test_repl_fns(npass, nfail)
 			! Declare then call on a later line
 			interpret('fn f(): i32 { return 42; }'//line_feed// &
 				'f();', quiet) == '42', &
+			! `use std::*;` on one line applies to the lines after it
+			interpret('use std::*;'//line_feed// &
+				'let m = reshape([1, 2, 3, 4], [2, 2]);'//line_feed// &
+				'm[1, 0];', quiet) == '2', &
+			! Likewise for `use std::name;`, and only for that name
+			interpret('use std::reshape;'//line_feed// &
+				'let m = reshape([1, 2, 3, 4], [2, 2]);'//line_feed// &
+				'm[1, 0];', quiet) == '2', &
+			interpret('use std::reshape;'//line_feed// &
+				'transpose(reshape([1, 2, 3, 4], [2, 2]));', quiet) == '', &
 			! Two fns declared on separate lines: the 2nd declaration must not
 			! clobber the 1st's slot in the flat fn array
 			interpret('fn f(): i32 { return 42; }'//line_feed// &
@@ -4666,6 +4689,194 @@ end subroutine unit_test_array_str
 
 !===============================================================================
 
+subroutine unit_test_format(npass, nfail)
+
+	! format() with a literal format string.  The format string is checked when
+	! the program is parsed, see unit_test_error_codes() for the errors
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'format'
+
+	character, parameter :: lf = achar(10)
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! Default formatting is the same as str(), except that a real is
+			! trimmed, and there is no placeholder to format
+			eval('std::format("no placeholders");') == 'no placeholders', &
+
+			! NaN and inf are aligned like numbers, and never zero-padded
+			eval('std::format("<{:6}>", 0.0/0.0);') == '<   NaN>', &
+			eval('std::format("<{:<6}>", 0.0/0.0);') == '<NaN   >', &
+			eval('std::format("<{:06}>", 0.0/0.0);') == '<   NaN>', &
+			eval('std::format("<{:6}>", 1.0/0.0);') == '<   inf>', &
+			eval('std::format("<{:06}>", -1.0/0.0);') == '<  -inf>', &
+			eval('std::format("");') == '', &
+			eval('std::format("{}", 42);') == '42', &
+			eval('std::format("{}", -7''i64);') == '-7', &
+			eval('std::format("{}", 1.5);') == '1.500000000000000E+00', &
+			eval('std::format("{}", 1.5f);') == '1.500000E+00', &
+			eval('std::format("{}", true);') == 'true', &
+			eval('std::format("{}", "text");') == 'text', &
+			eval('std::format("a{}b{}c", 1, 2);') == 'a1b2c', &
+			eval('std::format("{}{}", "x", "y");') == 'xy', &
+			eval('std::format("{{}} {{{}}}", 1);') == '{} {1}', &
+
+			! Width, alignment, and fill.  Numbers are right-aligned by default,
+			! and everything else is left-aligned
+			eval('std::format("{:5}", 42);') == '   42', &
+			eval('std::format("{:<5}|", 42);') == '42   |', &
+			eval('std::format("{:^6}|", 42);') == '  42  |', &
+			eval('std::format("{:^5}|", 42);') == ' 42  |', &
+			eval('std::format("{:>3}", 12345);') == '12345', &
+			eval('std::format("{:*>6}", 7);') == '*****7', &
+			eval('std::format("{:-<6}", 7);') == '7-----', &
+			eval('std::format("{:.^7}", "abc");') == '..abc..', &
+			eval('std::format("{:6}|", "ab");') == 'ab    |', &
+			eval('std::format("{:>6}", "ab");') == '    ab', &
+			eval('std::format("{:6}|", true);') == 'true  |', &
+			eval('std::format("{:>7}", false);') == '  false', &
+			eval('std::format("{:6}", 1.5f);') == '1.500000E+00', &
+			eval('std::format("{:25}", 1.5);') == '    1.500000000000000E+00', &
+
+			! Integer signs, zero padding, and bases
+			eval('std::format("{:+}", 5);') == '+5', &
+			eval('std::format("{:+}", -5);') == '-5', &
+			eval('std::format("{:05}", 42);') == '00042', &
+			eval('std::format("{:05}", -42);') == '-0042', &
+			eval('std::format("{:+05}", 42);') == '+0042', &
+			eval('std::format("{:x}", 255);') == 'ff', &
+			eval('std::format("{:X}", 255);') == 'FF', &
+			eval('std::format("{:o}", 64);') == '100', &
+			eval('std::format("{:b}", 5);') == '101', &
+			eval('std::format("{:#x}", 255);') == '0xff', &
+			eval('std::format("{:#X}", 255);') == '0xFF', &
+			eval('std::format("{:#o}", 8);') == '0o10', &
+			eval('std::format("{:#b}", 5);') == '0b101', &
+			eval('std::format("{:#010b}", 5);') == '0b00000101', &
+			eval('std::format("{:#6x}", 255);') == '  0xff', &
+			eval('std::format("{:08x}", 48879);') == '0000beef', &
+			eval('std::format("{:x}", 0);') == '0', &
+
+			! Negative integers are formatted in two's complement in their own
+			! size, like Rust's
+			eval('std::format("{:x}", -1);') == 'ffffffff', &
+			eval('std::format("{:x}", -1''i64);') == 'ffffffffffffffff', &
+			eval('std::format("{:b}", -2);') == '11111111111111111111111111111110', &
+			eval('std::format("{:o}", -1);') == '37777777777', &
+			eval('std::format("{:x}", 2147483647);') == '7fffffff', &
+			eval('std::format("{}", -2147483647 - 1);') == '-2147483648', &
+
+			! Real numbers: fixed precision, scientific notation
+			eval('std::format("{:.3}", 3.14159);') == '3.142', &
+			eval('std::format("{:.0}", 3.7);') == '4', &
+			eval('std::format("{:.1}", 0.04);') == '0.0', &
+			eval('std::format("{:.2}", 0.5);') == '0.50', &
+			eval('std::format("{:.2}", 0.0);') == '0.00', &
+			eval('std::format("{:.2}", -0.001);') == '-0.00', &
+			eval('std::format("{:.3}", 2.5f);') == '2.500', &
+			eval('std::format("{:08.3}", 3.14159);') == '0003.142', &
+			eval('std::format("{:08.3}", -3.14159);') == '-003.142', &
+			eval('std::format("{:+.1}", 2.5);') == '+2.5', &
+			eval('std::format("{:+.1}", -2.5);') == '-2.5', &
+			eval('std::format("{:10.2}|", 3.14159);') == '      3.14|', &
+			eval('std::format("{:<10.2}|", 3.14159);') == '3.14      |', &
+			eval('std::format("{:.2}", 1234567.891);') == '1234567.89', &
+			eval('std::format("{:.1}", 1.0e20);') == '100000000000000000000.0', &
+			eval('std::format("{:e}", 1234.5);') == '1.234500e3', &
+			eval('std::format("{:e}", 0.0);') == '0.000000e0', &
+			eval('std::format("{:.2e}", 0.00123);') == '1.23e-3', &
+			eval('std::format("{:.0e}", 1000.0);') == '1e3', &
+			eval('std::format("{:E}", 5.0e10);') == '5.000000E10', &
+			eval('std::format("{:.1e}", 1.0e-100);') == '1.0e-100', &
+			eval('std::format("{:.1e}", -2.5e100);') == '-2.5e100', &
+			eval('std::format("{:e}", 1.5f);') == '1.500000e0', &
+			eval('std::format("{:14.3e}|", 1234.5);') == '       1.234e3|', &
+			eval('std::format("{:.3}", std::PI);') == '3.142', &
+
+			! Strings: a precision truncates them
+			eval('std::format("{:.3}", "abcdef");') == 'abc', &
+			eval('std::format("{:.10}", "abc");') == 'abc', &
+			eval('std::format("{:.0}", "abc");') == '', &
+			eval('std::format("{:>6.2}", "abcdef");') == '    ab', &
+
+			! Enums and structs are formatted as str() does, and can be padded
+			eval('enum E { A, B } std::format("{}", E.B);') == 'E.B', &
+			eval('enum E { A, B } std::format("{:>5}", E.A);') == '  E.A', &
+			eval('struct P { x: i32 } std::format("{}", P{x = 1});') == 'P{x = 1}', &
+			eval('struct P { x: i32 } std::format("{:*<12}", P{x = 1});') == 'P{x = 1}****', &
+
+			! Arrays are their elements, separated by spaces and with no brackets,
+			! and a line break after each row.  The spec applies to each element
+			eval('std::format("{}", [1, 2, 3]);') == '1 2 3', &
+			eval('std::format("{:3}", [1, 2, 3]);') == '  1   2   3', &
+			eval('std::format("{:x}", [10, 11, 12]);') == 'a b c', &
+			eval('std::format("{:.1}", [1.25, 2.5, 3.75]);') == '1.2 2.5 3.8', &
+			eval('std::format("{:.1}", [1.5f, 2.5f]);') == '1.5 2.5', &
+			eval('std::format("{}", [1''i64, 2''i64]);') == '1 2', &
+			eval('std::format("{}", [true, false]);') == 'true false', &
+			eval('std::format("{:>3}", ["a", "b"]);') == '  a   b', &
+			eval('std::format("{}", [5]);') == '5', &
+			eval('std::format("{}", [1, 2, 3, 4, 5, 6; 3, 2]);') == '1 2 3'//lf//'4 5 6', &
+			eval('std::format("{:2}", [1, 2, 3, 4, 5, 6; 2, 3]);') == ' 1  2'//lf//' 3  4'//lf//' 5  6', &
+			eval('std::format("{}", [1, 2, 3, 4, 5, 6, 7, 8; 2, 2, 2]);') == &
+				'1 2'//lf//'3 4'//lf//'5 6'//lf//'7 8', &
+			eval('std::format("{}", [1, 2, 3, 4; 1, 4]);') == '1'//lf//'2'//lf//'3'//lf//'4', &
+			eval('std::format("{}", [0; 0]);') == '', &
+			eval('std::format("{:.2}", [1.0, 2.0, 3.0, 4.0; 2, 2]);') == &
+				'1.00 2.00'//lf//'3.00 4.00', &
+			eval('std::format("{}", ["a", "b", "c", "d"; 2, 2]);') == 'a b'//lf//'c d', &
+
+			! Several placeholders, mixing types and arrays
+			eval('std::format("{:3}|{:<4}|{:.1}|{}", 7, "ab", 2.25, [1, 2]);') == &
+				'  7|ab  |2.2|1 2', &
+			eval('let n = 3; let xs = [0.5, 1.5]; std::format("{} values: {:.2}", n, xs);') == &
+				'3 values: 0.50 1.50', &
+
+			! The arguments are evaluated like any others
+			eval('fn f(x: i32): i32 { return x * 2; } std::format("{:4}", f(21));') == '  42', &
+			eval('let a = [1, 2, 3]; std::format("{}", a[0: 2]);') == '1 2', &
+			eval('std::format("{}", str(1) + str(2));') == '12', &
+
+			! Used as a value
+			eval('let s = std::format("{:3}", 1) + std::format("{:<3}", 2); s;') == '  12  ', &
+			eval('len(std::format("{:10}", 1));') == '10', &
+
+			! The format string is split and parsed once per call site, so a site
+			! that runs many times, several sites with different formats, and a
+			! site in a fn must all keep their own pieces and specs
+			eval('let s = ""; for i in [1: 4] { s = s + std::format("<{:>3}>", i); } s;') == &
+				'<  1><  2><  3>', &
+			eval('std::format("{:03}", 5) + std::format("{:<3}|", 5) + std::format("{}{}", 1, 2);') == &
+				'005' // '5  |' // '12', &
+			eval('fn f(x: i32): str { return std::format("[{:*^5}]", x); } f(1) + f(22);') == &
+				'[**1**]' // '[*22**]', &
+			eval('let a = [1.5, 2.25, 3.0]; std::format("{:.1}|{:6.2}", a, a);') == &
+				'1.5 2.2 3.0|  1.50   2.25   3.00', &
+			eval('std::format("{:x}|{:#b}", [10, 255], 5);') == 'a ff|0b101', &
+			eval('std::format("{:>3}", ["a", "bb"]);') == '  a  bb', &
+
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_format
+
+!===============================================================================
+
 subroutine unit_test_io(npass, nfail)
 
 	! More advanced tests on longer scripts
@@ -4700,6 +4911,11 @@ subroutine unit_test_io(npass, nfail)
 			interpret_file(path//'test-10.syntran', quiet) == '0', &
 			interpret_file(path//'test-11.syntran', quiet) == 'true', &
 			interpret_file(path//'test-12.syntran', quiet) == 'true', &
+			interpret_file(path//'test-13.syntran', quiet) == 'true', &
+			interpret_file(path//'test-14.syntran', quiet) == 'true', &
+			interpret_file(path//'test-15.syntran', quiet) == 'true', &
+			interpret_file(path//'test-16.syntran', quiet) == 'true', &
+			interpret_file(path//'test-17.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -4757,6 +4973,21 @@ subroutine unit_test_include(npass, nfail)
 			interpret_file(path//'test-03.syntran', quiet) == '7', &
 			interpret_file(path//'test-04.syntran', quiet) == '7', &
 			abs_ok, &
+			! `use` followed by an #include from another dir
+			interpret_file(path//'subdir/use-then-inc.syntran', quiet) == '42', &
+			! A diagnostic about a statement that is directly followed by an
+			! #include must be located in the statement's file, not in the included
+			! one, which the current token belongs to after the statement's `;`/`}`
+			diag_loc_ok(get_diags_file(path//'subdir/ret-then-inc.syntran'), &
+				EC_BAD_RET_TYPE, path//'subdir/ret-then-inc.syntran', 5, 9, 5), &
+			diag_loc_ok(get_diags_file(path//'subdir/expr-then-inc.syntran'), &
+				EC_BAD_EXPR, path//'subdir/expr-then-inc.syntran', 3, 5, 6), &
+			diag_loc_ok(get_diags_file(path//'subdir/struct-then-inc.syntran'), &
+				EC_REDECLARE_STRUCT, path//'subdir/struct-then-inc.syntran', 3, 10, 1), &
+			diag_loc_ok(get_diags_file(path//'subdir/enum-then-inc.syntran'), &
+				EC_REDECLARE_ENUM, path//'subdir/enum-then-inc.syntran', 3, 9, 1), &
+			diag_loc_ok(get_diags_file(path//'subdir/use-retmod-then-inc.syntran'), &
+				EC_MODULE_RETURN, path//'subdir/retmod_then_inc.syntran', 4, 1, 6), &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -7191,7 +7422,21 @@ subroutine unit_test_modules(npass, nfail)
 			interpret_file(path//'test-duplicate-mixed.syntran', quiet) == '', &
 			interpret_file(path//'test-hyphen-ban.syntran', quiet) == '', &
 			interpret_file(path//'test-std-ban.syntran', quiet) == '', &
-			interpret_file(path//'test-std-ban-glob.syntran', quiet) == '', &
+			! `use std::*;` and `use std::name;` are the allowed forms of `use std`
+			interpret_file(path//'test-std-glob.syntran', quiet) == 'true', &
+			interpret_file(path//'test-std-glob-module.syntran', quiet) == 'true', &
+			diag_has_code(get_diags_file(path//'test-std-glob-noleak.syntran'), &
+				EC_STD_ONLY_FN), &
+			diag_has_code(get_diags_file(path//'test-std-glob-before.syntran'), &
+				EC_STD_ONLY_FN), &
+			interpret_file(path//'test-std-name.syntran', quiet) == 'true', &
+			interpret_file(path//'test-std-name-module.syntran', quiet) == 'true', &
+			diag_has_code(get_diags_file(path//'test-std-name-only.syntran'), &
+				EC_STD_ONLY_FN), &
+			diag_has_code(get_diags_file(path//'test-std-name-before.syntran'), &
+				EC_STD_ONLY_FN), &
+			diag_has_code(get_diags_file(path//'test-std-name-noleak.syntran'), &
+				EC_STD_ONLY_FN), &
 			interpret_file(path//'test-std-ban-path.syntran', quiet) == '', &
 			interpret_file(path//'test-keyword-ban.syntran', quiet) == '', &
 			interpret_file(path//'test-alias-01.syntran', quiet) == 'true', &
@@ -7611,6 +7856,8 @@ subroutine unit_test_error_codes(npass, nfail)
 	character(len = *), parameter :: MODSRC = &
 		'src/tests/test-src/modules/_diag.syntran'
 
+	character(len = *), parameter :: P = 'src/tests/test-src/errors/'
+
 	logical, allocatable :: tests(:)
 
 	type(string_vector_t) :: codes
@@ -7989,6 +8236,15 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_has_code(get_diags('use foo-bar;', MODSRC), EC_MOD_HYPHEN), &
 			diag_has_code(get_diags('use let;', MODSRC), EC_MOD_KEYWORD), &
 			diag_has_code(get_diags('use std;', MODSRC), EC_MOD_RESERVED_STD), &
+			.not. diag_has_code(get_diags('use std::reshape;', MODSRC), EC_MOD_RESERVED_STD), &
+			diag_has_code(get_diags('use std::reshap;', MODSRC), EC_STD_UNKNOWN_NAME), &
+			! A legacy intrinsic is already callable without the prefix, so importing
+			! it is fine, but its name must be a real fn
+			.not. diag_has_code(get_diags('use std::println;', MODSRC), EC_STD_UNKNOWN_NAME), &
+			diag_has_code(get_diags('use std::printl;', MODSRC), EC_STD_UNKNOWN_NAME), &
+			diag_has_code(get_diags('use std::1;', MODSRC), EC_MOD_RESERVED_STD), &
+			diag_has_code(get_diags('use std as s;', MODSRC), EC_MOD_RESERVED_STD), &
+			.not. diag_has_code(get_diags('use std::*;', MODSRC), EC_MOD_RESERVED_STD), &
 			diag_has_code(get_diags('use foo bar;', MODSRC), EC_MOD_SPACE), &
 			diag_has_code(get_diags('use foo as let;', MODSRC), EC_ALIAS_KEYWORD), &
 			diag_has_code(get_diags('use foo as std;', MODSRC), EC_ALIAS_RESERVED_STD), &
@@ -8731,6 +8987,136 @@ subroutine unit_test_error_codes(npass, nfail)
 					'fn f(a: &i32, b: &i32) { a = b; } let h = 1; let k = 2; f(&h, &k);'), &
 					EC_REF_ALIAS), &
 
+				! E117: the format string of format() has to be a literal
+				diag_count_code(get_diags_file(P//'E117-format-not-literal.syntran'), &
+					EC_FORMAT_NOT_LITERAL) == 1, &
+				diag_has_code(get_diags('let f = "{}"; println(std::format(f, 1));'), &
+					EC_FORMAT_NOT_LITERAL), &
+				diag_has_code(get_diags('println(std::format("{" + "}", 1));'), &
+					EC_FORMAT_NOT_LITERAL), &
+				.not. diag_has_code(get_diags('println(std::format("{}", 1));'), &
+					EC_FORMAT_NOT_LITERAL), &
+
+				! E118: a bad format string or spec
+				diag_count_code(get_diags_file(P//'E118-bad-format.syntran'), &
+					EC_BAD_FORMAT) == 1, &
+				diag_has_code(get_diags('println(std::format("{", 1));'), EC_BAD_FORMAT), &
+				diag_has_code(get_diags('println(std::format("}", 1));'), EC_BAD_FORMAT), &
+				diag_has_code(get_diags('println(std::format("{0}", 1));'), EC_BAD_FORMAT), &
+				diag_has_code(get_diags('println(std::format("{x}", 1));'), EC_BAD_FORMAT), &
+				diag_has_code(get_diags('println(std::format("{:5q}", 1));'), EC_BAD_FORMAT), &
+				diag_has_code(get_diags('println(std::format("{:.}", 1.0));'), EC_BAD_FORMAT), &
+				diag_has_code(get_diags('println(std::format("{:5 }", 1));'), EC_BAD_FORMAT), &
+				diag_has_code(get_diags('println(std::format("{:12345678}", 1));'), EC_BAD_FORMAT), &
+				diag_has_code(get_diags('println(std::format("{:.1234}", 1.0));'), EC_BAD_FORMAT), &
+				.not. diag_has_code(get_diags('println(std::format("{{}}"));'), EC_BAD_FORMAT), &
+				.not. diag_has_code(get_diags('println(std::format("{{{}}}", 1));'), EC_BAD_FORMAT), &
+				.not. diag_has_code(get_diags('println(std::format("{:*^+#012.3e}", 1.0));'), &
+					EC_BAD_FORMAT), &
+
+				! E119: the spec has to fit the type of its value
+				diag_count_code(get_diags_file(P//'E119-format-type.syntran'), &
+					EC_FORMAT_TYPE) == 1, &
+				diag_has_code(get_diags('println(std::format("{:x}", 1.5));'), EC_FORMAT_TYPE), &
+				diag_has_code(get_diags('println(std::format("{:e}", 1));'), EC_FORMAT_TYPE), &
+				diag_has_code(get_diags('println(std::format("{:.2}", 1));'), EC_FORMAT_TYPE), &
+				diag_has_code(get_diags('println(std::format("{:#}", 1));'), EC_FORMAT_TYPE), &
+				diag_has_code(get_diags('println(std::format("{:#}", 1.5));'), EC_FORMAT_TYPE), &
+				diag_has_code(get_diags('println(std::format("{:+}", "s"));'), EC_FORMAT_TYPE), &
+				diag_has_code(get_diags('println(std::format("{:05}", "s"));'), EC_FORMAT_TYPE), &
+				diag_has_code(get_diags('println(std::format("{:x}", true));'), EC_FORMAT_TYPE), &
+				diag_has_code(get_diags('println(std::format("{:.1}", true));'), EC_FORMAT_TYPE), &
+				diag_has_code(get_diags('println(std::format("{}", std::IN));'), EC_FORMAT_TYPE), &
+				diag_has_code(get_diags( &
+					'enum E { A, B } println(std::format("{}", [E.A, E.B]));'), EC_FORMAT_TYPE), &
+				diag_has_code(get_diags( &
+					'struct S { x: i32 } println(std::format("{}", [S{x = 1}]));'), EC_FORMAT_TYPE), &
+				.not. diag_has_code(get_diags('println(std::format("{:x} {:b}", 1, 2''i64));'), &
+					EC_FORMAT_TYPE), &
+				.not. diag_has_code(get_diags('println(std::format("{:e} {:.2E}", 1.0, 2.0f));'), &
+					EC_FORMAT_TYPE), &
+				.not. diag_has_code(get_diags('println(std::format("{:.2}", "str"));'), &
+					EC_FORMAT_TYPE), &
+				.not. diag_has_code(get_diags('println(std::format("{:>5}", true));'), &
+					EC_FORMAT_TYPE), &
+				.not. diag_has_code(get_diags( &
+					'enum E { A, B } struct S { x: i32 } '// &
+					'println(std::format("{:>5} {:<5}", E.A, S{x = 1}));'), EC_FORMAT_TYPE), &
+				.not. diag_has_code(get_diags('println(std::format("{:x}", [1, 2]));'), &
+					EC_FORMAT_TYPE), &
+
+				! E120: one value for each placeholder
+				diag_count_code(get_diags_file(P//'E120-format-count.syntran'), &
+					EC_FORMAT_COUNT) == 1, &
+				diag_has_code(get_diags('println(std::format("{}"));'), EC_FORMAT_COUNT), &
+				diag_has_code(get_diags('println(std::format("", 1));'), EC_FORMAT_COUNT), &
+				diag_has_code(get_diags('println(std::format("{} {}", 1));'), EC_FORMAT_COUNT), &
+				diag_has_code(get_diags('println(std::format("{}", 1, 2));'), EC_FORMAT_COUNT), &
+				.not. diag_has_code(get_diags('println(std::format("{{}}"));'), EC_FORMAT_COUNT), &
+
+				! E121: std::reshape() needs an array literal for its shape
+				diag_count_code(get_diags_file(P//'E121-reshape-shape-lit.syntran'), &
+					EC_RESHAPE_SHAPE_LIT) == 1, &
+				diag_has_code(get_diags( &
+					'fn f(s: [i32; :]): i32 { let r = std::reshape([1,2,3,4], s); return 0; }'), &
+					EC_RESHAPE_SHAPE_LIT), &
+				diag_has_code(get_diags( &
+					'fn f(): [i32; :] { return [2,2]; } println(std::reshape([1,2,3,4], f()));'), &
+					EC_RESHAPE_SHAPE_LIT), &
+				diag_has_code(get_diags( &
+					'let m = std::reshape([1,2,3,4], [2,2]); '// &
+					'println(std::reshape([1,2,3,4], std::shape(m)));'), &
+					EC_RESHAPE_SHAPE_LIT), &
+				diag_has_code(get_diags( &
+					'let s = [2,2]; println(std::reshape([1,2,3,4], s));'), &
+					EC_RESHAPE_SHAPE_LIT), &
+				diag_has_code(get_diags( &
+					'println(std::reshape([1,2,3,4], [0: 4]));'), EC_RESHAPE_SHAPE_LIT), &
+				.not. diag_has_code(get_diags( &
+					'let n = 2; println(std::reshape([1,2,3,4], [n, 2]));'), &
+					EC_RESHAPE_SHAPE_LIT), &
+				.not. diag_has_code(get_diags( &
+					'use std::*; println(reshape([1,2,3,4], [2, 2]));'), &
+					EC_RESHAPE_SHAPE_LIT), &
+				diag_has_code(get_diags( &
+					'use std::*; fn f(s: [i32; :]): i32 { let r = reshape([1,2,3], s); return 0; }'), &
+					EC_RESHAPE_SHAPE_LIT), &
+
+				! E122: `use std::name;` needs a real std fn
+				diag_count_code(get_diags_file(P//'E122-std-unknown-name.syntran'), &
+					EC_STD_UNKNOWN_NAME) == 1, &
+				diag_has_code(get_diags('use std::nope;'), EC_STD_UNKNOWN_NAME), &
+				.not. diag_has_code(get_diags('use std::reshape;'), EC_STD_UNKNOWN_NAME), &
+				! ... and the suggestion is a std fn, not a user fn with a close name
+				diag_has_text(get_diags('fn reshap2(): i32 { return 1; }'//char(10) &
+					//'use std::reshap;'), 'reshape'), &
+				.not. diag_has_text(get_diags('fn reshap2(): i32 { return 1; }'//char(10) &
+					//'use std::reshap;'), 'did you mean `reshap2`'), &
+
+				! E123: only `std` can be imported one name at a time
+				diag_count_code(get_diags_file(P//'E123-mod-import-name.syntran'), &
+					EC_MOD_IMPORT_NAME) == 1, &
+				diag_has_code(get_diags('use mymath::add;', MODSRC), EC_MOD_IMPORT_NAME), &
+				.not. diag_has_code(get_diags('use mymath::*;', MODSRC), EC_MOD_IMPORT_NAME), &
+				.not. diag_has_code(get_diags('use mymath;', MODSRC), EC_MOD_IMPORT_NAME), &
+				.not. diag_has_code(get_diags('use std::reshape;', MODSRC), EC_MOD_IMPORT_NAME), &
+
+				! printf() and writef() check their format strings like format()
+				diag_has_code(get_diags('std::printf("{}");'), EC_FORMAT_COUNT), &
+				diag_has_code(get_diags('std::printf("{} {}", 1);'), EC_FORMAT_COUNT), &
+				diag_has_code(get_diags('std::printf("{:x}", 1.5);'), EC_FORMAT_TYPE), &
+				diag_has_code(get_diags('std::printf("{", 1);'), EC_BAD_FORMAT), &
+				diag_has_code(get_diags('let s = "{}"; std::printf(s, 1);'), EC_FORMAT_NOT_LITERAL), &
+				diag_has_code(get_diags( &
+					'let f = open("build/x.txt", "w"); std::writef(f, "{}");'), EC_FORMAT_COUNT), &
+				diag_has_code(get_diags( &
+					'let f = open("build/x.txt", "w"); std::writef(f, "{:x}", 1.5);'), EC_FORMAT_TYPE), &
+				diag_has_code(get_diags( &
+					'let f = open("build/x.txt", "w"); std::writef(f, "}", 1);'), EC_BAD_FORMAT), &
+				.not. diag_has_code(get_diags('std::printf("{{}} {:x}", 255);'), EC_FORMAT_COUNT), &
+				.not. diag_has_code(get_diags( &
+					'let f = open("build/x.txt", "w"); std::writef(f, "{:3}", 1);'), EC_FORMAT_COUNT), &
+
 				! Int/float assignment is rejected at parse time (E48).  This
 				! used to be marked by a "TODO: test int/float casting" note
 				! in runtime_control.f90's eval_assignment_expr, with no
@@ -9244,7 +9630,81 @@ subroutine unit_test_runtime_errors(npass, nfail)
 
 			! R29: std::getenv() on an unset environment variable name
 			rt_code_both_file( &
-				P//'R29-getenv-unset.syntran', RC_GETENV_UNSET) &
+				P//'R29-getenv-unset.syntran', RC_GETENV_UNSET), &
+
+			! R43: text file operations on a binary file
+			rt_code_both_file( &
+				P//'R43-text-op-on-binary-file.syntran', RC_BINARY_TEXT_OP), &
+			diag_has_code(get_diags( &
+				'let f = open("build/rt_file_r43b.bin", "wb"); writeln(f, 1);'), &
+				RC_BINARY_TEXT_OP), &
+			diag_has_code(get_diags( &
+				'let f = open("build/rt_file_r43c.bin", "wb"); std::write(f, 1); close(f); ' &
+				//'let g = open("build/rt_file_r43c.bin", "rb"); let e = eof(g);'), &
+				RC_BINARY_TEXT_OP), &
+			.not. diag_has_code(get_diags( &
+				'let f = open("build/rt_file_r43d.bin", "wb"); std::write(f, 1, "x", [1, 2]);'), &
+				RC_BINARY_TEXT_OP), &
+
+			! R44: a failed std::read_i32() etc.
+			rt_code_both_file(P//'R44-read-fail.syntran', RC_READ_FAIL), &
+			! ... including a read after readln() already hit the end of the file
+			diag_has_code(get_diags( &
+				'let f = open("build/rt_file_r44l.txt", "w"); writeln(f, "1"); ' &
+				//'close(f); let g = open("build/rt_file_r44l.txt", "r"); ' &
+				//'let a = readln(g); let b = readln(g); let c = std::read_i32(g);'), &
+				RC_READ_FAIL), &
+			diag_has_code(get_diags( &
+				'let f = open("build/rt_file_r44b.txt", "w"); writeln(f, "1 x"); ' &
+				//'close(f); let g = open("build/rt_file_r44b.txt", "r"); ' &
+				//'let a = std::read_i32(g, 2);'), RC_READ_FAIL), &
+			diag_has_code(get_diags( &
+				'let f = open("build/rt_file_r44c.txt", "w"); close(f); ' &
+				//'let g = open("build/rt_file_r44c.txt", "r"); let a = std::read_f64(g);'), &
+				RC_READ_FAIL), &
+			diag_has_code(get_diags( &
+				'let f = open("build/rt_file_r44d.txt", "w"); close(f); ' &
+				//'let g = open("build/rt_file_r44d.txt", "r"); let a = std::read_f64(g, -1);'), &
+				RC_READ_FAIL), &
+			diag_has_code(get_diags( &
+				'let f = open("build/rt_file_r44e.txt", "w"); ' &
+				//'let a = std::read_f64(f);'), RC_READLN_NOT_READ_MODE), &
+
+			! A text read is strict.  `/`, `*`, and an empty field are not special like
+			! they are in a list-directed read
+			diag_has_code(get_diags( &
+				'let f = open("build/rt_file_r44f.txt", "w"); writeln(f, "1 2 / 9"); ' &
+				//'close(f); let g = open("build/rt_file_r44f.txt", "r"); ' &
+				//'let a = std::read_i32(g, 4);'), RC_READ_FAIL), &
+			diag_has_code(get_diags( &
+				'let f = open("build/rt_file_r44g.txt", "w"); writeln(f, "1,,3,4"); ' &
+				//'close(f); let g = open("build/rt_file_r44g.txt", "r"); ' &
+				//'let a = std::read_i32(g, 4);'), RC_READ_FAIL), &
+			diag_has_code(get_diags( &
+				'let f = open("build/rt_file_r44h.txt", "w"); writeln(f, "3*7 9"); ' &
+				//'close(f); let g = open("build/rt_file_r44h.txt", "r"); ' &
+				//'let a = std::read_i32(g, 4);'), RC_READ_FAIL), &
+			diag_has_code(get_diags( &
+				'let f = open("build/rt_file_r44i.txt", "w"); writeln(f, ",1 2"); ' &
+				//'close(f); let g = open("build/rt_file_r44i.txt", "r"); ' &
+				//'let a = std::read_i32(g, 2);'), RC_READ_FAIL), &
+			! Commas, blanks, tabs, and line breaks all separate values
+			.not. diag_has_code(get_diags( &
+				'let f = open("build/rt_file_r44j.txt", "w"); writeln(f, "1, 2,"); ' &
+				//'writeln(f, "3 ,4"); close(f); ' &
+				//'let g = open("build/rt_file_r44j.txt", "r"); ' &
+				//'let a = std::read_i32(g, 4);'), RC_READ_FAIL), &
+			eval('let f = open("build/rt_file_r44k.txt", "w"); writeln(f, "1, 2,"); ' &
+				//'writeln(f, "3 ,4 5"); close(f); ' &
+				//'let g = open("build/rt_file_r44k.txt", "r"); ' &
+				//'let a = std::read_i32(g, 4); a[0] + 10*a[1] + 100*a[2] + 1000*a[3];') &
+				== '4321', &
+
+			! R45: a value with no raw bytes written to a binary file
+			rt_code_both_file(P//'R45-binary-write-type.syntran', RC_BINARY_WRITE_TYPE), &
+			diag_has_code(get_diags( &
+				'let f = open("build/rt_file_r45b.bin", "wb"); std::write(f, ["a", "b"]);'), &
+				RC_BINARY_WRITE_TYPE) &
 		]
 
 	! R33: out-of-bounds subscript.  Only reachable in builds compiled with
@@ -10055,7 +10515,21 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E116-ref-alias.syntran'), &
 				EC_REF_ALIAS, P//'E116-ref-alias.syntran', 15, 11, 1), &
 			diag_count_code(get_diags_file(P//'E116-ref-alias.syntran'), &
-				EC_REF_ALIAS) == 1 &
+				EC_REF_ALIAS) == 1, &
+			diag_loc_ok(get_diags_file(P//'E117-format-not-literal.syntran'), &
+				EC_FORMAT_NOT_LITERAL, P//'E117-format-not-literal.syntran', 9, 21, 4), &
+			diag_loc_ok(get_diags_file(P//'E118-bad-format.syntran'), &
+				EC_BAD_FORMAT, P//'E118-bad-format.syntran', 8, 21, 21), &
+			diag_loc_ok(get_diags_file(P//'E119-format-type.syntran'), &
+				EC_FORMAT_TYPE, P//'E119-format-type.syntran', 6, 42, 11), &
+			diag_loc_ok(get_diags_file(P//'E120-format-count.syntran'), &
+				EC_FORMAT_COUNT, P//'E120-format-count.syntran', 7, 20, 22), &
+			diag_loc_ok(get_diags_file(P//'E121-reshape-shape-lit.syntran'), &
+				EC_RESHAPE_SHAPE_LIT, P//'E121-reshape-shape-lit.syntran', 7, 26, 5), &
+			diag_loc_ok(get_diags_file(P//'E122-std-unknown-name.syntran'), &
+				EC_STD_UNKNOWN_NAME, P//'E122-std-unknown-name.syntran', 6, 10, 6), &
+			diag_loc_ok(get_diags_file(P//'E123-mod-import-name.syntran'), &
+				EC_MOD_IMPORT_NAME, P//'E123-mod-import-name.syntran', 6, 12, 6) &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
@@ -10405,6 +10879,62 @@ subroutine unit_test_transpile(npass, nfail)
 			index(transpile_src('let f = open("x.txt", "r"); close(f);'), &
 				'function rt_str_a_i64_2(') == 0, &
 
+			! print() and write() are println() and writeln() without the line end.
+			! A number or a bool has a call of its own for write(), because a binary
+			! file gets its raw bytes.  Text is joined into one call
+			index(transpile_src('std::print("a", 1);'), "call rt_print_raw('a' // rt_str(1))") > 0, &
+			index(transpile_src('std::print("a", 1);'), 'rt_print(') == 0, &
+			index(transpile_src('std::print();'), "call rt_print_raw('')") > 0, &
+			index(transpile_src('let f = open("x.txt", "w"); std::write(f, "a", "b"); close(f);'), &
+				"call rt_write(f, 'ab')") > 0, &
+			index(transpile_src('let f = open("x.txt", "w"); std::write(f, "a", 1, 2.5, "b"); close(f);'), &
+				'call rt_write_i32(f, 1)') > 0, &
+			index(transpile_src('let f = open("x.txt", "w"); std::write(f, "a", 1, 2.5, "b"); close(f);'), &
+				'call rt_write_f64(f, 2.5_real64)') > 0, &
+			index(transpile_src('let f = open("x.txt", "w"); std::write(f, [1, 2]); close(f);'), &
+				'call rt_write_a_i32_1(f, [1, 2])') > 0, &
+			index(transpile_src('let f = open("x.txt", "w"); std::write(f); close(f);'), &
+				"call rt_write(f, '')") > 0, &
+			index(transpile_src('let f = open("x.txt", "wb"); std::write(f, 1); close(f);'), &
+				"'wb'") > 0, &
+			index(transpile_src('println(1);'), 'rt_write') == 0, &
+			index(transpile_src('println(1);'), 'function rt_fmt') == 0, &
+
+			! format() is a concatenation of the text around its placeholders and the
+			! call of the runtime fn of each value, which is only there if it is used
+			index(transpile_src('println(std::format("a{:5}b", 42));'), &
+				"('a' // rt_fmt_i32(42, '5') // 'b')") > 0, &
+			index(transpile_src('println(std::format("{:.2}", 1.5));'), &
+				"rt_fmt_f64(1.5_real64, '.2')") > 0, &
+			index(transpile_src('println(std::format("{:.2}", 1.5));'), &
+				'function rt_fmt_f64(') > 0, &
+			index(transpile_src('println(std::format("{:.2}", 1.5));'), &
+				'function rt_fmt_f32(') == 0, &
+			index(transpile_src('println(std::format("{:.2}", 1.5));'), &
+				'rt_fmt_a_') == 0, &
+			index(transpile_src('println(std::format("{:.2}", 1.5));'), &
+				'function rt_fmt_a_f64_1(') == 0, &
+			index(transpile_src('println(std::format("{:3}", [1, 2]));'), &
+				"rt_fmt_a_i32_1([1, 2], '3')") > 0, &
+			index(transpile_src('println(std::format("{}", [1, 2]));'), &
+				'function rt_fmt_join(') > 0, &
+			index(transpile_src('println(std::format("{}", 7));'), &
+				'rt_fmt_i32') == 0, &
+			index(transpile_src('println(std::format("{:>4}", "ab"));'), &
+				"rt_fmt_str('ab', '>4')") > 0, &
+			index(transpile_src('println(std::format("{{}}"));'), "'{}'") > 0, &
+			index(transpile_src('enum E { A } println(std::format("{:>4}", E.A));'), &
+				'rt_fmt_str(E_en1_str(0), ') > 0, &
+			index(transpile_src('println(1);'), 'subroutine rt_fmt_parse(') == 0, &
+
+			! std::read_<type>() reads one value, or an array of n of them
+			index(transpile_src('let f = open("x.txt", "r"); println(std::read_i32(f));'), &
+				'rt_read_i32(f)') > 0, &
+			index(transpile_src('let f = open("x.txt", "r"); println(std::read_f64(f, 3));'), &
+				'rt_read_a_f64(f, 3)') > 0, &
+			index(transpile_src('let f = open("x.txt", "r"); println(std::read_f64(f, 3));'), &
+				'function rt_read_a_i32(') == 0, &
+
 			! The helpers of structs and enums are only there if they are used, and
 			! those they use come with them
 			index(transpile_src('struct P{x:i32} let p = P{x = 1}; println(p.x);'), &
@@ -10621,6 +11151,21 @@ subroutine unit_test_transpile(npass, nfail)
 			.not. diag_has_code(get_diags_transpile('let x = ;'), EC_TRANSPILE_UNSUPPORTED), &
 			transpile_is_empty('let x = ;'), &
 
+			! format() emits its first value once, so a hoisted fn call temp isn't
+			! repeated and the fn doesn't run twice
+			index(transpile_src('fn f(): [i32; :] { return [1, 2]; } ' &
+				//'let s = std::format("{}", f()[0]);'), 'sc_t1 = f()') > 0, &
+			index(transpile_src('fn f(): [i32; :] { return [1, 2]; } ' &
+				//'let s = std::format("{}", f()[0]);'), 'sc_t2 = f()') == 0, &
+
+			! write() of a value that is only text goes through rt_write_text(), which
+			! a binary file refuses like the interpreter does.  A scalar string is
+			! the same in either kind of file
+			index(transpile_src('let f = open("a.bin", "wb"); std::write(f, ["a", "b"]);'), &
+				'call rt_write_text(f, ') > 0, &
+			index(transpile_src('let f = open("a.bin", "wb"); std::write(f, "a", "b");'), &
+				'rt_write_text') == 0, &
+
 			! Nothing is generated for a program with diagnostics
 			transpile_is_empty('let c = std::caller();') &
 		]
@@ -10780,6 +11325,7 @@ subroutine unit_tests(iostat)
 	if (run_group('comp_ass')) call unit_test_comp_ass(npass, nfail)
 	if (run_group('comp_ass_arr')) call unit_test_comp_ass_arr(npass, nfail)
 	if (run_group('io')) call unit_test_io(npass, nfail)
+	if (run_group('format')) call unit_test_format(npass, nfail)
 	if (run_group('i64')) call unit_test_i64(npass, nfail)
 	if (run_group('include')) call unit_test_include(npass, nfail)
 	if (run_group('rhs_slc_1')) call unit_test_rhs_slc_1(npass, nfail)
@@ -11334,6 +11880,24 @@ subroutine unit_test_reshape(npass, nfail)
 			! Identity reshape (1-D to 1-D, same length)
 			eval('let v = std::reshape([0,1,2,3,4,5], [6]); v[5];', quiet) == '5', &
 			eval('size(std::reshape([0,1,2,3,4,5], [6]), 0);', quiet) == '6', &
+
+			! A runtime value inside the shape literal is fine
+			eval('let n = 3; size(std::reshape([0,1,2,3,4,5], [2, n]), 1);', quiet) == '3', &
+
+			! With `use std::*;`, the prefix is optional.  User fns and legacy
+			! intrinsics are not shadowed by it
+			eval('use std::*; size(reshape([0,1,2,3,4,5], [2,3]), 1);', quiet) == '3', &
+			eval('use std::*; size(transpose(reshape([0,1,2,3,4,5], [2,3])), 0);', quiet) == '3', &
+			eval('use std::*; fn shape(): i32 { return 7; } shape();', quiet) == '7', &
+			eval('use std::*; abs(-3);', quiet) == '3', &
+
+			! `use std::name;` is the same, but for one name only
+			eval('use std::reshape; size(reshape([0,1,2,3,4,5], [2,3]), 1);', quiet) == '3', &
+			eval('use std::reshape; use std::transpose; ' &
+				//'size(transpose(reshape([0,1,2,3,4,5], [2,3])), 0);', quiet) == '3', &
+			eval('use std::shape; fn shape(): i32 { return 7; } shape();', quiet) == '7', &
+			diag_has_code(get_diags( &
+				'use std::reshape; let t = transpose([1,2,3,4]);'), EC_STD_ONLY_FN), &
 
 			! sum() of reshaped array (sum works on a temporary directly)
 			eval('sum(std::reshape([0,1,2,3,4,5], [3,2]));', quiet) == '15', &

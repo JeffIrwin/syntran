@@ -4,6 +4,7 @@
 module syntran__bytecode_m
 
 	use syntran__types_m
+	use syntran_rt, only: rt_str_t, rt_fmt_spec_t, rt_fmt_split, rt_fmt_parse
 
 	implicit none
 
@@ -38,6 +39,7 @@ module syntran__bytecode_m
 		OP_LOAD_MEMBER_TOS  = 1139, &	! M5: dot_expr read when root is a fn return: root on TOS, a=member-wrapper node_idx
 		OP_CALL_INTR        = 1022, &	! M6: intrinsic call; native: a=intr_id b=argc (args on stack);
 		                            	!   readln/close: a=intr_id b=1 c=(id_index*2+is_loc) for slot writeback
+		                            	!   format: a=INTR_FORMAT b=nvalues (the format string isn't pushed) c=prog%fmts index
 		OP_FOR_SETUP        = 1023, &	! M8: for-loop setup: a=node_idx; pushes iter onto for_iter stack
 		OP_FOR_NEXT         = 1024, &	! M8: for-loop advance: a=L_pop; exhausted->jump (no pop), else write loop var
 		OP_FOR_POP          = 1025, &	! M8: for-loop exit: pop for_iter stack (emitted at all loop exits)
@@ -487,6 +489,17 @@ module syntran__bytecode_m
 	! instead of OP_CALL_INTR
 	integer, parameter :: INTR_LU_FACTOR = 149, INTR_LU_SOLVE = 150
 
+	! print() and write(file, ...) are println() and writeln() without the newline
+	integer, parameter :: INTR_PRINT = 151, INTR_WRITE = 152
+
+	! format(fmt, values...) with a literal format string
+	integer, parameter :: INTR_FORMAT = 153
+
+	! std::read_i32(), read_i64(), read_f32(), read_f64(), each for one value or
+	! an array of n
+	integer, parameter :: INTR_READ_I32 = 154, INTR_READ_I64 = 155, &
+		INTR_READ_F32 = 156, INTR_READ_F64 = 157
+
 	!********
 
 	! A single bytecode instruction.  Kept as a plain POD record (no allocatable
@@ -503,6 +516,17 @@ module syntran__bytecode_m
 		integer :: a = 0, b = 0
 		integer(kind = 8) :: c = 0
 	end type instr_t
+
+	!********
+
+	! The literal format string of one format() call, split and parsed once by
+	! add_fmt() at compile time instead of on every call.  There is one more
+	! piece (the text around the placeholders) than there are specs
+
+	type fmt_t
+		type(rt_str_t), allocatable :: pieces(:)
+		type(rt_fmt_spec_t), allocatable :: specs(:)
+	end type fmt_t
 
 	!********
 
@@ -537,6 +561,11 @@ module syntran__bytecode_m
 
 		type(value_t), allocatable :: consts(:)
 		integer :: nconsts = 0
+
+		! Pre-split format strings referenced by OP_CALL_INTR for INTR_FORMAT
+		! (c = index)
+		type(fmt_t), allocatable :: fmts(:)
+		integer :: nfmts = 0
 
 		! AST node pool for opcodes that delegate to the AST layer
 		type(syntax_node_t), allocatable :: nodes(:)
@@ -687,6 +716,52 @@ end function add_const
 
 !===============================================================================
 
+function add_fmt(prog, fmt) result(idx)
+
+	! Split and parse the literal format string of a format() call, add it to
+	! the format pool, and return its 1-based index.  The parser already checked
+	! the string and its specs (check_format_call()), so neither can fail here
+
+	type(program_t), intent(inout) :: prog
+	character(len = *), intent(in) :: fmt
+	integer :: idx
+
+	!*******
+
+	integer :: i, ierr
+	type(fmt_t), allocatable :: tmp(:)
+	type(rt_str_t), allocatable :: specs(:)
+
+	integer, parameter :: INIT_FMT_CAP = 4
+
+	prog%nfmts = prog%nfmts + 1
+	idx = prog%nfmts
+
+	if (.not. allocated(prog%fmts)) then
+		allocate(prog%fmts(INIT_FMT_CAP))
+
+	else if (prog%nfmts > size(prog%fmts)) then
+		allocate(tmp(2 * prog%nfmts))
+		do i = 1, prog%nfmts - 1
+			call move_alloc(prog%fmts(i)%pieces, tmp(i)%pieces)
+			call move_alloc(prog%fmts(i)%specs, tmp(i)%specs)
+		end do
+		call move_alloc(tmp, prog%fmts)
+	end if
+
+	call rt_fmt_split(fmt, prog%fmts(idx)%pieces, specs, ierr)
+	if (ierr /= 0) call internal_error()
+
+	allocate(prog%fmts(idx)%specs(size(specs)))
+	do i = 1, size(specs)
+		call rt_fmt_parse(specs(i)%s, prog%fmts(idx)%specs(i), ierr)
+		if (ierr /= 0) call internal_error()
+	end do
+
+end function add_fmt
+
+!===============================================================================
+
 function new_program() result(prog)
 
 	type(program_t) :: prog
@@ -698,6 +773,7 @@ function new_program() result(prog)
 	prog%cap     = INIT_CAP
 	prog%len_    = 0
 	prog%nconsts = 0
+	prog%nfmts   = 0
 	prog%nnodes  = 0
 	prog%entry_main = 1
 	prog%cur_id  = 0
@@ -911,6 +987,16 @@ pure integer function intr_id_from_name(name) result(id)
 	case ("0max_f64");       id = INTR_MAX_F64
 	! String / conversion
 	case ("println");        id = INTR_PRINTLN
+	case ("print");          id = INTR_PRINT
+	case ("format");         id = INTR_FORMAT
+	case ("read_i32", "0read_i32_sca", "0read_i32_arr")
+		id = INTR_READ_I32
+	case ("read_i64", "0read_i64_sca", "0read_i64_arr")
+		id = INTR_READ_I64
+	case ("read_f32", "0read_f32_sca", "0read_f32_arr")
+		id = INTR_READ_F32
+	case ("read_f64", "0read_f64_sca", "0read_f64_arr")
+		id = INTR_READ_F64
 	case ("str");            id = INTR_STR
 	case ("len");            id = INTR_LEN
 	case ("repeat");         id = INTR_REPEAT
@@ -927,6 +1013,12 @@ pure integer function intr_id_from_name(name) result(id)
 	case ("open");           id = INTR_OPEN
 	case ("readln");         id = INTR_READLN
 	case ("writeln");        id = INTR_WRITELN
+	case ("write");          id = INTR_WRITE
+	! The parser rewrites printf() and writef() into print(format()) and
+	! write(f, format()), so they never reach the compiler.  They are only here
+	! to keep every registered name mapped to an id
+	case ("printf");         id = INTR_PRINT
+	case ("writef");         id = INTR_WRITE
 	case ("eof");            id = INTR_EOF
 	case ("close");          id = INTR_CLOSE
 	! Misc + reduction

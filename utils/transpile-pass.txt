@@ -157,6 +157,7 @@ src/tests/test-src/fns/test-42.syntran
 src/tests/test-src/fns/test-43.syntran
 src/tests/test-src/fns/test-44.syntran
 src/tests/test-src/fns/test-45.syntran
+src/tests/test-src/fns/test-46.syntran
 src/tests/test-src/for-loops/test-01.syntran
 src/tests/test-src/for-loops/test-02.syntran
 src/tests/test-src/for-loops/test-03.syntran
@@ -201,6 +202,11 @@ src/tests/test-src/io/test-09.syntran
 src/tests/test-src/io/test-10.syntran
 src/tests/test-src/io/test-11.syntran
 src/tests/test-src/io/test-12.syntran
+src/tests/test-src/io/test-13.syntran
+src/tests/test-src/io/test-14.syntran
+src/tests/test-src/io/test-15.syntran
+src/tests/test-src/io/test-16.syntran
+src/tests/test-src/io/test-17.syntran
 src/tests/test-src/linear-algebra/test-01.syntran
 src/tests/test-src/linear-algebra/test-02.syntran
 src/tests/test-src/linear-algebra/test-03.syntran
@@ -225,6 +231,7 @@ src/tests/test-src/modules/mymath.syntran
 src/tests/test-src/modules/pointmod.syntran
 src/tests/test-src/modules/qual_assign_mod.syntran
 src/tests/test-src/modules/shapes.syntran
+src/tests/test-src/modules/std_glob_mod.syntran
 src/tests/test-src/modules/struct_mod.syntran
 src/tests/test-src/modules/subdir/deep/test-grandparent-qualified.syntran
 src/tests/test-src/modules/subdir/deep/test-grandparent.syntran
@@ -252,6 +259,10 @@ src/tests/test-src/modules/test-modvar-array-qualified.syntran
 src/tests/test-src/modules/test-modvar-array.syntran
 src/tests/test-src/modules/test-modvar-arrstruct.syntran
 src/tests/test-src/modules/test-qual-assign-ok.syntran
+src/tests/test-src/modules/test-std-glob-module.syntran
+src/tests/test-src/modules/test-std-glob.syntran
+src/tests/test-src/modules/test-std-name-module.syntran
+src/tests/test-src/modules/test-std-name.syntran
 src/tests/test-src/modules/test-struct-collision-rev.syntran
 src/tests/test-src/modules/test-struct-collision.syntran
 src/tests/test-src/modules/test-struct-mod-qualified-annot.syntran
@@ -318,6 +329,7 @@ src/tests/test-src/transpile/test-10.syntran
 src/tests/test-src/transpile/test-11.syntran
 src/tests/test-src/transpile/test-12.syntran
 src/tests/test-src/transpile/test-13.syntran
+src/tests/test-src/transpile/test-14.syntran
 src/tests/test-src/var-scopes/test-01.syntran
 src/tests/test-src/var-scopes/test-02.syntran
 src/tests/test-src/var-scopes/test-03.syntran

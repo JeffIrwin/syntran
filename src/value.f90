@@ -17,12 +17,16 @@ module syntran__value_m
 
 		integer :: unit_  ! fortran file unit
 
-		! TODO: extend with more modes, e.g. binary, text, append (?)
+		! TODO: extend with more modes, e.g. append (?)
 		!
 		! c.f. python open modes:  https://docs.python.org/3/library/functions.html#open
 		logical :: &
 			mode_read  = .false., &
 			mode_write = .false.
+
+		! A binary file is opened with "rb" or "wb".  It is an unformatted stream
+		! of the raw bytes of the values, instead of lines of text
+		logical :: binary = .false.
 
 		logical :: is_open = .false.
 		logical :: eof = .false.

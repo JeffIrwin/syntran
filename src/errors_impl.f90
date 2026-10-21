@@ -318,6 +318,13 @@ module procedure get_all_error_codes
 	call codes%push(EC_MISSING_LET_NAME)
 	call codes%push(EC_TRANSPILE_UNSUPPORTED)
 	call codes%push(EC_REF_ALIAS)
+	call codes%push(EC_FORMAT_NOT_LITERAL)
+	call codes%push(EC_BAD_FORMAT)
+	call codes%push(EC_FORMAT_TYPE)
+	call codes%push(EC_FORMAT_COUNT)
+	call codes%push(EC_RESHAPE_SHAPE_LIT)
+	call codes%push(EC_STD_UNKNOWN_NAME)
+	call codes%push(EC_MOD_IMPORT_NAME)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -403,6 +410,9 @@ module procedure get_all_error_codes
 	call codes%push(RC_SOLVE_SHAPE)
 	call codes%push(RC_SOLVE_SINGULAR)
 	call codes%push(RC_LU_BAD_PIVOTS)
+	call codes%push(RC_BINARY_TEXT_OP)
+	call codes%push(RC_READ_FAIL)
+	call codes%push(RC_BINARY_WRITE_TYPE)
 	call codes%push(WC_MISSING_RETURN)
 end procedure get_all_error_codes
 
@@ -1197,6 +1207,105 @@ module procedure err_ref_alias
 
 end procedure err_ref_alias
 
+
+!===============================================================================
+
+module procedure err_format_not_literal
+
+	err = err_pre(EC_FORMAT_NOT_LITERAL) &
+		//'the format string of `'//fn//'()` is not a string literal' &
+		//underline(context, span)//" not a literal"//color_reset &
+		//line_feed//fg_bright_green//"help"//color_reset &
+		//": the format string is checked against the arguments when the program " &
+		//"is parsed, so it must be written out as a string literal like " &
+		//'`std::format("{:5}", x)`'
+
+end procedure err_format_not_literal
+
+!===============================================================================
+
+module procedure err_bad_format
+
+	err = err_pre(EC_BAD_FORMAT) &
+		//'invalid format string: '//what &
+		//underline(context, span)//" bad format string"//color_reset &
+		//line_feed//fg_bright_green//"help"//color_reset &
+		//": a placeholder is `{}` or `{:spec}`, where spec is " &
+		//"`[[fill]align][+][#][0][width][.precision][type]`.  Write `{{` and `}}` " &
+		//"for literal braces"
+
+end procedure err_bad_format
+
+!===============================================================================
+
+module procedure err_format_type
+
+	err = err_pre(EC_FORMAT_TYPE) &
+		//'format spec `'//spec//'` can not be used for a value of type `'//type_//'`' &
+		//underline(context, span)//" value of type `"//type_//"`"//color_reset &
+		//line_feed//fg_bright_green//"help"//color_reset &
+		//": "//why
+
+end procedure err_format_type
+
+!===============================================================================
+
+module procedure err_format_count
+
+	err = err_pre(EC_FORMAT_COUNT) &
+		//'the format string has '//str(nspecs)//' placeholder(s), but '//str(nargs) &
+		//' argument(s) were given' &
+		//underline(context, span)//" wrong number of arguments"//color_reset &
+		//line_feed//fg_bright_green//"help"//color_reset &
+		//": there must be exactly one argument for each `{}` or `{:spec}`"
+
+end procedure err_format_count
+
+!===============================================================================
+
+module procedure err_reshape_shape_lit
+
+	err = err_pre(EC_RESHAPE_SHAPE_LIT) &
+		//'the shape argument of `std::reshape()` must be an array literal' &
+		//underline(context, span)//" not an array literal"//color_reset &
+		//line_feed//fg_bright_green//"help"//color_reset &
+		//": the number of dimensions of the result must be known at compile time, e.g. `[nx, ny]`"
+
+end procedure err_reshape_shape_lit
+
+!===============================================================================
+
+module procedure err_std_unknown_name
+
+	err = err_pre(EC_STD_UNKNOWN_NAME) &
+		//'`std::'//name//'` is not a function in the standard library' &
+		//underline(context, span)//" unknown std function"//color_reset
+
+	if (present(suggest)) then
+		if (len(suggest) > 0) then
+			err = err//line_feed &
+				//fg_bright_green//"help"//color_reset &
+				//": did you mean `" &
+				//fg_bright_green//suggest//color_reset//"`?"
+		end if
+	end if
+
+end procedure err_std_unknown_name
+
+!===============================================================================
+
+module procedure err_mod_import_name
+
+	err = err_pre(EC_MOD_IMPORT_NAME) &
+		//'importing a single name from a module is not supported' &
+		//underline(context, span)//" cannot import `"//name//"` alone"//color_reset &
+		//line_feed//fg_bright_green//"help"//color_reset &
+		//": use `"//fg_bright_green//"use "//module//"::*;"//color_reset &
+		//"` to import every name, or `" &
+		//fg_bright_green//"use "//module//";"//color_reset &
+		//"` and call `"//module//"::"//name//"`"
+
+end procedure err_mod_import_name
 
 !===============================================================================
 

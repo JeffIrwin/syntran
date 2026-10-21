@@ -66,6 +66,12 @@ module syntran__runtime_m
 		type(structs_t) :: structs
 		type(enums_t) :: enums
 
+		! `use std::*;` seen on a previous REPL line, c.f. parser_t%std_glob
+		logical :: std_glob = .false.
+
+		! `use std::name;` seen on previous REPL lines, c.f. parser_t%std_names
+		character(len = :), allocatable :: std_names
+
 		type(vars_t) :: vars, locs
 
 		! Script arguments passed after `--` on the command line
@@ -470,6 +476,9 @@ subroutine open_file_impl(state, filename, mode, must_open, file_)
 		case ("w")
 			file_%mode_write = .true.
 
+		case ("b")
+			file_%binary = .true.
+
 		case default
 			call rt_throw(state, err_rt(RC_BAD_FILE_MODE, "bad file mode character """// &
 				char_//""""))
@@ -497,8 +506,15 @@ subroutine open_file_impl(state, filename, mode, must_open, file_)
 	! This is the key change for thread-safety
 	resolved_path = resolve_path(state%src_dir, filename)
 
-	open(newunit = file_%unit_, file = resolved_path, &
-		status = status_, iostat = io)
+	if (file_%binary) then
+		! Writing doesn't truncate a stream, so replace the file
+		if (file_%mode_write) status_ = "replace"
+		open(newunit = file_%unit_, file = resolved_path, status = status_, &
+			access = "stream", form = "unformatted", iostat = io)
+	else
+		open(newunit = file_%unit_, file = resolved_path, &
+			status = status_, iostat = io)
+	end if
 
 	if (io /= 0) then
 		! Decode fortran iostat codes in message?  I just looked up the docs

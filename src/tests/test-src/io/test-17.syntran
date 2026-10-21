@@ -1,0 +1,21 @@
+// writef() is write(f, format(...)), so a binary file gets the bytes of the text
+// that was formatted, the same as write(f, "text").  A text file can read them
+// back
+
+fn main(): bool
+{
+	let filename = "build/test-17.bin";
+
+	let fo = open(filename, "wb");
+	std::writef(fo, "{} {:03}|", 1, 7);
+	std::write(fo, "ab");
+	close(fo);
+
+	let fi = open(filename, "r");
+	let line = readln(fi);
+	close(fi);
+
+	return line == "1 007|ab";
+}
+
+return main();
