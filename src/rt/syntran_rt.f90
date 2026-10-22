@@ -444,6 +444,20 @@ function rt_parse_f64(s) result(r)
     if (io /= 0) call rt_fatal(' cannot parse_f64() for argument `'//s//'`')
 end function rt_parse_f64
 
+function rt_parse_bool(s) result(r)
+    character(len = *), intent(in) :: s
+    logical :: r
+    select case (trim(adjustl(s)))
+    case ('true')
+        r = .true.
+    case ('false')
+        r = .false.
+    case default
+        r = .false.
+        call rt_fatal(' cannot parse_bool() for argument `'//s//'`')
+    end select
+end function rt_parse_bool
+
 !===============================================================================
 
 ! The array [lb: ub], which is empty if ub <= lb

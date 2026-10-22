@@ -413,6 +413,7 @@ module procedure get_all_error_codes
 	call codes%push(RC_BINARY_TEXT_OP)
 	call codes%push(RC_READ_FAIL)
 	call codes%push(RC_BINARY_WRITE_TYPE)
+	call codes%push(RC_PARSE_BOOL)
 	call codes%push(WC_MISSING_RETURN)
 end procedure get_all_error_codes
 

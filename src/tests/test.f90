@@ -1528,6 +1528,31 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('repeat(" aBcD", 3);')  == " aBcD aBcD aBcD",  &
 			eval('repeat(" ", 4);')  == "    ",  &
 			eval('repeat("aBcD", 0);')  == "",  &  ! 0 is empty. negatives crash
+			eval('repeat("ab", len("abc"));')  == "ababab",  &  ! i64 ncopies
+			eval('repeat("ab", 2''i64);')  == "abab",  &
+			eval('repeat("ab", 0''i64);')  == "",  &
+			eval('repeat("a", i64(3) * 2);')  == "aaaaaa",  &
+			eval('parse_bool("true");')  == "true",  &
+			eval('parse_bool("false");')  == "false",  &
+			eval('parse_bool("  true");')  == "true",  &
+			eval('parse_bool("false  ");')  == "false",  &
+			eval('parse_bool("true") and not parse_bool("false");')  == "true",  &
+			abs(eval_f32('f32(3);') - 3.0) < tol, &
+			abs(eval_f32('f32(3) / 2;') - 1.5) < tol, &
+			abs(eval_f32('f32(7''i64);') - 7.0) < tol, &
+			abs(eval_f32('f32(1.5);') - 1.5) < tol, &
+			abs(eval_f32('f32(1.5f);') - 1.5) < tol, &
+			abs(eval_f64('f64(3) / 2;') - 1.5d0) < tol, &
+			abs(eval_f64('f64(7''i64);') - 7.0d0) < tol, &
+			abs(eval_f64('f64(2.5f);') - 2.5d0) < tol, &
+			abs(eval_f64('f64(2.5);') - 2.5d0) < tol, &
+			eval('f32([1, 2, 3]);')  == "[1.000000E+00, 2.000000E+00, 3.000000E+00]",  &
+			eval('f64([1, 2, 3]);')  == &
+				"[1.000000000000000E+00, 2.000000000000000E+00, 3.000000000000000E+00]",  &
+			eval('f64([1''i64, 2''i64]);')  == "[1.000000000000000E+00, 2.000000000000000E+00]",  &
+			eval('f32([1.5, 2.5]);')  == "[1.500000E+00, 2.500000E+00]",  &
+			abs(eval_f64('sum(f64([1, 2, 3, 4; 2, 2]));') - 10.0d0) < tol, &
+			eval('size(f32([1, 2, 3, 4; 2, 2]), 0);')  == "2",  &
 			eval('i32( 0.0);') ==   "0", &
 			eval('i32( 1.1);') ==   "1", &
 			eval('i32(-1.1);') ==  "-1", &
@@ -9704,7 +9729,22 @@ subroutine unit_test_runtime_errors(npass, nfail)
 			rt_code_both_file(P//'R45-binary-write-type.syntran', RC_BINARY_WRITE_TYPE), &
 			diag_has_code(get_diags( &
 				'let f = open("build/rt_file_r45b.bin", "wb"); std::write(f, ["a", "b"]);'), &
-				RC_BINARY_WRITE_TYPE) &
+				RC_BINARY_WRITE_TYPE), &
+
+			! R46: parse_bool() on text that is not exactly true or false
+			rt_code_both_file(P//'R46-parse-bool.syntran', RC_PARSE_BOOL), &
+			diag_count_code(get_diags_file( &
+				P//'R46-parse-bool.syntran'), &
+				RC_PARSE_BOOL) == 1, &
+			diag_has_code(get_diags('println(parse_bool("True"));'), RC_PARSE_BOOL), &
+			diag_has_code(get_diags('println(parse_bool("t"));'), RC_PARSE_BOOL), &
+			diag_has_code(get_diags('println(parse_bool(""));'), RC_PARSE_BOOL), &
+			.not. diag_has_code(get_diags('println(parse_bool("true"));'), RC_PARSE_BOOL), &
+			.not. diag_has_code(get_diags('println(parse_bool(" false "));'), RC_PARSE_BOOL), &
+
+			! R39 again, for the i64 overload of repeat()
+			diag_has_code(get_diags("println(repeat(""ab"", -1'i64));"), RC_REPEAT_NEGATIVE), &
+			.not. diag_has_code(get_diags("println(repeat(""ab"", 2'i64));"), RC_REPEAT_NEGATIVE) &
 		]
 
 	! R33: out-of-bounds subscript.  Only reachable in builds compiled with
@@ -10976,6 +11016,7 @@ subroutine unit_test_transpile(npass, nfail)
 			interpret_file(T//'transpile/test-09.syntran', .true.) == '0', &
 			interpret_file(T//'transpile/test-11.syntran', .true.) == '0', &
 			interpret_file(T//'transpile/test-12.syntran', .true.) == '0', &
+			interpret_file(T//'transpile/test-15.syntran', .true.) == '0', &
 			transpiles_ok(T//'transpile/test-01.syntran'), &
 			transpiles_ok(T//'transpile/test-02.syntran'), &
 			transpiles_ok(T//'transpile/test-03.syntran'), &
@@ -10988,6 +11029,7 @@ subroutine unit_test_transpile(npass, nfail)
 			transpiles_ok(T//'transpile/test-10.syntran'), &
 			transpiles_ok(T//'transpile/test-11.syntran'), &
 			transpiles_ok(T//'transpile/test-12.syntran'), &
+			transpiles_ok(T//'transpile/test-15.syntran'), &
 
 			! Most of the tests programs are supported
 			transpiles_ok(T//'fns/test-01.syntran'), &

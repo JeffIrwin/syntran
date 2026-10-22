@@ -855,7 +855,8 @@ module procedure value_to_f32
 
 		case (str_type)
 
-			! There is no user-facing `f32()` fn (or `f64()`) yet anyway, unlike `i32()`
+			! Unlike `i32()`, the user-facing `f32()` and `f64()` casts only take
+			! numeric types
 			write(*,*) err_int(IC_CONVERT_F32, 'cannot convert from type `' &
 				//value_type_name(val)//'` to f32.  Use `parse_f32()`')
 			call internal_error()

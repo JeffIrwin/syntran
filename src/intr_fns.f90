@@ -20,12 +20,12 @@ module syntran__intr_fns_m
 	! are the two places that need this list.  Kept as one parameter array so
 	! there is only one place to update when a new overload is added, instead
 	! of the select case this replaced needing to stay in sync by hand
-	character(len = 8), parameter :: OVERLOAD_NAMES(28) = &
+	character(len = 8), parameter :: OVERLOAD_NAMES(31) = &
 		[character(len = 8) :: &
 			"exp", "log", "log10", "log2", "sqrt", "abs", &
 			"cos", "sin", "tan", "cosd", "sind", "tand", &
 			"acos", "asin", "atan", "acosd", "asind", "atand", &
-			"min", "max", "i32", "i64", &
+			"min", "max", "i32", "i64", "f32", "f64", "repeat", &
 			"sum", "minval", "maxval", "product", "norm2", "dot"]
 
 !===============================================================================
@@ -848,6 +848,53 @@ recursive subroutine resolve_overload(args, fn_call, has_rank, has_arr_type, arr
 			!print *, "resolving 0i64_sca"
 			fn_call%identifier%text = "0i64_sca"
 		end select
+
+	case ("f32")
+
+		type_ = f32_type
+		if (args%len_ >= 1) type_ = args%v(1)%val%type
+
+		select case (type_)
+		case (array_type)
+			fn_call%identifier%text = "0f32_arr"
+
+			if (args%len_ >= 1) then
+				has_rank = .true.
+				allocate(fn_call%val%array)
+				fn_call%val%array%rank = args%v(1)%val%array%rank
+			end if
+
+		case default
+			fn_call%identifier%text = "0f32_sca"
+		end select
+
+	case ("f64")
+
+		type_ = f64_type
+		if (args%len_ >= 1) type_ = args%v(1)%val%type
+
+		select case (type_)
+		case (array_type)
+			fn_call%identifier%text = "0f64_arr"
+
+			if (args%len_ >= 1) then
+				has_rank = .true.
+				allocate(fn_call%val%array)
+				fn_call%val%array%rank = args%v(1)%val%array%rank
+			end if
+
+		case default
+			fn_call%identifier%text = "0f64_sca"
+		end select
+
+	case ("repeat")
+
+		! ncopies may be i32 or i64, e.g. repeat(" ", len(s)).  Anything else
+		! falls back on i32 to get a normal wrong-type error later
+		fn_call%identifier%text = "0repeat_i32"
+		if (args%len_ >= 2) then
+			if (args%v(2)%val%type == i64_type) fn_call%identifier%text = "0repeat_i64"
+		end if
 
 	case ("sum")
 

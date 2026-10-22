@@ -227,6 +227,7 @@ module syntran__errors_m
 		RC_BINARY_TEXT_OP = "R43", &
 		RC_READ_FAIL = "R44", &
 		RC_BINARY_WRITE_TYPE = "R45", &
+		RC_PARSE_BOOL = "R46", &
 		WC_MISSING_RETURN = "W1"
 
 	! A text span indicates which characters to underline in a faulty line of
@@ -1149,7 +1150,7 @@ module syntran__errors_m
 		end function err_rt_dot_size
 
 		module function err_rt_repeat_negative(ncopies) result(err)
-			integer, intent(in) :: ncopies
+			integer(kind = 8), intent(in) :: ncopies
 			character(len = :), allocatable :: err
 		end function err_rt_repeat_negative
 

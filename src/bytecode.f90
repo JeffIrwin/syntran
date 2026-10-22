@@ -500,6 +500,11 @@ module syntran__bytecode_m
 	integer, parameter :: INTR_READ_I32 = 154, INTR_READ_I64 = 155, &
 		INTR_READ_F32 = 156, INTR_READ_F64 = 157
 
+	! parse_bool(), and the f32() and f64() casts, each for one value or an array
+	integer, parameter :: INTR_PARSE_BOOL = 158, &
+		INTR_F32_SCA = 159, INTR_F32_ARR = 160, &
+		INTR_F64_SCA = 161, INTR_F64_ARR = 162
+
 	!********
 
 	! A single bytecode instruction.  Kept as a plain POD record (no allocatable
@@ -999,7 +1004,8 @@ pure integer function intr_id_from_name(name) result(id)
 		id = INTR_READ_F64
 	case ("str");            id = INTR_STR
 	case ("len");            id = INTR_LEN
-	case ("repeat");         id = INTR_REPEAT
+	case ("0repeat_i32", "0repeat_i64"); id = INTR_REPEAT
+	case ("parse_bool");     id = INTR_PARSE_BOOL
 	case ("parse_i32");      id = INTR_PARSE_I32
 	case ("parse_i64");      id = INTR_PARSE_I64
 	case ("parse_f32");      id = INTR_PARSE_F32
@@ -1009,6 +1015,10 @@ pure integer function intr_id_from_name(name) result(id)
 	case ("0i32_arr");       id = INTR_I32_ARR
 	case ("0i64_sca");       id = INTR_I64_SCA
 	case ("0i64_arr");       id = INTR_I64_ARR
+	case ("0f32_sca");       id = INTR_F32_SCA
+	case ("0f32_arr");       id = INTR_F32_ARR
+	case ("0f64_sca");       id = INTR_F64_SCA
+	case ("0f64_arr");       id = INTR_F64_ARR
 	! I/O
 	case ("open");           id = INTR_OPEN
 	case ("readln");         id = INTR_READLN

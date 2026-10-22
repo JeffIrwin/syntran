@@ -23,9 +23,10 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 
 	!********
 
-	type(fn_t) :: println_fn, str_fn, len_fn, repeat_fn, args_fn, &
-		parse_i32_fn, parse_i64_fn, parse_f32_fn, parse_f64_fn, &
+	type(fn_t) :: println_fn, str_fn, len_fn, repeat_i32_fn, repeat_i64_fn, args_fn, &
+		parse_i32_fn, parse_i64_fn, parse_f32_fn, parse_f64_fn, parse_bool_fn, &
 		char_fn, i32_sca_fn, i32_arr_fn, i64_sca_fn, i64_arr_fn, &
+		f32_sca_fn, f32_arr_fn, f64_sca_fn, f64_arr_fn, &
 		open_fn, readln_fn, writeln_fn, eof_fn, close_fn, exit_fn, &
 		getenv_fn, hasenv_fn, exists_fn, try_open_fn, &
 		print_trace_fn, stack_trace_fn, caller_fn, print_fn, write_fn, format_fn, printf_fn, writef_fn
@@ -109,18 +110,33 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 
 	!********
 
-	repeat_fn%type%type = str_type
-	allocate(repeat_fn%params(2))
-	allocate(repeat_fn%param_names%v(2))
+	! repeat() is overloaded on the type of ncopies, so that e.g. the i64 result
+	! of len() can be used directly.  See resolve_overload() in intr_fns.f90
+	repeat_i32_fn%type%type = str_type
+	allocate(repeat_i32_fn%params(2))
+	allocate(repeat_i32_fn%param_names%v(2))
 
-	repeat_fn%params(1)%type = str_type
-	repeat_fn%param_names%v(1)%s = "str"
+	repeat_i32_fn%params(1)%type = str_type
+	repeat_i32_fn%param_names%v(1)%s = "str"
 
-	! TODO: overload for i32 and i64 ncopies? Not sure if you would need that many reps
-	repeat_fn%params(2)%type = i32_type
-	repeat_fn%param_names%v(2)%s = "ncopies"
+	repeat_i32_fn%params(2)%type = i32_type
+	repeat_i32_fn%param_names%v(2)%s = "ncopies"
 
-	call fns%insert("repeat", repeat_fn, id_index)
+	call fns%insert("0repeat_i32", repeat_i32_fn, id_index)
+
+	!********
+
+	repeat_i64_fn%type%type = str_type
+	allocate(repeat_i64_fn%params(2))
+	allocate(repeat_i64_fn%param_names%v(2))
+
+	repeat_i64_fn%params(1)%type = str_type
+	repeat_i64_fn%param_names%v(1)%s = "str"
+
+	repeat_i64_fn%params(2)%type = i64_type
+	repeat_i64_fn%param_names%v(2)%s = "ncopies"
+
+	call fns%insert("0repeat_i64", repeat_i64_fn, id_index)
 
 	!********
 
@@ -138,8 +154,6 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 	call fns%insert("std::args", args_fn, id_index)
 
 	!********
-
-	! TODO: add fns for parsing str to other types (bool, etc.)
 
 	! Should this accept any type?  f32 can be converted implicitly so there
 	! shouldn't be a need for other types
@@ -184,6 +198,16 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 
 	!********
 
+	parse_bool_fn%type%type = bool_type
+	allocate(parse_bool_fn%params(1))
+	allocate(parse_bool_fn%param_names%v(1))
+	parse_bool_fn%params(1)%type = str_type
+	parse_bool_fn%param_names%v(1)%s = "str"
+
+	call fns%insert("parse_bool", parse_bool_fn, id_index)
+
+	!********
+
 	char_fn%type%type = str_type
 	allocate(char_fn%params(1))
 	allocate(char_fn%param_names%v(1))
@@ -224,8 +248,6 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 
 	!********
 
-	! TODO: to f32 casting
-
 	i64_sca_fn%type%type = i64_type
 	allocate(i64_sca_fn%params(1))
 	allocate(i64_sca_fn%param_names%v(1))
@@ -251,6 +273,62 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 	i64_arr_fn%param_names%v(1)%s = "a"
 
 	call fns%insert("0i64_arr", i64_arr_fn, id_index)
+
+	!********
+
+	f32_sca_fn%type%type = f32_type
+	allocate(f32_sca_fn%params(1))
+	allocate(f32_sca_fn%param_names%v(1))
+
+	f32_sca_fn%params(1)%type = any_type
+
+	f32_sca_fn%param_names%v(1)%s = "a"
+
+	call fns%insert("0f32_sca", f32_sca_fn, id_index)
+
+	!********
+
+	f32_arr_fn%type%type = array_type
+	allocate(f32_arr_fn%type%array)
+	f32_arr_fn%type%array%type = f32_type
+	f32_arr_fn%type%array%rank = -1
+
+	allocate(f32_arr_fn%params(1))
+	allocate(f32_arr_fn%param_names%v(1))
+
+	f32_arr_fn%params(1)%type = any_type
+
+	f32_arr_fn%param_names%v(1)%s = "a"
+
+	call fns%insert("0f32_arr", f32_arr_fn, id_index)
+
+	!********
+
+	f64_sca_fn%type%type = f64_type
+	allocate(f64_sca_fn%params(1))
+	allocate(f64_sca_fn%param_names%v(1))
+
+	f64_sca_fn%params(1)%type = any_type
+
+	f64_sca_fn%param_names%v(1)%s = "a"
+
+	call fns%insert("0f64_sca", f64_sca_fn, id_index)
+
+	!********
+
+	f64_arr_fn%type%type = array_type
+	allocate(f64_arr_fn%type%array)
+	f64_arr_fn%type%array%type = f64_type
+	f64_arr_fn%type%array%rank = -1
+
+	allocate(f64_arr_fn%params(1))
+	allocate(f64_arr_fn%param_names%v(1))
+
+	f64_arr_fn%params(1)%type = any_type
+
+	f64_arr_fn%param_names%v(1)%s = "a"
+
+	call fns%insert("0f64_arr", f64_arr_fn, id_index)
 
 	!********
 
@@ -536,9 +614,10 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 	! Return array of all functions declared in this module
 	fn_array = &
 		[ &
-			println_fn, str_fn, len_fn, repeat_fn, args_fn, &
-			parse_i32_fn, parse_i64_fn, parse_f32_fn, parse_f64_fn, &
+			println_fn, str_fn, len_fn, repeat_i32_fn, repeat_i64_fn, args_fn, &
+			parse_i32_fn, parse_i64_fn, parse_f32_fn, parse_f64_fn, parse_bool_fn, &
 			char_fn, i32_sca_fn, i32_arr_fn, i64_sca_fn, i64_arr_fn, &
+			f32_sca_fn, f32_arr_fn, f64_sca_fn, f64_arr_fn, &
 			open_fn, readln_fn, writeln_fn, eof_fn, close_fn, exit_fn, &
 			getenv_fn, hasenv_fn, exists_fn, try_open_fn, &
 			print_trace_fn, stack_trace_fn, caller_fn, print_fn, write_fn, format_fn, printf_fn, writef_fn, read_fns &

@@ -550,19 +550,6 @@ recursive module subroutine parse_use_statement(parser, statement)
 			call qualify_fn_struct_names(fn, qualified_prefix)
 		else
 			insert_name = fn_name
-
-			! Check if this would shadow an overloaded intrinsic function. Note:
-			! we only check overloaded intrinsics here because non-overloaded
-			! intrinsics are handled mostly like normal user-defined fns
-			!
-			! TODO: is this still needed since we already handle
-			! err_redeclare_intr_fn() elsewhere?
-			if (is_overloaded_intr(fn_name)) then
-				span = new_span(mod_identifier%pos, len(mod_identifier%text))
-				call parser%diagnostics%push( &
-					err_redeclare_intr_fn(use_ctx, span, fn_name))
-				cycle
-			end if
 		end if
 
 		! Insert into current parser with the SAME id_index from module parser.
@@ -1106,9 +1093,8 @@ recursive subroutine parse_case_clause(parser, subj_type, subj_val, clause)
 		! zero-length -- compile_switch_statement() then falls straight into the
 		! guard instead of emitting a "nothing matched" jump.  Only reachable on
 		! the first iteration, since a trailing comma already exits the loop via
-		! at_case_body_start().  This is sugar for the wildcard `case _ when
-		! <cond>` reserved in core.f90's switch TODO, and must keep meaning the
-		! same thing if `_` ever lands
+		! at_case_body_start().  This is sugar for a wildcard `case _ when
+		! <cond>`, and must keep meaning the same thing if `_` ever lands
 		if (parser%current_kind() == when_keyword .and. vals%len_ == 0) exit
 
 		val_beg = parser%peek_pos(0)
@@ -1181,7 +1167,7 @@ recursive subroutine parse_case_clause(parser, subj_type, subj_val, clause)
 		! `when <cond>` guard, checked only once one of this arm's values or
 		! ranges has already matched.  Must be spelled `when`, never `if`:
 		! `case 1 if c { ... }` already parses as value `1` with the
-		! if-statement as the arm's body (see core.f90's switch TODO)
+		! if-statement as the arm's body
 		call parser%match(when_keyword, when_token)
 
 		cond_beg = parser%peek_pos(0)

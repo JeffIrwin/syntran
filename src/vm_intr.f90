@@ -41,7 +41,7 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 	integer :: env_len, env_stat
 	integer :: red_inner, red_n, red_outer, red_op
 	integer :: solve_n, solve_nrhs, solve_info
-	integer(kind = 8) :: ir, ic
+	integer(kind = 8) :: ir, ic, ncopies
 
 	logical :: exists_, red_ok, ok_
 
@@ -472,12 +472,15 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 
 	case (INTR_REPEAT)
 		res%type = str_type
-		if (args(2)%sca%i32 < 0) then
-			call rt_throw(state, err_rt_repeat_negative(args(2)%sca%i32))
+
+		! ncopies is i32 or i64 depending on the overload
+		ncopies = args(2)%to_i64()
+		if (ncopies < 0) then
+			call rt_throw(state, err_rt_repeat_negative(ncopies))
 			return
 		end if
 		if (.not. allocated(res%str)) allocate(res%str)
-		res%str%s = repeat(args(1)%str%s, args(2)%sca%i32)
+		res%str%s = repeat(args(1)%str%s, ncopies)
 
 	case (INTR_PARSE_I32)
 		res%type = i32_type
@@ -515,6 +518,22 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 			return
 		end if
 
+	case (INTR_PARSE_BOOL)
+		res%type = bool_type
+
+		! Only syntran's own literals, not everything that a list-directed
+		! read of a logical would accept (`t`, `.true.`, `tx`, etc.)
+		select case (trim(adjustl(args(1)%str%s)))
+		case ("true")
+			res%sca%bool = .true.
+		case ("false")
+			res%sca%bool = .false.
+		case default
+			call rt_throw(state, err_rt(RC_PARSE_BOOL, " cannot parse_bool() for argument `"// &
+				args(1)%str%s//"`"))
+			return
+		end select
+
 	case (INTR_CHAR)
 		res%type = str_type
 		if (.not. allocated(res%str)) allocate(res%str)
@@ -535,6 +554,22 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 	case (INTR_I64_ARR)
 		res%type = array_type
 		res%array = args(1)%to_i64_array()
+
+	case (INTR_F32_SCA)
+		res%type = f32_type
+		res%sca%f32 = args(1)%to_f32()
+
+	case (INTR_F32_ARR)
+		res%type = array_type
+		res%array = args(1)%to_f32_array()
+
+	case (INTR_F64_SCA)
+		res%type = f64_type
+		res%sca%f64 = args(1)%to_f64()
+
+	case (INTR_F64_ARR)
+		res%type = array_type
+		res%array = args(1)%to_f64_array()
 
 	!==== I/O (native-able) =====================================================
 

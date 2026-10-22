@@ -3147,12 +3147,14 @@ recursive function emit_intr_call(em, node) result(s)
 		s = convert('len('//a1//', kind = int64)', i64_type, elem_type(node%val))
 
 	case ('repeat')
-		s = 'repeat('//a1//', '//convert(a2, elem_type(node%args(2)%val), i32_type)//')'
+		! Fortran's repeat() takes ncopies of any integer kind, so there is no need
+		! to convert an i64 down
+		s = 'repeat('//a1//', '//a2//')'
 
 	case ('char')
 		s = 'achar('//convert(a1, elem_type(node%args(1)%val), i32_type)//')'
 
-	case ('parse_i32', 'parse_i64', 'parse_f32', 'parse_f64')
+	case ('parse_i32', 'parse_i64', 'parse_f32', 'parse_f64', 'parse_bool')
 		s = 'rt_'//base//'('//a1//')'
 
 	case ('size')
@@ -3279,6 +3281,10 @@ recursive function emit_intr_call(em, node) result(s)
 		else
 			s = 'int('//a1//', '//kind_str//')'
 		end if
+
+	case ('f32', 'f64')
+		! real() is elemental, so this also casts arrays
+		s = 'real('//a1//', '//merge('real32', 'real64', base == 'f32')//')'
 
 	case default
 		call em_unsupported(em, 'the intrinsic fn `'// &

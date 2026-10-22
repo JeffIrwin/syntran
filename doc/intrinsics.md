@@ -357,6 +357,48 @@ arrays.
 
 Related functions: [`log`](#log)
 
+## `f32`
+```rust
+fn f32(a: any_num): f32
+#elemental
+```
+
+Explicitly cast any numeric type to 32-bit float `f32`.  For example, `f32(3)` is
+`3.0f`, and `f32(2.5)` is `2.5f`.  To read a decimal number from a string, use
+[`parse_f32`](#parse_f32) instead.
+
+The `f32` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Unlike [`i32`](#i32), non-numeric types (`str`, `bool`, `file`, enums) cannot be
+cast to `f32`.
+
+Note that `f32` is an intrinsic function, so you cannot declare your own function
+with that name.
+
+Related functions: [`f64`](#f64), [`i32`](#i32), [`i64`](#i64)
+
+## `f64`
+```rust
+fn f64(a: any_num): f64
+#elemental
+```
+
+Explicitly cast any numeric type to 64-bit float `f64`.  For example, `f64(3)` is
+`3.0`.  To read a decimal number from a string, use [`parse_f64`](#parse_f64)
+instead.
+
+The `f64` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Unlike [`i32`](#i32), non-numeric types (`str`, `bool`, `file`, enums) cannot be
+cast to `f64`.
+
+Note that `f64` is an intrinsic function, so you cannot declare your own function
+with that name.
+
+Related functions: [`f32`](#f32), [`i32`](#i32), [`i64`](#i64)
+
 ## `format`
 ```rust
 fn format(fmt: str, value0: any, value1: any, value2: any, ...): str
@@ -472,7 +514,7 @@ arrays.
 
 Other non-numeric types (`bool`, `file`) cannot be cast to `i64`.
 
-Related functions: [`char`](#char)
+Related functions: [`char`](#char), [`i64`](#i64), [`f32`](#f32), [`f64`](#f64)
 
 ## `i64`
 ```rust
@@ -489,6 +531,8 @@ The `i64` function is _elemental_, i.e. it can operate on both scalars and
 arrays.
 
 Other non-numeric types (`bool`, `file`) cannot be cast to `i64`.
+
+Related functions: [`i32`](#i32), [`f32`](#f32), [`f64`](#f64)
 
 ## `len`
 ```rust
@@ -766,6 +810,20 @@ fixed set of read-only members, accessed with `.`:
 These members cannot be assigned to (`f.eof = true;` is a compile-time
 error); they only reflect the handle's current state.
 
+## `parse_bool`
+```rust
+fn parse_bool(s: str): bool
+```
+
+Convert from a string to a `bool`.  Only `"true"` and `"false"` are accepted,
+optionally with surrounding spaces, so `parse_bool("true")` is `true`.  Other
+spellings like `"True"`, `"t"`, or `"1"` are not accepted.
+
+Any invalid text will cause a runtime error,
+[R46](errors.md#r46----parse-bool).
+
+Related functions: [`parse_i32`](#parse_i32), [`str`](#str)
+
 ## `parse_f32`
 ```rust
 fn parse_f32(s: str): f32
@@ -776,8 +834,8 @@ returns roughly `65.4f`.
 
 Any invalid numbers will cause a runtime error.
 
-Note that other numeric types (`i32`) can be converted to float simply by
-multiplying by `1.0f`.
+Note that other numeric types (`i32`) can be converted to float with
+[`f32`](#f32), e.g. `f32(3)`, or simply by multiplying by `1.0f`.
 
 Related functions: [`parse_i32`](#parse_i32), [`str`](#str)
 
@@ -791,8 +849,8 @@ returns roughly `65.4`.
 
 Any invalid numbers will cause a runtime error.
 
-Note that other numeric types (`i32`) can be converted to double simply by
-multiplying by `1.0`.
+Note that other numeric types (`i32`) can be converted to double with
+[`f64`](#f64), e.g. `f64(3)`, or simply by multiplying by `1.0`.
 
 Related functions: [`parse_f32`](#parse_f32), [`str`](#str)
 
@@ -954,11 +1012,14 @@ Related functions: [`close`](#close), [`eof`](#eof), [`open`](#open), [`read_i32
 ## `repeat`
 ```rust
 fn repeat(str: str, ncopies: i32): str
+fn repeat(str: str, ncopies: i64): str
 ```
 
 Return `str` concatenated with itself `ncopies` times.  For example,
 `repeat("ab", 3)` is `"ababab"`, and an `ncopies` of `0` gives the empty
-string.  `ncopies` must not be negative, which is a runtime error,
+string.  `ncopies` can be an `i32` or an `i64`, so the result of
+[`len`](#len) can be used directly, e.g. `repeat("-", len(title))`.  `ncopies`
+must not be negative, which is a runtime error,
 [R39](errors.md#r39----repeat-negative).
 
 Related functions: [`len`](#len), [`str`](#str)

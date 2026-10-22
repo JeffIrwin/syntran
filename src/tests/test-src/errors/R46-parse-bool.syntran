@@ -1,0 +1,5 @@
+// R46: parse-bool
+// parse_bool() could not parse its string argument as a bool
+
+let word = "yes";
+let ok = parse_bool(word);

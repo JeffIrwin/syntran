@@ -1279,6 +1279,13 @@ arrays of strings.
 
 [Example](../src/tests/test-src/errors/R45-binary-write-type.syntran)
 
+### R46 -- parse-bool
+
+`parse_bool()` could not parse its string argument as a `bool`.  Only `"true"` and
+`"false"` are accepted, optionally with surrounding spaces.
+
+[Example](../src/tests/test-src/errors/R46-parse-bool.syntran)
+
 ## Warnings
 
 ### W1 -- missing-return

@@ -73,8 +73,8 @@ This is a subset of the language so far:
   `repeat`, `char`, `size`, `count`, `all`, `any`, `sum`, `product`, `minval`,
   `maxval` (with `dim` and `mask` too), `norm2`, `dot`, `min`, `max`, `abs`,
   `exp`, `log`, `log2`, `log10`, `sqrt`, the trigonometric functions and their
-  inverses in radians and in degrees, `i32`, `i64`, `parse_i32`, `parse_i64`,
-  `parse_f32`, `parse_f64`, `exit`
+  inverses in radians and in degrees, `i32`, `i64`, `f32`, `f64`, `parse_i32`,
+  `parse_i64`, `parse_f32`, `parse_f64`, `parse_bool`, `exit`
 
 ## What isn't supported yet
 
