@@ -29,7 +29,7 @@ program main
 		call exit(EXIT_SUCCESS)
 	end if
 
-	maxerr           = args%maxerr
+	maxerr            = args%maxerr
 	permissive_return = args%permissive_return
 
 	io = EXIT_SUCCESS
