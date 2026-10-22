@@ -5503,6 +5503,14 @@ subroutine unit_test_struct(npass, nfail)
 			    //'let d0 = get_d();' &
 			    //'return d0.m;' &
 				, quiet) == 'Sep', &
+			! Explicit-shape struct array literal.  This used to be an
+			! internal I18 error
+			eval('struct P{x:i32} let a = [P{x=1}, P{x=2}, P{x=3}, P{x=4}; 2, 2];' &
+				//'return a[1,0].x * 10 + a[0,1].x;', quiet) == '23', &
+			eval('struct P{x:i32} let a = [P{x=1}, P{x=2}; 2, 1];' &
+				//'return size(a, 0) * 10 + size(a, 1);', quiet) == '21', &
+			eval('struct P{x:i32} let p = P{x=9}; let a = [p, p; 2, 1];' &
+				//'a[0,0].x = 5; return p.x * 10 + a[0,0].x;', quiet) == '95', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -7220,6 +7228,11 @@ subroutine unit_test_enum(npass, nfail)
 			! Assigning a scalar enum to a whole array of enums broadcasts it
 			eval( 'enum C{A,B,D}' &
 				//'let a=[C.A;3]; a = C.D; a;', quiet) == '[C.D, C.D, C.D]', &
+			! Explicit-shape enum array literal (was an internal I18 error)
+			eval( 'enum C{A,B,D}' &
+				//'let a=[C.A,C.B,C.D,C.A; 2, 2]; a[1,0];', quiet) == 'C.B', &
+			eval( 'enum C{A,B,D}' &
+				//'let a=[C.A,C.B,C.D,C.A; 2, 2]; size(a, 1);', quiet) == '2', &
 			! positive: cross-enum-type array comparisons remain a parse
 			! error (E48), same as the pre-existing scalar enum_cookie check
 			diag_has_code(get_diags( &

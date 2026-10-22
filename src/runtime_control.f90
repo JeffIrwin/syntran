@@ -971,36 +971,62 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 
 		! Explicit array with size
 
-		array = new_array(node%val%array%type, size(node%elems))
+		if (any(node%val%array%type == [struct_type, enum_type])) then
+			! Struct and enum elements are stored in res%struct(:), which
+			! new_array() and push() can't handle.  Assign one element at a
+			! time so that value_copy() deep copies each one, like expl_array
+			! below
+			allocate(res%array)
+			res%array%type = node%val%array%type
+			call allocate_array(res, size(node%elems, kind = 8))
+			do i = 1, size(node%elems)
+				k = k + 1; elem = slots(k)
+				if (state%rt_halt) return
+				res%struct(i) = elem
+			end do
+			res%array%len_ = size(node%elems)
 
-		do i = 1, size(node%elems)
-			k = k + 1; elem = slots(k)
-			if (state%rt_halt) return
-			!print *, 'elem['//str(i)//'] = ', elem%to_str()
-			call array%push(elem)
-		end do
+			if (allocated(node%val%struct_name)) then
+				res%struct_name = node%val%struct_name
+			end if
+			if (allocated(node%val%struct_cookie)) then
+				res%struct_cookie = node%val%struct_cookie
+			end if
+			res%struct_reg_idx = node%val%struct_reg_idx
+			if (allocated(node%val%enum_name)) then
+				res%enum_name = node%val%enum_name
+			end if
+			if (allocated(node%val%enum_cookie)) then
+				res%enum_cookie = node%val%enum_cookie
+			end if
+		else
+			array = new_array(node%val%array%type, size(node%elems))
 
-		array%rank = size( node%size_ )
-		allocate(array%size( array%rank ))
-		do i = 1, array%rank
+			do i = 1, size(node%elems)
+				k = k + 1; elem = slots(k)
+				if (state%rt_halt) return
+				!print *, 'elem['//str(i)//'] = ', elem%to_str()
+				call array%push(elem)
+			end do
+
+			allocate(res%array)
+			res%array = array
+		end if
+
+		res%array%rank = size( node%size_ )
+		allocate(res%array%size( res%array%rank ))
+		do i = 1, res%array%rank
 			k = k + 1; len_ = slots(k)
 			if (state%rt_halt) return
-			array%size(i) = len_%to_i64()
+			res%array%size(i) = len_%to_i64()
 		end do
 
-		if (size(node%elems) /= product(array%size)) then
-			call rt_throw(state, err_rt_expl_array_size(size(node%elems), array%size))
+		if (size(node%elems) /= product(res%array%size)) then
+			call rt_throw(state, err_rt_expl_array_size(size(node%elems), res%array%size))
 			return
 		end if
 
-		!print *, 'copying array'
-		allocate(res%array)
 		res%type  = array_type
-		res%array = array
-		!print *, 'done'
-
-		!print *, "size_array"
-		!print *, "size = ", array%size
 
 	else if (node%val%array%kind == expl_array) then
 		!print *, 'expl_array'
