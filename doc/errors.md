@@ -799,6 +799,13 @@ every name, or `use module;` and call `module::name`.
 
 [Example](../src/tests/test-src/errors/E123-mod-import-name.syntran)
 
+### E124 -- file-array
+
+Arrays of `file` handles (e.g. `[f, g]` or `[std::OUT; 2]`) are not supported: array
+storage has no case for `file`-typed values.
+
+[Example](../src/tests/test-src/errors/E124-file-array.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type

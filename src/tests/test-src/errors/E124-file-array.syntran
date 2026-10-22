@@ -1,0 +1,6 @@
+// E124: file-array
+// Arrays of files are not supported
+
+let fo = open("build/E124.txt", "w");
+
+let files = [fo, fo];

@@ -461,7 +461,7 @@ subroutine open_file_impl(state, filename, mode, must_open, file_)
 	!********
 
 	character :: char_
-	character(len = :), allocatable :: status_, resolved_path
+	character(len = :), allocatable :: status_, position_, resolved_path
 	integer :: i, io
 
 	file_%name_ = filename   ! Keep original name for error messages
@@ -475,6 +475,12 @@ subroutine open_file_impl(state, filename, mode, must_open, file_)
 
 		case ("w")
 			file_%mode_write = .true.
+
+		case ("a")
+			! Append is a write mode that doesn't truncate.  It sets mode_write
+			! too, so "ra" is rejected as a combined read/write mode below
+			file_%mode_write = .true.
+			file_%append     = .true.
 
 		case ("b")
 			file_%binary = .true.
@@ -506,14 +512,19 @@ subroutine open_file_impl(state, filename, mode, must_open, file_)
 	! This is the key change for thread-safety
 	resolved_path = resolve_path(state%src_dir, filename)
 
+	position_ = "asis"
+	if (file_%append) position_ = "append"
+
 	if (file_%binary) then
-		! Writing doesn't truncate a stream, so replace the file
-		if (file_%mode_write) status_ = "replace"
+		! Writing doesn't truncate a stream, so replace the file, unless we're
+		! appending to it
+		if (file_%mode_write .and. .not. file_%append) status_ = "replace"
 		open(newunit = file_%unit_, file = resolved_path, status = status_, &
-			access = "stream", form = "unformatted", iostat = io)
+			access = "stream", form = "unformatted", position = position_, &
+			iostat = io)
 	else
 		open(newunit = file_%unit_, file = resolved_path, &
-			status = status_, iostat = io)
+			status = status_, position = position_, iostat = io)
 	end if
 
 	if (io /= 0) then

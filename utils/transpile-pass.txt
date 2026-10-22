@@ -207,6 +207,7 @@ src/tests/test-src/io/test-14.syntran
 src/tests/test-src/io/test-15.syntran
 src/tests/test-src/io/test-16.syntran
 src/tests/test-src/io/test-17.syntran
+src/tests/test-src/io/test-18.syntran
 src/tests/test-src/linear-algebra/test-01.syntran
 src/tests/test-src/linear-algebra/test-02.syntran
 src/tests/test-src/linear-algebra/test-03.syntran

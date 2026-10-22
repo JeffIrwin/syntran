@@ -1,0 +1,51 @@
+// Append mode: "a" adds to the end of an existing file instead of replacing it
+// like "w" does, and creates the file if it doesn't exist.  "ab" does the same
+// for a binary file, which a text file can read back
+
+fn main(): bool
+{
+	let filename = "build/test-18.txt";
+
+	let fo = open(filename, "w");
+	writeln(fo, "first");
+	close(fo);
+
+	let fa = open(filename, "a");
+	writeln(fa, "second");
+	close(fa);
+
+	let fi = open(filename, "r");
+	let line1 = readln(fi);
+	let line2 = readln(fi);
+	// eof() is only true after trying to read past the last line
+	let tail1 = readln(fi);
+	let eof1 = eof(fi);
+	close(fi);
+
+	// "w" again starts over
+	let fw = open(filename, "w");
+	writeln(fw, "third");
+	close(fw);
+	let fr = open(filename, "r");
+	let line3 = readln(fr);
+	let tail2 = readln(fr);
+	let eof2 = eof(fr);
+	close(fr);
+
+	let binname = "build/test-18.bin";
+	let fb = open(binname, "wb");
+	std::write(fb, "ab");
+	close(fb);
+	let fba = open(binname, "ab");
+	std::write(fba, "cd");
+	close(fba);
+	let fbi = open(binname, "r");
+	let bline = readln(fbi);
+	close(fbi);
+
+	return line1 == "first" and line2 == "second" and eof1 and
+		line3 == "third" and eof2 and
+		bline == "abcd";
+}
+
+return main();

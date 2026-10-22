@@ -1048,6 +1048,11 @@ subroutine unit_test_comp_ass(npass, nfail)
 			eval('let j = i64(24); j /= 4; j;', quiet) == '6', &
 			eval('let j = 13; j %= i64(4); j;', quiet) == '1', &
 			eval('let j = i64(14); j %= 4; j;', quiet) == '2', &
+			! %= between i64 and a float (c.f. modulo_value_t in math.f90)
+			eval('let j = i64(9); j %= 2.5; j;', quiet) == '1', &
+			eval('let j = i64(9); j %= f32(2.5); j;', quiet) == '1', &
+			abs(eval_f64('let j = 9.5; j %= i64(2); j;', quiet) - 1.5) < tol, &
+			abs(eval_f32('let j = f32(9.5); j %= i64(2); j;', quiet) - 1.5) < tol, &
 			eval('let j = 2; j **= i64(4); j;', quiet) == '16', &
 			eval('let j = i64(2); j **= 5; j;', quiet) == '32', &
 			eval('let j = 10; j += 3;', quiet) == '13'  &
@@ -4941,6 +4946,7 @@ subroutine unit_test_io(npass, nfail)
 			interpret_file(path//'test-15.syntran', quiet) == 'true', &
 			interpret_file(path//'test-16.syntran', quiet) == 'true', &
 			interpret_file(path//'test-17.syntran', quiet) == 'true', &
+			interpret_file(path//'test-18.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -6238,6 +6244,12 @@ subroutine unit_test_struct_arr3(npass, nfail)
 				//'let b = [a, [C.B], a];' &
 				//'return str(size(b, 0))+" "+str(b[2])+" "+str(b[4]);' &
 				, quiet) == '5 C.B C.G', &
+			! Assigning a scalar struct to a whole array of structs broadcasts
+			! it to every element (c.f. assign_value_t in math.f90)
+			eval('struct P{x: i32} let a = [P{x = 1}; 3]; a = P{x = 5};' &
+				//'a[0].x + a[1].x + a[2].x;', quiet) == '15', &
+			eval('struct P{x: i32} let a = [P{x = 1}; 2, 2]; a = P{x = 7};' &
+				//'a[0,0].x + a[1,1].x;', quiet) == '14', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -7205,6 +7217,9 @@ subroutine unit_test_enum(npass, nfail)
 			eval( 'enum C{A,B,D}' &
 				//'let a=[C.A,C.B,C.D]; C.B == a;', quiet) == &
 				'[false, true, false]', &
+			! Assigning a scalar enum to a whole array of enums broadcasts it
+			eval( 'enum C{A,B,D}' &
+				//'let a=[C.A;3]; a = C.D; a;', quiet) == '[C.D, C.D, C.D]', &
 			! positive: cross-enum-type array comparisons remain a parse
 			! error (E48), same as the pre-existing scalar enum_cookie check
 			diag_has_code(get_diags( &
@@ -8441,6 +8456,15 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_has_code(get_diags( &
 				'fn dbl(n: i32): i32 { return 2 * n; } let a = [dbl; 3];'), &
 				EC_FN_PTR_ARRAY), &
+
+			! E124: arrays of files are not supported (array_t has no file
+			! storage, so letting this through is an internal error)
+			diag_has_code(get_diags( &
+				'let f = open("build/E124.txt", "w"); let a = [f, f];'), &
+				EC_FILE_ARRAY), &
+			diag_has_code(get_diags('let a = [std::OUT; 2];'), EC_FILE_ARRAY), &
+			diag_count_code(get_diags_file(P//'E124-file-array.syntran'), &
+				EC_FILE_ARRAY) == 1, &
 
 			! E90 (retired): fn-pointer-typed struct members used to be
 			! rejected here (musl/gfortran segfault in the member dict's
@@ -10569,7 +10593,9 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E122-std-unknown-name.syntran'), &
 				EC_STD_UNKNOWN_NAME, P//'E122-std-unknown-name.syntran', 6, 10, 6), &
 			diag_loc_ok(get_diags_file(P//'E123-mod-import-name.syntran'), &
-				EC_MOD_IMPORT_NAME, P//'E123-mod-import-name.syntran', 6, 12, 6) &
+				EC_MOD_IMPORT_NAME, P//'E123-mod-import-name.syntran', 6, 12, 6), &
+			diag_loc_ok(get_diags_file(P//'E124-file-array.syntran'), &
+				EC_FILE_ARRAY, P//'E124-file-array.syntran', 6, 14, 2) &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

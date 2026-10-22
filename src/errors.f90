@@ -139,6 +139,7 @@ module syntran__errors_m
 		EC_RESHAPE_SHAPE_LIT = "E121", &
 		EC_STD_UNKNOWN_NAME = "E122", &
 		EC_MOD_IMPORT_NAME = "E123", &
+		EC_FILE_ARRAY = "E124", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -855,6 +856,13 @@ module syntran__errors_m
 			character(len = :), allocatable :: err
 			character(len = *), intent(in) :: elem
 		end function err_fn_ptr_array
+
+		module function err_file_array(context, span, elem) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+			character(len = *), intent(in) :: elem
+		end function err_file_array
 
 		module function err_missing_return(context, span, fn) result(err)
 			type(text_context_t) :: context

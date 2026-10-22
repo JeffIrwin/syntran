@@ -17,12 +17,14 @@ module syntran__value_m
 
 		integer :: unit_  ! fortran file unit
 
-		! TODO: extend with more modes, e.g. append (?)
-		!
 		! c.f. python open modes:  https://docs.python.org/3/library/functions.html#open
+		!
+		! Append mode "a" is a write mode that starts at the end of an existing
+		! file instead of replacing it, so it sets both mode_write and append
 		logical :: &
 			mode_read  = .false., &
-			mode_write = .false.
+			mode_write = .false., &
+			append     = .false.
 
 		! A binary file is opened with "rb" or "wb".  It is an unformatted stream
 		! of the raw bytes of the values, instead of lines of text
@@ -85,7 +87,8 @@ module syntran__value_m
 
 		type(string_t   ), allocatable ::  str(:)
 
-		! TODO: file arrays
+		! There are no file arrays.  Arrays of files are rejected at parse time
+		! (E124)
 
 		integer :: rank
 		integer(kind = 8) :: len_, cap

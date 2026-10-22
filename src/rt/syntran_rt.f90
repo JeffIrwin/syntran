@@ -74,6 +74,7 @@ module syntran_rt
         integer :: unit = -1
         character(len = :), allocatable :: name
         logical :: is_open = .false., mode_read = .false., mode_write = .false.
+        logical :: append = .false.
         logical :: eof = .false.
         logical :: is_std = .false.
         ! Opened with "rb" or "wb", so raw bytes instead of lines of text
@@ -1093,7 +1094,7 @@ function rt_open(name, mode, must_open) result(f)
     character(len = *), intent(in) :: name, mode
     logical, intent(in) :: must_open
     type(rt_file_t) :: f
-    character(len = :), allocatable :: status
+    character(len = :), allocatable :: status, position
     integer :: i, io
     f%name = name
     f%unit = -1
@@ -1103,6 +1104,9 @@ function rt_open(name, mode, must_open) result(f)
             f%mode_read = .true.
         case ('w')
             f%mode_write = .true.
+        case ('a')
+            f%mode_write = .true.
+            f%append = .true.
         case ('b')
             f%binary = .true.
         case default
@@ -1118,12 +1122,15 @@ function rt_open(name, mode, must_open) result(f)
     else
         status = 'unknown'
     end if
+    position = 'asis'
+    if (f%append) position = 'append'
     if (f%binary) then
-        if (f%mode_write) status = 'replace'
+        if (f%mode_write .and. .not. f%append) status = 'replace'
         open(newunit = f%unit, file = name, status = status, access = 'stream', &
-            form = 'unformatted', iostat = io)
+            form = 'unformatted', position = position, iostat = io)
     else
-        open(newunit = f%unit, file = name, status = status, iostat = io)
+        open(newunit = f%unit, file = name, status = status, position = position, &
+            iostat = io)
     end if
     if (io /= 0) then
         f%unit = -1

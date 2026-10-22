@@ -1,7 +1,8 @@
 
-// Startup file for the REPL `chdir_` test in unit_test_repl_directives().  It
-// doesn't do anything itself, the test checks how relative paths are resolved
-// after it has been loaded
+// Startup file for the REPL `chdir_` test in unit_test_repl_directives(), and
+// for the `-i` pty test in src/tests/repl/interactive.exp.  It doesn't do
+// anything itself, the tests check how relative paths are resolved and that
+// `startup_cd_loaded` is visible after it has been loaded
 
 let startup_cd_loaded = 1;
 

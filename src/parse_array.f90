@@ -95,6 +95,15 @@ recursive module subroutine parse_array_expr(parser, expr)
 			parser%context(), span, parser%text(lb_beg, lb_end)))
 	end if
 
+	! Arrays of files are not supported either: file_t has no array storage
+	! (array_t has no file component), so this would hit the
+	! IC_ALLOC_ARRAY_TYPE internal error
+	if (lbound_%val%type == file_type) then
+		span = new_span(lb_beg, lb_end - lb_beg + 1)
+		call parser%diagnostics%push(err_file_array( &
+			parser%context(), span, parser%text(lb_beg, lb_end)))
+	end if
+
 	if (parser%current_kind() == semicolon_token) then
 
 		! Implicit constant-value array form [lbound; len]

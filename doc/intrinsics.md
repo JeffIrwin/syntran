@@ -779,20 +779,23 @@ Related functions: [`dot`](#dot), [`sum`](#sum)
 fn open(filename: str, mode: str): file
 ```
 
-Open a `file` handle named `filename`.  The `mode` string must be either `"r"`
-(read) or `"w"` (write), never both.  It is a runtime error if `filename`
+Open a `file` handle named `filename`.  The `mode` string must be one of `"r"`
+(read), `"w"` (write), or `"a"` (append), never a combination of read and
+write.  Write mode replaces what was in the file before, while append mode adds
+to the end of an existing file.  Both create the file if it does not exist.  It
+is a runtime error if `filename`
 cannot be opened, e.g. if it does not exist in read mode -- guard with
 [`exists`](#exists) first, or use [`try_open`](#try_open) to get a closed
 handle back instead of a runtime error.
 
-A `b` in the mode, as in `"rb"` or `"wb"`, opens a binary file instead of a text
+A `b` in the mode, as in `"rb"`, `"wb"`, or `"ab"`, opens a binary file instead of a text
 file.  The values of a binary file are the raw bytes that are in memory, with no
 separators: they are written with [`write`](#write) and read back with
 [`read_i32`](#read_i32) and its siblings.  Binary files are not portable between
 machines with different byte orders.  The text operations [`readln`](#readln),
 [`writeln`](#writeln), and [`eof`](#eof) are a runtime error for them
-([R43](errors.md#r43----text-op-on-binary-file)).  Writing a binary file replaces
-what was in the file before.
+([R43](errors.md#r43----text-op-on-binary-file)).  Writing a binary file with
+`"wb"` replaces what was in the file before, and `"ab"` appends to it.
 
 Related functions: [`close`](#close), [`writeln`](#writeln), [`write`](#write), [`exists`](#exists), [`try_open`](#try_open)
 

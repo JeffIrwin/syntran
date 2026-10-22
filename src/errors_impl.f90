@@ -325,6 +325,7 @@ module procedure get_all_error_codes
 	call codes%push(EC_RESHAPE_SHAPE_LIT)
 	call codes%push(EC_STD_UNKNOWN_NAME)
 	call codes%push(EC_MOD_IMPORT_NAME)
+	call codes%push(EC_FILE_ARRAY)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -1329,6 +1330,17 @@ module procedure err_fn_ptr_array
 		//underline(context, span)//" fn pointer in array literal"//color_reset
 
 end procedure err_fn_ptr_array
+
+!===============================================================================
+
+module procedure err_file_array
+
+	err = err_pre(EC_FILE_ARRAY) &
+		//'array element `'//elem//'` is a file.  ' &
+		//'Arrays of files are not supported' &
+		//underline(context, span)//" file in array literal"//color_reset
+
+end procedure err_file_array
 
 
 !===============================================================================

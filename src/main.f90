@@ -29,7 +29,6 @@ program main
 		call exit(EXIT_SUCCESS)
 	end if
 
-	! TODO: move into settings constructor?
 	maxerr           = args%maxerr
 	permissive_return = args%permissive_return
 
@@ -73,7 +72,7 @@ program main
 		! "Interactive" keeps running in the REPL with the same vars and fns
 		! workspace after running a startup file
 		!
-		! TODO: add a test that covers a "-i" interactive run
+		! A "-i" run is covered by the pty test src/tests/repl/interactive.exp
 		res = syntran_interpret(startup_file = args%syntran_file, &
 			script_args = args%script_args, chdir_ = args%chdir)
 
