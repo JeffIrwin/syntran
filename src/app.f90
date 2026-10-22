@@ -7,7 +7,7 @@ module syntran__app_m
 	use syntran__core_m
 	use syntran__errors_m
 	use syntran__utils_m
-	use syntran__line_edit_m, only: enable_vt_processing
+	use syntran__line_edit_m, only: enable_vt_processing, is_stdout_tty
 
 	implicit none
 
@@ -92,10 +92,6 @@ subroutine set_ansi_colors(is_color_in)
 	! Should this be in error.f90 or utils.f90?  This is the only reason
 	! test.f90 needs to use app.f90
 
-#if defined(__INTEL_COMPILER)
-	use ifport  ! isatty() (otherwise it's a gnu extension)
-#endif
-
 	logical, intent(in), optional :: is_color_in
 	logical :: is_color
 
@@ -107,7 +103,7 @@ subroutine set_ansi_colors(is_color_in)
 		! If stdout is a TTY, default to color on.  If stdout is redirected to a
 		! log (not TTY), default to color off because most text editors will not
 		! render ANSI escape sequences
-		is_color = isatty(output_unit)
+		is_color = is_stdout_tty()
 		!print *, "is_color_in not present"
 	end if
 

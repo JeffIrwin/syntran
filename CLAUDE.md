@@ -182,6 +182,7 @@ The interpreter follows a lexer → parser → bytecode compiler → VM pipeline
   - `parse_expr.f90` - Expression parsing
   - `parse_control.f90` - Control flow (if/while/for) and **module imports (`use` statements)**
   - `parse_fn.f90` - Function declarations
+  - `parse_struct.f90` - Struct/enum declarations, struct instances, and methods
   - `parse_array.f90` - Array syntax
   - `parse_misc.f90` - Preprocessing (`#include`) and other misc parsing
 - `src/compile.f90` - Bytecode compiler orchestration

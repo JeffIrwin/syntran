@@ -192,8 +192,15 @@ module syntran__parse_m
 			type(value_t), intent(out) :: type
 		end subroutine parse_type
 
-		! TODO: move struct stuff to another translation unit? parse_fn.f90 is a
-		! very manageable ~1100 lines rn, so not much benefit to splitting
+		! Used by parse_fn_declaration() above and parse_method_declaration()
+		! below
+		recursive module function all_paths_return(node) result(returns)
+			type(syntax_node_t), intent(in) :: node
+			logical :: returns
+		end function all_paths_return
+
+		! Implemented in parse_struct.f90
+
 		module subroutine parse_struct_declaration(parser, decl)
 			class(parser_t) :: parser
 			type(syntax_node_t), intent(out) :: decl
@@ -236,6 +243,8 @@ module syntran__parse_m
 			type(syntax_node_t), intent(out) :: expr
 			character(len = *), intent(in), optional :: enum_name
 		end subroutine parse_enum_name_expr
+
+		! Implemented in parse_fn.f90
 
 		module subroutine check_call_arg(parser, arg, call_is_ref_i, arg_span, &
 				fn_name, i_0based, param_val, param_name, param_is_ref, param_is_const_ref, &

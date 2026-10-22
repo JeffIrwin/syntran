@@ -124,6 +124,20 @@ int syntran_isatty(void)
 #endif
 }
 
+/* Non-zero when stdout alone is a real terminal.  This is what decides whether
+ * to color output, so unlike syntran_isatty() it doesn't care about stdin.  It
+ * replaces Fortran's isatty(), which is a gnu extension that Intel only has in
+ * its ifport module.
+ */
+int syntran_stdout_isatty(void)
+{
+#ifdef _WIN32
+	return _isatty(_fileno(stdout));
+#else
+	return isatty(fileno(stdout));
+#endif
+}
+
 /* Non-zero when stdin is an MSYS2/Cygwin/MinTTY interactive pty pipe.
  *
  * A native _WIN32 exe cannot use isocline's POSIX termios path in MinTTY

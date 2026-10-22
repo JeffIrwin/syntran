@@ -22,7 +22,6 @@ module syntran__utils_m
 	!
 	!     https://stackoverflow.com/a/54062826/4347028
 	!
-	! TODO: more colors
 	character(len = *), parameter :: &
 			FG_BOLD_            = esc//'[;1m', &
 			FG_BRIGHT_RED_      = esc//'[91m', &

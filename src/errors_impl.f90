@@ -2415,9 +2415,9 @@ module procedure underline
 	last  = context%lines(i+1) - 1
 
 	! Trim whitespace from end of line.  Make sure interpreter looks ok with
-	! errors at final character of line.  TODO: use is_whitespace()
-	do while (context%text(last:last) == line_feed .or. &
-	          context%text(last:last) == carriage_return)
+	! errors at final character of line
+	do while (last >= start)
+		if (.not. is_whitespace(context%text(last:last))) exit
 		last = last - 1
 	end do
 

@@ -291,16 +291,23 @@ module subroutine promote_i32_i64(val)
 
 	! If val is i32 type, change it to i64 and copy the values
 	!
-	! TODO: consider refactoring with to_i64()? at least add internal error.
-	! to_i64() is a fn which returns a new val, whereas this is a subroutine
-	! that changes the type of a given value
+	! This is not refactored with to_i64() because to_i64() is a fn which
+	! returns a new val, whereas this is a subroutine that changes the type of a
+	! given value
 
 	type(value_t), intent(inout) :: val
 
-	if (val%type == i32_type) then
+	select case (val%type)
+	case (i32_type)
 		val%type = i64_type
 		val%sca%i64 = val%sca%i32
-	end if
+	case (i64_type)
+		! Already promoted
+	case default
+		write(*,*) err_int(IC_CONVERT_I64, 'cannot convert from type `' &
+			//value_type_name(val)//'` to i64')
+		call internal_error()
+	end select
 
 end subroutine promote_i32_i64
 

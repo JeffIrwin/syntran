@@ -231,6 +231,7 @@ set(LIB_SRC
 	${SRC_DIR}/parse_control.f90
 	${SRC_DIR}/parse_expr.f90
 	${SRC_DIR}/parse_fn.f90
+	${SRC_DIR}/parse_struct.f90
 	${SRC_DIR}/parse_misc.f90
 	${SRC_DIR}/repl.f90
 	${SRC_DIR}/rt/syntran_rt.f90
@@ -253,23 +254,6 @@ set(LIB_SRC
 	${SRC_DIR}/value.f90
 	${SRC_DIR}/value_impl.f90
 )
-
-if(NOT DEFINED ENV{SYNTRAN_INTEL})
-	# app.f90's `use ifport` (for isatty()) is Intel-only; under Intel it
-	# resolves to the compiler's own built-in IFPORT module and produces no
-	# local .mod.  ifport_shim.f90 provides an empty local module of the same
-	# name so fpm's (and, without this exclusion, cmake's) source-text-based
-	# Fortran module scanner -- which isn't preprocessor-aware and can't tell
-	# the `use` is inactive here -- has a real producer to satisfy.  Under
-	# Intel, cmake must NOT compile this file at all: if it did, the scanner
-	# would expect a real "ifport.mod" build artifact that Intel never
-	# actually writes (it comes from the compiler's own module path instead),
-	# and cmake's copy-module-between-targets step would fail trying to find
-	# it.  fpm has no per-compiler source exclusion, so it always compiles
-	# this file; ifport_shim.f90's own internal `#if defined(__GFORTRAN__)`
-	# guard keeps that safe under fpm+Intel too.
-	list(APPEND LIB_SRC ${SRC_DIR}/ifport_shim.f90)
-endif()
 
 if(DEFINED ENV{SYNTRAN_INTEL})
 	# This build previously used -ipo, which emits LLVM-IR objects instead of

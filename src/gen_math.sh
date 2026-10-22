@@ -4,8 +4,8 @@ set -exu
 
 # Generate WET fortran source for binary math operators from a single template
 #
-# TODO: remove generated files from git tracking.  I assume mac will be a pain
-# to get awk working, Windows might be tricky too
+# The generated files are tracked in git on purpose: fpm can't run this script
+# before building, and neither can projects that depend on syntran
 
 #===============================================================================
 
