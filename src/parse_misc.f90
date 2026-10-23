@@ -317,7 +317,7 @@ end subroutine match
 
 !===============================================================================
 
-recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, unit_)
+recursive module subroutine preprocess(parser, tokens_in, src_file, contexts)
 
 	! src_file is the filename of the current file being processed, i.e. the
 	! *includer*, not the includee
@@ -327,8 +327,6 @@ recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, un
 	character(len = *), intent(in) :: src_file
 
 	type(text_context_vector_t), intent(inout) :: contexts
-
-	integer, intent(inout) :: unit_
 
 	!********
 
@@ -343,7 +341,9 @@ recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, un
 	type(syntax_token_t) :: token, token_peek, lparen, rparen, semicolon
 	type(syntax_token_vector_t) :: tokens_out
 
-	unit_0 = unit_
+	! The includer's own context was pushed by new_parser() before it called
+	! us, so it is the last one
+	unit_0 = contexts%len_
 
 	tokens_out = new_syntax_token_vector()
 	i = 0
@@ -414,7 +414,7 @@ recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, un
 			!print *, inc_text
 
 			! Any nested includes are handled in this new_parser() call
-			call new_parser(inc_parser, inc_text, filename, contexts, unit_)
+			call new_parser(inc_parser, inc_text, filename, contexts)
 
 			! Add includee tokens to includer.  Minus 1 because included eof_token
 			do j = 1, size(inc_parser%tokens) - 1
@@ -931,15 +931,13 @@ end subroutine parse_unit_pass
 
 !===============================================================================
 
-recursive module subroutine new_parser(parser, str_, src_file, contexts, unit_)
+recursive module subroutine new_parser(parser, str_, src_file, contexts)
 
 	type(parser_t), intent(out) :: parser
 
 	character(len = *), intent(in) :: str_, src_file
 
 	type(text_context_vector_t) :: contexts
-
-	integer, intent(inout) :: unit_
 
 	!********
 
@@ -950,7 +948,7 @@ recursive module subroutine new_parser(parser, str_, src_file, contexts, unit_)
 
 	! Lex and get an array of tokens
 	tokens = new_syntax_token_vector()
-	lexer = new_lexer(str_, src_file, unit_)
+	lexer = new_lexer(str_, src_file, contexts%len_ + 1)
 	do
 		call lexer%lex(token)
 		!print *, 'token%unit_ = ', token%unit_
@@ -984,7 +982,7 @@ recursive module subroutine new_parser(parser, str_, src_file, contexts, unit_)
 	parser%diagnostics = new_string_vector()
 	call parser%diagnostics%push_all( lexer%diagnostics )
 
-	call parser%preprocess(tokens%v(1:tokens%len_), src_file, contexts, unit_)
+	call parser%preprocess(tokens%v(1:tokens%len_), src_file, contexts)
 
 	! Set other parser members
 

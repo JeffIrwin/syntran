@@ -70,10 +70,6 @@ module syntran__core_m
 	!    * ubuntu is 9.5 minutes, while windows and intel classic are 7.5 min
 	!    * split into multiple (parallel) stages, or possible remove any stages
 	!      that are redundant
-	!  - cleanup TODO notes throughout the codebase
-	!    * took a big chunk out already
-	!    * continue one file at a time
-	!    * '''grep -c  'TODO' src/* | sort -t: -k2 -n'''
 	!  - declare variable types without initializing them, and/or
 	!    conditional initialization.  Rust discourages mutability, instead
 	!    preferring patterns like this:
@@ -158,58 +154,6 @@ module syntran__core_m
 	!    * updated to ubuntu 24.04 on 2026-06-06. 26 is not available yet
 	!    * related, update wsl ubuntu version. consider updating gfortran
 	!      versions in some places
-	!  - claude tasks:
-	!    * fpm *IS* parallel, but it has to be compiled with -fopenmp to enable
-	!      it. duh!
-	!    * fortran compile time optimization -- see if pain points like
-	!      intr_fns.f90, lex.f90, or math*.f90 can be actually improved
-	!      + intr_fns.f90, eval.f90 (now runtime.f90), types.f90 broken up
-	!      + anything else?
-	!      + build.sh (cmake) uses parallel gnu make builds. fpm still builds
-	!        serially
-	!      + ninja takes just as long as gnu make, but apparently it has
-	!        profiling output options. maybe try that just to find the
-	!        bottlenecks:
-	!
-	!        ❯ check build/Release/.ninja_log. which files take the longest to
-	!          compile?
-	!        ● Based on the ninja log, here are the files that take the longest
-	!          to compile (duration = end_time - start_time in milliseconds):
-	!          ┌────────────────────────┬──────────┐
-	!          │          File          │ Duration │
-	!          ├────────────────────────┼──────────┤
-	!          │ src/core.f90           │ 95.6 s   │
-	!          ├────────────────────────┼──────────┤
-	!          │ src/parse_misc.f90     │ 75.3 s   │
-	!          ├────────────────────────┼──────────┤
-	!          │ src/parse_control.f90  │ 73.2 s   │
-	!          ├────────────────────────┼──────────┤
-	!          │ src/lex.f90            │ 60.3 s   │
-	!          ├────────────────────────┼──────────┤
-	!          │ src/parse_fn.f90       │ 50.2 s   │
-	!          ├────────────────────────┼──────────┤
-	!          │ src/intr_fns_trig.f90  │ 39.7 s   │
-	!          ├────────────────────────┼──────────┤
-	!          │ src/parse_expr.f90     │ 31.2 s   │
-	!          ├────────────────────────┼──────────┤
-	!          │ src/parse_array.f90    │ 29.1 s   │
-	!          ├────────────────────────┼──────────┤
-	!          │ src/intr_fns_array.f90 │ 25.7 s   │
-	!          ├────────────────────────┼──────────┤
-	!          │ src/intr_fns_math.f90  │ 22.5 s   │
-	!          ├────────────────────────┼──────────┤
-	!          │ src/intr_fns_io.f90    │ 18.8 s   │
-	!          ├────────────────────────┼──────────┤
-	!          │ src/types_copy.f90     │ 12.4 s   │
-	!          ├────────────────────────┼──────────┤
-	!          │ src/types.f90          │ 11.5 s   │
-	!          └────────────────────────┴──────────┘
-	!          The parser submodules (parse_*.f90) and core.f90 dominate
-	!          compilation time. The intrinsic function files (intr_fns_*.f90)
-	!          are also quite slow, likely due to heavy use of
-	!          generated/templated code for multiple type combinations.
-	!
-	!    * docs -- see several notes below
 	!  - fn pointer (callback) improvements:
 	!    * A function pointer (`fn(...)`-typed value) cannot be taken to an
 	!      intrinsic function, a struct method, or a user-defined function with
@@ -329,7 +273,7 @@ module syntran__core_m
 	!      and if a statement is expensive, you may not want to have to run it
 	!      again
 	!  - structs
-	!    * post-merge TODO struct items:
+	!    * post-merge struct tasks:
 	!      + update struct sample.  include struct/array combos, nesting, etc.
 	!        maybe make separate simple and compound struct samples
 	!  - windows memory crashes require constant maintanence or they pop up
@@ -568,7 +512,7 @@ function syntax_parse(str_, state, src_file, allow_continue, repl) result(tree)
 
 	character(len = :), allocatable :: src_filel, fn_name, var_name
 
-	integer :: i, id, slot, unit_, num_fns0, num_structs0, num_enums0
+	integer :: i, id, slot, num_fns0, num_structs0, num_enums0
 
 	logical :: allow_continuel, repll
 
@@ -597,13 +541,9 @@ function syntax_parse(str_, state, src_file, allow_continue, repl) result(tree)
 	repll = .true.
 	if (present(repl)) repll = repl
 
-	! TODO: unit_ is just synonymous with contexts%len_ in many places, so it
-	! can be removed (but not in all places)
 	contexts = new_context_vector()
-	unit_ = 0
 
-	call new_parser(parser, str_, src_filel, contexts, unit_)
-	!print *, 'units = ', parser%tokens(:)%unit_
+	call new_parser(parser, str_, src_filel, contexts)
 
 	call parser%import_stack%set(src_filel, 0)
 
@@ -844,13 +784,11 @@ function syntax_parse(str_, state, src_file, allow_continue, repl) result(tree)
 	! Move back.  It's possible that vars were empty before this call but not
 	! anymore
 	if (allocated(parser%vars%dicts(1)%table)) then
-	!if (parser%num_vars > 0) then
 		call move_alloc(parser%vars%dicts(1)%table, state%vars%dicts(1)%table)
 		state%vars%dicts(1)%capacity = parser%vars%dicts(1)%capacity
 		state%vars%dicts(1)%count    = parser%vars%dicts(1)%count
 	end if
 
-	! TODO: if num_fns instead?
 	if (allocated(parser%fns%table)) then
 		call move_alloc(parser%fns%table, state%fns%table)
 		state%fns%capacity = parser%fns%capacity

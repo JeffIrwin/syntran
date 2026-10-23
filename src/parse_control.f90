@@ -158,7 +158,7 @@ recursive module subroutine parse_use_statement(parser, statement)
 	type(value_t) :: var_val
 	type(struct_t), pointer :: struct_val
 	type(enum_t), pointer :: enum_val
-	integer :: i, io, iostat, mod_unit_, id_index, struct_slot, fn_slot, enum_slot
+	integer :: i, io, iostat, id_index, struct_slot, fn_slot, enum_slot
 	logical :: qualified_import, is_const_var, is_legacy
 	character(len = :), allocatable :: qualified_prefix, suggest
 
@@ -464,8 +464,7 @@ recursive module subroutine parse_use_statement(parser, statement)
 
 	! Create a new parser for the module
 	mod_contexts = new_context_vector()
-	mod_unit_ = 0
-	call new_parser(mod_parser, mod_text, mod_filename, mod_contexts, mod_unit_)
+	call new_parser(mod_parser, mod_text, mod_filename, mod_contexts)
 
 	! The module's global scope can return any type, same as the main
 	! program's global scope (see syntax_parse() in core.f90).  Otherwise

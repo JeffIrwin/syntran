@@ -507,12 +507,11 @@ module syntran__parse_m
 			character(len = *), intent(in), optional :: what
 		end subroutine match
 
-		recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, unit_)
+		recursive module subroutine preprocess(parser, tokens_in, src_file, contexts)
 			class(parser_t) :: parser
 			type(syntax_token_t), intent(in) :: tokens_in(:)
 			character(len = *), intent(in) :: src_file
 			type(text_context_vector_t), intent(inout) :: contexts
-			integer, intent(inout) :: unit_
 		end subroutine preprocess
 
 		module subroutine match_pre(parser, kind, tokens, token_index, context, token)
@@ -536,11 +535,10 @@ module syntran__parse_m
 			type(syntax_node_t), intent(out) :: unit
 		end subroutine parse_unit
 
-		recursive module subroutine new_parser(parser, str_, src_file, contexts, unit_)
+		recursive module subroutine new_parser(parser, str_, src_file, contexts)
 			type(parser_t), intent(out) :: parser
 			character(len = *), intent(in) :: str_, src_file
 			type(text_context_vector_t) :: contexts
-			integer, intent(inout) :: unit_
 		end subroutine new_parser
 
 	end interface
