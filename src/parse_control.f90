@@ -938,7 +938,7 @@ logical function at_case_body_start(parser) result(at_body)
 	! True when the parser is sitting at the start of a `case` arm's body
 	! statement rather than another match-value expression.  Used to allow a
 	! trailing comma in the value list, e.g. `case 1, 2, { ... }`, consistent
-	! with enum declarations (parse_fn.f90's at_method_start() neighbor) and
+	! with enum declarations (parse_struct.f90's at_method_start() neighbor) and
 	! array literals (parse_array.f90's trailing-comma check).  Kind list
 	! mirrors parse_statement()'s select-case dispatch above.  when_keyword is
 	! included too, so a trailing comma before a guard, e.g. `case 1, 2, when

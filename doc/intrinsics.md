@@ -512,7 +512,7 @@ value, e.g. `i32(Card.Queen)`.
 The `i32` function is _elemental_, i.e. it can operate on both scalars and
 arrays.
 
-Other non-numeric types (`bool`, `file`) cannot be cast to `i64`.
+Other non-numeric types (`bool`, `file`) cannot be cast to `i32`.
 
 Related functions: [`char`](#char), [`i64`](#i64), [`f32`](#f32), [`f64`](#f64)
 

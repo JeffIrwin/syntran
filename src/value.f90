@@ -207,7 +207,7 @@ module syntran__value_m
 	! which itself `use`s syntran__value_m -- passing them down would be a
 	! circular module dependency (c.f. value_type_name()'s note above on the
 	! same constraint).  Populated once per struct declaration by
-	! parse_struct_declaration() (parse_fn.f90), read at print time
+	! parse_struct_declaration() (parse_struct.f90), read at print time
 	type(map_i32_t), save :: struct_reg_map
 	type(string_vector_t), allocatable, save :: struct_reg_names(:)
 	integer, save :: struct_reg_len = 0

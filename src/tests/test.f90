@@ -1051,6 +1051,11 @@ subroutine unit_test_comp_ass(npass, nfail)
 			! %= between i64 and a float (c.f. modulo_value_t in math.f90)
 			eval('let j = i64(9); j %= 2.5; j;', quiet) == '1', &
 			eval('let j = i64(9); j %= f32(2.5); j;', quiet) == '1', &
+			! The float operand is not truncated before the mod, like `+=` and `/=`
+			eval('let j = i64(7); j %= 2.5; j;', quiet) == '2', &
+			eval('let j = i64(7); j %= f32(2.5); j;', quiet) == '2', &
+			eval('let j = 7; j %= 2.5; j;', quiet) == '2', &
+			eval('let j = 7; j %= f32(2.5); j;', quiet) == '2', &
 			abs(eval_f64('let j = 9.5; j %= i64(2); j;', quiet) - 1.5) < tol, &
 			abs(eval_f32('let j = f32(9.5); j %= i64(2); j;', quiet) - 1.5) < tol, &
 			eval('let j = 2; j **= i64(4); j;', quiet) == '16', &
@@ -1739,6 +1744,7 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('let f = std::try_open("no/such/path/xyz", "r"); f.name;') == 'no/such/path/xyz', &
 			diag_has_code(get_diags('std::try_open("x", "q");'), RC_BAD_FILE_MODE), &
 			diag_has_code(get_diags('std::try_open("x", "rw");'), RC_FILE_RW_MODE), &
+			diag_has_code(get_diags('std::try_open("x", "ra");'), RC_FILE_RW_MODE), &
 			diag_has_code(get_diags( &
 				'let f = std::try_open("no/such/xyz","r"); readln(f);'), RC_READLN_NOT_OPEN), &
 			diag_has_code(get_diags( &
@@ -1791,6 +1797,13 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('fn format(a: i32): i32 { return a * 2; } format(4);') == '8', &
 			diag_has_code(get_diags('std::print_trace(1);'), EC_BAD_ARG_TYPE), &
 			diag_has_code(get_diags('let x = std::stack_trace("a");'), EC_BAD_ARG_TYPE), &
+			! f32() and f64() only cast numeric types, unlike i32()
+			diag_has_code(get_diags('let x = f32("1.5");'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags('let x = f64(true);'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags('enum C{A,B} let x = f64(C.B);'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags('let x = f32([true, false]);'), EC_BAD_ARG_TYPE), &
+			.not. diag_has_code(get_diags("let x = f32(1'i64);"), EC_BAD_ARG_TYPE), &
+			.not. diag_has_code(get_diags('let x = f64([1, 2]);'), EC_BAD_ARG_TYPE), &
 			diag_has_code(get_diags('let x = std::stack_trace(1, 2);'), EC_TOO_MANY_ARGS), &
 
 			.false.  & ! so I don't have to bother w/ trailing commas

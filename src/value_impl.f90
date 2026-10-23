@@ -1173,7 +1173,7 @@ module procedure struct_reg_set
 	! Register (or overwrite, e.g. on REPL struct redeclaration) a struct's
 	! member names under its canonical cookie, and return the slot index.
 	! Called once per struct declaration by parse_struct_declaration()
-	! (parse_fn.f90), which stashes the returned idx on every value_t built
+	! (parse_struct.f90), which stashes the returned idx on every value_t built
 	! from that struct (c.f. value_t%struct_reg_idx) so that
 	! value_to_str()'s round-trip struct branch below can look member names
 	! up with a plain array index -- this hash-by-cookie lookup only runs

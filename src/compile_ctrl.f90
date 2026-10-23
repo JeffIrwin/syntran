@@ -234,9 +234,9 @@ subroutine emit_fn_epilogue(prog, decl, fn_id)
 	! OP_RET pops the sentinel and not the body's stranded result.
 	!
 	! Stamped with decl's own location (decl%src_id/src_pos, set by
-	! parse_fn_declaration()/parse_method_declaration() in parse_fn.f90)
-	! rather than whatever cur_id/cur_pos happens to be left over from the
-	! last statement compiled -- compile_node()'s own save/restore only
+	! parse_fn_declaration() in parse_fn.f90 and parse_method_declaration() in
+	! parse_struct.f90) rather than whatever cur_id/cur_pos happens to be left
+	! over from the last statement compiled -- compile_node()'s own save/restore only
 	! covers nodes nested *within* a statement, not code emitted after
 	! compile_node() returns.  Without this, a runtime error at OP_RET
 	! itself (e.g. a by-ref receiver's writeback bounds check, OP_RET in

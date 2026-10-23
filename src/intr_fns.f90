@@ -16,7 +16,7 @@ module syntran__intr_fns_m
 	! "0dot_i32", "0dot_f32", etc. per call-site arg types.  These base names
 	! are never themselves inserted as fns_t table keys (only their "0"-
 	! mangled variants are; c.f. resolve_overload() below and its call site
-	! at parse_fn.f90:932), so is_overloaded_intr() and intr_fn_names() below
+	! in parse_fn.f90), so is_overloaded_intr() and intr_fn_names() below
 	! are the two places that need this list.  Kept as one parameter array so
 	! there is only one place to update when a new overload is added, instead
 	! of the select case this replaced needing to stay in sync by hand

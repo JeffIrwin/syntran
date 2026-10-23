@@ -1048,13 +1048,14 @@ The `@` matrix-multiplication operator's operands have incompatible inner dimens
 
 ### R6 -- bad-file-mode
 
-`open()` was given a file-mode character other than `r` or `w`.
+`open()` was given a file-mode character other than `r`, `w`, `a`, or `b`.
 
 [Example](../src/tests/test-src/errors/R6-bad-file-mode.syntran)
 
 ### R7 -- file-rw-mode
 
-`open()` was given a mode string combining `r` and `w`, which isn't supported.
+`open()` was given a mode string combining read (`r`) with write (`w`) or append
+(`a`), which isn't supported.
 
 [Example](../src/tests/test-src/errors/R7-file-rw-mode.syntran)
 

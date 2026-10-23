@@ -710,7 +710,7 @@ recursive module subroutine parse_unit(parser, unit)
 		! Resetting the counters (not the tables) is enough: pass 2 re-inserts
 		! every struct/enum from num_structs0/num_enums0 with overwrite = .true.
 		! (parser%ipass > 0, c.f. parse_struct_declaration()/
-		! parse_enum_declaration() in parse_fn.f90), landing on the exact same
+		! parse_enum_declaration() in parse_struct.f90), landing on the exact same
 		! id_index as pass 1 assigned it
 
 		! Pass 2 re-parses every `use` statement, so the duplicate-import

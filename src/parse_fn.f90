@@ -28,7 +28,7 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 
 	integer :: i, io, io_std, id_index, id_index_tmp, pos0, rank, arr_type_result, arr_type_src, slot
 	integer :: var_io, var_id_index, method_slot, method_fn_id
-	integer :: field_id, field_io, ifmt
+	integer :: field_id, field_io, ifmt, cast_type
 
 	logical :: has_rank, has_arr_type, param_is_ref, param_is_const_ref, self_name, &
 		arg_is_ref, is_ok, is_const_var, var_is_loc
@@ -582,6 +582,19 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 
 	call check_ref_aliases(parser, args%v(1: args%len_), fn_call%is_ref, &
 		alias_mut, alias_spans, identifier_%text)
+
+	! The f32() and f64() casts accept any_type params so that they can be
+	! overloaded on scalar vs array, but only numeric types can be cast, unlike
+	! i32().  Array args are checked by their element type
+	if (fn%is_intr .and. any(identifier_%text == ["f32", "f64"]) .and. args%len_ == 1) then
+		cast_type = args%v(1)%val%type
+		if (cast_type == array_type) cast_type = args%v(1)%val%array%type
+		if (cast_type /= unknown_type .and. .not. is_num_type(cast_type)) then
+			call parser%diagnostics%push(err_bad_arg_type( &
+				parser%context(), alias_spans(1), identifier_%text, 0, "a", &
+				"any numeric type", type_name(args%v(1)%val)))
+		end if
+	end if
 
 	if (fn%is_intr .and. any(identifier_%text == ["format", "printf", "writef"])) then
 		! The format string is the first arg, except for writef(), where the file

@@ -436,28 +436,28 @@ subroutine modulo_value_t(left, right, res, op_text)
 		res%sca%i32 = mod(left%sca%i32, int(right%sca%i64))
 
 	case        (magic**2 * i64_type + magic * f32_type + i64_type)
-		res%sca%i64 = mod(int(left%sca%f32, 8), right%sca%i64)
+		res%sca%i64 = int(mod(left%sca%f32, real(right%sca%i64, 4)), 8)
 
 	case        (magic**2 * i64_type + magic * i64_type + f32_type)
-		res%sca%i64 = mod(left%sca%i64, int(right%sca%f32, 8))
+		res%sca%i64 = int(mod(real(left%sca%i64, 4), right%sca%f32), 8)
 
 	case        (magic**2 * i64_type + magic * f64_type + i64_type)
-		res%sca%i64 = mod(int(left%sca%f64, 8), right%sca%i64)
+		res%sca%i64 = int(mod(left%sca%f64, real(right%sca%i64, 8)), 8)
 
 	case        (magic**2 * i64_type + magic * i64_type + f64_type)
-		res%sca%i64 = mod(left%sca%i64, int(right%sca%f64, 8))
+		res%sca%i64 = int(mod(real(left%sca%i64, 8), right%sca%f64), 8)
 
 	case        (magic**2 * i32_type + magic * f32_type + i32_type)
-		res%sca%i32 = mod(int(left%sca%f32), right%sca%i32)
+		res%sca%i32 = int(mod(left%sca%f32, real(right%sca%i32)))
 
 	case        (magic**2 * i32_type + magic * i32_type + f32_type)
-		res%sca%i32 = mod(left%sca%i32, int(right%sca%f32))
+		res%sca%i32 = int(mod(real(left%sca%i32), right%sca%f32))
 
 	case        (magic**2 * i32_type + magic * f64_type + i32_type)
-		res%sca%i32 = mod(int(left%sca%f64), right%sca%i32)
+		res%sca%i32 = int(mod(left%sca%f64, real(right%sca%i32, 8)))
 
 	case        (magic**2 * i32_type + magic * i32_type + f64_type)
-		res%sca%i32 = mod(left%sca%i32, int(right%sca%f64))
+		res%sca%i32 = int(mod(real(left%sca%i32, 8), right%sca%f64))
 
 	!****
 	case        (magic**2 * f32_type + magic * f32_type + f32_type)
