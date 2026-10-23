@@ -1804,6 +1804,17 @@ subroutine unit_test_intr_fns(npass, nfail)
 			diag_has_code(get_diags('let x = f32([true, false]);'), EC_BAD_ARG_TYPE), &
 			.not. diag_has_code(get_diags("let x = f32(1'i64);"), EC_BAD_ARG_TYPE), &
 			.not. diag_has_code(get_diags('let x = f64([1, 2]);'), EC_BAD_ARG_TYPE), &
+			! ... and i32() and i64() reject bool, file, and struct, but not str or enum
+			diag_has_code(get_diags('let x = i32(true);'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags('let x = i64(true);'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags('let x = i32([true, false]);'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags('let x = i64([true, false]);'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags('let x = i64(std::OUT);'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags('struct P{x: i32} let x = i32(P{x = 1});'), EC_BAD_ARG_TYPE), &
+			.not. diag_has_code(get_diags('let x = i32("A");'), EC_BAD_ARG_TYPE), &
+			.not. diag_has_code(get_diags('let x = i64(["a", "b"]);'), EC_BAD_ARG_TYPE), &
+			.not. diag_has_code(get_diags('enum C{A,B} let x = i32(C.B);'), EC_BAD_ARG_TYPE), &
+			.not. diag_has_code(get_diags('enum C{A,B} let x = i64([C.A, C.B]);'), EC_BAD_ARG_TYPE), &
 			diag_has_code(get_diags('let x = std::stack_trace(1, 2);'), EC_TOO_MANY_ARGS), &
 
 			.false.  & ! so I don't have to bother w/ trailing commas

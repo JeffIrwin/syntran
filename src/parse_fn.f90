@@ -583,16 +583,29 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 	call check_ref_aliases(parser, args%v(1: args%len_), fn_call%is_ref, &
 		alias_mut, alias_spans, identifier_%text)
 
-	! The f32() and f64() casts accept any_type params so that they can be
-	! overloaded on scalar vs array, but only numeric types can be cast, unlike
-	! i32().  Array args are checked by their element type
-	if (fn%is_intr .and. any(identifier_%text == ["f32", "f64"]) .and. args%len_ == 1) then
+	! The i32(), i64(), f32() and f64() casts accept any_type params so that they
+	! can be overloaded on scalar vs array, so check the arg type here.  The float
+	! casts take only numeric types, while the int casts also take a str (a single
+	! char, checked at runtime) or an enum.  Array args are checked by their
+	! element type
+	if (fn%is_intr .and. any(identifier_%text == ["i32", "i64", "f32", "f64"]) &
+		.and. args%len_ == 1) then
+
 		cast_type = args%v(1)%val%type
 		if (cast_type == array_type) cast_type = args%v(1)%val%array%type
-		if (cast_type /= unknown_type .and. .not. is_num_type(cast_type)) then
+
+		is_ok = is_num_type(cast_type) .or. cast_type == unknown_type
+		if (any(identifier_%text == ["i32", "i64"])) then
+			is_ok = is_ok .or. cast_type == str_type .or. cast_type == enum_type
+			exp_type = "numeric, str, or enum"
+		else
+			exp_type = "any numeric type"
+		end if
+
+		if (.not. is_ok) then
 			call parser%diagnostics%push(err_bad_arg_type( &
 				parser%context(), alias_spans(1), identifier_%text, 0, "a", &
-				"any numeric type", type_name(args%v(1)%val)))
+				exp_type, type_name(args%v(1)%val)))
 		end if
 	end if
 
