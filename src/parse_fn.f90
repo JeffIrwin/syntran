@@ -1531,17 +1531,77 @@ end subroutine desugar_printf
 
 !===============================================================================
 
+subroutine decode_escapes(s, res, ierr)
+
+	! Decode the backslash escapes of a format string: `\n`, `\t`, `\r`, and `\\`.
+	! Any other escape, or a `\` at the end, is an error.  ierr is 0 on success,
+	! or else the 1-based position of the offending `\` in s
+
+	character(len = *), intent(in) :: s
+	character(len = :), allocatable, intent(out) :: res
+	integer, intent(out) :: ierr
+
+	!********
+
+	character :: c
+
+	integer :: i
+
+	ierr = 0
+	res = ''
+
+	i = 1
+	do while (i <= len(s))
+
+		if (s(i:i) /= '\') then
+			res = res//s(i:i)
+			i = i + 1
+			cycle
+		end if
+
+		if (i == len(s)) then
+			ierr = i
+			return
+		end if
+
+		select case (s(i+1: i+1))
+		case ('n')
+			c = line_feed
+		case ('t')
+			c = achar(9)
+		case ('r')
+			c = achar(13)
+		case ('\')
+			c = '\'
+		case default
+			ierr = i
+			return
+		end select
+
+		res = res//c
+		i = i + 2
+
+	end do
+
+end subroutine decode_escapes
+
+!===============================================================================
+
 module subroutine check_format_call(parser, fn_name, args, spans, call_span)
 
 	! The format string of format() is checked against the rest of its arguments
 	! when the call is parsed, so a literal is required.  Its placeholders are
 	! `{}` or `{:spec}`, with one argument each.  The spec has to make sense for
 	! the type of its argument, e.g. `x` is for integers.  The interpreter and
-	! the Fortran backend then never see a bad format
+	! the Fortran backend then never see a bad format.
+	!
+	! Backslash escapes (`\n`, `\t`, `\r`, `\\`) are decoded here, and only here,
+	! so ordinary strings are unaffected.  The decoded string is written back into
+	! the literal, so nothing after parsing sees an escape
 
 	class(parser_t), intent(inout) :: parser
 	character(len = *), intent(in) :: fn_name
-	type(syntax_node_t), intent(in) :: args(:)
+	type(syntax_node_t), intent(inout) :: args(:)
 	type(text_span_t), intent(in) :: spans(:), call_span
 
 	!********
@@ -1563,7 +1623,20 @@ module subroutine check_format_call(parser, fn_name, args, spans, call_span)
 		return
 	end if
 
-	fmt = args(1)%val%str%s
+	call decode_escapes(args(1)%val%str%s, fmt, ierr)
+	if (ierr /= 0) then
+		if (ierr < len(args(1)%val%str%s)) then
+			why = 'unknown escape `'//args(1)%val%str%s(ierr: ierr+1)//'` at position ' &
+				//str(ierr)//' of the format string; use `\\` for a backslash'
+		else
+			why = 'the `\` at position '//str(ierr)//' of the format string ' &
+				//'ends it; use `\\` for a backslash'
+		end if
+		call parser%diagnostics%push(err_bad_format(parser%context(), spans(1), why))
+		return
+	end if
+	args(1)%val%str%s = fmt
+
 	call rt_fmt_split(fmt, pieces, specs, ierr)
 	if (ierr /= 0) then
 		if (fmt(ierr: ierr) == '}') then

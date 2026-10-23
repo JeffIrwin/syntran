@@ -272,7 +272,7 @@ module syntran__parse_m
 		module subroutine check_format_call(parser, fn_name, args, spans, call_span)
 			class(parser_t), intent(inout) :: parser
 			character(len = *), intent(in) :: fn_name
-			type(syntax_node_t), intent(in) :: args(:)
+			type(syntax_node_t), intent(inout) :: args(:)
 			type(text_span_t), intent(in) :: spans(:), call_span
 		end subroutine check_format_call
 

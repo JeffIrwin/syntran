@@ -210,6 +210,9 @@ module syntran__core_m
 	!  - print improvements:
 	!    * newline shortcut in fmt str? char(10) can be interpolated into "{}"
 	!      fmt at end but it's a bit awkward
+	!      + \n would be a breaking change but i might do it anyway. currently
+	!        "\n" is just literal "\n" two char string. anything like a
+	!        hard-coded windows path would break
 	!    * still might need file_stat? what happens after write errors e.g. with
 	!      a full disk
 	!    * std::print(), std::write(), std::format(), std::printf(), and
@@ -223,12 +226,7 @@ module syntran__core_m
 	!    * format() of a struct or enum only pads its str(), and can't format
 	!      the members.  Arrays of structs and enums can't be formatted
 	!  - file reading/writing
-	!    * binary files ("rb", "wb"), write(), std::read_i32() etc. are done.
-	!      There is no seek(), so a binary file can't be read to its end without
-	!      knowing the number of values, and no way to read bytes or a str
-	!    * vectorized writes are done by writeln(f, format("{}", a)).  Vectorized
-	!      reads are std::read_f64(f, n) etc., which only make a rank 1 array
-	!    * readln(), eof() done
+	!    * add seek() and helper to get file size, at least for binary mode
 	!  - installer packaging:
 	!    * bin exists.  nest it in a `bin` folder
 	!    * add build os to `--version` output, to distinguish between rocky vs

@@ -753,7 +753,8 @@ The format string of [`std::format()`](intrinsics.md#format) is not valid.  Eith
 are not supported; or a `}` has no `{` before it, in which case a literal brace is
 written as `}}`; or the spec after the `:` of a placeholder is not
 `[[fill]align][+][#][0][width][.precision][type]` with a type of `x`, `X`, `o`,
-`b`, `e`, or `E`.  A width has at most 6 digits and a precision has at most 3.
+`b`, `e`, or `E`.  A width has at most 6 digits and a precision has at most 3.  A
+backslash which is not part of `\n`, `\t`, `\r`, or `\\` is also this error.
 
 [Example](../src/tests/test-src/errors/E118-bad-format.syntran)
 

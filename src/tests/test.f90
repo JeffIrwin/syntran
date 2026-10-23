@@ -4768,6 +4768,18 @@ subroutine unit_test_format(npass, nfail)
 			! trimmed, and there is no placeholder to format
 			eval('std::format("no placeholders");') == 'no placeholders', &
 
+			! Backslash escapes are decoded in the format string only
+			eval('std::format("a\nb");') == 'a'//lf//'b', &
+			eval('std::format("a\tb");') == 'a'//achar(9)//'b', &
+			eval('std::format("a\rb");') == 'a'//achar(13)//'b', &
+			eval('std::format("a\\b");') == 'a\b', &
+			eval('std::format("a\\nb");') == 'a\nb', &
+			eval('std::format("{{\n}}");') == '{'//lf//'}', &
+			eval('std::format("{}\n", 7);') == '7'//lf, &
+			eval('std::format(r"a\nb");') == 'a'//lf//'b', &
+			eval('"a\nb";') == 'a\nb', &
+			eval('str("a\nb");') == 'a\nb', &
+
 			! NaN and inf are aligned like numbers, and never zero-padded
 			eval('std::format("<{:6}>", 0.0/0.0);') == '<   NaN>', &
 			eval('std::format("<{:<6}>", 0.0/0.0);') == '<NaN   >', &
@@ -9192,6 +9204,8 @@ subroutine unit_test_error_codes(npass, nfail)
 				diag_has_code(get_diags('std::printf("{} {}", 1);'), EC_FORMAT_COUNT), &
 				diag_has_code(get_diags('std::printf("{:x}", 1.5);'), EC_FORMAT_TYPE), &
 				diag_has_code(get_diags('std::printf("{", 1);'), EC_BAD_FORMAT), &
+				diag_has_code(get_diags('std::printf("a\qb");'), EC_BAD_FORMAT), &
+				diag_has_code(get_diags('std::format("a\");'), EC_BAD_FORMAT), &
 				diag_has_code(get_diags('let s = "{}"; std::printf(s, 1);'), EC_FORMAT_NOT_LITERAL), &
 				diag_has_code(get_diags( &
 					'let f = open("build/x.txt", "w"); std::writef(f, "{}");'), EC_FORMAT_COUNT), &

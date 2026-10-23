@@ -2120,15 +2120,14 @@ ff 0b101 100
 
 <!-- syntran-begin mode=file group=str-printf -->
 ```rust
-std::printf("{} has {:3} items", "bag", 12);
-println();
+std::printf("{} has {:3} items\n", "bag", 12);
 ```
 <!-- syntran-expect
 bag has  12 items
 -->
 <!-- syntran-end -->
 
-[`std::printf()`](doc/intrinsics.md#printf) is `std::print(std::format(...))`, and [`std::writef()`](doc/intrinsics.md#writef) is `std::write(f, std::format(...))` for files.  They don't add a newline.
+[`std::printf()`](doc/intrinsics.md#printf) is `std::print(std::format(...))`, and [`std::writef()`](doc/intrinsics.md#writef) is `std::write(f, std::format(...))` for files.  They don't add a newline, but the format string can have one: `\n`, `\t`, `\r`, and `\\` are escapes for a newline, tab, carriage return, and backslash.  Only format strings decode escapes.  An ordinary string like `"a\nb"` keeps its backslash.
 
 The format string is checked when the program is parsed.  An array is written as its elements without brackets or commas, which is useful for writing a whole array to a file with one call.
 

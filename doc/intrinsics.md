@@ -421,6 +421,16 @@ a spec that doesn't fit the type of its value is
 than values is [E120](errors.md#e120----format-count).  A format string that isn't
 a literal is [E117](errors.md#e117----format-not-literal).
 
+A format string also has backslash escapes: `\n` is a newline, `\t` a tab, `\r` a
+carriage return, and `\\` a backslash.  Any other backslash is
+[E118](errors.md#e118----bad-format).  Only a format string decodes them, so an
+ordinary string like `"a\nb"` keeps its backslash, and so does a raw string
+anywhere except in a format string, where `r"a\nb"` is decoded the same as `"a\nb"`.
+
+```rust
+std::printf("{}\t{}\n", 1, 2);
+```
+
 A `{}` formats its value the way [`str`](#str) does, except that a real number is
 not padded with leading blanks.  The spec of `{:spec}` is like Rust's:
 
