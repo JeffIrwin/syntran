@@ -23,6 +23,9 @@ with python. Vectorized array operations use native Fortran constructs, offering
 numpy-like performance without requiring any third-party dependencies.  See the
 [benchmarks](src/benchmarks/README.md).
 
+Syntran can run standalone scripts, serve as a desktop calculator in its REPL,
+or be embedded in Fortran applications through its [API](doc/api.md).
+
 ## Try it online
 
 You can run syntran in your browser at
