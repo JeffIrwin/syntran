@@ -6,11 +6,9 @@
 <!-- [![](doc/imgs/logo-syntran-128p.png)](https://github.com/JeffIrwin/syntran/blob/main/samples/logo.syntran) -->
 [![](doc/imgs/logo-syntran-128p.png)](samples/logo.syntran)
 
-⚠️ Syntran is beta and I don't recommend using it for anything serious.  You may discover bugs, missing features, general pain points; and later updates may be incompatible.
-
 ## [Syntax translator](https://www.practo.com/medicine-info/syntran-100-mg-capsule-18930)
 
-An interpreter written in Fortran, I guess
+_An interpreter written in Fortran_
 
 > Jerry: Fungicide. I mean what could she have?
 >
@@ -18,7 +16,12 @@ An interpreter written in Fortran, I guess
 >
 > Kramer: Fungus.
 
-This began as a sandbox for me to play in as I followed along with [Immo Landwerth's _building a compiler_ series](https://www.youtube.com/playlist?list=PLRAdsfhKI4OWNOSfS7EUu5GRAVmze1t2y), but it has since diverged.  Syntran has morphed into an interpretted, array-oriented language -- basically MATLAB but with curly braces, type checking, and zero-indexed arrays.
+Syntran is an interpreted, array-oriented language -- basically MATLAB but with curly braces, type checking, and zero-indexed arrays.
+
+The interpreter is an efficient stack-based bytecode VM with performance roughly on par
+with python. Vectorized array operations use native Fortran constructs, offering
+numpy-like performance without requiring any third-party dependencies.  See the
+[benchmarks](src/benchmarks/README.md).
 
 ## Try it online
 
@@ -2151,7 +2154,7 @@ println(std::format("{} {:.1} {}", n, x, v));
 -->
 <!-- syntran-end -->
 
-Only ASCII strings are supported because syntran is interpretted in Fortran.  Unicode strings cannot be indexed properly:
+Only ASCII strings are supported because syntran is interpreted in Fortran.  Unicode strings cannot be indexed properly:
 
 <!-- syntran-begin mode=skip reason="unicode indexing is explicitly documented as YMMV / mojibake" -->
 ```rust
