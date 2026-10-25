@@ -312,15 +312,6 @@ module syntran__core_m
 	!      hashing, utf, base64, and rng algorithms
 	!  - add more tests for lhs slicing
 	!    * str, bool, and i64 need testing
-	!  - array operations:
-	!    * done: element-wise add, sub, mul, div, pow, mod
-	!      + compound array assignment works but needs unit tests
-	!    * done: vector dot product and matrix mul via `@` operator
-	!      + v@v -> scalar, m@v -> vector, v@m -> vector, m@m -> matrix
-	!    * optional `dim` argument for any() and all(). 1 arg versions done
-	!    * comparisons done
-	!    * array and, or, not, done
-	!    * unary -, + done
 	!  - document recent features:
 	!    * hex/bin/oct literals
 	!    * bitwise ops
@@ -340,13 +331,6 @@ module syntran__core_m
 	!      it's in the ternary dict first.
 	!    * any use cases for #let? i probably don't want to get into general
 	!      expression parsing like `#let x = 1 + 2;` during preprocessing
-	!  - str comparison operations:
-	!    * >, <, etc. via lexicographical ordering? careful w/ strs that have
-	!      matching leading chars but diff lens
-	!    * also careful with fortran padding strs with spaces before
-	!      comparisons. i had a long-standing bug where "a" == "a " was true
-	!      because that's how fortran works :(
-	!    * ==, !=:  done
 	!  - fuzz testing
 	!  - compound assignment: logical &=, |=, etc.
 	!    * maybe make &&= to avoid confusion with bitwise compound assignment &=
