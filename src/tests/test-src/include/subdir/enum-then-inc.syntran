@@ -1,0 +1,6 @@
+
+enum E { a, b, }
+   enum E { c, d, }
+#include("../test-01-inc.syntran");
+
+return fn_inc();

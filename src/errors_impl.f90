@@ -62,6 +62,141 @@ end procedure err_rt
 
 !===============================================================================
 
+function rt_line_of(context, pos) result(i)
+
+	! Shared line-number lookup for src_loc_str()/rt_trace_snippet() below,
+	! factored out of underline()'s identical maxloc trick.  Not part of the
+	! parent module's interface -- a plain submodule-local helper, so it's
+	! only reachable from procedures in this file
+
+	type(text_context_t), intent(in) :: context
+	integer, intent(in) :: pos
+	integer :: i
+
+	integer :: i1(1)
+
+	i1 = maxloc(context%lines, context%lines <= pos)
+	i = min(size(context%lines) - 1, max(1, i1(1)))
+
+end function rt_line_of
+
+
+!===============================================================================
+
+module procedure register_src
+
+	! Dedupe by (src_file, text): a module/include re-parsed on the parser's
+	! second pass, or imported from two call sites, should not grow
+	! src_registry again.  Each REPL line still gets its own entry since its
+	! text differs even though src_file ("<stdin>") repeats across lines
+
+	integer :: prev_id
+
+	! src_registry is a bare `save` module variable (see its docstring in
+	! errors.f90), never run through new_context_vector(), so %v starts
+	! unallocated and %len_/%cap start undefined -- initialize both
+	! registries on first use
+	if (.not. allocated(src_registry%v)) src_registry = new_context_vector()
+	if (src_registry_map%capacity <= 0) call src_registry_map%init(64)
+
+	if (src_registry_map%get(context%src_file, prev_id)) then
+		if (prev_id >= 1 .and. prev_id <= src_registry%len_) then
+			if (src_registry%v(prev_id)%text == context%text) then
+				id = prev_id
+				return
+			end if
+		end if
+	end if
+
+	call src_registry%push(context)
+	id = src_registry%len_
+	call src_registry_map%set(context%src_file, id)
+
+end procedure register_src
+
+
+!===============================================================================
+
+module procedure reset_src_registry
+
+	! Reassigning src_registry its own fresh new_context_vector() frees the
+	! old %v(:) (text_context_vector_t has no user-defined assignment, so
+	! this is a plain structure assignment -- the old allocatable component
+	! is deallocated before the new, empty one is assigned).  destroy()
+	! zeroes src_registry_map%capacity, which doubles as the "uninitialized"
+	! state register_src() already checks for, so the next register_src()
+	! call reinitializes it lazily, same as on first use ever
+	src_registry = new_context_vector()
+	call src_registry_map%destroy()
+
+end procedure reset_src_registry
+
+
+!===============================================================================
+
+module procedure src_loc_str
+
+	integer :: i
+
+	str_ = ''
+	if (src_id < 1 .or. src_id > src_registry%len_) return
+
+	i = rt_line_of(src_registry%v(src_id), pos)
+	str_ = src_registry%v(src_id)%src_file//':'//str(i)
+
+end procedure src_loc_str
+
+
+!===============================================================================
+
+module procedure rt_trace_snippet
+
+	! Rust-style "--> file:line:col" + source-line snippet, no carets (there's
+	! no token span here, just one position).  Shares its line-lookup/
+	! tab-handling/trailing-newline-trim logic with underline() below, minus
+	! the caret-underline tail
+
+	character(len = :), allocatable :: str_i, spaces, fg1, rst, col, text
+	integer :: i, str_i_len, start, last
+
+	str_ = ''
+	if (src_id < 1 .or. src_id > src_registry%len_) return
+
+	associate (context => src_registry%v(src_id))
+
+		i = rt_line_of(context, pos)
+
+		str_i = str(i)
+		str_i_len = len(str_i)
+		spaces = repeat(' ', str_i_len + 2)
+
+		start = context%lines(i)
+		last  = context%lines(i+1) - 1
+
+		do while (last > start .and. (context%text(last:last) == line_feed .or. &
+		          context%text(last:last) == carriage_return))
+			last = last - 1
+		end do
+
+		text = tabs2spaces(context%text(start: last))
+		col  = str(pos - context%lines(i) + 1)
+
+		fg1 = fg_bright_cyan
+		rst = color_reset
+
+		str_ = line_feed//fg1//spaces(2:)//"--> "//rst//context%src_file &
+			//":"//str_i//":"//col//line_feed &
+			//fg1//     spaces//"| "//line_feed &
+			//fg1//" "//str_i//" | "//rst//text//line_feed &
+			//fg1//     spaces//"| "//color_reset
+
+	end associate
+
+end procedure rt_trace_snippet
+
+
+!===============================================================================
+
 module procedure get_all_error_codes
 	! Every error/warning code in the registry.  Used by the error-code unit
 	! test to check uniqueness and format.  Keep this in sync with the
@@ -181,6 +316,16 @@ module procedure get_all_error_codes
 	call codes%push(EC_FN_MISSING_PARENS)
 	call codes%push(EC_MISSING_LET_EQUALS)
 	call codes%push(EC_MISSING_LET_NAME)
+	call codes%push(EC_TRANSPILE_UNSUPPORTED)
+	call codes%push(EC_REF_ALIAS)
+	call codes%push(EC_FORMAT_NOT_LITERAL)
+	call codes%push(EC_BAD_FORMAT)
+	call codes%push(EC_FORMAT_TYPE)
+	call codes%push(EC_FORMAT_COUNT)
+	call codes%push(EC_RESHAPE_SHAPE_LIT)
+	call codes%push(EC_STD_UNKNOWN_NAME)
+	call codes%push(EC_MOD_IMPORT_NAME)
+	call codes%push(EC_FILE_ARRAY)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -260,6 +405,16 @@ module procedure get_all_error_codes
 	call codes%push(RC_REDUCE_DIM_RANGE)
 	call codes%push(RC_MASK_SHAPE_MISMATCH)
 	call codes%push(RC_MINMAX_EMPTY)
+	call codes%push(RC_BINOP_SHAPE_MISMATCH)
+	call codes%push(RC_DOT_SIZE_MISMATCH)
+	call codes%push(RC_REPEAT_NEGATIVE)
+	call codes%push(RC_SOLVE_SHAPE)
+	call codes%push(RC_SOLVE_SINGULAR)
+	call codes%push(RC_LU_BAD_PIVOTS)
+	call codes%push(RC_BINARY_TEXT_OP)
+	call codes%push(RC_READ_FAIL)
+	call codes%push(RC_BINARY_WRITE_TYPE)
+	call codes%push(RC_PARSE_BOOL)
 	call codes%push(WC_MISSING_RETURN)
 end procedure get_all_error_codes
 
@@ -1029,6 +1184,133 @@ end procedure err_missing_let_name
 
 !===============================================================================
 
+module procedure err_transpile_unsupported
+
+	err = err_pre(EC_TRANSPILE_UNSUPPORTED) &
+		//what//' is not supported by the Fortran transpiler yet' &
+		//underline(context, span)//" unsupported" &
+		//color_reset//line_feed//fg_bright_green//"help"//color_reset &
+		//": run the program with the interpreter instead, i.e. without `--transpile`"
+
+end procedure err_transpile_unsupported
+
+
+!===============================================================================
+
+module procedure err_ref_alias
+
+	err = err_pre(EC_REF_ALIAS) &
+		//'variable `'//var//'` is passed to `'//fn//'` by `&` reference ' &
+		//'and also by another reference' &
+		//underline(context, span)//" aliased reference"//color_reset &
+		//line_feed//fg_bright_green//"help"//color_reset &
+		//": a mutable `&` reference can't alias another reference to the same " &
+		//"variable.  Copy it first, e.g. `let t = "//var//";`"
+
+end procedure err_ref_alias
+
+
+!===============================================================================
+
+module procedure err_format_not_literal
+
+	err = err_pre(EC_FORMAT_NOT_LITERAL) &
+		//'the format string of `'//fn//'()` is not a string literal' &
+		//underline(context, span)//" not a literal"//color_reset &
+		//line_feed//fg_bright_green//"help"//color_reset &
+		//": the format string is checked against the arguments when the program " &
+		//"is parsed, so it must be written out as a string literal like " &
+		//'`std::format("{:5}", x)`'
+
+end procedure err_format_not_literal
+
+!===============================================================================
+
+module procedure err_bad_format
+
+	err = err_pre(EC_BAD_FORMAT) &
+		//'invalid format string: '//what &
+		//underline(context, span)//" bad format string"//color_reset &
+		//line_feed//fg_bright_green//"help"//color_reset &
+		//": a placeholder is `{}` or `{:spec}`, where spec is " &
+		//"`[[fill]align][+][#][0][width][.precision][type]`.  Write `{{` and `}}` " &
+		//"for literal braces"
+
+end procedure err_bad_format
+
+!===============================================================================
+
+module procedure err_format_type
+
+	err = err_pre(EC_FORMAT_TYPE) &
+		//'format spec `'//spec//'` can not be used for a value of type `'//type_//'`' &
+		//underline(context, span)//" value of type `"//type_//"`"//color_reset &
+		//line_feed//fg_bright_green//"help"//color_reset &
+		//": "//why
+
+end procedure err_format_type
+
+!===============================================================================
+
+module procedure err_format_count
+
+	err = err_pre(EC_FORMAT_COUNT) &
+		//'the format string has '//str(nspecs)//' placeholder(s), but '//str(nargs) &
+		//' argument(s) were given' &
+		//underline(context, span)//" wrong number of arguments"//color_reset &
+		//line_feed//fg_bright_green//"help"//color_reset &
+		//": there must be exactly one argument for each `{}` or `{:spec}`"
+
+end procedure err_format_count
+
+!===============================================================================
+
+module procedure err_reshape_shape_lit
+
+	err = err_pre(EC_RESHAPE_SHAPE_LIT) &
+		//'the shape argument of `std::reshape()` must be an array literal' &
+		//underline(context, span)//" not an array literal"//color_reset &
+		//line_feed//fg_bright_green//"help"//color_reset &
+		//": the number of dimensions of the result must be known at compile time, e.g. `[nx, ny]`"
+
+end procedure err_reshape_shape_lit
+
+!===============================================================================
+
+module procedure err_std_unknown_name
+
+	err = err_pre(EC_STD_UNKNOWN_NAME) &
+		//'`std::'//name//'` is not a function in the standard library' &
+		//underline(context, span)//" unknown std function"//color_reset
+
+	if (present(suggest)) then
+		if (len(suggest) > 0) then
+			err = err//line_feed &
+				//fg_bright_green//"help"//color_reset &
+				//": did you mean `" &
+				//fg_bright_green//suggest//color_reset//"`?"
+		end if
+	end if
+
+end procedure err_std_unknown_name
+
+!===============================================================================
+
+module procedure err_mod_import_name
+
+	err = err_pre(EC_MOD_IMPORT_NAME) &
+		//'importing a single name from a module is not supported' &
+		//underline(context, span)//" cannot import `"//name//"` alone"//color_reset &
+		//line_feed//fg_bright_green//"help"//color_reset &
+		//": use `"//fg_bright_green//"use "//module//"::*;"//color_reset &
+		//"` to import every name, or `" &
+		//fg_bright_green//"use "//module//";"//color_reset &
+		//"` and call `"//module//"::"//name//"`"
+
+end procedure err_mod_import_name
+
+!===============================================================================
+
 module procedure err_not_callable
 
 	err = err_pre(EC_NOT_CALLABLE) &
@@ -1048,6 +1330,17 @@ module procedure err_fn_ptr_array
 		//underline(context, span)//" fn pointer in array literal"//color_reset
 
 end procedure err_fn_ptr_array
+
+!===============================================================================
+
+module procedure err_file_array
+
+	err = err_pre(EC_FILE_ARRAY) &
+		//'array element `'//elem//'` is a file.  ' &
+		//'Arrays of files are not supported' &
+		//underline(context, span)//" file in array literal"//color_reset
+
+end procedure err_file_array
 
 
 !===============================================================================
@@ -1633,23 +1926,127 @@ module procedure err_rt_expl_array_size
 	! Shared by eval_array_expr() and the bytecode VM's OP_FOR_SETUP
 	! (size_array case) so their messages can't drift apart
 
-	integer :: i
-	integer(kind = 8) :: total
+	err = err_rt(RC_ARRAY_SIZE_MISMATCH, &
+		"explicit array has "//str(nelems)// &
+		" elements but declared size is "//dims_str(sizes)//" = "// &
+		str(product(sizes)))
+
+end procedure err_rt_expl_array_size
+
+
+!===============================================================================
+
+function dims_str(sizes) result(dims)
+
+	! Format array extents as `2 x 3 x 4`
+
+	integer(kind = 8), intent(in) :: sizes(:)
 	character(len = :), allocatable :: dims
 
-	dims  = ''
-	total = 1
+	integer :: i
+
+	dims = ''
 	do i = 1, size(sizes)
-		total = total * sizes(i)
 		if (i > 1) dims = dims//' x '
 		dims = dims//str(sizes(i))
 	end do
 
-	err = err_rt(RC_ARRAY_SIZE_MISMATCH, &
-		"explicit array has "//str(nelems)// &
-		" elements but declared size is "//dims//" = "//str(total))
+end function dims_str
 
-end procedure err_rt_expl_array_size
+
+!===============================================================================
+
+module procedure err_rt_binop_shape
+
+	! Runtime (R37) error for an element-wise binary operator whose array
+	! operands don't have the same extents.  Shared by the VM's OP_BINOP and
+	! OP_ARR_BINOP handlers and by compound assignment (`a += b`)
+
+	err = err_rt(RC_BINOP_SHAPE_MISMATCH, &
+		"array shape mismatch for binary operator `"//op_text//"`: "// &
+		dims_str(lsizes)//" and "//dims_str(rsizes))
+
+end procedure err_rt_binop_shape
+
+
+!===============================================================================
+
+module procedure err_rt_dot_size
+
+	! Runtime (R38) error for dot() called with vectors of different lengths
+
+	err = err_rt(RC_DOT_SIZE_MISMATCH, &
+		"vector length mismatch in dot(): "//str(lsize)//" and "//str(rsize))
+
+end procedure err_rt_dot_size
+
+
+!===============================================================================
+
+module procedure err_rt_repeat_negative
+
+	! Runtime (R39) error for repeat() called with a negative ncopies
+
+	err = err_rt(RC_REPEAT_NEGATIVE, &
+		"ncopies argument of repeat() is negative: "//str(ncopies))
+
+end procedure err_rt_repeat_negative
+
+
+!===============================================================================
+
+module procedure err_rt_solve_shape
+
+	! Runtime (R40) error for std::solve() or std::lu_solve() with a non-square
+	! `A`, or a `b` whose leading extent isn't the order of `A`.  `fn` is the
+	! name of the fn to report
+
+	if (arows /= acols) then
+		err = err_rt(RC_SOLVE_SHAPE, &
+			"matrix `A` in "//fn//"() is not square: "//str(arows)//" x "//str(acols))
+	else
+		err = err_rt(RC_SOLVE_SHAPE, &
+			"size mismatch in "//fn//"(): `A` is "//str(arows)//" x "//str(acols)// &
+			" but `b` has "//str(brows)//" rows")
+	end if
+
+end procedure err_rt_solve_shape
+
+
+!===============================================================================
+
+module procedure err_rt_solve_singular
+
+	! Runtime (R41) error for std::solve(), std::lu_factor(), or std::lu_solve()
+	! of an exactly singular matrix.  `pivot` is the 1-based LAPACK `info`, but
+	! it's reported as a zero-based index like the rest of syntran
+
+	err = err_rt(RC_SOLVE_SINGULAR, &
+		"matrix `A` in "//fn//"() is singular: pivot U["//str(pivot - 1)//", " &
+		//str(pivot - 1)//"] is zero")
+
+end procedure err_rt_solve_singular
+
+
+!===============================================================================
+
+module procedure err_rt_lu_bad_pivots
+
+	! Runtime (R42) error for std::lu_solve() with an `ipiv` that isn't a valid
+	! row permutation for the n x n factors in `A`.  If `i` is negative, then
+	! the length of `ipiv` is wrong.  Otherwise, `ipiv[i]` is out of range
+
+	if (i < 0) then
+		err = err_rt(RC_LU_BAD_PIVOTS, &
+			"size mismatch in lu_solve(): `A` is "//str(n)//" x "//str(n)// &
+			" but `ipiv` has "//str(len_)//" elements")
+	else
+		err = err_rt(RC_LU_BAD_PIVOTS, &
+			"invalid pivot in lu_solve(): ipiv["//str(i)//"] is "//str(p)// &
+			", which is outside of [0, "//str(n)//")")
+	end if
+
+end procedure err_rt_lu_bad_pivots
 
 
 !===============================================================================
@@ -2018,9 +2415,9 @@ module procedure underline
 	last  = context%lines(i+1) - 1
 
 	! Trim whitespace from end of line.  Make sure interpreter looks ok with
-	! errors at final character of line.  TODO: use is_whitespace()
-	do while (context%text(last:last) == line_feed .or. &
-	          context%text(last:last) == carriage_return)
+	! errors at final character of line
+	do while (last >= start)
+		if (.not. is_whitespace(context%text(last:last))) exit
 		last = last - 1
 	end do
 

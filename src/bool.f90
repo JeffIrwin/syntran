@@ -3,8 +3,6 @@
 
 module syntran__bool_m
 
-	! TODO: consider auto-generating from template like math_bin_*.f90
-
 	use syntran__utils_m
 	use syntran__value_m
 
@@ -73,9 +71,9 @@ subroutine is_eq_value_t(left, right, res, op_text)
 
 	case        (magic * f32_type + i32_type)
 		res%sca%bool = left%sca%f32 == right%sca%i32
-		! Is this even possible or should I ban comparing ints and floats?
-		! Similarly for other comparisons.  Currently this is banned in
-		! is_binary_op_allowed()
+		! Mixed int/float `==` and `!=` are banned in is_binary_op_allowed(),
+		! so these cases are never reached from the parser.  Other comparisons
+		! (`<`, etc.) do allow them
 		!
 		! GNU says Warning: Equality comparison for REAL(4) at (1)
 		! [-Wcompare-reals]
@@ -100,11 +98,7 @@ subroutine is_eq_value_t(left, right, res, op_text)
 
 	case        (magic * f64_type + i32_type)
 		res%sca%bool = left%sca%f64 == right%sca%i32
-		! TODO: is this even possible or should I ban comparing ints and
-		! floats?  Similarly for other comparisons
-		!
-		! GNU says Warning: Equality comparison for REAL(4) at (1)
-		! [-Wcompare-reals]
+		! Banned in is_binary_op_allowed(), like the f32 case above
 
 	case        (magic * f64_type + i64_type)
 		res%sca%bool = left%sca%f64 == real(right%sca%i64)

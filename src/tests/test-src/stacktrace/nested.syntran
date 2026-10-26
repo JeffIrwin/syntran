@@ -1,0 +1,25 @@
+// Regression test for runtime-error stack traces (append_rt_trace(),
+// vm_exec.f90): a 3-deep call chain (<main> -> outer -> inner), with the
+// actual throw (a runtime-valued for-loop step of 0, R23) on an indented,
+// non-first line of inner()'s body, so the test can check that the
+// innermost frame's line/column/source-snippet point there and not at
+// inner()'s header or at outer()/<main>'s call sites.
+
+fn inner(): i32
+{
+	println("inner start");
+	let s = 0;
+	for i in [0: s: 5]
+	{
+	}
+	return 0;
+}
+
+fn outer(): i32
+{
+	println("outer start");
+	return inner();
+}
+
+println("main start");
+let z = outer();

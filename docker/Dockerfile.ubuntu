@@ -18,7 +18,8 @@ ARG FC="gfortran-${GFORT_VERS}"
 RUN apt-get update -y && apt-get install -y \
 	vim \
 	"$FC" \
-	git
+	git \
+	libopenblas-dev
 
 RUN cp $(which "$FC") /usr/bin/gfortran
 

@@ -6,8 +6,10 @@ module syntran__consts_m
 	! Debug logging verbosity (0 == silent)
 	integer, parameter :: debug = 0
 
-	integer :: maxerr  ! TODO: move this (not default) into a settings struct that gets passed around
+	! Max number of error messages to log, set by --maxerr in main.  Defaults
+	! to maxerr_def for library users, who don't go through main
 	integer, parameter :: maxerr_def = 4
+	integer :: maxerr = maxerr_def
 
 	logical :: permissive_return = .false.
 
@@ -28,8 +30,7 @@ module syntran__consts_m
 	! OP_NEW_ARRAY (eval_array_expr), which has no rank limit.
 	integer, parameter :: MAX_NAT_UNIF_RANK = 8
 
-	! Must be larger than largest token enum below.  TODO: add an init check for
-	! this
+	! Must be larger than largest token enum below
 	integer, parameter :: magic = 256
 
 	! Token and syntax node kinds enum.  Is there a better way to do this that

@@ -1,0 +1,20 @@
+// E116: ref-alias
+// The same variable is passed to a fn by a mutable `&` reference and by
+// another reference too.  A by-reference argument is moved out of its variable
+// for the duration of the call, so the two can't both be live.  Several
+// `&const` references to one variable are fine, and so is passing a copy
+
+fn bump(a: &[i32; :], b: &const [i32; :])
+{
+	a[0] = b[0] + 1;
+}
+
+fn main(): i32
+{
+	let v = [1, 2, 3];
+	bump(&v, v);
+	return v[0];
+}
+
+println(main());
+return 0;

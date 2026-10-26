@@ -79,6 +79,19 @@ fi
 #build=build
 build="build/$config"
 
-cmake -S . -B "$build" "${generator[@]}" -DCMAKE_BUILD_TYPE=$config -DCMAKE_Fortran_COMPILER=$FC
+# BLAS/LAPACK is required by default (for `@`, std::solve(), and
+# std::lu_factor()/std::lu_solve()).  This cmake
+# build still uses the portable fallbacks on Windows, since the runner has no
+# BLAS that find_package(LAPACK) knows about.  The shipped Windows binary comes
+# from the fpm build in CI, which links OpenBLAS (see main.yml).  Anyone can
+# also opt out on any platform with `SYNTRAN_NO_BLAS=1 bash build.sh`
+extra=()
+if [[ "$machine" == "MinGw" || -n "${SYNTRAN_NO_BLAS:-}" ]]; then
+	extra+=(-DSYNTRAN_NO_BLAS=ON)
+fi
+
+# The `${extra[@]+...}` form is for bash 3.2 on macOS, where expanding an empty
+# array under `set -u` is an "unbound variable" error
+cmake -S . -B "$build" "${generator[@]}" ${extra[@]+"${extra[@]}"} -DCMAKE_BUILD_TYPE=$config -DCMAKE_Fortran_COMPILER=$FC
 cmake --build "$build" --config $config --parallel
 

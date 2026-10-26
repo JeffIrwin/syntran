@@ -14,6 +14,8 @@ program main
 
 	type(args_t) :: args
 
+	type(transpile_t) :: transpile
+
 	!********
 
 	! What happens if there's an error while parsing args?  Here I initialize to
@@ -27,8 +29,7 @@ program main
 		call exit(EXIT_SUCCESS)
 	end if
 
-	! TODO: move into settings constructor?
-	maxerr           = args%maxerr
+	maxerr            = args%maxerr
 	permissive_return = args%permissive_return
 
 	io = EXIT_SUCCESS
@@ -47,13 +48,33 @@ program main
 				syntax_only = .true., io = io)
 		end if
 
+	else if (args%transpile) then
+		! Write the program as Fortran source for the user to compile, instead of
+		! running it.  The value of the last statement is only printed by the
+		! generated program if we're not --quiet, like the interpreter
+		transpile%print_result = .not. args%quiet
+		transpile%shake_fns = .not. args%keep_unused_fns
+
+		if (args%syntran_file_arg) then
+			res = syntran_interpret_file(args%syntran_file, &
+				chdir_ = args%chdir, script_args = args%script_args, &
+				transpile = transpile, io = io)
+		else
+			res = syntran_eval(args%command, script_args = args%script_args, &
+				transpile = transpile, io = io)
+		end if
+
+		if (io == EXIT_SUCCESS) then
+			call syntran_write_transpiled(transpile, args%transpile_out, io)
+		end if
+
 	else if (args%interactive) then
 		! "Interactive" keeps running in the REPL with the same vars and fns
 		! workspace after running a startup file
 		!
-		! TODO: add a test that covers a "-i" interactive run
+		! A "-i" run is covered by the pty test src/tests/repl/interactive.exp
 		res = syntran_interpret(startup_file = args%syntran_file, &
-			script_args = args%script_args)
+			script_args = args%script_args, chdir_ = args%chdir)
 
 	else if (args%syntran_file_arg) then
 		! Interpret a file and exit

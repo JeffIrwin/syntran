@@ -16,16 +16,16 @@ module syntran__intr_fns_m
 	! "0dot_i32", "0dot_f32", etc. per call-site arg types.  These base names
 	! are never themselves inserted as fns_t table keys (only their "0"-
 	! mangled variants are; c.f. resolve_overload() below and its call site
-	! at parse_fn.f90:932), so is_overloaded_intr() and intr_fn_names() below
+	! in parse_fn.f90), so is_overloaded_intr() and intr_fn_names() below
 	! are the two places that need this list.  Kept as one parameter array so
 	! there is only one place to update when a new overload is added, instead
 	! of the select case this replaced needing to stay in sync by hand
-	character(len = 8), parameter :: OVERLOAD_NAMES(28) = &
+	character(len = 8), parameter :: OVERLOAD_NAMES(31) = &
 		[character(len = 8) :: &
 			"exp", "log", "log10", "log2", "sqrt", "abs", &
 			"cos", "sin", "tan", "cosd", "sind", "tand", &
 			"acos", "asin", "atan", "acosd", "asind", "atand", &
-			"min", "max", "i32", "i64", &
+			"min", "max", "i32", "i64", "f32", "f64", "repeat", &
 			"sum", "minval", "maxval", "product", "norm2", "dot"]
 
 !===============================================================================
@@ -167,6 +167,8 @@ recursive subroutine resolve_overload(args, fn_call, has_rank, has_arr_type, arr
 	!********
 
 	integer :: type_, arr_type
+
+	logical :: is_lu_solve
 
 	has_rank = .false.
 	if (present(has_arr_type)) has_arr_type = .false.
@@ -847,6 +849,53 @@ recursive subroutine resolve_overload(args, fn_call, has_rank, has_arr_type, arr
 			fn_call%identifier%text = "0i64_sca"
 		end select
 
+	case ("f32")
+
+		type_ = f32_type
+		if (args%len_ >= 1) type_ = args%v(1)%val%type
+
+		select case (type_)
+		case (array_type)
+			fn_call%identifier%text = "0f32_arr"
+
+			if (args%len_ >= 1) then
+				has_rank = .true.
+				allocate(fn_call%val%array)
+				fn_call%val%array%rank = args%v(1)%val%array%rank
+			end if
+
+		case default
+			fn_call%identifier%text = "0f32_sca"
+		end select
+
+	case ("f64")
+
+		type_ = f64_type
+		if (args%len_ >= 1) type_ = args%v(1)%val%type
+
+		select case (type_)
+		case (array_type)
+			fn_call%identifier%text = "0f64_arr"
+
+			if (args%len_ >= 1) then
+				has_rank = .true.
+				allocate(fn_call%val%array)
+				fn_call%val%array%rank = args%v(1)%val%array%rank
+			end if
+
+		case default
+			fn_call%identifier%text = "0f64_sca"
+		end select
+
+	case ("repeat")
+
+		! ncopies may be i32 or i64, e.g. repeat(" ", len(s)).  Anything else
+		! falls back on i32 to get a normal wrong-type error later
+		fn_call%identifier%text = "0repeat_i32"
+		if (args%len_ >= 2) then
+			if (args%v(2)%val%type == i64_type) fn_call%identifier%text = "0repeat_i64"
+		end if
+
 	case ("sum")
 
 		type_ = i32_type
@@ -986,11 +1035,16 @@ recursive subroutine resolve_overload(args, fn_call, has_rank, has_arr_type, arr
 				has_rank = .true.
 				if (.not. allocated(fn_call%val%array)) allocate(fn_call%val%array)
 
-				! Result rank = number of elements in the shape array (second argument)
-				if (args%len_ >= 2 .and. args%v(2)%val%type == array_type) then
-					fn_call%val%array%rank = int(args%v(2)%val%array%len_)
-				else
-					fn_call%val%array%rank = -1  ! unknown at parse time
+				! Result rank = number of elements in the shape array (second
+				! argument).  That count is only known at parse time for an
+				! explicit list literal like [nx, ny].  Any other array, e.g. a
+				! variable or a fn param, has a len_ of 0 or a stale value, so the
+				! rank is unknown here and parse_fn_call() reports E121
+				fn_call%val%array%rank = -1
+				if (args%len_ >= 2) then
+					if (is_expl_array_lit(args%v(2))) then
+						fn_call%val%array%rank = int(args%v(2)%val%array%len_)
+					end if
 				end if
 
 				! Element type follows the source array (first argument).
@@ -1003,6 +1057,80 @@ recursive subroutine resolve_overload(args, fn_call, has_rank, has_arr_type, arr
 						if (present(arr_type_src)) arr_type_src = 1
 					end if
 				end if
+			end if
+		end if
+
+	case ("solve")
+
+		! std::solve(A, b) -- only fires for std::solve, not a user-defined
+		! solve(), because module_prefix is set before this call.  The element
+		! type of A picks the overload.  Anything but f32 falls through to f64,
+		! so that other types are rejected by the arg type check against f64.
+		! A `b` that isn't a vector picks the matrix overload, so any rank
+		! other than 1 or 2 is rejected by the arg type check too.  The result
+		! has the rank of b, which is part of the overload's signature
+		if (allocated(fn_call%module_prefix)) then
+			if (fn_call%module_prefix == "std") then
+
+				type_ = f64_type
+				if (args%len_ >= 1) then
+					if (args%v(1)%val%type == array_type) type_ = args%v(1)%val%array%type
+				end if
+
+				if (type_ == f32_type) then
+					fn_call%identifier%text = "0solve_f32"
+				else
+					fn_call%identifier%text = "0solve_f64"
+				end if
+
+				if (.not. arg_is_rank1(args, 2)) &
+					fn_call%identifier%text = fn_call%identifier%text//"_mat"
+
+			end if
+		end if
+
+	case ("read_i32", "read_i64", "read_f32", "read_f64")
+
+		! std::read_<type>(file_handle[, n]) -- reads one value, or an array of n.
+		! Only fires for the std:: version, like std::solve above
+		if (allocated(fn_call%module_prefix)) then
+			if (fn_call%module_prefix == "std") then
+				if (args%len_ >= 2) then
+					fn_call%identifier%text = "0"//fn_call%identifier%text//"_arr"
+				else
+					fn_call%identifier%text = "0"//fn_call%identifier%text//"_sca"
+				end if
+			end if
+		end if
+
+	case ("lu_factor", "lu_solve")
+
+		! std::lu_factor(&A[, &info]) and std::lu_solve(A, ipiv, &b) -- like
+		! std::solve above, the element type of the first arg picks the
+		! overload and anything but f32 falls through to f64, so that it's
+		! rejected by the arg type check.  The result type doesn't depend on the
+		! args (lu_factor returns [i32; :] and lu_solve is void), so no rank
+		! needs to be resolved.  Like solve(), lu_solve() has a matrix overload
+		! for any `b` (arg 3) that isn't a vector
+		if (allocated(fn_call%module_prefix)) then
+			if (fn_call%module_prefix == "std") then
+
+				is_lu_solve = fn_call%identifier%text == "lu_solve"
+
+				type_ = f64_type
+				if (args%len_ >= 1) then
+					if (args%v(1)%val%type == array_type) type_ = args%v(1)%val%array%type
+				end if
+
+				if (type_ == f32_type) then
+					fn_call%identifier%text = "0"//fn_call%identifier%text//"_f32"
+				else
+					fn_call%identifier%text = "0"//fn_call%identifier%text//"_f64"
+				end if
+
+				if (is_lu_solve .and. .not. arg_is_rank1(args, 3)) &
+					fn_call%identifier%text = fn_call%identifier%text//"_mat"
+
 			end if
 		end if
 
@@ -1032,6 +1160,45 @@ recursive subroutine resolve_overload(args, fn_call, has_rank, has_arr_type, arr
 	end select
 
 end subroutine resolve_overload
+
+!===============================================================================
+
+logical function arg_is_rank1(args, i)
+
+	! Is the i-th (1-based) arg a rank-1 array?  False if there is no such arg
+	! or it isn't an array, in which case the arg type check that follows
+	! reports the error
+
+	type(syntax_node_vector_t), intent(in) :: args
+	integer, intent(in) :: i
+
+	arg_is_rank1 = .false.
+	if (args%len_ < i) return
+	if (args%v(i)%val%type /= array_type) return
+	if (.not. allocated(args%v(i)%val%array)) return
+
+	arg_is_rank1 = args%v(i)%val%array%rank == 1
+
+end function arg_is_rank1
+
+!===============================================================================
+
+function is_expl_array_lit(node) result(is_lit)
+
+	! Is this node an explicit-element rank-1 array literal like [a, b, c]?  Its
+	! element count is known at parse time, unlike a variable, a call, a range
+	! [lo: hi], or a repeat/sized form [x; n]
+
+	type(syntax_node_t), intent(in) :: node
+	logical :: is_lit
+
+	is_lit = .false.
+	if (node%kind /= array_expr) return
+	if (.not. allocated(node%val%array)) return
+
+	is_lit = node%val%array%kind == expl_array
+
+end function is_expl_array_lit
 
 !===============================================================================
 

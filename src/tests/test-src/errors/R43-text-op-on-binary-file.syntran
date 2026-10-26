@@ -1,0 +1,11 @@
+// R43: text-op-on-binary-file
+// readln(), writeln(), or eof() was called for a file that was opened in
+// binary mode "b".  A binary file is written with write() and read with
+// std::read_i32() and friends
+
+let f = open("build/rt_file_r43.bin", "wb");
+std::write(f, 1, 2, 3);
+close(f);
+
+let g = open("build/rt_file_r43.bin", "rb");
+let line = readln(g);

@@ -27,30 +27,42 @@ module syntran__core_m
 
 	integer, parameter ::   &
 		syntran_major =  1, &
-		syntran_minor =  6, &
+		syntran_minor =  7, &
 		syntran_patch =  0
 
 	! TODO:
-	!  - port something like aoc 2019/17 or 15 here as a long test
-	!    * good non-trivial coverage of enums in a module plus other recent
-	!      features (switch/case)
-	!    * 17 has switch case with array of enum subjects
-	!    * 15 has an intcode program struct getting passed down a recursive DFS
-	!    * maybe port both, they're fast
-	!    * consider 19, 21, 23, ... after i implement them
-	!  - stack trace for runtime errors
-	!    * as more minor breaking runtime guards are added for safety, e.g.
-	!      slice reassignment size checks, this is more pressing. if users have
-	!      an old script that used to work and now raises an error, it's
-	!      difficult to just see a runtime error message with no indication of
-	!      what line or file it's in
-	!    * even just one stack frame would be better than nothing if there are
-	!      perf costs
-	!  - direct enum to i64 casting. currently can only cast to i32 directly, or
-	!    to i64 awkwardly as i64(i32(Enum.variant))
-	!    * in the other direction, casting i64 to enum could fail for big nums,
-	!      maybe should be avoided
-	!    * similarly, casting char to i64?
+	!  - transpiler improvements:
+	!    * cover more OS's and intel in addition to gnu in testing. currently
+	!      only gnu on ubuntu
+	!    * readln implementation is technically O(n**2), although the 256 char
+	!      buffer in practice usually has a nice constant factor
+	!    * rank-4 limitation is clunky. is there really no general size(*) or
+	!      polymorphic workaround? if not, maybe go up a few more ranks (at
+	!      least 6 or 7)
+	!    * replace stack_trace with a native backtrace() call instead of
+	!      parse erroring?
+	!    * option to split generated code into multiple files -- one for runtime
+	!      lib, another for user program, maybe even split user files per input
+	!      syntran module
+	!      + maybe also generate a cmake list (or makefile) to accompany?
+	!      + runtime lib probably shouldn't be shipped pre-compiled, since it
+	!        would only work with one user's compiler
+	!      + would want to flip --keep-unused-fns default if split. tree shaking
+	!        only makes sense for single file outputs. with splitting,
+	!        tree-shaking would introduce churn which would backfire for
+	!        incremental builds
+	!    * very low priority, but de-mangling and parenthesis stripping in
+	!      generated code seem to miss a few edge cases
+	!    * save comments? would need to save "trivia" tokens in parser. maybe
+	!      not worth the overhead or the complications of re-formating without
+	!      introducing edge cases like unterminated pre-processor breaking
+	!      comments
+	!    * eventually (long away) shoot for a full syntran compiler using LLVM
+	!      + maybe a good fable task
+	!      + claude estimates compiler would be 3x more code than transpiler
+	!      + initial transpiler pr is about 15 kloc code
+	!      + considering claude did the transpiler in one day, a full compiler
+	!        could still be very achievable
 	!  - split or streamline ci/cd:
 	!    * "build on ubuntu-24" stage is now the slowest. i believe this just
 	!      changed after ast removal. previously, windows and intel-compiler
@@ -58,10 +70,6 @@ module syntran__core_m
 	!    * ubuntu is 9.5 minutes, while windows and intel classic are 7.5 min
 	!    * split into multiple (parallel) stages, or possible remove any stages
 	!      that are redundant
-	!  - cleanup TODO notes throughout the codebase
-	!    * took a big chunk out already
-	!    * continue one file at a time
-	!    * '''grep -c  'TODO' src/* | sort -t: -k2 -n'''
 	!  - declare variable types without initializing them, and/or
 	!    conditional initialization.  Rust discourages mutability, instead
 	!    preferring patterns like this:
@@ -109,7 +117,6 @@ module syntran__core_m
 	!  - built-in `move` fn to move_alloc an array (or struct)? it's useful to
 	!    avoid a copy in many cases, e.g. dynamic vector example
 	!    src/tests/test-src/struct/test-03.syntran
-	!  - matrix inverse? link gfortran to mkl?
 	!  - generics? longshot, lots of design decisions
 	!  - log a known issue that syntran is not threadsafe
 	!    * did some work on feature/parallel branch to try running long tests in
@@ -147,58 +154,6 @@ module syntran__core_m
 	!    * updated to ubuntu 24.04 on 2026-06-06. 26 is not available yet
 	!    * related, update wsl ubuntu version. consider updating gfortran
 	!      versions in some places
-	!  - claude tasks:
-	!    * fpm *IS* parallel, but it has to be compiled with -fopenmp to enable
-	!      it. duh!
-	!    * fortran compile time optimization -- see if pain points like
-	!      intr_fns.f90, lex.f90, or math*.f90 can be actually improved
-	!      + intr_fns.f90, eval.f90 (now runtime.f90), types.f90 broken up
-	!      + anything else?
-	!      + build.sh (cmake) uses parallel gnu make builds. fpm still builds
-	!        serially
-	!      + ninja takes just as long as gnu make, but apparently it has
-	!        profiling output options. maybe try that just to find the
-	!        bottlenecks:
-	!
-	!        ❯ check build/Release/.ninja_log. which files take the longest to
-	!          compile?
-	!        ● Based on the ninja log, here are the files that take the longest
-	!          to compile (duration = end_time - start_time in milliseconds):
-	!          ┌────────────────────────┬──────────┐
-	!          │          File          │ Duration │
-	!          ├────────────────────────┼──────────┤
-	!          │ src/core.f90           │ 95.6 s   │
-	!          ├────────────────────────┼──────────┤
-	!          │ src/parse_misc.f90     │ 75.3 s   │
-	!          ├────────────────────────┼──────────┤
-	!          │ src/parse_control.f90  │ 73.2 s   │
-	!          ├────────────────────────┼──────────┤
-	!          │ src/lex.f90            │ 60.3 s   │
-	!          ├────────────────────────┼──────────┤
-	!          │ src/parse_fn.f90       │ 50.2 s   │
-	!          ├────────────────────────┼──────────┤
-	!          │ src/intr_fns_trig.f90  │ 39.7 s   │
-	!          ├────────────────────────┼──────────┤
-	!          │ src/parse_expr.f90     │ 31.2 s   │
-	!          ├────────────────────────┼──────────┤
-	!          │ src/parse_array.f90    │ 29.1 s   │
-	!          ├────────────────────────┼──────────┤
-	!          │ src/intr_fns_array.f90 │ 25.7 s   │
-	!          ├────────────────────────┼──────────┤
-	!          │ src/intr_fns_math.f90  │ 22.5 s   │
-	!          ├────────────────────────┼──────────┤
-	!          │ src/intr_fns_io.f90    │ 18.8 s   │
-	!          ├────────────────────────┼──────────┤
-	!          │ src/types_copy.f90     │ 12.4 s   │
-	!          ├────────────────────────┼──────────┤
-	!          │ src/types.f90          │ 11.5 s   │
-	!          └────────────────────────┴──────────┘
-	!          The parser submodules (parse_*.f90) and core.f90 dominate
-	!          compilation time. The intrinsic function files (intr_fns_*.f90)
-	!          are also quite slow, likely due to heavy use of
-	!          generated/templated code for multiple type combinations.
-	!
-	!    * docs -- see several notes below
 	!  - fn pointer (callback) improvements:
 	!    * A function pointer (`fn(...)`-typed value) cannot be taken to an
 	!      intrinsic function, a struct method, or a user-defined function with
@@ -250,23 +205,28 @@ module syntran__core_m
 	!      newlines, just like the real interactive repl
 	!    * added a couple basic tests in main.yml
 	!    * should also cover options like `-i` (startup include file)
-	!  - optional `dim` and/or `mask` args for intrn fns, e.g. sum, minval, any,
-	!    etc.
-	!    * just use `reshape` and call the fortran built-in.  no need for any
-	!      slice logic on my end
-	!    * "all" that needs to be done is resolve overloads based on which args
-	!       are present, call fortran build-in with reshape to the appropriate
-	!       size, and then set the result data along with size/rank meta-data
 	!  - using `in` (a keyword) as a fn arg name crashes the parser
 	!    * when? check blame for this comment. can't repro in 1.0.1
 	!  - print improvements:
-	!    * hex format printing
-	!    * formatted printf?
-	!      + fully general formatting sounds hard
-	!    * print (without newline)
-	!      + can be worked around with str() to build a line and then println
-	!    * maybe strhex() as a stopgap?
-	!    * bin/oct too
+	!    * newline shortcut in fmt str? char(10) can be interpolated into "{}"
+	!      fmt at end but it's a bit awkward
+	!      + \n would be a breaking change but i might do it anyway. currently
+	!        "\n" is just literal "\n" two char string. anything like a
+	!        hard-coded windows path would break
+	!    * still might need file_stat? what happens after write errors e.g. with
+	!      a full disk
+	!    * std::print(), std::write(), std::format(), std::printf(), and
+	!      std::writef() (std::-only so they don't clash with user fns) with
+	!      Rust-style `{:spec}` placeholders
+	!      (hex/bin/oct, width, fill, precision, sci notation) are done
+	!    * std::format() only takes a literal format string for now, so it is checked
+	!      at parse time.  Non-literal formats, positional `{0}` and named
+	!      `{name}` placeholders, and padding with a fill char that is not ascii
+	!      could be added later
+	!    * format() of a struct or enum only pads its str(), and can't format
+	!      the members.  Arrays of structs and enums can't be formatted
+	!  - file reading/writing
+	!    * add seek() and helper to get file size, at least for binary mode
 	!  - installer packaging:
 	!    * bin exists.  nest it in a `bin` folder
 	!    * add build os to `--version` output, to distinguish between rocky vs
@@ -311,7 +271,7 @@ module syntran__core_m
 	!      and if a statement is expensive, you may not want to have to run it
 	!      again
 	!  - structs
-	!    * post-merge TODO struct items:
+	!    * post-merge struct tasks:
 	!      + update struct sample.  include struct/array combos, nesting, etc.
 	!        maybe make separate simple and compound struct samples
 	!  - windows memory crashes require constant maintanence or they pop up
@@ -352,15 +312,6 @@ module syntran__core_m
 	!      hashing, utf, base64, and rng algorithms
 	!  - add more tests for lhs slicing
 	!    * str, bool, and i64 need testing
-	!  - array operations:
-	!    * done: element-wise add, sub, mul, div, pow, mod
-	!      + compound array assignment works but needs unit tests
-	!    * done: vector dot product and matrix mul via `@` operator
-	!      + v@v -> scalar, m@v -> vector, v@m -> vector, m@m -> matrix
-	!    * optional `dim` argument for any() and all(). 1 arg versions done
-	!    * comparisons done
-	!    * array and, or, not, done
-	!    * unary -, + done
 	!  - document recent features:
 	!    * hex/bin/oct literals
 	!    * bitwise ops
@@ -380,23 +331,7 @@ module syntran__core_m
 	!      it's in the ternary dict first.
 	!    * any use cases for #let? i probably don't want to get into general
 	!      expression parsing like `#let x = 1 + 2;` during preprocessing
-	!  - str comparison operations:
-	!    * >, <, etc. via lexicographical ordering? careful w/ strs that have
-	!      matching leading chars but diff lens
-	!    * also careful with fortran padding strs with spaces before
-	!      comparisons. i had a long-standing bug where "a" == "a " was true
-	!      because that's how fortran works :(
-	!    * ==, !=:  done
 	!  - fuzz testing
-	!  - file reading/writing
-	!    * binary file i/o
-	!    * vectorized writes (and reads) for arrays without syntran loops. c.f.
-	!      vectorized wave sample (all math is vectorized but writes are not).
-	!      need to strip bracket [] wrapping and comma delimiters
-	!    * readln(), eof() done
-	!    * also add a file_stat() fn which checks IO of previous file operation.
-	!      this way I don't need to add structs, multiple return vals, or out
-	!      args yet
 	!  - compound assignment: logical &=, |=, etc.
 	!    * maybe make &&= to avoid confusion with bitwise compound assignment &=
 	!    * +=, -=, *=, /=, %=, **= done
@@ -468,10 +403,12 @@ module syntran__core_m
 	!    * could have syntactic sugar like `dict["key"] = val`
 	!    * would perform better than syntran-implemented dicts
 	!    * how to handle many permutations of key/val types? templates?
-	!  - split doc into multiple README's, add TOC, cross-linking, etc.  Only
-	!    include quick-start and links in top-level README?
-	!    * github automatically includes a Table of Contents in a menu, so maybe
-	!      it's better as-is
+	!  - split doc into multiple README's, add TOC, cross-linking, etc.
+	!    * done: doc/README.md is a TOC for the pages in doc/, and the
+	!      intrinsic fns have their own page, doc/intrinsics.md
+	!    * open: only include quick-start and links in top-level README?
+	!      github automatically includes a Table of Contents in a menu, so
+	!      maybe it's better as-is
 	!  - switch/case follow-ups (mvp done):
 	!    * switch as an expression (like rust's match)
 	!    * beyond simple ranges:
@@ -557,7 +494,7 @@ function syntax_parse(str_, state, src_file, allow_continue, repl) result(tree)
 
 	character(len = :), allocatable :: src_filel, fn_name, var_name
 
-	integer :: i, id, slot, unit_, num_fns0, num_structs0, num_enums0
+	integer :: i, id, slot, num_fns0, num_structs0, num_enums0
 
 	logical :: allow_continuel, repll
 
@@ -586,13 +523,9 @@ function syntax_parse(str_, state, src_file, allow_continue, repl) result(tree)
 	repll = .true.
 	if (present(repl)) repll = repl
 
-	! TODO: unit_ is just synonymous with contexts%len_ in many places, so it
-	! can be removed (but not in all places)
 	contexts = new_context_vector()
-	unit_ = 0
 
-	call new_parser(parser, str_, src_filel, contexts, unit_)
-	!print *, 'units = ', parser%tokens(:)%unit_
+	call new_parser(parser, str_, src_filel, contexts)
 
 	call parser%import_stack%set(src_filel, 0)
 
@@ -725,6 +658,8 @@ function syntax_parse(str_, state, src_file, allow_continue, repl) result(tree)
 
 	parser%num_structs = num_structs0
 	parser%num_enums   = num_enums0
+	parser%std_glob    = state%std_glob
+	if (allocated(state%std_names)) parser%std_names = state%std_names
 
 	if (allocated(state%structs%table)) then
 		call move_alloc(state%structs%table, parser%structs%table)
@@ -831,13 +766,11 @@ function syntax_parse(str_, state, src_file, allow_continue, repl) result(tree)
 	! Move back.  It's possible that vars were empty before this call but not
 	! anymore
 	if (allocated(parser%vars%dicts(1)%table)) then
-	!if (parser%num_vars > 0) then
 		call move_alloc(parser%vars%dicts(1)%table, state%vars%dicts(1)%table)
 		state%vars%dicts(1)%capacity = parser%vars%dicts(1)%capacity
 		state%vars%dicts(1)%count    = parser%vars%dicts(1)%count
 	end if
 
-	! TODO: if num_fns instead?
 	if (allocated(parser%fns%table)) then
 		call move_alloc(parser%fns%table, state%fns%table)
 		state%fns%capacity = parser%fns%capacity
@@ -850,6 +783,8 @@ function syntax_parse(str_, state, src_file, allow_continue, repl) result(tree)
 		state%structs%count    = parser%structs%count
 	end if
 	state%structs%num_structs = parser%num_structs
+	state%std_glob = parser%std_glob
+	if (allocated(parser%std_names)) state%std_names = parser%std_names
 
 	if (allocated(parser%enums%table)) then
 		call move_alloc(parser%enums%table, state%enums%table)

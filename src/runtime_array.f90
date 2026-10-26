@@ -504,7 +504,7 @@ module subroutine allocate_array(val, cap)
 	call alloc_array_prim(val%array, cap, ok)
 	if (.not. ok) then
 		write(*,*) err_int(IC_ALLOC_ARRAY_TYPE, 'cannot allocate array of type `' &
-			//kind_name(val%array%type)//'`')
+			//type_name_primitive(val%array%type)//'`')
 		call internal_error()
 	end if
 
@@ -542,6 +542,37 @@ module function new_array(type, cap) result(vector)
 	end if
 
 end function new_array
+
+!===============================================================================
+
+module subroutine compound_shape_err(lhs, rhs, op, rt_err)
+
+	! Check the operands of a whole-array compound assignment (`a += b`,
+	! `s.v &= b`, etc.).  Sets (allocates) rt_err to an R37 message when both
+	! are arrays with different shapes, and leaves it unallocated otherwise.
+	!
+	! This is a subroutine instead of a function because assigning an
+	! unallocated deferred-length function result to a variable is invalid
+	! Fortran, and gfortran gives a zero-length *allocated* string for it
+	!
+	! Plain `=` is exempt since it may legitimately resize the array.  The
+	! math kernels behind apply_assign_op() don't check shapes themselves, and
+	! that routine has no state_t to throw with, so each caller that has one
+	! calls this first and does the rt_throw()
+
+	type(value_t), intent(in) :: lhs, rhs
+	type(syntax_token_t), intent(in) :: op
+	character(len = :), allocatable, intent(out) :: rt_err
+
+	if (op%kind == equals_token) return
+	if (lhs%type /= array_type .or. rhs%type /= array_type) return
+	if (same_shape(lhs%array, rhs%array)) return
+
+	rt_err = err_rt_binop_shape(op%text, &
+		lhs%array%size(1: lhs%array%rank), &
+		rhs%array%size(1: rhs%array%rank))
+
+end subroutine compound_shape_err
 
 !===============================================================================
 
@@ -1779,6 +1810,57 @@ module subroutine str_slice_bounds(node, isub, sz, state, il, iu, step, slots)
 	end if
 
 end subroutine str_slice_bounds
+
+!===============================================================================
+
+module subroutine str_arr_sub_indices(node, isub, sz, state, idx, slots)
+
+	! The 0-based character indices of an arr_sub character subscript at
+	! node%lsubscripts(isub), e.g. `s[[0, 3, 5]]`, for a string of length sz.
+	! This is the index-array counterpart of str_slice_bounds(), which can't
+	! describe a gather as (il, iu, step).
+	!
+	! The index array is the dimension's one pre-evaluated slot, same
+	! convention as str_slice_bounds()'s `slots` argument.
+	!
+	! Every index is bounds-checked individually (like check_arr_sub_bound()
+	! does for arrays), since arbitrary values have no endpoints to check.
+	! callers must check state%rt_halt on return
+
+	type(syntax_node_t), intent(in)    :: node
+	integer,             intent(in)    :: isub
+	integer(kind = 8),   intent(in)    :: sz
+	type(state_t),       intent(inout) :: state
+	integer(kind = 8), allocatable, intent(out) :: idx(:)
+	type(value_t),       intent(in)    :: slots(:)
+
+	!********
+
+	integer :: k
+	integer(kind = 8) :: j
+	type(value_t) :: asubval
+
+	k = subscript_slot_start(node, isub) + 1
+	asubval = slots(k)
+
+	select case (asubval%array%type)
+	case (i32_type)
+		idx = int(asubval%array%i32(1: asubval%array%len_), 8)
+	case (i64_type)
+		idx = asubval%array%i64(1: asubval%array%len_)
+	case default
+		write(*,*) err_int(IC_BAD_ARRAY_SUBSCRIPT_TYPE, 'bad array subscript type')
+		call internal_error()
+	end select
+
+	if (bounds_check) then
+		do j = 1, size(idx, kind = 8)
+			call check_str_bound(state, idx(j), sz)
+			if (state%rt_halt) return
+		end do
+	end if
+
+end subroutine str_arr_sub_indices
 
 !===============================================================================
 

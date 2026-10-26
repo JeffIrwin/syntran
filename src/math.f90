@@ -45,6 +45,8 @@ subroutine assign_value_t(left, right, op_text)
 
 	!********
 
+	integer(kind = 8) :: i8
+
 	!print *, 'starting assign_value_t()'
 	!print *, 'left %type = ', kind_name(left%type)
 	!print *, 'right%type = ', kind_name(right%type)
@@ -123,8 +125,13 @@ subroutine assign_value_t(left, right, op_text)
 		return
 	end if
 
-	! TODO: looks like this fails on arrays of structs
 	select case (left%array%type)
+	case (struct_type, enum_type)
+		! These elements live in left%struct(:), not in left%array.  Copy
+		! one at a time so that value_copy() deep copies each element
+		do i8 = 1, left%array%len_
+			left%struct(i8) = right
+		end do
 	case (bool_type)
 		left%array%bool = right%sca%bool
 	case (f32_type)
@@ -428,19 +435,29 @@ subroutine modulo_value_t(left, right, res, op_text)
 	case        (magic**2 * i32_type + magic * i32_type + i64_type)
 		res%sca%i32 = mod(left%sca%i32, int(right%sca%i64))
 
-	! TODO: i64/f32 casting
+	case        (magic**2 * i64_type + magic * f32_type + i64_type)
+		res%sca%i64 = int(mod(left%sca%f32, real(right%sca%i64, 4)), 8)
+
+	case        (magic**2 * i64_type + magic * i64_type + f32_type)
+		res%sca%i64 = int(mod(real(left%sca%i64, 4), right%sca%f32), 8)
+
+	case        (magic**2 * i64_type + magic * f64_type + i64_type)
+		res%sca%i64 = int(mod(left%sca%f64, real(right%sca%i64, 8)), 8)
+
+	case        (magic**2 * i64_type + magic * i64_type + f64_type)
+		res%sca%i64 = int(mod(real(left%sca%i64, 8), right%sca%f64), 8)
 
 	case        (magic**2 * i32_type + magic * f32_type + i32_type)
-		res%sca%i32 = mod(int(left%sca%f32), right%sca%i32)
+		res%sca%i32 = int(mod(left%sca%f32, real(right%sca%i32)))
 
 	case        (magic**2 * i32_type + magic * i32_type + f32_type)
-		res%sca%i32 = mod(left%sca%i32, int(right%sca%f32))
+		res%sca%i32 = int(mod(real(left%sca%i32), right%sca%f32))
 
 	case        (magic**2 * i32_type + magic * f64_type + i32_type)
-		res%sca%i32 = mod(int(left%sca%f64), right%sca%i32)
+		res%sca%i32 = int(mod(left%sca%f64, real(right%sca%i32, 8)))
 
 	case        (magic**2 * i32_type + magic * i32_type + f64_type)
-		res%sca%i32 = mod(left%sca%i32, int(right%sca%f64))
+		res%sca%i32 = int(mod(real(left%sca%i32, 8), right%sca%f64))
 
 	!****
 	case        (magic**2 * f32_type + magic * f32_type + f32_type)
@@ -451,6 +468,12 @@ subroutine modulo_value_t(left, right, res, op_text)
 
 	case        (magic**2 * f32_type + magic * i32_type + f32_type)
 		res%sca%f32 = mod(real(left%sca%i32), right%sca%f32)
+
+	case        (magic**2 * f32_type + magic * f32_type + i64_type)
+		res%sca%f32 = mod(left%sca%f32, real(right%sca%i64, 4))
+
+	case        (magic**2 * f32_type + magic * i64_type + f32_type)
+		res%sca%f32 = mod(real(left%sca%i64, 4), right%sca%f32)
 
 	!****
 	case        (magic**2 * f64_type + magic * f64_type + f64_type)
@@ -470,6 +493,12 @@ subroutine modulo_value_t(left, right, res, op_text)
 
 	case        (magic**2 * f64_type + magic * i32_type + f64_type)
 		res%sca%f64 = mod(real(left%sca%i32, 8), right%sca%f64)
+
+	case        (magic**2 * f64_type + magic * f64_type + i64_type)
+		res%sca%f64 = mod(left%sca%f64, real(right%sca%i64, 8))
+
+	case        (magic**2 * f64_type + magic * i64_type + f64_type)
+		res%sca%f64 = mod(real(left%sca%i64, 8), right%sca%f64)
 
 	case default
 		write(*,*) err_eval_binary_types(op_text)

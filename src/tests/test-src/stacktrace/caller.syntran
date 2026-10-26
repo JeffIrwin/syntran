@@ -1,0 +1,27 @@
+// Regression test for std::caller()/std::stack_trace(skip) (vm_exec.f90's
+// rt_skip_frames(), shared by OP_CALL_INTR's INTR_CALLER/INTR_STACK_TRACE).
+// See on-demand.syntran for std::print_trace()/std::stack_trace() basics;
+// this covers the optional depth/skip args specifically.
+//
+// <main> (line 26) -> outer() (line 23) -> inner() (line 12..17), where
+// inner() builds a "|"-joined str from std::caller() at a few depths and
+// std::stack_trace() at a few skip counts, then returns it.
+
+fn inner(): str
+{
+	let a = std::caller();         // line 12: default depth 1 -> outer (line 23)
+	let b = std::caller(0);        // line 13: depth 0 -> inner (line 13), itself
+	let c = std::caller(2);        // line 14: depth 2 -> <main> (line 26)
+	let d = std::caller(99);       // line 15: out of range -> ""
+	let e = std::stack_trace(1);   // line 16: drop innermost (inner) frame
+	let f = std::stack_trace(99);  // line 17: drop everything, even <main>
+	return a + "|" + b + "|" + c + "|" + d + "|" + e + "|" + f;
+}
+
+fn outer(): str
+{
+	return inner();
+}
+
+let trace = outer();
+return trace;

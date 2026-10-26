@@ -1,0 +1,6 @@
+let n = 10_000_000;
+let a = 1.0e-7 * [0: n];
+let b = 1.0 - a;
+let s = 0.0;
+for k in [0: 50] { s += sum(a * b) + (a @ b) + maxval(a - b); }
+println(s);

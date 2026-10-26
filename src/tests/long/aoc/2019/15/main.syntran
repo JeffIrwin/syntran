@@ -1,0 +1,188 @@
+
+use ../../utils_2026::*;
+use ../../dicts/dict_i64_2026 as dict_i64;
+use ../../queues/queue_i64 as queue_i64;
+use ../../queues/queue_vec_i32_2026 as queue_vec_i32;
+
+use ../intcode;
+
+let filename = "input.txt";
+
+//==============================================================================
+
+enum Move
+{
+	// north (1), south (2), west (3), and east (4).
+	north = 1,
+	south = 2,
+	west  = 3,
+	east  = 4,
+}
+
+let oxy_x = 0;
+let oxy_y = 0;
+fn part1(): str
+{
+	let sum_ = 0'i64;
+
+	const prog0 = read_i64_mat_delim(filename, ",")[:,0];
+	//println("prog0 = ", prog0);
+
+	let prog = intcode::new_program(prog0);
+
+	let dists = dict_i64::new();
+	dists.set("0,0", 0'i64);
+	dfs(0, 0, &dists, &prog);
+
+	const key = str(oxy_x, ",", oxy_y);
+	sum_ = dists.get(key);
+
+	println("part 1 = ", sum_);
+	return str(sum_);
+}
+
+fn part2(): str
+{
+	let sum_ = 0'i64;
+
+	const prog0 = read_i64_mat_delim(filename, ",")[:,0];
+	//println("prog0 = ", prog0);
+
+	let prog = intcode::new_program(prog0);
+
+	// First DFS: search from origin start to find the oxygen system (part 1)
+	let dists = dict_i64::new();
+	dists.set("0,0", 0'i64);
+	dfs(0, 0, &dists, &prog);
+
+	//const key = str(oxy_x, ",", oxy_y);
+	//sum_ = dists.get(key);
+
+	//// Second DFS: fill from oxygen system
+	//dists = dict_i64::new();
+	//const key = str(oxy_x, ",", oxy_y);
+	//dists.set(key, 0'i64);
+	//dfs(oxy_x, oxy_y, &dists, &prog);
+
+	//sum_ = maxval(dists.get_vals());
+
+	let xmin = let xmax = let ymin = let ymax = 0;
+	for key in dists.get_keys()
+	{
+		//println("key = ", key);
+		const xy = parse_i32_delim(key, ",");
+		xmin = min(xmin, xy[0]);
+		ymin = min(ymin, xy[1]);
+		xmax = max(xmax, xy[0]);
+		ymax = max(ymax, xy[1]);
+	}
+	//println("xy min/max = ", [xmin, xmax, ymin, ymax]);
+	const nx = xmax - xmin + 1;
+	const ny = ymax - ymin + 1;
+	let dg = [-2; nx, ny];  // -2 == wall/outside
+	for key in dists.get_keys()
+	{
+		//println("key = ", key);
+		const xy = parse_i32_delim(key, ",");
+		dg[xy[0] - xmin, xy[1] - ymin] = -1;  // -1 == inside, dist yet unknown
+	}
+	//println("dg = ", dg);
+
+	// BFS on grid `dg`
+	//
+	// idk why i tried just using dfs() fn again from different start point but
+	// i got a different answer (390 instead of 382). maybe the intcode program
+	// sabotages you after you've reached the oxygen system??
+	let q = queue_vec_i32::new();
+	q.push([0, oxy_x - xmin, oxy_y - ymin]);
+	while not q.is_empty()
+	{
+		const u = q.pop();
+		//println("u = ", u);
+		const d0 = u[0];
+		const x0 = u[1];
+		const y0 = u[2];
+		if (x0 < 0) continue;
+		if (y0 < 0) continue;
+		if (x0 >= nx) continue;
+		if (y0 >= ny) continue;
+		if (dg[x0, y0] == -2) continue;
+		if (dg[x0, y0] >= 0) continue;
+		dg[x0, y0] = d0;
+		q.push([d0+1, x0+1, y0]);
+		q.push([d0+1, x0-1, y0]);
+		q.push([d0+1, x0, y0+1]);
+		q.push([d0+1, x0, y0-1]);
+	}
+	sum_ = maxval(dg);
+
+	println("part 2 = ", sum_);
+	return str(sum_);
+}
+
+fn dfs(x: i32, y: i32, dists: &dict_i64::dict_i64, prog: &const intcode::Program)
+{
+	//println("x, y = ", [x, y]);
+	let dist = dists.get(str(x, ",", y));
+	let stat = intcode::new_status();
+	for move in Move
+	{
+		let inputs = queue_i64::new();
+		//println(move);
+		let x = x;  // local copy shadows
+		let y = y;
+		let prog = prog;
+		switch move
+		{
+			case Move.north
+				y += 1;
+			case Move.south
+				y -= 1;
+			case Move.east
+				x += 1;
+			case Move.west
+				x -= 1;
+		}
+		let alt = dists.get(str(x, ",", y));
+		//if alt < 0 or dist+1 < alt
+		if (alt >= 0 and dist+1 > alt) continue;
+
+		inputs.push(i64(i32(move)));
+		let outputs = prog.exec(&inputs, &stat);
+		if (outputs.data[0] == 0) continue;
+
+		dists.set(str(x, ",", y), dist + 1);
+
+		if outputs.data[0] == 2
+		{
+			oxy_x = x;
+			oxy_y = y;
+		}
+		dfs(x, y, &dists, &prog);
+		//println("outputs = ", outputs.data);
+	}
+}
+
+//==============================================================================
+
+fn main(): str
+{
+	// For unit-testing (within the syntran repo), this main fn returns a value
+	// to be compared with expected results
+	println();
+	println("Starting AOC syntran main 2019/15");
+
+	let p1 = part1();
+	let p2 = part2();
+
+	println("Ending AOC syntran main");
+	println();
+	return p1 + ":" + p2;
+}
+
+//==============================================================================
+
+return main();
+
+//==============================================================================
+

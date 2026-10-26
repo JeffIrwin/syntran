@@ -17,12 +17,18 @@ module syntran__value_m
 
 		integer :: unit_  ! fortran file unit
 
-		! TODO: extend with more modes, e.g. binary, text, append (?)
-		!
 		! c.f. python open modes:  https://docs.python.org/3/library/functions.html#open
+		!
+		! Append mode "a" is a write mode that starts at the end of an existing
+		! file instead of replacing it, so it sets both mode_write and append
 		logical :: &
 			mode_read  = .false., &
-			mode_write = .false.
+			mode_write = .false., &
+			append     = .false.
+
+		! A binary file is opened with "rb" or "wb".  It is an unformatted stream
+		! of the raw bytes of the values, instead of lines of text
+		logical :: binary = .false.
 
 		logical :: is_open = .false.
 		logical :: eof = .false.
@@ -81,7 +87,8 @@ module syntran__value_m
 
 		type(string_t   ), allocatable ::  str(:)
 
-		! TODO: file arrays
+		! There are no file arrays.  Arrays of files are rejected at parse time
+		! (E124)
 
 		integer :: rank
 		integer(kind = 8) :: len_, cap
@@ -200,7 +207,7 @@ module syntran__value_m
 	! which itself `use`s syntran__value_m -- passing them down would be a
 	! circular module dependency (c.f. value_type_name()'s note above on the
 	! same constraint).  Populated once per struct declaration by
-	! parse_struct_declaration() (parse_fn.f90), read at print time
+	! parse_struct_declaration() (parse_struct.f90), read at print time
 	type(map_i32_t), save :: struct_reg_map
 	type(string_vector_t), allocatable, save :: struct_reg_names(:)
 	integer, save :: struct_reg_len = 0
@@ -273,6 +280,10 @@ module syntran__value_m
 			integer, intent(in) :: type_
 			type(array_t), allocatable :: array
 		end function mold
+
+		module logical function same_shape(a, b)
+			type(array_t), intent(in) :: a, b
+		end function same_shape
 
 		module subroutine copy_composite_id(dst, src)
 			type(value_t), intent(inout) :: dst

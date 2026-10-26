@@ -1,0 +1,10 @@
+// R42: lu-bad-pivots
+// std::lu_solve() was given pivots that are not valid for its factors, i.e.
+// the wrong number of them or an entry outside of the matrix
+
+let A = [2.0, 1.0, 1.0, 3.0; 2, 2];
+let ipiv = std::lu_factor(&A);
+
+let b = [3.0, 5.0];
+let bad = [0, 5];
+std::lu_solve(A, bad, &b);

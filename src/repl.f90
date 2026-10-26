@@ -149,6 +149,12 @@ subroutine repl_help_keys(ou)
 
 	character(len = :), allocatable :: hist_path
 
+	if (.not. line_edit_available()) then
+		write(ou, "(a)") "This build has no line editing (history, arrow keys), because it"
+		write(ou, "(a)") "was built with SYNTRAN_NO_ISOCLINE."
+		return
+	end if
+
 	write(ou, "(a)") "Line editing:"
 	write(ou, "(a)") tab//"Up / Down    Recall the previous / next history entry"
 	write(ou, "(a)") tab//"Ctrl+R       Reverse-search history"
@@ -224,7 +230,7 @@ subroutine repl_help_fns(state, ou)
 	if (len(fn_line) > len(tab)) write(ou, "(a)") fn_line
 
 	write(ou, *)
-	write(ou, "(a)") "See doc/README.md for signatures."
+	write(ou, "(a)") "See doc/intrinsics.md for signatures."
 
 end subroutine repl_help_fns
 
@@ -268,6 +274,10 @@ subroutine repl_help_vars(state, ou)
 	do i = 1, state%fns%capacity
 		if (.not. allocated(state%fns%table(i)%key)) cycle
 		if (state%fns%table(i)%val%is_intr) cycle
+
+		! Per-id alias of an imported method, c.f. parse_use_statement()
+		if (index(state%fns%table(i)%key, "#") > 0) cycle
+
 		any_fns = .true.
 		write(ou, "(a)") tab//state%fns%table(i)%key
 	end do

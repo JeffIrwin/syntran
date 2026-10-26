@@ -317,7 +317,7 @@ end subroutine match
 
 !===============================================================================
 
-recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, unit_)
+recursive module subroutine preprocess(parser, tokens_in, src_file, contexts)
 
 	! src_file is the filename of the current file being processed, i.e. the
 	! *includer*, not the includee
@@ -327,8 +327,6 @@ recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, un
 	character(len = *), intent(in) :: src_file
 
 	type(text_context_vector_t), intent(inout) :: contexts
-
-	integer, intent(inout) :: unit_
 
 	!********
 
@@ -343,7 +341,9 @@ recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, un
 	type(syntax_token_t) :: token, token_peek, lparen, rparen, semicolon
 	type(syntax_token_vector_t) :: tokens_out
 
-	unit_0 = unit_
+	! The includer's own context was pushed by new_parser() before it called
+	! us, so it is the last one
+	unit_0 = contexts%len_
 
 	tokens_out = new_syntax_token_vector()
 	i = 0
@@ -414,7 +414,7 @@ recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, un
 			!print *, inc_text
 
 			! Any nested includes are handled in this new_parser() call
-			call new_parser(inc_parser, inc_text, filename, contexts, unit_)
+			call new_parser(inc_parser, inc_text, filename, contexts)
 
 			! Add includee tokens to includer.  Minus 1 because included eof_token
 			do j = 1, size(inc_parser%tokens) - 1
@@ -610,6 +610,11 @@ recursive module subroutine parse_unit(parser, unit)
 	integer :: i, j, num_vars0, num_fns0, num_structs0, num_enums0
 	integer :: ndiag_pre
 
+	! `use std::*;` and `use std::name;` from an earlier REPL line, restored
+	! before pass 2
+	logical :: std_glob0
+	character(len = :), allocatable :: std_names0
+
 	! Pass-0 diagnostics, saved so the pass-0-only families among them can be
 	! merged back in after pass 1 (see the comment at the merge below)
 	type(string_vector_t) :: diags0
@@ -621,6 +626,8 @@ recursive module subroutine parse_unit(parser, unit)
 	! First pass
 	parser%ipass = 0
 	parser%last_e20_pos = 0
+	std_glob0 = parser%std_glob
+	if (allocated(parser%std_names)) std_names0 = parser%std_names
 
 	! Diagnostics that exist before either pass: lexer errors and #include
 	! preprocessor errors, both pushed by new_parser().  Pass 0's own output
@@ -686,6 +693,15 @@ recursive module subroutine parse_unit(parser, unit)
 		parser%ipass = 1
 		parser%last_e20_pos = 0
 
+		! Pass 2 re-parses `use std::*;` too, so a bare call before it must
+		! not see the flag that pass 1 set
+		parser%std_glob = std_glob0
+		if (allocated(std_names0)) then
+			parser%std_names = std_names0
+		else if (allocated(parser%std_names)) then
+			deallocate(parser%std_names)
+		end if
+
 		parser%num_vars = num_vars0
 		parser%num_fns = num_fns0
 		parser%num_structs = num_structs0
@@ -694,7 +710,7 @@ recursive module subroutine parse_unit(parser, unit)
 		! Resetting the counters (not the tables) is enough: pass 2 re-inserts
 		! every struct/enum from num_structs0/num_enums0 with overwrite = .true.
 		! (parser%ipass > 0, c.f. parse_struct_declaration()/
-		! parse_enum_declaration() in parse_fn.f90), landing on the exact same
+		! parse_enum_declaration() in parse_struct.f90), landing on the exact same
 		! id_index as pass 1 assigned it
 
 		! Pass 2 re-parses every `use` statement, so the duplicate-import
@@ -915,15 +931,13 @@ end subroutine parse_unit_pass
 
 !===============================================================================
 
-recursive module subroutine new_parser(parser, str_, src_file, contexts, unit_)
+recursive module subroutine new_parser(parser, str_, src_file, contexts)
 
 	type(parser_t), intent(out) :: parser
 
 	character(len = *), intent(in) :: str_, src_file
 
 	type(text_context_vector_t) :: contexts
-
-	integer, intent(inout) :: unit_
 
 	!********
 
@@ -934,7 +948,7 @@ recursive module subroutine new_parser(parser, str_, src_file, contexts, unit_)
 
 	! Lex and get an array of tokens
 	tokens = new_syntax_token_vector()
-	lexer = new_lexer(str_, src_file, unit_)
+	lexer = new_lexer(str_, src_file, contexts%len_ + 1)
 	do
 		call lexer%lex(token)
 		!print *, 'token%unit_ = ', token%unit_
@@ -950,6 +964,17 @@ recursive module subroutine new_parser(parser, str_, src_file, contexts, unit_)
 
 	! Preprocess then convert to standard array (and parser class member)
 
+	! Register this file/include/module's context in the process-global
+	! src_registry (errors.f90) before anything else gets a chance to see
+	! it, so every statement parsed below can be stamped with a stable
+	! src_id for runtime-error stack traces (parse_statement(),
+	! parse_control.f90).  An #include'd file gets its own context/src_id
+	! here too: preprocess() (parse_misc.f90), called just below, recurses
+	! into new_parser() for each #include, so each included file's
+	! statements are stamped with *that* recursive call's src_id, not this
+	! outer one's
+	lexer%context%src_id = register_src(lexer%context)
+
 	! For correct ordering wrt token%unit_, the current parser context is pushed
 	! first, before preprocessing.
 	call contexts%push( lexer%context )
@@ -957,7 +982,7 @@ recursive module subroutine new_parser(parser, str_, src_file, contexts, unit_)
 	parser%diagnostics = new_string_vector()
 	call parser%diagnostics%push_all( lexer%diagnostics )
 
-	call parser%preprocess(tokens%v(1:tokens%len_), src_file, contexts, unit_)
+	call parser%preprocess(tokens%v(1:tokens%len_), src_file, contexts)
 
 	! Set other parser members
 

@@ -1,0 +1,6 @@
+// R38: dot-size-mismatch
+// dot() was given two vectors with different lengths
+
+let a = [1, 2, 3];
+let b = [1, 2];
+let d = dot(a, b);

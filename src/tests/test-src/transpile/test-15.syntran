@@ -1,0 +1,62 @@
+// repeat() with an i64 ncopies, parse_bool(), and the f32() and f64() casts.
+// These programs are run by both the interpreter and the Fortran transpiler
+// (utils/test-transpile.sh), which must print the same thing.  The return
+// value is the number of failed checks.  The floats are all exactly
+// representable, so their printed digits match between the backends
+
+let status = 0;
+
+fn check(ok: bool): i32
+{
+	if (ok) return 0;
+	return 1;
+}
+
+//==============================================================================
+// repeat(), with ncopies of either integer type
+
+let title = "abc";
+println(repeat("-", len(title)));
+println(repeat("ab", 3));
+println(repeat("ab", 2'i64));
+println("[", repeat("x", 0'i64), "]");
+status += check(repeat("ab", len(title)) == "ababab");
+status += check(repeat(title, i64(2)) == "abcabc");
+
+//==============================================================================
+// parse_bool()
+
+println(parse_bool("true"));
+println(parse_bool(" false"));
+status += check(parse_bool("true"));
+status += check(not parse_bool("false"));
+status += check(parse_bool("false  ") == false);
+
+//==============================================================================
+// f32() and f64() of scalars
+
+println(f32(3) / 2);
+println(f64(3) / 2);
+println(f32(7'i64));
+println(f64(2.5f));
+println(f32(1.5));
+status += check(f32(3) / 2 == 1.5f);
+status += check(f64(3) / 2 == 1.5);
+status += check(f64(f32(0.25)) == 0.25);
+
+//==============================================================================
+// ... and of arrays, of rank 1 and 2
+
+let a = f64([1, 2, 3]);
+println(a);
+status += check(sum(a) == 6.0);
+status += check(size(a) == 3);
+
+let b = f32([1, 2, 3, 4; 2, 2]);
+println(b);
+status += check(sum(b) == 10.0f);
+status += check(size(b, 0) == 2);
+status += check(size(f64([1'i64, 2'i64, 3'i64])) == 3);
+
+println(status);
+return status;

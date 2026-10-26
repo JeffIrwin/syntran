@@ -1,0 +1,11 @@
+let n = parse_i32(std::args()[0]);
+let x = [0.0; n];
+let v = [1.0; n];
+let g = [-9.8; n];
+let dt = 1.0e-6;
+for k in [0: 60_000_000 / n]
+{
+	v = v + dt * g;
+	x = x + dt * v;
+}
+println(sum(x));

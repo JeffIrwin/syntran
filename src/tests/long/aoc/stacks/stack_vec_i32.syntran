@@ -1,0 +1,94 @@
+
+struct Stack_vec_i32
+{
+	vals: [i32; :,:],
+	len: i32, // stack size
+	cap: i32,
+	vec_len: i32, // size of a single pushed/popped vector value
+	is_init : bool, // vec size is set on first push
+
+	fn push(val: &const [i32; :])
+	{
+		if is_init
+		{
+			if size(val) != size(vals,0)
+			{
+				println("Error: cannot push stack value with inconsistent size");
+				exit(2);
+			}
+		}
+		is_init = true;
+
+		if cap == 0 or len == cap
+		{
+			//println("resizing");
+			let new_cap = 1;
+			if cap > 0
+				new_cap = cap * 2;
+
+			// Note syntran cannot move yet, so we need two copies here where
+			// other languages could optimally do only one copy
+			let new_vals = [0; size(val), new_cap];
+			new_vals[:, 0:len] = vals;
+			vals = new_vals;
+			cap = new_cap;
+		}
+
+		vals[:,len] = val;
+		len += 1;
+	}
+
+	fn pop(): [i32; :]
+	{
+		len -= 1;
+		if len < 0
+		{
+			println("Error: cannot pop empty stack");
+			exit(1);
+		}
+		return vals[:,len];
+	}
+}
+fn new(): Stack_vec_i32
+{
+	return Stack_vec_i32
+	{
+		vals = [0; 0, 0],
+		len = 0,
+		cap = 0,
+		vec_len = 0,
+		is_init = false,
+	};
+}
+
+//fn stack_test(): i32
+//{
+//	let nfail = 0;
+//
+//	let stack = new();
+//	stack.push([1, 10]);
+//	stack.push([2, 20]);
+//	stack.push([3, 30]);
+//	stack.push([4, 40]);
+//	stack.push([5, 50]);
+//	stack.push([6, 60]);
+//	stack.push([7, 70]);
+//	stack.push([8, 80]);
+//	stack.push([9, 90]);
+//	//stack.push([10, 100, 1000]); // error: bad size
+//
+//	if not all(stack.pop() == [9, 90]) nfail += 1;
+//	if not all(stack.pop() == [8, 80]) nfail += 1;
+//	if not all(stack.pop() == [7, 70]) nfail += 1;
+//	if not all(stack.pop() == [6, 60]) nfail += 1;
+//	//println("stack.pop() = ", stack.pop());
+//	if not all(stack.pop() == [5, 50]) nfail += 1;
+//	if not all(stack.pop() == [4, 40]) nfail += 1;
+//	if not all(stack.pop() == [3, 30]) nfail += 1;
+//	if not all(stack.pop() == [2, 20]) nfail += 1;
+//	if not all(stack.pop() == [1, 10]) nfail += 1;
+//
+//	return nfail;
+//}
+//return stack_test();
+

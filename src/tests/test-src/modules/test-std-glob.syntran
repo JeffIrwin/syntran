@@ -1,0 +1,23 @@
+// `use std::*;` lets std-only fns be called without the `std::` prefix
+
+use std::*;
+
+let m = reshape([1, 2, 3, 4, 5, 6], [2, 3]);
+let t = transpose(m);
+
+// A user fn named like a std-only fn takes precedence over it
+fn shape(): i32
+{
+	return 7;
+}
+
+// Mixed with explicit std:: calls and legacy intrinsics, which never needed
+// the prefix
+let n = 3;
+
+return
+	size(t, 0) == 3 and
+	t[2, 1] == 6 and
+	shape() == 7 and
+	std::size(std::reshape([0: 6], [n, 2]), 1) == 2 and
+	sum([1, 2, 3]) == 6;

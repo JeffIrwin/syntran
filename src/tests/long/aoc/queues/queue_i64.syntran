@@ -1,0 +1,101 @@
+// User-defined dynamic circular queue (resizable array) for i64, using a struct
+// with methods.  Push grows capacity by doubling
+//
+// Based on samples/vec_i64.syntran
+//
+// The difference between vec and queue is that queues pop from the start, not
+// the end, and circular queues can push to the start of the array after values
+// have been popped to reduce resize amortization
+
+struct Queue_i64
+{
+	beg: i32,
+	end: i32,
+	cap: i32,
+	is_empty_m: bool,
+	data: [i64; :],
+
+	const fn is_empty(): bool
+	{
+		return is_empty_m;
+	}
+	fn push(val: i64)
+	{
+		//println("pushing val = ", val);
+		//println("beg, end, is_empty_m = ", beg, end, is_empty_m);
+		if cap == 0 or (beg == end and not is_empty_m)
+		{
+			//println("resizing");
+			//println("data = ", data);
+			let new_cap = 1;
+			if cap > 0
+				new_cap = cap * 2;
+
+			// Note syntran cannot move yet, so we need two copies here where
+			// other languages could optimally do only one copy
+			//let new_data = [0; new_cap];
+
+			//let new_data = [data[beg: cap], data[:end], [0; new_cap-cap]];
+			//data = new_data;
+			data = [data[beg: cap], data[:end], [0'i64; new_cap-cap]];
+
+			//println("new_cap, size = ", new_cap, size(data));
+			beg = 0;
+			end = cap;
+			cap = new_cap;
+		}
+		data[end] = val;
+		//println("data = ", data);
+		//end += 1;
+		end = (end+1) % cap;
+		is_empty_m = false;
+		return;
+	}
+
+	const fn len(): i32
+	{
+		if is_empty_m
+			return 0;
+		if beg < end
+			return end - beg;
+		else
+			return end + cap - beg;
+	}
+
+	const fn get_vals(): [i64; :]
+	{
+		if is_empty_m
+			return [0'i64; 0];
+		if beg < end
+			return data[beg: end];
+		else
+			return [data[beg:], data[:end]];
+	}
+
+	fn pop(): i64
+	{
+		if is_empty_m
+		{
+			println("Error: cannot pop empty queue");
+			exit(1);
+		}
+		let beg0 = beg;
+		//beg += 1;
+		beg = (beg+1) % cap;
+		is_empty_m = beg == end;
+		return data[beg0];
+	}
+}
+
+fn new(): Queue_i64
+{
+	return Queue_i64
+	{
+		beg = 0,
+		end = 0,
+		cap = 0,
+		is_empty_m = true,
+		data = [0'i64; 0],
+	};
+}
+

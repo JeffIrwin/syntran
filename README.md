@@ -6,11 +6,9 @@
 <!-- [![](doc/imgs/logo-syntran-128p.png)](https://github.com/JeffIrwin/syntran/blob/main/samples/logo.syntran) -->
 [![](doc/imgs/logo-syntran-128p.png)](samples/logo.syntran)
 
-⚠️ Syntran is beta and I don't recommend using it for anything serious.  You may discover bugs, missing features, general pain points; and later updates may be incompatible.
-
 ## [Syntax translator](https://www.practo.com/medicine-info/syntran-100-mg-capsule-18930)
 
-An interpreter written in Fortran, I guess
+_An interpreter written in Fortran_
 
 > Jerry: Fungicide. I mean what could she have?
 >
@@ -18,7 +16,15 @@ An interpreter written in Fortran, I guess
 >
 > Kramer: Fungus.
 
-This began as a sandbox for me to play in as I followed along with [Immo Landwerth's _building a compiler_ series](https://www.youtube.com/playlist?list=PLRAdsfhKI4OWNOSfS7EUu5GRAVmze1t2y), but it has since diverged.  Syntran has morphed into an interpretted, array-oriented language -- basically MATLAB but with curly braces, type checking, and zero-indexed arrays.
+Syntran is an interpreted, array-oriented language -- basically MATLAB but with curly braces, type checking, and zero-indexed arrays.
+
+The interpreter is an efficient stack-based bytecode VM with performance roughly on par
+with python. Vectorized array operations use native Fortran constructs, offering
+numpy-like performance without requiring any third-party dependencies.  See the
+[benchmarks](src/benchmarks/README.md).
+
+Syntran can run standalone scripts, serve as a desktop calculator in its REPL,
+or be embedded in Fortran applications through its [API](doc/api.md).
 
 ## Try it online
 
@@ -115,7 +121,7 @@ Using cmake:
 
 If you installed syntran as a binary, you can skip this section.
 
-A [Fortran compiler](https://fortran-lang.org/en/compilers/) and either [CMake](https://cmake.org/download/) or [FPM](https://fpm.fortran-lang.org/index.html) are required.  Supported compilers are gfortran 10 through 15, or Intel 2025.2.  Also check `matrix.gfortran` in the [github actions workflow ](.github/workflows/main.yml) to see which compilers are regularly tested in CI/CD.  For performance, gfortran is recommended over Intel.
+A [Fortran compiler](https://fortran-lang.org/en/compilers/) and either [CMake](https://cmake.org/download/) or [FPM](https://fpm.fortran-lang.org/index.html) are required.  Supported compilers are gfortran 10 through 15, or Intel 2025.2.  Also check `matrix.gfortran` in the [github actions workflow ](.github/workflows/main.yml) to see which compilers are regularly tested in CI/CD.  For performance, gfortran is recommended over Intel.  A BLAS/LAPACK library is also needed by default, see [below](#blas-and-lapack).
 
 Two independent build systems are provided for syntran.  You can either use cmake, which is run by `build.sh` as shown above, or you can use the Fortran Package Manager `fpm`:
 
@@ -135,6 +141,50 @@ docker container using the included [Dockerfile](Dockerfile).  See the
 
 You shouldn't need to worry about this, but note that some of the source code is
 auto-generated.  [Go here for details](doc/src-gen.md).
+
+### BLAS and LAPACK
+
+The `@` operator on `f32`/`f64` arrays, `std::solve()`, and
+`std::lu_factor()`/`std::lu_solve()` call BLAS and LAPACK.  Binary releases
+already have them linked in statically, so this only matters if you build from
+source.  The Linux and Windows releases bundle OpenBLAS and LAPACK, and their
+license notices are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), which
+is shipped alongside the binary.  Install an optimized implementation (OpenBLAS), not the much slower
+reference `libblas`/`liblapack`:
+
+- macOS: nothing to install, the Accelerate framework is used
+- Debian/Ubuntu: `sudo apt-get install libopenblas-dev`
+- Fedora/Rocky/Alma: `sudo dnf install --enablerepo=crb openblas-devel blas-devel lapack-devel`
+- Alpine: `apk add openblas-dev`, then `ln -s libopenblas.so /usr/lib/libblas.so`
+- Windows: install OpenBLAS from MSYS2 with
+  `pacman -S mingw-w64-ucrt-x86_64-openblas`, copy
+  `C:\msys64\ucrt64\lib\libopenblas.a` to `build/openblas/libblas.a` and
+  `build/openblas/liblapack.a` in the syntran directory, and pass
+  `--flag "-fopenmp -Lbuild/openblas"` to fpm.  See the "Install OpenBLAS windows" step in
+  the [github actions workflow](.github/workflows/main.yml) for the full recipe.
+  Note that `build.sh` (cmake) doesn't look for BLAS on Windows and always
+  builds with the portable fallbacks described below
+
+To build without BLAS and LAPACK, define `SYNTRAN_NO_BLAS`.  Portable Fortran
+fallbacks are used instead, which give the same results up to rounding but are
+slower for large matrices.  Nothing needs to be installed:
+
+<!-- syntran-begin mode=skip reason="builds the interpreter itself; out of scope for output testing" -->
+```
+# cmake, via build.sh
+SYNTRAN_NO_BLAS=1 ./build.sh
+
+# fpm, which needs version 0.13.0 or later
+fpm build --features release,noblas
+fpm test test --features debug,noblas
+```
+<!-- syntran-end -->
+
+With fpm, `--features` takes the place of `--profile`, so name `release` or
+`debug` in the list.
+
+If you depend on syntran from your own fpm project, see
+[doc/api.md](doc/api.md#blas-and-lapack).
 
 ## Run
 
@@ -167,12 +217,34 @@ Use two asterisks for exponent powers, like Fortran and Scilab:
 5 ** 2;
 // 25
 ```
-<!-- syntran-expect
-25
--->
 <!-- syntran-end -->
 
 There's no need to [import `math.h`](https://en.cppreference.com/w/c/numeric/math/pow) and call the `pow()` function!
+
+Powers group the same way as in Fortran, Python, and math notation.  They are right-associative, and they bind tighter than a unary minus:
+
+<!-- syntran-begin mode=repl group=intro-arith -->
+```cpp
+2 ** 3 ** 2;
+// 512
+
+(2 ** 3) ** 2;
+// 64
+
+-2 ** 2;
+// -4
+
+(-2) ** 2;
+// 4
+```
+<!-- syntran-expect
+25
+512
+64
+-4
+4
+-->
+<!-- syntran-end -->
 
 ## Variables, Booleans, and type checking
 
@@ -201,7 +273,7 @@ not q and foo + bar == baz;
 // true
 
 foo and p;
-// Error[E48]: binary operator `and` is not defined for types i32_type and bool_type
+// Error[E48]: binary operator `and` is not defined for types i32 and bool
 //   --> <stdin>:1:5
 //    |
 //  1 | foo and p;
@@ -217,7 +289,7 @@ true
 false
 true
 true
-Error[E48]: binary operator `and` is not defined for types i32_type and bool_type
+Error[E48]: binary operator `and` is not defined for types i32 and bool
   --> <stdin>:1:5
    |
  1 | foo and p;
@@ -264,7 +336,7 @@ Larger integer literals outside the `i32` range are automatically inferred as
 - the literal `-3000000000` is of type `i64`
 
 Small literals can be explicitly cast up to `i64` either by using a type suffix
-or by using the [`i64()` function](doc/README.md#i64):
+or by using the [`i64()` function](doc/intrinsics.md#i64):
 - `42'i64` is of type `i64`
 - `i64(42)` is a function call with a literal argument `42` of type `i32`, and
   the function returns type `i64`
@@ -321,9 +393,27 @@ As programs get longer and more complicated, it becomes difficult to enter them 
 
 <!--
 Note: global block statement is not required as of 0.0.13.  Multiple statements (and functions) are parsed at the global scope.
-
-Make sure to wrap the entire script in a main block with braces `{}`.  The global block `{}` is not required when interactively using the interpreter because it parses and evaluates one statement at a time.  However, if you forget the global block `{}` in a script file, only the first statement will be parsed and any trailing junk statements will be unexpected.
 -->
+
+### Transpiling to Fortran
+
+Instead of running a program with the interpreter, `syntran --transpile`
+translates it to a standalone modern Fortran program, which you compile
+yourself with the Fortran compiler of your choice:
+
+<!-- syntran-begin mode=skip reason="shell invocation example" -->
+```
+syntran --transpile fib.f90 fib.syntran
+gfortran -O3 fib.f90 -o fib
+./fib
+```
+<!-- syntran-end -->
+
+Most of the language is supported, including structs, enums, modules, `switch`,
+file I/O, and function pointers.  The interpreter's call stack
+(`std::caller()` and friends) is not.  See [doc/transpile.md](doc/transpile.md)
+for what is supported, and for how the generated program differs from
+interpreting.
 
 ### Other command-line arguments
 
@@ -352,6 +442,8 @@ Run `syntran -h` to see a comprehensive listing of syntran command-line argument
      --permissive-return Downgrade missing-return errors to warnings
      --cd                Resolve the script's relative file paths against its own directory
      -s --syntax-only    Parse and type check without running the program
+     -t --transpile <f>  Write the program as Fortran source to <f> ('-' for stdout) instead of running it
+     --keep-unused-fns   With --transpile, also write the fns that nothing calls
      -- <args>...        Pass remaining arguments to script via std::args()
 ```
 <!-- syntran-expect
@@ -374,6 +466,8 @@ Run `syntran -h` to see a comprehensive listing of syntran command-line argument
      --permissive-return Downgrade missing-return errors to warnings
      --cd                Resolve the script's relative file paths against its own directory
      -s --syntax-only    Parse and type check without running the program
+     -t --transpile <f>  Write the program as Fortran source to <f> ('-' for stdout) instead of running it
+     --keep-unused-fns   With --transpile, also write the fns that nothing calls
      -- <args>...        Pass remaining arguments to script via std::args()
 -->
 <!-- syntran-end -->
@@ -389,6 +483,38 @@ Although the semantic version is always shown, `--version` shows more details:
 ```
 <!-- syntran-end -->
 This can be helpful for binary installations.  If you built from source, most of the details are pointlessly redundant, and the `git commit` will not be shown.
+
+## Calling syntran from Fortran
+
+Syntran is a Fortran library as well as an executable, so a Fortran program can
+evaluate syntran source directly.  Hand a string to one of the
+`syntran_eval_*()` functions and get a Fortran value back:
+
+<!-- syntran-begin mode=skip reason="Fortran host program, not syntran code" -->
+```fortran
+program main
+    use syntran
+    implicit none
+
+    integer :: io
+    real(kind = 8) :: x
+
+    x = syntran_eval_f64('sqrt(2.0) * 3.0;', quiet = .true., io = io)
+    if (io /= exit_success) error stop 'syntran failed'
+    print *, x
+end program main
+```
+<!-- syntran-end -->
+
+Typed functions are provided for `i32`, `i64`, `f32`, `f64`, `bool`, and `str`,
+and `syntran_eval()` returns any result as a string.  Pass `quiet = .true.`
+from a host program, or else a runtime error in the syntran source will call
+`exit()` and end your program too.
+
+See [doc/api.md](doc/api.md) for the full reference and for how to depend on
+syntran from your own fpm project (note that a plain `git` dependency doesn't
+work yet), and [`example/`](example) for programs which you can run with
+`fpm run --example eval_basic`.
 
 ## If statements and for loops
 
@@ -1142,6 +1268,40 @@ v1[size(v1,0)-1: -1: -1];
 ```
 <!-- syntran-end -->
 
+Either bound of a range may be omitted.  With a single colon, an omitted lower
+bound defaults to `0` and an omitted upper bound defaults to the size of the
+array:
+<!-- syntran-begin mode=repl group=array-slice -->
+```rust
+v1[2:];
+// [4, 6, 8]
+v1[:3];
+// [0, 2, 4]
+```
+<!-- syntran-end -->
+
+With a step, the default for an omitted bound depends on the **sign of the
+step**:
+
+| Omitted bound | Step > 0 | Step < 0   |
+|---------------|----------|------------|
+| `lower`       | `0`      | `size - 1` |
+| `upper`       | `size`   | `-1`       |
+
+<!-- syntran-begin mode=repl group=array-slice -->
+```rust
+v1[:-1:];
+// [8, 6, 4, 2, 0]
+v1[3:-1:];
+// [6, 4, 2, 0]
+```
+<!-- syntran-end -->
+
+Note that the step comes **second**, between the two colons, unlike Python's
+`lower:upper:step`.  The step cannot be omitted when there are two colons, so
+`v1[1::4]` is a parse error.  Negative indices counting from the end of an
+array, like Python's `v1[-1]`, are deliberately not supported.
+
 Arbitrary elements of an array with non-uniform steps can be extracted by using
 another rank-1 array (i.e. vector) as a subscript:
 <!-- syntran-begin mode=repl group=array-slice -->
@@ -1170,6 +1330,10 @@ v1[indices];
 [0, 2, 4, 6, 8]
 [0, 4, 8]
 [8, 6, 4, 2, 0]
+[4, 6, 8]
+[0, 2, 4]
+[8, 6, 4, 2, 0]
+[6, 4, 2, 0]
 [0, 2, 6]
 [0, 1, 3]
 [0, 2, 6]
@@ -1330,7 +1494,7 @@ mat_slice = [
 
 ## Functions
 
-This section is about user-defined functions.  [See this page](doc/) for a list of intrinsic syntran functions.
+This section is about user-defined functions.  [See this page](doc/intrinsics.md) for a list of intrinsic syntran functions.
 
 Use the `fn` keyword to declare a function, as in Rust.  Unlike Rust, use a colon `:` before the return type instead of `->`:
 
@@ -1480,6 +1644,10 @@ vice-versa, the parser will throw an error.
 Only variable identifiers can be used as a reference.  Literals cannot be
 referenced, and array elements and struct members cannot currently be
 referenced.
+
+A variable can't be passed by a mutable `&` reference and by another reference
+in the same call, so `f(&x, &x)` is an error (E116).  This includes the receiver
+of a method call.  Copy the variable first if you need both: `let y = x; f(&x, y);`
 
 ### Function pointers (callbacks)
 
@@ -1805,9 +1973,7 @@ l
 -->
 <!-- syntran-end -->
 
-<!-- TODO: not TBD anymore! -->
-Slice indexing for substrings of length > 1 is TBD.
-To slice a substring, use a range:
+To slice a substring, use a range, as with an array slice:
 <!-- syntran-begin mode=repl group=str-slice -->
 ```rust
 let string4 = "01234567";
@@ -1823,7 +1989,78 @@ string4[3:6];
 -->
 <!-- syntran-end -->
 
-The intrinsic function [`str()`](doc/README.md#str) converts other types to `str` and concatenates them:
+As with arrays, either bound of a string slice may be omitted:
+<!-- syntran-begin mode=repl group=str-slice-omit -->
+```rust
+let string5 = "hello";
+string5[3:];
+// lo
+string5[:3];
+// hel
+```
+<!-- syntran-expect
+hello
+lo
+hel
+-->
+<!-- syntran-end -->
+
+Like an array, a string can also be subscripted by an index array, which picks
+out arbitrary characters in any order:
+<!-- syntran-begin mode=repl group=str-index-array -->
+```rust
+let string6 = "01234567";
+string6[[0, 3, 5]];
+// 035
+string6[[7, 0]];
+// 70
+```
+<!-- syntran-expect
+01234567
+035
+70
+-->
+<!-- syntran-end -->
+
+An index array can be assigned to as well.  The right-hand side needs exactly
+one character per index:
+<!-- syntran-begin mode=repl group=str-index-array-assign -->
+```rust
+let string7 = "abcd";
+string7[[0, 2]] = "xy";
+string7;
+// xbyd
+```
+<!-- syntran-expect
+abcd
+xy
+xbyd
+-->
+<!-- syntran-end -->
+
+Strings support the comparison operators `==`, `!=`, `<`, `<=`, `>`, and `>=`.
+Ordering is lexicographic (dictionary order) and length-aware:  two strings of
+different lengths are never padded before comparing, so a string that is a
+strict prefix of another always sorts before it.  All six comparisons also work
+elementwise on string arrays:
+
+<!-- syntran-begin mode=repl group=str-compare -->
+```rust
+"a" < "a ";
+// true
+"ab" < "abc";
+// true
+["a", "b"] < ["b", "b"];
+// [true, false]
+```
+<!-- syntran-expect
+true
+true
+[true, false]
+-->
+<!-- syntran-end -->
+
+The intrinsic function [`str()`](doc/intrinsics.md#str) converts other types to `str` and concatenates them:
 
 <!-- syntran-begin mode=repl group=str-str-fn -->
 ```rust
@@ -1837,7 +2074,7 @@ testing 1 2     1.000000000000000E+00    false
 
 Integers and bools are stringified without padding, so separate them with `" "` if that's what you want.
 
-Use [`println()`](doc/README.md#println) to print to stdout:
+Use [`println()`](doc/intrinsics.md#println) to print to stdout:
 
 <!-- syntran-begin mode=repl group=str-println -->
 ```rust
@@ -1849,7 +2086,7 @@ hello world
 -->
 <!-- syntran-end -->
 
-Use [`open()`](doc/README.md#open), [`writeln()`](doc/README.md#writeln), and [`close()`](doc/README.md#close) to write to a file:
+Use [`open()`](doc/intrinsics.md#open), [`writeln()`](doc/intrinsics.md#writeln), and [`close()`](doc/intrinsics.md#close) to write to a file:
 
 <!-- syntran-begin mode=file group=file-io -->
 ```rust
@@ -1869,7 +2106,58 @@ here's a second line of text with a number 42
 -->
 <!-- syntran-end -->
 
-Only ASCII strings are supported because syntran is interpretted in Fortran.  Unicode strings cannot be indexed properly:
+Use [`std::format()`](doc/intrinsics.md#format) to make a string from a literal format string.  Each `{}` is replaced with a value, and a `{:spec}` also sets the width, alignment, precision, or base of the value, like in Rust:
+
+<!-- syntran-begin mode=file group=str-format -->
+```rust
+println(std::format("[{:5}] [{:<5}] [{:^5}] [{:05}]", 42, 42, 42, 42));
+println(std::format("{:.3} {:e} {:08.2}", std::PI, 1234.5, -3.14159));
+println(std::format("{:x} {:#b} {:o}", 255, 5, 64));
+println(std::format("{:3}", [1, 2, 3, 4, 5, 6; 3, 2]));
+```
+<!-- syntran-expect
+[   42] [42   ] [ 42  ] [00042]
+3.142 1.234500e3 -0003.14
+ff 0b101 100
+  1   2   3
+  4   5   6
+-->
+<!-- syntran-end -->
+
+<!-- syntran-begin mode=file group=str-printf -->
+```rust
+std::printf("{} has {:3} items\n", "bag", 12);
+```
+<!-- syntran-expect
+bag has  12 items
+-->
+<!-- syntran-end -->
+
+[`std::printf()`](doc/intrinsics.md#printf) is `std::print(std::format(...))`, and [`std::writef()`](doc/intrinsics.md#writef) is `std::write(f, std::format(...))` for files.  They don't add a newline, but the format string can have one: `\n`, `\t`, `\r`, and `\\` are escapes for a newline, tab, carriage return, and backslash.  Only format strings decode escapes.  An ordinary string like `"a\nb"` keeps its backslash.
+
+The format string is checked when the program is parsed.  An array is written as its elements without brackets or commas, which is useful for writing a whole array to a file with one call.
+
+Add a `b` to the mode of `open()` to read and write the raw bytes of values, instead of lines of text.  [`std::write()`](doc/intrinsics.md#write) is like `writeln()` without a newline, and [`std::read_i32()`](doc/intrinsics.md#read_i32) and its siblings read a value, or an array of `n` values, back:
+
+<!-- syntran-begin mode=file group=file-binary -->
+```rust
+let fb = open("test.bin", "wb");
+std::write(fb, 42, 1.5, [1, 2, 3]);
+close(fb);
+
+let fr = open("test.bin", "rb");
+let n = std::read_i32(fr);
+let x = std::read_f64(fr);
+let v = std::read_i32(fr, 3);
+close(fr);
+println(std::format("{} {:.1} {}", n, x, v));
+```
+<!-- syntran-expect
+42 1.5 1 2 3
+-->
+<!-- syntran-end -->
+
+Only ASCII strings are supported because syntran is interpreted in Fortran.  Unicode strings cannot be indexed properly:
 
 <!-- syntran-begin mode=skip reason="unicode indexing is explicitly documented as YMMV / mojibake" -->
 ```rust
@@ -2100,7 +2388,14 @@ suit_mod::Suit.Spades
 Module names follow the same rules as identifiers: they may contain letters,
 digits, and underscores, but must not start with a digit.  Hyphens, spaces, and
 language keywords are not allowed as module names or aliases.  The name `std` is
-additionally reserved for the syntran standard library.
+additionally reserved for the syntran standard library.  The only forms of
+`use` that are allowed for it are `use std::*;` and `use std::name;`, which let you call the
+functions of the standard library without the `std::` prefix, e.g. `reshape()`
+instead of `std::reshape()`.  The glob form does so for every function, while
+`use std::reshape;` does so only for that one function.  Beware that this
+accepts the risk of a name clash with functions that are added to a future
+version of syntran, which is smaller for the single-name form, so the prefix is
+the stable choice.
 
 <!-- syntran-begin mode=skip reason="illustrates module-naming-rule errors; the first `ok` import depends on a my_math module file not shown in this excerpt" -->
 ```rust
@@ -2417,7 +2712,7 @@ let d = Dir.North;
 
 Enum values only support equality comparison, `==` and `!=`.  To use a
 variant as an integer -- e.g. for ordering, arithmetic, or array indexing --
-convert it explicitly with `i32()`:
+convert it explicitly with `i32()` or `i64()`:
 <!-- syntran-begin mode=file group=enums -->
 ```rust
 let a = [10, 20, 30, 40];
@@ -2504,8 +2799,8 @@ Note that `len()` is not overloaded for enums (or arrays in general) -- it's
 reserved for `str`.  Use `size()` for a container's length, same as for any
 other array.
 
-Outside of `for`'s iterable and an argument to `size()`/`str()`/`println()`/
-`writeln()`, a bare enum name is *not* a value: it can't be bound with
+Outside of `for`'s iterable and an argument to `size()`/`str()`/`std::print()`/
+`println()`/`std::write()`/`writeln()`, a bare enum name is *not* a value: it can't be bound with
 `let`/`const`, assigned, returned, passed to a user function, or stored in an
 array or struct literal (`E99`).  Write out the variants explicitly wherever
 an actual array value is needed:
@@ -2559,6 +2854,7 @@ Many syntran samples are provided in this repository and elsewhere:
 
 1.  [Inline tests](src/tests/test.f90):  these are short one-to-few line syntran snippets, embedded in Fortran as a string and `eval`'d.  They are covered by the tests
 2.  [Script tests](src/tests/test-src):  these are longer syntran scripts, organized into categories by directory.  They are covered by the tests
-3.  [Samples](samples):  these are longer syntran scripts which can also take a while to run, e.g. the wave equation solvers.  They are *not* covered by the tests because of the time they take to run
-4.  [Advent of Code](https://github.com/JeffIrwin/aoc-syntran):  these are syntran scripts which solve problems from the [Advent of Code](https://adventofcode.com/about).  They are *not* covered by tests and in a separate repository
+3.  [Fortran examples](example):  short Fortran programs which call syntran as a library, see [above](#calling-syntran-from-fortran).  Run them with `fpm run --example <name>`
+4.  [Samples](samples):  these are longer syntran scripts which can also take a while to run, e.g. the wave equation solvers.  They are *not* covered by the tests because of the time they take to run
+5.  [Advent of Code](https://github.com/JeffIrwin/aoc-syntran):  these are syntran scripts which solve problems from the [Advent of Code](https://adventofcode.com/about).  They are *not* covered by tests and in a separate repository
 

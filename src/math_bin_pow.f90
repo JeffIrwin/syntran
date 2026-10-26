@@ -29,13 +29,6 @@ subroutine pow_value_t(left, right, res, op_text)
 
 	select case (magic**2 * res%type + magic * left%type + right%type)
 
-	! TODO: consider different operators for element-wise multiplication vs
-	! matrix multiplication, e.g. `.*` vs `*` in MATLAB.  Similar for division
-	!
-	! Although I'm not sure I like MATLAB's choice.  Matrix-multiplication is
-	! the special-purpose operator resticted to rank-2 only, while element-wise
-	! multiplication is probably the more common operation
-
 	!****
 	case        (magic**2 * array_type + magic * array_type + f32_type)
 		!print *, 'array_type + f32_type'

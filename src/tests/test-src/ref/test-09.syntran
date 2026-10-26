@@ -1,0 +1,61 @@
+
+// Several `&const` references to one variable are allowed.  Only a mutable `&`
+// reference that aliases another reference to the same variable is an error,
+// E116.  Before that was diagnosed, passing a variable by reference twice moved
+// it out of its slot twice and segfaulted
+
+fn inner(a: &const [i32; :], b: &const [i32; :]): i32
+{
+	let s = 0;
+	for i in [0: size(a, 0)]
+	{
+		s += a[i] * b[i];
+	}
+	return s;
+}
+
+fn add3(a: &const i32, b: &const i32, c: &const i32): i32
+{
+	return a + b + c;
+}
+
+fn bump(a: &[i32; :], b: [i32; :])
+{
+	a[0] = b[0] + 1;
+}
+
+struct S
+{
+	x: i32,
+
+	const fn plus(o: &const S): i32
+	{
+		return x + o.x;
+	}
+}
+
+let v = [1, 2, 3];
+let ok1 = inner(v, v) == 14;
+let ok2 = add3(2, 3, 4) == 9;
+
+let n = 5;
+let ok3 = add3(n, n, n) == 15;
+
+// A mutable ref plus the same variable passed by value is fine.  The by-value
+// arg is a copy
+bump(&v, v);
+let ok4 = v[0] == 2 and v[1] == 2 and v[2] == 3;
+
+let s = S{x = 4};
+let ok5 = s.plus(s) == 8;
+
+// The aliased const refs also work inside of a fn, on a local
+fn local(): bool
+{
+	let w = [4, 5];
+	let t = S{x = 6};
+	return inner(w, w) == 41 and t.plus(t) == 12;
+}
+let ok6 = local();
+
+return ok1 and ok2 and ok3 and ok4 and ok5 and ok6;

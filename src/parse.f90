@@ -89,6 +89,16 @@ module syntran__parse_m
 
 		logical :: repl = .false.
 
+		! Set by `use std::*;`.  Lets a bare call `reshape(...)` fall back to
+		! the std-only fn `std::reshape(...)` when no user fn or legacy
+		! intrinsic of that name exists
+		logical :: std_glob = .false.
+
+		! Names imported one at a time by `use std::name;`, each surrounded by
+		! spaces, e.g. " reshape transpose ".  Same fallback as std_glob, but
+		! only for these names.  Unallocated until the first such `use`
+		character(len = :), allocatable :: std_names
+
 		type(map_i32_t) :: import_stack
 		type(map_i32_t) :: imported_modules
 
@@ -99,6 +109,7 @@ module syntran__parse_m
 				current_kind, &
 				current_pos, &
 				current_unit, &
+				std_imported, &
 				match, &
 				match_pre, &
 				next => next_token, &
@@ -181,8 +192,15 @@ module syntran__parse_m
 			type(value_t), intent(out) :: type
 		end subroutine parse_type
 
-		! TODO: move struct stuff to another translation unit? parse_fn.f90 is a
-		! very manageable ~1100 lines rn, so not much benefit to splitting
+		! Used by parse_fn_declaration() above and parse_method_declaration()
+		! below
+		recursive module function all_paths_return(node) result(returns)
+			type(syntax_node_t), intent(in) :: node
+			logical :: returns
+		end function all_paths_return
+
+		! Implemented in parse_struct.f90
+
 		module subroutine parse_struct_declaration(parser, decl)
 			class(parser_t) :: parser
 			type(syntax_node_t), intent(out) :: decl
@@ -226,6 +244,8 @@ module syntran__parse_m
 			character(len = *), intent(in), optional :: enum_name
 		end subroutine parse_enum_name_expr
 
+		! Implemented in parse_fn.f90
+
 		module subroutine check_call_arg(parser, arg, call_is_ref_i, arg_span, &
 				fn_name, i_0based, param_val, param_name, param_is_ref, param_is_const_ref, &
 				eff_is_ref)
@@ -239,6 +259,22 @@ module syntran__parse_m
 			logical, intent(in) :: param_is_ref, param_is_const_ref
 			logical(kind = 1), intent(out) :: eff_is_ref
 		end subroutine check_call_arg
+
+		module subroutine check_ref_aliases(parser, args, is_ref, is_mut, spans, fn_name)
+			class(parser_t), intent(inout) :: parser
+			type(syntax_node_t), intent(in) :: args(:)
+			logical, intent(inout) :: is_ref(:)
+			logical, intent(in) :: is_mut(:)
+			type(text_span_t), intent(in) :: spans(:)
+			character(len = *), intent(in) :: fn_name
+		end subroutine check_ref_aliases
+
+		module subroutine check_format_call(parser, fn_name, args, spans, call_span)
+			class(parser_t), intent(inout) :: parser
+			character(len = *), intent(in) :: fn_name
+			type(syntax_node_t), intent(inout) :: args(:)
+			type(text_span_t), intent(in) :: spans(:), call_span
+		end subroutine check_format_call
 
 		! Shared by parse_dot (explicit `recv.method()`) and parse_fn_call's
 		! self-method fallback (bare `method()` inside another method of the
@@ -471,12 +507,11 @@ module syntran__parse_m
 			character(len = *), intent(in), optional :: what
 		end subroutine match
 
-		recursive module subroutine preprocess(parser, tokens_in, src_file, contexts, unit_)
+		recursive module subroutine preprocess(parser, tokens_in, src_file, contexts)
 			class(parser_t) :: parser
 			type(syntax_token_t), intent(in) :: tokens_in(:)
 			character(len = *), intent(in) :: src_file
 			type(text_context_vector_t), intent(inout) :: contexts
-			integer, intent(inout) :: unit_
 		end subroutine preprocess
 
 		module subroutine match_pre(parser, kind, tokens, token_index, context, token)
@@ -500,11 +535,10 @@ module syntran__parse_m
 			type(syntax_node_t), intent(out) :: unit
 		end subroutine parse_unit
 
-		recursive module subroutine new_parser(parser, str_, src_file, contexts, unit_)
+		recursive module subroutine new_parser(parser, str_, src_file, contexts)
 			type(parser_t), intent(out) :: parser
 			character(len = *), intent(in) :: str_, src_file
 			type(text_context_vector_t) :: contexts
-			integer, intent(inout) :: unit_
 		end subroutine new_parser
 
 	end interface
@@ -522,6 +556,24 @@ integer function current_kind(parser)
 	class(parser_t) :: parser
 	current_kind = parser%peek_kind(0)
 end function current_kind
+
+!********
+
+logical function std_imported(parser, name)
+
+	! Has `name` been brought in as a bare name by `use std::*;` or by
+	! `use std::name;`?  See parser_t%std_glob and parser_t%std_names
+
+	class(parser_t), intent(in) :: parser
+	character(len = *), intent(in) :: name
+
+	std_imported = parser%std_glob
+	if (std_imported) return
+	if (.not. allocated(parser%std_names)) return
+
+	std_imported = index(parser%std_names, " "//name//" ") > 0
+
+end function std_imported
 
 !********
 

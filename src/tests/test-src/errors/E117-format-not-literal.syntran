@@ -1,0 +1,9 @@
+// E117: format-not-literal
+// The format string of format() is checked against the other arguments when
+// the program is parsed, so it must be a string literal, not a variable or an
+// expression
+
+let width = 5;
+let fmt = "{:" + str(width) + "}";
+let n = 42;
+println(std::format(fmt, n));

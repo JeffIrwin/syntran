@@ -1,0 +1,11 @@
+let n = 300;
+let m = [0.0; n, n];
+for j in [0: n]
+	for i in [0: n]
+		m[i,j] = 1.0e-3 * (i + n*j);
+let c = m;
+for k in [0: 20]
+{
+	c = 1.0e-3 * (m @ c);
+}
+println(sum(c));

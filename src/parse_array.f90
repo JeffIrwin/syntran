@@ -95,6 +95,15 @@ recursive module subroutine parse_array_expr(parser, expr)
 			parser%context(), span, parser%text(lb_beg, lb_end)))
 	end if
 
+	! Arrays of files are not supported either: file_t has no array storage
+	! (array_t has no file component), so this would hit the
+	! IC_ALLOC_ARRAY_TYPE internal error
+	if (lbound_%val%type == file_type) then
+		span = new_span(lb_beg, lb_end - lb_beg + 1)
+		call parser%diagnostics%push(err_file_array( &
+			parser%context(), span, parser%text(lb_beg, lb_end)))
+	end if
+
 	if (parser%current_kind() == semicolon_token) then
 
 		! Implicit constant-value array form [lbound; len]
@@ -116,6 +125,9 @@ recursive module subroutine parse_array_expr(parser, expr)
 		expr%val%type        = array_type
 		if (allocated(lbound_%val%struct_name)) then
 			expr%val%struct_name = lbound_%val%struct_name
+			if (allocated(lbound_%val%struct_cookie)) &
+				expr%val%struct_cookie = lbound_%val%struct_cookie
+			expr%val%struct_reg_idx = lbound_%val%struct_reg_idx
 		else if (allocated(lbound_%val%enum_name)) then
 			expr%val%enum_name = lbound_%val%enum_name
 			if (allocated(lbound_%val%enum_cookie)) &
@@ -515,6 +527,17 @@ recursive module subroutine parse_array_expr(parser, expr)
 		expr%val%array%kind = size_array
 		expr%val%array%rank = size_%len_
 
+		if (allocated(lbound_%val%struct_name)) then
+			expr%val%struct_name = lbound_%val%struct_name
+			if (allocated(lbound_%val%struct_cookie)) &
+				expr%val%struct_cookie = lbound_%val%struct_cookie
+			expr%val%struct_reg_idx = lbound_%val%struct_reg_idx
+		else if (allocated(lbound_%val%enum_name)) then
+			expr%val%enum_name = lbound_%val%enum_name
+			if (allocated(lbound_%val%enum_cookie)) &
+				expr%val%enum_cookie = lbound_%val%enum_cookie
+		end if
+
 		allocate(expr%size_(size_%len_))
 		do i = 1, size_%len_
 			call syntax_node_move_into(size_%v(i), expr%size_(i))
@@ -537,6 +560,9 @@ recursive module subroutine parse_array_expr(parser, expr)
 	expr%val%type        = array_type
 	if (allocated(lbound_%val%struct_name)) then
 		expr%val%struct_name = lbound_%val%struct_name
+		if (allocated(lbound_%val%struct_cookie)) &
+			expr%val%struct_cookie = lbound_%val%struct_cookie
+		expr%val%struct_reg_idx = lbound_%val%struct_reg_idx
 	else if (allocated(lbound_%val%enum_name)) then
 		expr%val%enum_name = lbound_%val%enum_name
 		if (allocated(lbound_%val%enum_cookie)) &

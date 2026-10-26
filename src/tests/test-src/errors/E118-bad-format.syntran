@@ -1,0 +1,8 @@
+// E118: bad-format
+// The format string of format() has a placeholder that is not `{}` or `{:spec}`,
+// an unmatched brace, or a spec that is not
+// `[[fill]align][+][#][0][width][.precision][type]`.  Here the type `q` of the
+// spec is not one of `x`, `X`, `o`, `b`, `e` or `E`
+
+let count = 3;
+println(std::format("count: {:5q} items", count));

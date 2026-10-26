@@ -106,7 +106,10 @@ subroutine unit_test_aoc_2019(npass, nfail)
 
 	if (.not. g_quiet) write(*,*) 'Unit testing '//label//' ...'
 
-	call chk(path//"20/main.syntran", '514:6208', npass, nfail)
+	call chk(path//"15/main.syntran", '248:382',     npass, nfail)
+	call chk(path//"17/main.syntran", '3336:597517', npass, nfail)
+	call chk(path//"20/main.syntran", '514:6208',    npass, nfail)
+	call chk(path//"23/main.syntran", '15416:10946', npass, nfail)
 
 end subroutine unit_test_aoc_2019
 

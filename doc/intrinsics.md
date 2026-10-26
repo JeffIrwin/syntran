@@ -1,0 +1,1371 @@
+<!-- # Variadic and polymorphic functions -->
+# Special functions
+
+Some of the intrinsic functions have special properties:
+- variadic
+- polymorphic
+- elemental
+
+[Variadic](https://en.wikipedia.org/wiki/Variadic_function) intrinsic functions are indicated with `...`.
+
+[Polymorphic](https://en.wikipedia.org/wiki/Polymorphism_(computer_science))
+function parameters are indicated with special types.  Rank-polymorphic array
+function parameters are indicated with `any_rank`.
+
+[Elemental](https://fortran-lang.org/en/learn/best_practices/element_operations/)
+functions are tagged with `#elemental`.  Elemental functions can take either a
+scalar argument or an array argument.  When given an array argument, the result
+is also an array, with the same rank and size as the argument, with values as if
+the function had been called element-wise on each member of the array.
+
+A function that is documented as "must be called with the `std::` prefix" is
+only available as e.g. `std::reshape()`.  `use std::reshape;` makes that one
+function available without the prefix for the rest of the file, e.g.
+`reshape()`, and `use std::*;` does so for all of them.  A function that
+you declare yourself, or an intrinsic function that never needed the prefix, is
+never shadowed by this.  The risk is that a later version of syntran adds a new
+`std::` function with the same name as one of yours, which can change which
+function a call resolves to or make a name ambiguous.  `std::` is the stable
+choice, and `use std::*;` is a convenience for scripts where that doesn't matter.
+Importing only the names that you list, like `use std::printf;`, limits that
+risk to those names.  Each `use std::name;` imports a single function, and the
+name must exist in `std`, otherwise it's an error.
+The `use` of a file doesn't carry over to the modules that it imports, or to the
+files that import it.
+
+These are the special polymorphic types used in documentation:
+- `any`: any unlimitted primitive, built-in syntran type
+- `any_num`: any numeric type, i.e. `i32`, `i64`, `f32`, or `f64`
+- `any_float`: any floating-point type, i.e. `f32` or `f64`
+
+A few intrinsic functions take arguments by reference, which are indicated with
+`&` like a user-defined function's by-reference parameters, e.g.
+[`lu_factor`](#lu_factor).  The caller must write `&` too, and the argument must
+be a variable name that is not `const`.  The exception is a `&const` parameter,
+e.g. `A` and `ipiv` of [`lu_solve`](#lu_solve), which is only read.  It accepts
+plain value syntax and `const` variables, and a variable name is borrowed
+instead of copied.
+
+All of these special properties are special cases for intrinsic functions.  For
+now at least, user-defined functions cannot be variadic, polymorphic, or
+elemental.
+
+# List of intrinsic functions
+
+## `abs`
+```rust
+fn abs(x: any_num): any_num
+#elemental
+```
+
+Return the absolute value of `x`, with the same type as `x`.
+
+The `abs` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+## `acos`
+```rust
+fn acos(x: any_float): any_float
+#elemental
+```
+
+Compute the inverse cosine of `x`, in radians.  The result is in the range
+`[0, std::PI]`.  If `x` is outside of `[-1, 1]`, the result is `NaN`.
+
+The `acos` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`cos`](#cos), [`acosd`](#acosd), [`asin`](#asin), [`atan`](#atan)
+
+## `acosd`
+```rust
+fn acosd(x: any_float): any_float
+#elemental
+```
+
+Compute the inverse cosine of `x`, in degrees.  The result is in the range
+`[0, 180]`.  If `x` is outside of `[-1, 1]`, the result is `NaN`.  This is
+[`acos`](#acos) with the result converted to degrees.
+
+The `acosd` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`cosd`](#cosd), [`acos`](#acos), [`asind`](#asind), [`atand`](#atand)
+
+## `all`
+```rust
+fn all(mask: [bool; any_rank]): bool
+fn all(mask: [bool; any_rank], dim: i32): [bool; any_rank - 1]
+```
+
+Return `true` if every element of `mask` is `true`, including the case where
+`mask` is empty.  Otherwise, i.e. if at least 1 element of `mask` is `false`,
+return `false`.
+
+If `dim` is given, instead test each lane of `mask` along the dimension `dim`
+and return an array of bools.  For example, `all(m > 0, 0)` says whether each
+column of a matrix `m` is all positive.
+
+With a `dim`, the result has one less rank than the array.  If the array is rank
+1, the result is a scalar instead of a 1-element array.  Like `size`, `dim` is
+zero-indexed, and a `dim` outside of `0 <= dim < rank` is a runtime error
+([R34](errors.md#r34----reduce-dim-range)).
+
+Related functions: [`any`](#any)
+
+## `any`
+```rust
+fn any(mask: [bool; any_rank]): bool
+fn any(mask: [bool; any_rank], dim: i32): [bool; any_rank - 1]
+```
+
+Return `true` if at least 1 element of `mask` is `true`.  Otherwise, i.e. if
+all elements of `mask` are `false` or `mask` is empty, return `false`.
+
+If `dim` is given, instead test each lane of `mask` along the dimension `dim`
+and return an array of bools.
+
+With a `dim`, the result has one less rank than the array.  If the array is rank
+1, the result is a scalar instead of a 1-element array.  Like `size`, `dim` is
+zero-indexed, and a `dim` outside of `0 <= dim < rank` is a runtime error
+([R34](errors.md#r34----reduce-dim-range)).
+
+Related functions: [`all`](#all)
+
+## `args`
+```rust
+fn args(): [str; :]
+```
+
+Return the command-line arguments passed to the script, as a rank-1 array of
+strings.  These are the arguments after `--` on the command line, e.g.
+`syntran script.syntran -- a b c` makes `std::args()` return `["a", "b", "c"]`.
+The array is empty if there are none.  Must be called with the `std::` prefix,
+e.g. `std::args()`.
+
+## `asin`
+```rust
+fn asin(x: any_float): any_float
+#elemental
+```
+
+Compute the inverse sine of `x`, in radians.  The result is in the range
+`[-std::PI / 2, std::PI / 2]`.  If `x` is outside of `[-1, 1]`, the result is
+`NaN`.
+
+The `asin` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`sin`](#sin), [`asind`](#asind), [`acos`](#acos), [`atan`](#atan)
+
+## `asind`
+```rust
+fn asind(x: any_float): any_float
+#elemental
+```
+
+Compute the inverse sine of `x`, in degrees.  The result is in the range
+`[-90, 90]`.  If `x` is outside of `[-1, 1]`, the result is `NaN`.  This is
+[`asin`](#asin) with the result converted to degrees.
+
+The `asind` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`sind`](#sind), [`asin`](#asin), [`acosd`](#acosd), [`atand`](#atand)
+
+## `atan`
+```rust
+fn atan(x: any_float): any_float
+#elemental
+```
+
+Compute the inverse tangent of `x`, in radians.  The result is in the range
+`[-std::PI / 2, std::PI / 2]`.
+
+The `atan` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`tan`](#tan), [`atand`](#atand), [`asin`](#asin), [`acos`](#acos)
+
+## `atand`
+```rust
+fn atand(x: any_float): any_float
+#elemental
+```
+
+Compute the inverse tangent of `x`, in degrees.  The result is in the range
+`[-90, 90]`.  This is [`atan`](#atan) with the result converted to degrees.
+
+The `atand` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`tand`](#tand), [`atan`](#atan), [`asind`](#asind), [`acosd`](#acosd)
+
+## `caller`
+```rust
+fn caller(): str
+fn caller(depth: i32): str
+```
+
+Return the `"<fn> (file:line)"` label of the call-chain frame `depth` steps
+up from the current call, with no leading `"  at "` (unlike
+[`stack_trace`](#stack_trace), this is a single label, not a multi-line
+trace).  `depth` 0 is the current function itself (where `std::caller()` was
+called from); the default, 1, is the function that called *that* function.
+A `depth` beyond the top of the call chain (including calling it directly
+from `<main>` with the default depth) returns `""`.  A negative `depth` is
+treated as `0`.  Must be called with the `std::` prefix, e.g.
+`std::caller()`.
+
+Related functions: [`print_trace`](#print_trace), [`stack_trace`](#stack_trace)
+
+## `char`
+```rust
+fn char(i: i32): str
+```
+
+Perform an ASCII table lookup and return the single-character string with ASCII
+index `i`.  For example, `char(65)` is `"A"`.  The inverse of the ASCII lookup
+is [`i32`](#i32), which is also overloaded to do other casting operations.
+
+Related functions: [`i32`](#i32)
+
+## `close`
+```rust
+fn close(file_handle: file)
+```
+
+Close a `file_handle` created by [`open`](#open)
+
+Related functions: [`open`](#open), [`writeln`](#writeln)
+
+## `cos`
+```rust
+fn cos(x: any_float): any_float
+#elemental
+```
+
+Compute the cosine of `x`, where `x` is in radians.  For an argument in
+degrees, use [`cosd`](#cosd).
+
+The `cos` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`sin`](#sin), [`tan`](#tan), [`cosd`](#cosd), [`acos`](#acos)
+
+## `cosd`
+```rust
+fn cosd(x: any_float): any_float
+#elemental
+```
+
+Compute the cosine of `x`, where `x` is in degrees.  For example, `cosd(60.0)`
+is `0.5`, and `cosd(90.0)` is `0.0` where `cos(std::PI / 2.0)` is only
+approximately zero.  For an argument in radians, use [`cos`](#cos).
+
+The `cosd` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`sind`](#sind), [`tand`](#tand), [`cos`](#cos), [`acosd`](#acosd)
+
+## `count`
+```rust
+fn count(mask: [bool; any_rank]): i64
+fn count(mask: [bool; any_rank], dim: i32): [i64; any_rank - 1]
+```
+
+Return how many elements of `mask` are `true`.  If `mask` is empty, return `0`.
+Not to be confused with [`size`](#size).
+
+If `dim` is given, instead count the `true` elements of each lane of `mask`
+along the dimension `dim`.  For example, `count(m > 0, 1)` counts the positive
+elements in each row of a matrix `m`.
+
+With a `dim`, the result has one less rank than the array.  If the array is rank
+1, the result is a scalar instead of a 1-element array.  Like `size`, `dim` is
+zero-indexed, and a `dim` outside of `0 <= dim < rank` is a runtime error
+([R34](errors.md#r34----reduce-dim-range)).
+
+Related functions: [`any`](#any), [`all`](#all)
+
+## `dot`
+```rust
+fn dot(vector_a: [any_num; :], vector_b: [any_num; :]): any_num
+```
+
+Return the dot product of two vectors, i.e. the sum of `vector_a[i] * vector_b[i]`
+over all `i`.  For example, `dot([1, 2, 3], [4, 5, 6])` is `32`.
+
+Like Fortran's `dot_product()`, the arguments must be rank-1 arrays.  Both
+vectors must have the same element type, which is also the type of the result,
+and the same length.  A length mismatch is a runtime error,
+[R38](errors.md#r38----dot-size-mismatch).
+
+Related functions: [`norm2`](#norm2), [`sum`](#sum)
+
+## `eof`
+```rust
+fn eof(): bool
+fn eof(file_handle: file): bool
+```
+
+Has the end of file (EOF) been reached yet while reading from `file_handle`, or from stdin if called with no argument?  The return value is `false` until and including the last line is read and does not become `true` until reading *past* the EOF is attempted, for which [`readln()`](#readln) will return an empty string
+
+A file opened in [binary mode](#open) has no lines, so `eof()` of one is a runtime error ([R43](errors.md#r43----text-op-on-binary-file)).
+
+Related functions: [`close`](#close), [`readln`](#readln), [`open`](#open)
+
+## `exists`
+```rust
+fn exists(path: str): bool
+```
+
+Return whether a file exists at `path`.  Relative paths are resolved the same
+way [`open`](#open) resolves them.  Must be called with the `std::` prefix,
+e.g. `std::exists("data.txt")`.
+
+Whether a *directory* counts as existing is compiler-dependent and should not
+be relied on.  A `true` result is also not a guarantee that a subsequent
+`open()` will succeed -- the file could be removed or become unreadable in
+the interim -- use [`try_open`](#try_open) if you need to recover from that.
+
+Related functions: [`open`](#open), [`try_open`](#try_open)
+
+## `exit`
+```rust
+fn exit(status: i32)
+```
+
+Terminate the process normally,
+return the system exit status `status`, and
+perform the regular cleanup for terminating programs.
+
+By the C convention, use status `0` for success and any other value for failure.
+
+<!-- Abort execution and return the system exit status `status`. -->
+
+## `exp`
+```rust
+fn exp(x: any_float): any_float
+#elemental
+```
+
+Compute the base _e_ exponential of `x`
+
+The `exp` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`log`](#log)
+
+## `f32`
+```rust
+fn f32(a: any_num): f32
+#elemental
+```
+
+Explicitly cast any numeric type to 32-bit float `f32`.  For example, `f32(3)` is
+`3.0f`, and `f32(2.5)` is `2.5f`.  To read a decimal number from a string, use
+[`parse_f32`](#parse_f32) instead.
+
+The `f32` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Unlike [`i32`](#i32), non-numeric types (`str`, `bool`, `file`, enums) cannot be
+cast to `f32`.
+
+Note that `f32` is an intrinsic function, so you cannot declare your own function
+with that name.
+
+Related functions: [`f64`](#f64), [`i32`](#i32), [`i64`](#i64)
+
+## `f64`
+```rust
+fn f64(a: any_num): f64
+#elemental
+```
+
+Explicitly cast any numeric type to 64-bit float `f64`.  For example, `f64(3)` is
+`3.0`.  To read a decimal number from a string, use [`parse_f64`](#parse_f64)
+instead.
+
+The `f64` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Unlike [`i32`](#i32), non-numeric types (`str`, `bool`, `file`, enums) cannot be
+cast to `f64`.
+
+Note that `f64` is an intrinsic function, so you cannot declare your own function
+with that name.
+
+Related functions: [`f32`](#f32), [`i32`](#i32), [`i64`](#i64)
+
+## `format`
+```rust
+fn format(fmt: str, value0: any, value1: any, value2: any, ...): str
+```
+
+Return a string made from the format string `fmt`, with a `{}` or `{:spec}`
+placeholder in it for each value.  Anything else in `fmt` is copied as it is, and
+`{{` and `}}` are literal braces.
+
+```rust
+println(std::format("{} has {:3} items, {:.2} avg", "bag", 12, 4.5));
+// bag has  12 items, 4.50 avg
+```
+
+The format string must be a string literal, not a variable or an expression.
+That way it is checked against the values when the program is parsed, instead of
+when it runs: an invalid format string is [E118](errors.md#e118----bad-format),
+a spec that doesn't fit the type of its value is
+[E119](errors.md#e119----format-type), and a different number of placeholders
+than values is [E120](errors.md#e120----format-count).  A format string that isn't
+a literal is [E117](errors.md#e117----format-not-literal).
+
+A format string also has backslash escapes: `\n` is a newline, `\t` a tab, `\r` a
+carriage return, and `\\` a backslash.  Any other backslash is
+[E118](errors.md#e118----bad-format).  Only a format string decodes them, so an
+ordinary string like `"a\nb"` keeps its backslash, and so does a raw string
+anywhere except in a format string, where `r"a\nb"` is decoded the same as `"a\nb"`.
+
+```rust
+std::printf("{}\t{}\n", 1, 2);
+```
+
+A `{}` formats its value the way [`str`](#str) does, except that a real number is
+not padded with leading blanks.  The spec of `{:spec}` is like Rust's:
+
+```
+[[fill]align][+][#][0][width][.precision][type]
+```
+
+| Part | Meaning |
+|------|---------|
+| `fill` | Any one ASCII character to pad with, which is a blank by default.  It is only recognized in front of `align` |
+| `align` | `<` left, `^` center, or `>` right.  The default is right for numbers and left for everything else.  When a center can't be exact, the extra pad goes on the right |
+| `+` | Always write the sign of a number |
+| `#` | Write a `0x`, `0o`, or `0b` prefix in front of an integer in `x`, `X`, `o`, or `b` |
+| `0` | Pad a number with zeros after its sign and prefix, instead of with the fill and alignment |
+| `width` | The minimum width of the whole value.  A value which is wider is not cut |
+| `.precision` | The number of digits after the point of a real number, or the maximum number of characters of a string |
+| `type` | None for the default, `x` or `X` for hexadecimal, `o` for octal, or `b` for binary integers, and `e` or `E` for scientific notation of reals |
+
+The types are for integers (`i32` and `i64`) and reals (`f32` and `f64`) only:
+
+| Type | Example | Result |
+|------|---------|--------|
+| (none) | `std::format("{:5}", 42)` | `   42` |
+| (none) | `std::format("{:.3}", 3.14159)` | `3.142` |
+| `x` | `std::format("{:#06x}", 255)` | `0x00ff` |
+| `X` | `std::format("{:X}", 255)` | `FF` |
+| `o` | `std::format("{:o}", 64)` | `100` |
+| `b` | `std::format("{:08b}", 5)` | `00000101` |
+| `e` | `std::format("{:.2e}", 1234.5)` | `1.23e3` |
+| `E` | `std::format("{:E}", 5.0e10)` | `5.000000E10` |
+
+A negative integer in `x`, `o`, or `b` is written as its two's complement in its
+own size, so `std::format("{:x}", -1)` is `ffffffff` for an `i32`, and
+`ffffffffffffffff` for an `i64`.  The scientific notation has no `+` and no
+leading zeros in its exponent, and 6 digits after the point unless there is a
+precision.  A real number which is `NaN` or infinite is written as `NaN` or `inf`.
+
+A `bool`, an `enum`, or a `struct` is padded like a string.  An enum or a struct
+is formatted by [`str`](#str) first, so only the alignment and width apply to it.
+A string, a bool, an enum, or a struct can't have a sign, `#`, `0`, or a number
+type.
+
+An array is its elements, formatted one by one with the same spec, separated by
+spaces and with no brackets or commas.  A line break comes after each row, which
+is the number of elements in the first dimension, so a rank 1 array is a single
+line.  The result has no line break at the end.  This is meant for writing arrays
+to a file in one call, e.g. `writeln(f, std::format("{:.6e}", a))`.  An array of
+structs, an array of enums, a file, or a function can't be formatted.
+
+Must be called with the `std::` prefix, e.g. `std::format("{:5}", 42)`.
+
+Related functions: [`str`](#str), [`println`](#println), [`writeln`](#writeln), [`printf`](#printf), [`writef`](#writef)
+
+## `getenv`
+```rust
+fn getenv(name: str): str
+```
+
+Return the value of the environment variable `name`.  It is a runtime error if
+`name` is not set; guard with [`hasenv`](#hasenv) first.  Must be called with
+the `std::` prefix, e.g. `std::getenv("HOME")`.
+
+Related functions: [`hasenv`](#hasenv)
+
+## `hasenv`
+```rust
+fn hasenv(name: str): bool
+```
+
+Return whether the environment variable `name` is set.  Must be called with
+the `std::` prefix, e.g. `std::hasenv("HOME")`.
+
+Related functions: [`getenv`](#getenv)
+
+## `i32`
+```rust
+fn i32(a: any_num): i32
+#elemental
+```
+<!-- TODO: not just `any_num` type. Strings are allowed, but it's a runtime
+error if you try a string of 2 or more chars. -->
+
+Explicitly cast any numeric type to 32-bit integer `i32`. The `i32()` fn also
+casts single-character strings to their ASCII values, e.g. `i32("A")` returns
+`65`.  The inverse ASCII lookup is [`char`](#char).  To read a decimal number
+from a string, use `parse_i32()` instead.  An enum value is cast to its backing
+value, e.g. `i32(Card.Queen)`.
+
+The `i32` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Other non-numeric types (`bool`, `file`) cannot be cast to `i32`.
+
+Related functions: [`char`](#char), [`i64`](#i64), [`f32`](#f32), [`f64`](#f64)
+
+## `i64`
+```rust
+fn i64(a: any_num): i64
+#elemental
+```
+
+Explicitly cast any numeric type to 64-bit integer `i64`.  Like `i32()`, the
+`i64()` fn also casts single-character strings to their ASCII values, e.g.
+`i64("A")` returns `65`, and enum values to their backing value.  To read a
+decimal number from a string, use `parse_i64()` instead.
+
+The `i64` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Other non-numeric types (`bool`, `file`) cannot be cast to `i64`.
+
+Related functions: [`i32`](#i32), [`f32`](#f32), [`f64`](#f64)
+
+## `len`
+```rust
+fn len(s: str): i64
+```
+
+Get the length of a string `s`
+
+Related functions: [`size`](#size), [`repeat`](#repeat)
+
+## `log`
+```rust
+fn log(x: any_float): any_float
+#elemental
+```
+
+Compute the natural logarithm (base _e_) of `x`.  The result is `NaN` if `x` is
+negative, and `-Infinity` if `x` is zero.  This is not an error.
+
+The `log` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`exp`](#exp), [`log10`](#log10), [`log2`](#log2)
+
+## `log10`
+```rust
+fn log10(x: any_float): any_float
+#elemental
+```
+
+Compute the base 10 logarithm of `x`.  Like [`log`](#log), the result is `NaN`
+if `x` is negative, and `-Infinity` if `x` is zero.
+
+The `log10` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`log`](#log), [`log2`](#log2)
+
+## `log2`
+```rust
+fn log2(x: any_float): any_float
+#elemental
+```
+
+Compute the base 2 logarithm of `x`.  Like [`log`](#log), the result is `NaN`
+if `x` is negative, and `-Infinity` if `x` is zero.
+
+The `log2` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`log`](#log), [`log10`](#log10)
+
+## `lu_factor`
+```rust
+fn lu_factor(A: &[any_float; :, :]): [i32; :]
+fn lu_factor(A: &[any_float; :, :], info: &i32): [i32; :]
+```
+
+Compute the LU factorization with partial pivoting of the matrix `A`, in place.
+This is the first half of the "expert" interface for linear systems.  Factor
+once with `lu_factor`, then call [`lu_solve`](#lu_solve) for as many right-hand
+sides as you like.  If you only have one right-hand side, use
+[`solve`](#solve) instead.
+
+`A` is an `m x n` `f32` or `f64` matrix.  It need not be square.  On return, `A`
+has been _overwritten_ with its factors, so make a copy first if you still need
+the original.  Its strict lower triangle holds `L`, which has an implicit unit
+diagonal, and its upper triangle holds `U`, such that `A == P * L * U` for a
+row permutation `P`.
+
+The result is the pivots `ipiv`, an `i32` vector of length `min(m, n)`.  Pivots
+are zero-based: `ipiv[i] == r` means that row `i` was swapped with row `r`,
+applied in order for `i = 0, 1, ...`.  Pass `ipiv` unmodified to `lu_solve`.
+
+An exactly singular matrix is a runtime error
+([R41](errors.md#r41----solve-singular)), but the factors are still written
+back to `A`.  If you give the optional `info` argument, then there is no error
+and `info` is set instead.  Following LAPACK, `info` is `0` on success, or
+`k > 0` if `U[k-1, k-1]` is exactly zero.  This is a status code and not an
+index, so it is one-based unlike `ipiv`.  `info` is always assigned, and any
+previous value is overwritten.
+
+Both arguments are passed by reference, so they must be written with `&`.
+Must be called with the `std::` prefix, e.g. `std::lu_factor()`.
+
+```rust
+let A = [2.0, 1.0, 1.0, 3.0; 2, 2];  // [[2, 1], [1, 3]]
+let F = A;
+let info = 0;
+let ipiv = std::lu_factor(&F, &info);
+
+// Factor once, solve for many right-hand sides
+let x1 = [3.0, 5.0];
+std::lu_solve(F, ipiv, &x1);
+println(x1);      // [0.8, 1.4]
+
+let x2 = [1.0, 0.0];
+std::lu_solve(F, ipiv, &x2);
+println(A @ x2);  // [1.0, 0.0]
+```
+
+Official builds use LAPACK's `getrf`.  Builds made with `SYNTRAN_NO_BLAS` use a
+portable implementation instead, which may differ in the last digits.
+
+Related functions: [`lu_solve`](#lu_solve), [`solve`](#solve)
+
+## `lu_solve`
+```rust
+fn lu_solve(A: &const [any_float; :, :], ipiv: &const [i32; :], b: &[any_float; :])
+fn lu_solve(A: &const [any_float; :, :], ipiv: &const [i32; :], b: &[any_float; :, :])
+```
+
+Solve the linear system `A @ x == b` for `x`, using the factors from
+[`lu_factor`](#lu_factor).  This is the second half of the "expert" interface.
+`A` and `ipiv` are the factors and pivots that `lu_factor` produced, and must
+not have been changed.  `b` is either a vector of length `n` or an `n x k`
+matrix of `k` right-hand sides, one per column.
+
+`b` is _overwritten_ with the solution `x`.  `A` and `ipiv` are not modified, so
+they can be reused for another call.  Each call costs `O(n^2)` per right-hand
+side, compared to `O(n^3)` for the factorization.
+
+`A` and `b` must both be `f32` or both be `f64`.  Other element types, or a mix,
+are a compile-time error.  The factors must be square, because a non-square
+matrix has no unique solution.  `A` and `ipiv` are `&const` params, so they
+don't need `&` at the call site and they are not copied, but `b` does.
+
+The following are runtime errors:
+- `A` is not square, or `b` has a number of rows other than `n`
+  ([R40](errors.md#r40----solve-shape))
+- `U` has an exactly zero on its diagonal, i.e. the matrix was singular
+  ([R41](errors.md#r41----solve-singular))
+- `ipiv` has a length other than `n`, or an entry outside of `[0, n)`
+  ([R42](errors.md#r42----lu-bad-pivots))
+
+Must be called with the `std::` prefix, e.g. `std::lu_solve()`.  See
+[`lu_factor`](#lu_factor) for an example.
+
+Related functions: [`lu_factor`](#lu_factor), [`solve`](#solve)
+
+## `max`
+```rust
+fn max(a0: any_num, a1: any_num, a2: any_num, ...): any_num
+```
+
+Return the argument with the largest (most positive) value.  The arguments of
+`max` must be homogeneous types, i.e. `a1` must be the same type as `a0` in one
+invocation.  For example, this is a parser error:
+```rust
+let x = max(1, 2.0);
+// Error[E42]: function `max` parameter 1 `a1` requires type `i32` but was given `f64`
+//   --> <stdin>:1:8
+//    |
+//  1 | max(1, 2.0);
+//    |        ^^^ wrong argument type
+```
+Every syntran error, warning, and internal diagnostic carries a unique code
+like `E42` above (in the style of rustc's `error[E0631]`). See
+[errors.md](errors.md) for the full index of codes.
+
+Seperate invocations with different types are fine:
+```rust
+let max_int = max(1, 2);
+let max_flt = max(3.0, 2.0);
+```
+
+Related functions: [`min`](#min), [`maxval`](#maxval)
+
+## `maxval`
+```rust
+fn maxval(array: [any_num; any_rank]): any_num
+fn maxval(array: [any_num; any_rank], dim: i32): [any_num; any_rank - 1]
+fn maxval(array: [any_num; any_rank], mask: [bool; any_rank]): any_num
+fn maxval(array: [any_num; any_rank], dim: i32, mask: [bool; any_rank]): [any_num; any_rank - 1]
+```
+
+Return the largest element of `array`.  If `dim` is given, instead return the
+largest element of each lane of `array` along the dimension `dim`.  If `mask` is
+given, only the elements where `mask` is `true` are considered.
+
+With a `dim`, the result has one less rank than the array.  If the array is rank
+1, the result is a scalar instead of a 1-element array.  Like `size`, `dim` is
+zero-indexed, and a `dim` outside of `0 <= dim < rank` is a runtime error
+([R34](errors.md#r34----reduce-dim-range)).
+
+It is a runtime error ([R36](errors.md#r36----minmax-empty)) if there is nothing
+to take the largest of, i.e. `array` is empty or `mask` selects no elements.
+
+Not to be confused with [`max`](#max), which compares its scalar arguments.
+
+Related functions: [`minval`](#minval), [`max`](#max)
+
+## `min`
+```rust
+fn min(a0: any_num, a1: any_num, a2: any_num, ...): any_num
+```
+
+Return the argument with the smallest (most negative) value.  Like with `max`,
+the arguments of `min` must be homogeneous types.
+
+Related functions: [`max`](#max), [`minval`](#minval)
+
+## `minval`
+```rust
+fn minval(array: [any_num; any_rank]): any_num
+fn minval(array: [any_num; any_rank], dim: i32): [any_num; any_rank - 1]
+fn minval(array: [any_num; any_rank], mask: [bool; any_rank]): any_num
+fn minval(array: [any_num; any_rank], dim: i32, mask: [bool; any_rank]): [any_num; any_rank - 1]
+```
+
+Return the smallest element of `array`.  If `dim` is given, instead return the
+smallest element of each lane of `array` along the dimension `dim`.  If `mask` is
+given, only the elements where `mask` is `true` are considered.
+
+With a `dim`, the result has one less rank than the array.  If the array is rank
+1, the result is a scalar instead of a 1-element array.  Like `size`, `dim` is
+zero-indexed, and a `dim` outside of `0 <= dim < rank` is a runtime error
+([R34](errors.md#r34----reduce-dim-range)).
+
+It is a runtime error ([R36](errors.md#r36----minmax-empty)) if there is nothing
+to take the smallest of, i.e. `array` is empty or `mask` selects no elements.
+
+Not to be confused with [`min`](#min), which compares its scalar arguments.
+
+Related functions: [`maxval`](#maxval), [`min`](#min)
+
+## `norm2`
+```rust
+fn norm2(array: [any_float; any_rank]): any_float
+```
+
+Return the Euclidean norm of `array`, i.e. the square root of the sum of the
+squares of all of its elements.  For example, `norm2([3.0, 4.0])` is `5.0`.  The
+result is a scalar for an array of any rank.
+
+Like Fortran's `norm2()`, this only accepts floating-point arrays.  Integer
+arrays are a parser error, unlike [`dot`](#dot) and [`sum`](#sum) which accept
+them.
+
+Related functions: [`dot`](#dot), [`sum`](#sum)
+
+## `open`
+```rust
+fn open(filename: str, mode: str): file
+```
+
+Open a `file` handle named `filename`.  The `mode` string must be one of `"r"`
+(read), `"w"` (write), or `"a"` (append), never a combination of read and
+write.  Write mode replaces what was in the file before, while append mode adds
+to the end of an existing file.  Both create the file if it does not exist.  It
+is a runtime error if `filename`
+cannot be opened, e.g. if it does not exist in read mode -- guard with
+[`exists`](#exists) first, or use [`try_open`](#try_open) to get a closed
+handle back instead of a runtime error.
+
+A `b` in the mode, as in `"rb"`, `"wb"`, or `"ab"`, opens a binary file instead of a text
+file.  The values of a binary file are the raw bytes that are in memory, with no
+separators: they are written with [`write`](#write) and read back with
+[`read_i32`](#read_i32) and its siblings.  Binary files are not portable between
+machines with different byte orders.  The text operations [`readln`](#readln),
+[`writeln`](#writeln), and [`eof`](#eof) are a runtime error for them
+([R43](errors.md#r43----text-op-on-binary-file)).  Writing a binary file with
+`"wb"` replaces what was in the file before, and `"ab"` appends to it.
+
+Related functions: [`close`](#close), [`writeln`](#writeln), [`write`](#write), [`exists`](#exists), [`try_open`](#try_open)
+
+## File handle members
+
+A `file` handle returned by [`open`](#open) or [`try_open`](#try_open) has a
+fixed set of read-only members, accessed with `.`:
+
+| Member | Type | Meaning |
+|--------|------|---------|
+| `f.is_open` | `bool` | Whether the handle is currently open. `false` for a handle returned by a failed `try_open()`, or after [`close`](#close). |
+| `f.eof` | `bool` | Same value [`eof(f)`](#eof) would return. For `std::IN`, this tracks the same underlying state as no-arg `eof()`/`readln()`, so mixing the two forms stays consistent. |
+| `f.name` | `str` | The filename exactly as passed to `open()`/`try_open()` -- *not* resolved against the script directory, so it may differ from the path in a runtime error message under `--cd`. |
+
+These members cannot be assigned to (`f.eof = true;` is a compile-time
+error); they only reflect the handle's current state.
+
+## `parse_bool`
+```rust
+fn parse_bool(s: str): bool
+```
+
+Convert from a string to a `bool`.  Only `"true"` and `"false"` are accepted,
+optionally with surrounding spaces, so `parse_bool("true")` is `true`.  Other
+spellings like `"True"`, `"t"`, or `"1"` are not accepted.
+
+Any invalid text will cause a runtime error,
+[R46](errors.md#r46----parse-bool).
+
+Related functions: [`parse_i32`](#parse_i32), [`str`](#str)
+
+## `parse_f32`
+```rust
+fn parse_f32(s: str): f32
+```
+
+Convert from a string to a float `f32`.  For example, `parse_f32("65.4")`
+returns roughly `65.4f`.
+
+Any invalid numbers will cause a runtime error.
+
+Note that other numeric types (`i32`) can be converted to float with
+[`f32`](#f32), e.g. `f32(3)`, or simply by multiplying by `1.0f`.
+
+Related functions: [`parse_i32`](#parse_i32), [`str`](#str)
+
+## `parse_f64`
+```rust
+fn parse_f64(s: str): f64
+```
+
+Convert from a string to a double `f64`.  For example, `parse_f64("65.4")`
+returns roughly `65.4`.
+
+Any invalid numbers will cause a runtime error.
+
+Note that other numeric types (`i32`) can be converted to double with
+[`f64`](#f64), e.g. `f64(3)`, or simply by multiplying by `1.0`.
+
+Related functions: [`parse_f32`](#parse_f32), [`str`](#str)
+
+## `parse_i32`
+```rust
+fn parse_i32(s: str): i32
+```
+
+Convert from a string to an integer `i32`.  For example, `parse_i32("65")`
+returns `65`.  This is in contrast to calling `i32()` on character arguments,
+which performs an ASCII table lookup.
+
+Any invalid numbers will cause a runtime error.  Other languages variously refer
+to similar functions as `atoi()`, `stoi()`, `read()`, `parse()`, `strtol()`,
+`str2int()`, etc.
+
+Note that other numeric types (`f32`) can be implicitly cast to `i32`.
+
+Related functions: [`parse_i64`](#parse_i64), [`str`](#str)
+
+## `parse_i64`
+```rust
+fn parse_i64(s: str): i64
+```
+
+Convert from a string to an integer `i64`.  For example, `parse_i64("65")`
+returns `65`.
+
+Any invalid numbers will cause a runtime error.
+
+Related functions: [`parse_i32`](#parse_i32), [`str`](#str)
+
+## `print`
+```rust
+fn print(s0: any, s1: any, s2: any, ...)
+```
+
+Print to the standard output, without a newline.  Output is flushed, so a prompt
+shows up before a following [`readln()`](#readln) waits for input.
+
+Must be called with the `std::` prefix, e.g. `std::print("a")`.
+
+Related functions: [`println`](#println), [`write`](#write), [`format`](#format), [`printf`](#printf)
+
+## `printf`
+```rust
+fn printf(fmt: str, value0: any, value1: any, value2: any, ...)
+```
+
+Print to the standard output, without a newline, a string made by
+[`format`](#format).  `std::printf(fmt, a, b)` is the same as `std::print(std::format(fmt, a, b))`.
+The format string must be a string literal, and it is checked when the program is
+parsed, with the same errors as `std::format()`.
+
+```rust
+std::printf("{} has {:3} items", "bag", 12);
+println();
+```
+
+Must be called with the `std::` prefix, e.g. `std::printf("{}", 1)`.
+
+Related functions: [`format`](#format), [`print`](#print), [`writef`](#writef)
+
+## `print_trace`
+```rust
+fn print_trace()
+fn print_trace(label: str)
+```
+
+Print a stack trace of the current call chain to standard output, without
+halting execution.  Each line is `at <fn> (file:line)`, innermost call first,
+down to `at <main>` -- the same frames a runtime (`R*`) error prints
+automatically, minus its source-line snippet.  If `label` is given, it's
+appended to the `Stack trace:` header line, e.g. for a debug checkpoint:
+`std::print_trace("got here")` prints `Stack trace: got here` followed by the
+usual frame lines.  Must be called with the `std::` prefix, e.g.
+`std::print_trace()`.
+
+Related functions: [`caller`](#caller), [`stack_trace`](#stack_trace)
+
+## `println`
+```rust
+fn println(s0: any, s1: any, s2: any, ...)
+```
+
+Print to the standard output, with a newline
+
+Related functions: [`print`](#print), [`str`](#str), [`writeln`](#writeln), [`format`](#format)
+
+## `product`
+```rust
+fn product(array: [any_num; any_rank]): any_num
+fn product(array: [any_num; any_rank], dim: i32): [any_num; any_rank - 1]
+fn product(array: [any_num; any_rank], mask: [bool; any_rank]): any_num
+fn product(array: [any_num; any_rank], dim: i32, mask: [bool; any_rank]): [any_num; any_rank - 1]
+```
+
+Return the product of all elements in an array.  If `dim` is given, instead
+return the product of each lane of `array` along the dimension `dim`.  If `mask`
+is given, only the elements where `mask` is `true` are multiplied.  The product
+of no elements is `1`.
+
+With a `dim`, the result has one less rank than the array.  If the array is rank
+1, the result is a scalar instead of a 1-element array.  Like `size`, `dim` is
+zero-indexed, and a `dim` outside of `0 <= dim < rank` is a runtime error
+([R34](errors.md#r34----reduce-dim-range)).
+
+Related functions: [`sum`](#sum)
+
+## `read_f32`
+## `read_f64`
+## `read_i32`
+## `read_i64`
+```rust
+fn read_i32(file_handle: file): i32
+fn read_i32(file_handle: file, n: i32): [i32; :]
+```
+
+`read_f32`, `read_f64`, `read_i32`, and `read_i64` have the same forms with
+their own type.  They must be called with the `std::` prefix, e.g.
+`std::read_f64(f)`.
+
+Read one value from `file_handle`, or an array of `n` values if `n` is given.
+There is no `n` for a multi-dimensional array: read the elements with
+[`reshape`](#reshape) after, e.g. `std::reshape(std::read_f64(f, nx*ny), [nx, ny])`.
+
+In a text file, the values are separated by blanks, tabs, commas, or line breaks, so
+they can be on different lines, like the ones that
+[`format`](#format) writes for an array.  Reading a value that is not a number is
+a runtime error, and so is reading past the end of the file
+([R44](errors.md#r44----read-fail)).  Unlike Fortran's list-directed input, `/`,
+`*`, and quotes have no special meaning and are not numbers, and an empty field
+like the one in `1,,3` is not a null value, so they are all R44 too.  After the
+last value that is read, the rest of its line is skipped.  Don't mix these with
+[`readln`](#readln) on the same line.
+
+Reading past the end of a file is a runtime error rather than something to check
+for first, so [`eof()`](#eof) doesn't tell a loop when to stop reading values: it
+only becomes `true` after a `readln()` reaches the end.  Know the count of values
+instead, e.g. by writing it first.  A read from a file whose `readln()` already
+reached the end is the same error.
+
+In a binary file, opened in [`"rb"` mode](#open), they read the raw bytes that
+[`write`](#write) wrote.  The count of values has to be known, e.g. by writing it
+first.
+
+Related functions: [`open`](#open), [`write`](#write), [`readln`](#readln), [`format`](#format)
+
+## `readln`
+```rust
+fn readln(): str
+fn readln(file_handle: file): str
+```
+
+Read a single line from `file_handle`, or from stdin if called with no argument
+
+Related functions: [`close`](#close), [`eof`](#eof), [`open`](#open), [`read_i32`](#read_i32)
+
+## `repeat`
+```rust
+fn repeat(str: str, ncopies: i32): str
+fn repeat(str: str, ncopies: i64): str
+```
+
+Return `str` concatenated with itself `ncopies` times.  For example,
+`repeat("ab", 3)` is `"ababab"`, and an `ncopies` of `0` gives the empty
+string.  `ncopies` can be an `i32` or an `i64`, so the result of
+[`len`](#len) can be used directly, e.g. `repeat("-", len(title))`.  `ncopies`
+must not be negative, which is a runtime error,
+[R39](errors.md#r39----repeat-negative).
+
+Related functions: [`len`](#len), [`str`](#str)
+
+## `reshape`
+```rust
+fn reshape(source: [any; any_rank], shape: [i32; :]): [any; size(shape)]
+```
+
+Return an array with the same elements as `source`, in the same order, but with
+the extents given by `shape`.  The result has the same element type as `source`
+and a rank equal to the length of `shape`.  Elements are in column-major order,
+i.e. the first dimension varies fastest, so for example this makes a 2x3 matrix:
+```rust
+let m = std::reshape([1, 2, 3, 4, 5, 6], [2, 3]);
+```
+
+The product of the extents in `shape` must equal the number of elements in
+`source`, otherwise it is a runtime error
+([R19](errors.md#r19----reshape-mismatch)).
+
+The `shape` argument must be an array literal like `[2, 3]` or `[nx, ny]`, whose
+elements can be any expression.  Its length is the rank of the result, which
+has to be known when the program is parsed, so a variable, a function parameter,
+or the result of a function like `std::shape()` is an error
+([E121](errors.md#e121----reshape-shape-lit)).
+
+Must be called with the `std::` prefix, e.g. `std::reshape()`.
+
+Related functions: [`shape`](#shape), [`size`](#size), [`transpose`](#transpose)
+
+## `shape`
+```rust
+fn shape(source: [any; any_rank]): [i64; :]
+```
+
+Return the extents of `source` along every dimension, as a rank-1 array of
+`i64`.  The length of the result is the rank of `source`, and element `d` of the
+result is `size(source, d)`.  For example, if `m` is a 2x3 matrix, `std::shape(m)`
+is `[2, 3]`.  Must be called with the `std::` prefix, e.g. `std::shape()`.
+
+Related functions: [`size`](#size), [`reshape`](#reshape)
+
+## `sin`
+```rust
+fn sin(x: any_float): any_float
+#elemental
+```
+
+Compute the sine of `x`, where `x` is in radians.  For an argument in degrees,
+use [`sind`](#sind).
+
+The `sin` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`cos`](#cos), [`tan`](#tan), [`sind`](#sind), [`asin`](#asin)
+
+## `sind`
+```rust
+fn sind(x: any_float): any_float
+#elemental
+```
+
+Compute the sine of `x`, where `x` is in degrees.  For example, `sind(30.0)` is
+`0.5`.  For an argument in radians, use [`sin`](#sin).
+
+The `sind` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`cosd`](#cosd), [`tand`](#tand), [`sin`](#sin), [`asind`](#asind)
+
+## `size`
+```rust
+fn size(array: [any; any_rank]): i64
+fn size(array: [any; any_rank], dim: i32): i64
+```
+
+Return the total number of elements in `array`.  If `dim` is given, instead
+return the extent of `array` along the dimension `dim`.  Like all dimension
+arguments, `dim` is zero-indexed, so for a 2x3 matrix `m`, `size(m, 0)` is `2`
+and `size(m, 1)` is `3`.  A `dim` outside of `0 <= dim < rank` is a runtime error
+([R17](errors.md#r17----size-rank-mismatch)).
+
+Not to be confused with [`count`](#count), which counts the `true` elements of
+a `bool` array, or [`len`](#len), which gets the length of a string.
+
+Related functions: [`shape`](#shape), [`count`](#count), [`len`](#len)
+
+## `solve`
+```rust
+fn solve(A: [any_float; :, :], b: [any_float; :]): [any_float; :]
+fn solve(A: [any_float; :, :], b: [any_float; :, :]): [any_float; :, :]
+```
+
+Solve the linear system `A @ x == b` for `x`, using LU factorization with
+partial pivoting.  `A` is a square `n x n` matrix and `b` is either a vector
+of length `n` or an `n x k` matrix of `k` right-hand sides, one per column.
+The result has the shape of `b`.  `A` and `b` are not modified.
+
+`A` and `b` must both be `f32` or both be `f64`.  Other element types, or a
+mix, are a compile-time error.  The result has the same type.
+
+A matrix that is not square, or a `b` with a number of rows other than `n`, is
+a runtime error ([R40](errors.md#r40----solve-shape)), as is a matrix that is
+exactly singular ([R41](errors.md#r41----solve-singular)).  A matrix that is
+only nearly singular is not an error, but its solution is inaccurate.
+
+Prefer `solve` to computing an inverse, which is slower and less accurate.  To
+solve for many right-hand sides that aren't all known up front, factor once with
+[`lu_factor`](#lu_factor) and then call [`lu_solve`](#lu_solve) repeatedly.
+Must be called with the `std::` prefix, e.g. `std::solve()`.
+
+```rust
+let A = [2.0, 1.0, 1.0, 3.0; 2, 2];  // [[2, 1], [1, 3]]
+let b = [3.0, 5.0];
+let x = std::solve(A, b);
+println(x);      // [0.8, 1.4]
+println(A @ x);  // [3.0, 5.0]
+```
+
+Official builds use LAPACK's `gesv`.  Builds made with `SYNTRAN_NO_BLAS` use a
+portable implementation instead, which may differ in the last digits.
+
+Related functions: [`lu_factor`](#lu_factor), [`lu_solve`](#lu_solve), [`transpose`](#transpose), [`dot`](#dot)
+
+## `sqrt`
+```rust
+fn sqrt(x: any_float): any_float
+#elemental
+```
+
+Compute the square root of `x`.  The result is `NaN` if `x` is negative.  This
+is not an error.
+
+The `sqrt` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`exp`](#exp), [`norm2`](#norm2)
+
+## `stack_trace`
+```rust
+fn stack_trace(): str
+fn stack_trace(skip: i32): str
+```
+
+Return a stack trace of the current call chain as a `str`, in the same
+format [`print_trace`](#print_trace) prints to standard output -- useful for
+logging to a file or [`std::ERR`](#writeln) instead.  If `skip` is given, the
+`skip` innermost frames are dropped -- useful inside a logging helper that
+wraps `std::stack_trace()` and wants to omit its own frame, the way
+JavaScript's `Error.captureStackTrace(obj, fn)` does.  `skip` beyond the
+whole call chain (even past `<main>`) just returns the `Stack trace:` header
+with no frame lines.  A negative `skip` is treated as `0`.  Must be called
+with the `std::` prefix, e.g. `std::stack_trace()`.
+
+Related functions: [`caller`](#caller), [`print_trace`](#print_trace)
+
+## `str`
+```rust
+fn str(s0: any, s1: any, s2: any, ...): str
+```
+
+Convert arguments to `str` and concatenate
+
+Related functions: [`println`](#println), [`writeln`](#writeln), [`parse_i32`](#parse_i32)
+
+## `sum`
+```rust
+fn sum(array: [any_num; any_rank]): any_num
+fn sum(array: [any_num; any_rank], dim: i32): [any_num; any_rank - 1]
+fn sum(array: [any_num; any_rank], mask: [bool; any_rank]): any_num
+fn sum(array: [any_num; any_rank], dim: i32, mask: [bool; any_rank]): [any_num; any_rank - 1]
+```
+
+Return the sum of all elements in an array.
+
+If `dim` is given, instead return the sum of each lane of `array` along the
+dimension `dim`.  For example, for a matrix `m`, `sum(m, 0)` is the sum of each
+column and `sum(m, 1)` is the sum of each row.
+
+With a `dim`, the result has one less rank than the array.  If the array is rank
+1, the result is a scalar instead of a 1-element array.  Like `size`, `dim` is
+zero-indexed, and a `dim` outside of `0 <= dim < rank` is a runtime error
+([R34](errors.md#r34----reduce-dim-range)).
+
+If `mask` is given, only the elements of `array` where `mask` is `true` are
+summed.  `mask` must have the same shape as `array`, otherwise it is a runtime
+error ([R35](errors.md#r35----mask-shape-mismatch)).  The same goes for the
+`mask` of `product`, `minval`, and `maxval`.  Unlike Fortran, syntran has no
+keyword arguments, so `dim` always comes before `mask`, and the two overloads
+are told apart by whether the second argument is an integer or a `bool` array.
+
+```rust
+let a = [1, 2, 3, 4, 5, 6; 2, 3];
+let s0 = sum(a, 0);        // [3, 7, 11]
+let s1 = sum(a, 1);        // [9, 12]
+let sm = sum(a, a > 2);    // 18
+let sd = sum(a, 0, a > 2); // [0, 7, 11]
+```
+
+Related functions: [`product`](#product), [`count`](#count)
+
+## `tan`
+```rust
+fn tan(x: any_float): any_float
+#elemental
+```
+
+Compute the tangent of `x`, where `x` is in radians.  For an argument in
+degrees, use [`tand`](#tand).
+
+The `tan` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`sin`](#sin), [`cos`](#cos), [`tand`](#tand), [`atan`](#atan)
+
+## `tand`
+```rust
+fn tand(x: any_float): any_float
+#elemental
+```
+
+Compute the tangent of `x`, where `x` is in degrees.  For an argument in
+radians, use [`tan`](#tan).
+
+The `tand` function is _elemental_, i.e. it can operate on both scalars and
+arrays.
+
+Related functions: [`sind`](#sind), [`cosd`](#cosd), [`tan`](#tan), [`atand`](#atand)
+
+## `transpose`
+```rust
+fn transpose(source: [any; :, :]): [any; :, :]
+```
+
+Return the transpose of a rank-2 array, i.e. with its rows and columns
+exchanged, so that `std::transpose(m)[j, i]` is `m[i, j]`.  The result has the
+same element type as `source`.  A 2x3 matrix becomes a 3x2 matrix.  Only rank-2
+arrays are accepted.  Must be called with the `std::` prefix, e.g.
+`std::transpose()`.
+
+Related functions: [`reshape`](#reshape), [`shape`](#shape)
+
+## `try_open`
+```rust
+fn try_open(filename: str, mode: str): file
+```
+
+A non-throwing [`open`](#open).  On failure it returns a closed handle
+(`f.is_open == false`) instead of raising a runtime error, so it's the tool
+for recovering from an open failure rather than just guarding against one
+with [`exists`](#exists) beforehand.  A malformed `mode` string is still a
+runtime error, since that's a program bug rather than an I/O failure.  Must
+be called with the `std::` prefix, e.g. `std::try_open("data.txt", "r")`.
+
+```rust
+let f = std::try_open("data.txt", "r");
+if f.is_open
+{
+    while not f.eof { println(readln(f)); }
+    close(f);
+}
+else
+{
+    println("could not open data.txt");
+}
+```
+
+See also [File handle members](#file-handle-members) for `f.is_open`,
+`f.eof`, and `f.name`.
+
+Related functions: [`open`](#open), [`exists`](#exists), [`close`](#close)
+
+## `write`
+```rust
+fn write(file_handle: file, s0: any, s1: any, s2: any, ...)
+```
+
+Write to `file_handle`, without a newline.  Several calls can write a line piece by
+piece, and [`writeln`](#writeln) can end it.
+
+If `file_handle` is a text file, the values are written as text, the same as
+[`writeln`](#writeln) writes them.  If it is a [binary file](#open), the raw bytes
+of the values are written instead, with nothing between them.  A number is 4 or 8
+bytes, a `bool` is 1 byte, a `str` is its characters, and an array is its
+elements in storage order.  Any other value, e.g. a struct or an array of strings,
+can't be written to a binary file ([R45](errors.md#r45----binary-write-type)).
+
+Must be called with the `std::` prefix, e.g. `std::write(f, 1)`.
+
+Related functions: [`writeln`](#writeln), [`print`](#print), [`writef`](#writef), [`read_i32`](#read_i32), [`open`](#open)
+
+## `writef`
+```rust
+fn writef(file_handle: file, fmt: str, value0: any, value1: any, value2: any, ...)
+```
+
+Write to `file_handle`, without a newline, a string made by [`format`](#format).
+`std::writef(f, fmt, a, b)` is the same as `std::write(f, std::format(fmt, a, b))`.  The format
+string must be a string literal, and it is checked when the program is parsed,
+with the same errors as `std::format()`.
+
+As with [`write`](#write), a file opened in [binary mode](#open) gets the bytes
+of the formatted text, with nothing between them.  Use [`write`](#write) to write
+the raw bytes of a number instead.
+
+Must be called with the `std::` prefix, e.g. `std::writef(f, "{}", 1)`.
+
+Related functions: [`format`](#format), [`write`](#write), [`writeln`](#writeln), [`printf`](#printf)
+
+## `writeln`
+```rust
+fn writeln(file_handle: file, s0: any, s1: any, s2: any, ...)
+```
+
+Write to `file_handle`, with a newline.  It is a runtime error for a file opened
+in [binary mode](#open) ([R43](errors.md#r43----text-op-on-binary-file)).
+
+Related functions: [`close`](#close), [`readln`](#readln), [`println`](#println), [`write`](#write), [`open`](#open), [`format`](#format)
+
+# Intrinsic constants
+
+These are built-in constants.  They must be referenced with the `std::` prefix,
+and they cannot be assigned to ([E82](errors.md#e82----immutable-var)).
+
+| Constant | Type | Meaning |
+|----------|------|---------|
+| `std::PI` | `f64` | The ratio of a circle's circumference to its diameter, π ≈ 3.14159. |
+| `std::IN` | `file` | Standard input, for [`readln`](#readln) and [`eof`](#eof). |
+| `std::OUT` | `file` | Standard output, for [`writeln`](#writeln) and [`write`](#write). |
+| `std::ERR` | `file` | Standard error, for [`writeln`](#writeln) and [`write`](#write). |
+
+The standard file handles have the same [members](#file-handle-members) as any
+other `file`, but closing one is a runtime error
+([R28](errors.md#r28----close-standard)).
+

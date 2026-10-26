@@ -1,0 +1,174 @@
+// Arrays: literals of every form, subscripts, slices, vector subscripts,
+// elementwise operators, reductions, and arrays of strings.  Run by both the
+// interpreter and the Fortran transpiler, which must print the same thing.
+// The return value is the number of failed checks
+
+let status = 0;
+
+fn check(ok: bool): i32
+{
+	if (ok) return 0;
+	return 1;
+}
+
+// Literals
+let a = [1, 2, 3, 4, 5, 6];
+let r = [2: 8];
+let st = [10: 3: 20];
+let down = [10: -3: 0];
+let fl = [0.0: 0.25: 1.0];
+let ls = [0.0: 1.0; 5];
+let un = [7; 4];
+let un2 = [1.5; 2, 3];
+let ex = [1, 2, 3, 4, 5, 6; 2, 3];
+let cat = [[1, 2], [3], [4, 5, 6]];
+let bs = [true, false, true];
+let strs = ["ab", "cd", "ef"];
+println(a, " ", r, " ", st, " ", down);
+println(fl, " ", ls);
+println(un, " ", un2, " ", ex);
+println(cat, " ", bs, " ", strs);
+let e = [0: 0];
+println(size(e), " ", e);
+
+// Subscripts and slices
+println(a[0], " ", a[5], " ", a[1: 4], " ", a[:2], " ", a[4:], " ", a[:]);
+println(a[:2:], " ", a[1: 2 :], " ", a[5: -1: 0], " ", a[:-1:], " ", a[4: -2: 0]);
+println(ex[1, 2], " ", ex[0, :], " ", ex[:, 1], " ", ex[0: 2, 1: 3]);
+let idx = [0, 2, 4];
+println(a[idx], " ", a[idx + 1]);
+let stp = 2;
+println(a[0: stp: 6], " ", a[:stp:]);
+
+// Assignment to elements and slices
+let b = [0; 6];
+b[0] = 7;
+b[1: 3] = 9;
+b[3:] = [4, 5, 6];
+println(b);
+b[idx] = -1;
+println(b);
+b[:2:] += 100;
+println(b);
+let m = [0; 3, 3];
+m[1, 1] = 5;
+m[0, :] = 1;
+m[:, 2] = [7, 8, 9];
+println(m);
+
+// Elementwise operators and mixed types
+println(a + 1, " ", a * a, " ", a - r[0: 6], " ", a / 2, " ", a % 4, " ", -a);
+println(a * 1.5, " ", a > 3, " ", a == r[0: 6] + 1, " ", a ** 2);
+println(fl + fl, " ", 2.0 * fl, " ", fl ** 2, " ", un2 * 2);
+println(a & 3, " ", a << 1, " ", a >> 1, " ", !a);
+println(bs and [true, true, false], " ", bs or [false, false, false], " ", not bs);
+
+// Reductions
+println(sum(a), " ", product(a[0:4]), " ", minval(a), " ", maxval(a), " ", sum(fl));
+println(sum(ex, 0), " ", sum(ex, 1), " ", minval(ex, 0), " ", maxval(ex, 1));
+println(sum(a, a > 3), " ", count(a > 2), " ", all(a > 0), " ", any(a > 5), " ", all(a > 1));
+println(sum(ex, 0, ex > 2), " ", count(ex > 2, 0), " ", any(ex > 5, 1));
+println(norm2([3.0, 4.0]), " ", dot([1.0, 2.0], [3.0, 4.0]));
+println(size(a), " ", size(ex, 0), " ", size(ex, 1), " ", size(e));
+
+// Matrix products
+let mat = [1.0, 2.0, 3.0, 4.0; 2, 2];
+let vec = [1.0, 1.0];
+println(mat @ vec, " ", vec @ mat, " ", mat @ mat, " ", vec @ vec);
+
+// Arrays of strings: elements, characters, slices, and operators
+println(strs[1], " ", strs[1, 0], " ", strs[0: 2], " ", strs + "!", " ", "<" + strs + ">");
+println(strs == ["ab", "xx", "ef"], " ", strs < ["ab", "ce", "eg"], " ", strs != "cd");
+let s2 = ["x"; 3];
+s2[1] = "yy";
+s2[2] += "zz";
+s2[0: 2] = "q";
+println(s2, " ", s2[1, 0], " ", str(s2));
+
+// Strings with a step, like the arrays above.  The omitted bounds of a negative
+// step are the whole string reversed
+let rs = "hello world";
+let rk = -1;
+let rz = 0;
+let re = "";
+println(rs[:-1:], "|", rs[:2:], "|", rs[1:2:], "|", rs[3:-1:], "|", rs[8:-2:-1]);
+println(rs[:rk:], "|", rs[2:rk:], "|", rs[rz:3:], "|", rs[:2:7], "|", "[", re[:-1:], "]");
+let rv = ["hello", "world"];
+println(rv[0, :-1:], " ", rv[1, :2:], " ", rv[1, 3:-1:]);
+status += check(rs[:-1:] == "dlrow olleh");
+status += check(rs[:2:] == "hlowrd");
+status += check(rv[0, :-1:] == "olleh");
+
+// ... and assigned to
+let ws = "hello";
+ws[:-1:] = "olleh";
+status += check(ws == "hello");
+ws[:-1:] = "abcde";
+status += check(ws == "edcba");
+ws[:-1:] = ws;
+status += check(ws == "abcde");
+ws[1:2:] = "XY";
+status += check(ws == "aXcYe");
+rv[1, :2:] = "WRD";
+status += check(rv[1] == "WoRlD");
+let rw = ["abc", "def", "ghi"];
+rw[0: 2, :-1:] = "xyz";
+status += check(rw[0] == "zyx" and rw[1] == "zyx" and rw[2] == "ghi");
+rw[:, :-1:] = rw[0];
+status += check(rw[2] == "xyz");
+println(ws, " ", rv, " ", rw);
+
+// Iteration over arrays, strings, and ranges of every type
+let total = 0;
+for v in a
+	total += v;
+println(total);
+for v in [0.5: 0.5: 2.5]
+	println(v);
+for w in strs
+	println(w);
+for ch in "abc"
+	println(ch);
+for k in [5: -2: 0]
+	println(k);
+for k in [3'i64: 6'i64]
+	println(k);
+
+// Copy semantics
+let c1 = [1, 2, 3];
+let c2 = c1;
+c2[0] = 99;
+println(c1, " ", c2);
+
+// Arrays as function arguments and results
+fn double_all(x: [i32; :]): [i32; :]
+{
+	return x * 2;
+}
+
+fn bump(x: &[i32; :])
+{
+	x[0] += 1;
+	return;
+}
+
+fn first_str(x: [str; :]): str
+{
+	return x[0];
+}
+
+fn mat_scale(x: [f64; :, :], k: f64): [f64; :, :]
+{
+	let y = x;
+	y[0, 0] = y[0, 0] * k;
+	return y;
+}
+
+let dbl = double_all(a);
+bump(&c1);
+println(dbl, " ", c1, " ", first_str(strs), " ", mat_scale(mat, 10.0));
+status += check(dbl[5] == 12);
+status += check(c1[0] == 2);
+status += check(sum(a) == 21);
+
+return status;

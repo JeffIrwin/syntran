@@ -1,0 +1,27 @@
+// Regression test for on-demand stack traces (std::print_trace()/
+// std::stack_trace(), vm_exec.f90's OP_CALL_INTR INTR_PRINT_TRACE/
+// INTR_STACK_TRACE).  Unlike the R*-error traces covered by nested.syntran
+// et al., these must NOT halt execution: std::print_trace() just writes to
+// stdout and std::stack_trace() just returns the same text as a str, and
+// the script keeps running afterward.
+//
+// <main> (line 25) -> outer() (line 21) -> inner() (line 12), where inner()
+// calls std::print_trace() (smoke test only, line 14) then returns
+// std::stack_trace() (line 15).
+
+fn inner(): str
+{
+	std::print_trace();
+	return std::stack_trace();
+}
+
+fn outer(): str
+{
+	println("outer start");
+	return inner();
+}
+
+println("main start");
+let trace = outer();
+println("main end");
+return trace;

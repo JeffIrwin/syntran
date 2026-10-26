@@ -197,6 +197,9 @@ A function was called before being defined.  May include a "did you mean" sugges
 ### E30 -- std-only-fn
 
 A standard-library function was called without its required `std::` prefix.
+Write `std::name()`, add `use std::name;` earlier in the file to call that one
+function without the prefix, or add `use std::*;` to do so for every such
+function.
 
 [Example](../src/tests/test-src/errors/E30-std-only-fn.syntran)
 
@@ -459,7 +462,8 @@ A module name is a reserved language keyword.
 
 ### E74 -- mod-reserved-std
 
-The module name `std` is reserved for the standard library.
+The module name `std` is reserved for the standard library.  The only forms of
+`use` that are allowed for it are `use std::*;` and `use std::name;`.
 
 [Example](../src/tests/test-src/errors/E74-mod-reserved-std.syntran)
 
@@ -704,6 +708,105 @@ or `let = 3;`.
 
 [Example](../src/tests/test-src/errors/E114-missing-let-name.syntran)
 
+### E115 -- transpile-unsupported
+
+A construct which the Fortran transpiler (`syntran --transpile`) can't
+translate, e.g. a function pointer or the interpreter's own call stack with
+`std::caller()`.  The program is still valid.  Run it with the interpreter instead,
+i.e. without `--transpile`.  This is only ever reported when transpiling.  There
+is at most one diagnostic for each statement.
+
+See [transpile.md](transpile.md) for what is supported.
+
+[Example](../src/tests/test-src/errors/E115-transpile-unsupported.syntran)
+
+### E116 -- ref-alias
+
+The same variable is passed to a fn by a mutable `&` reference and by another
+reference too, e.g. `f(&h, &h)`, or `f(&h, h)` when the second parameter is
+`&const`.  This also applies to a method's receiver, which is a mutable
+reference to `self` unless the method is `const`, so `s.add(s)` is an error when
+`add` takes a `&const S`.  The two references would be live at once, and a call
+can't give out a mutable reference and anything else to the same variable.
+
+Several `&const` references to one variable are fine, e.g. `dot(v, v)`.  So is
+passing a mutable reference and the same variable by value, because the value is
+a copy.  To fix the error, copy the variable first: `let t = h; f(&h, t);`
+
+[Example](../src/tests/test-src/errors/E116-ref-alias.syntran)
+
+### E117 -- format-not-literal
+
+The format string of [`std::format()`](intrinsics.md#format),
+[`std::printf()`](intrinsics.md#printf), or [`std::writef()`](intrinsics.md#writef)
+is not a string literal, e.g. it is a variable or the result of an expression.  The format string is
+checked against the values after it when the program is parsed, so it has to be
+written out in the call.  To build a format string, build the result with
+[`str()`](intrinsics.md#str) or a few calls of `std::format()` instead.
+
+[Example](../src/tests/test-src/errors/E117-format-not-literal.syntran)
+
+### E118 -- bad-format
+
+The format string of [`std::format()`](intrinsics.md#format) is not valid.  Either a
+`{` is not closed or isn't followed by `}` or `:`, e.g. `{0}` and `{name}`, which
+are not supported; or a `}` has no `{` before it, in which case a literal brace is
+written as `}}`; or the spec after the `:` of a placeholder is not
+`[[fill]align][+][#][0][width][.precision][type]` with a type of `x`, `X`, `o`,
+`b`, `e`, or `E`.  A width has at most 6 digits and a precision has at most 3.  A
+backslash which is not part of `\n`, `\t`, `\r`, or `\\` is also this error.
+
+[Example](../src/tests/test-src/errors/E118-bad-format.syntran)
+
+### E119 -- format-type
+
+The spec of a placeholder of [`std::format()`](intrinsics.md#format) doesn't fit the type
+of its value.  Integers can have the types `x`, `X`, `o`, and `b`, but no
+precision.  Real numbers can have `e` and `E`.  Strings, bools, enums, and structs
+have no type, sign, `#`, or `0`, and only a string has a precision.  A file, a
+function pointer, and an array of structs or enums can't be formatted at all.
+
+[Example](../src/tests/test-src/errors/E119-format-type.syntran)
+
+### E120 -- format-count
+
+The format string of [`std::format()`](intrinsics.md#format) has a different number of
+placeholders (`{}` and `{:spec}`) than there are values after it.  There must be
+exactly one value for each placeholder.
+
+[Example](../src/tests/test-src/errors/E120-format-count.syntran)
+
+### E121 -- reshape-shape-lit
+
+The `shape` argument of [`std::reshape()`](intrinsics.md#reshape) is not an array
+literal.  The length of the shape is the rank of the result, which has to be
+known when the program is parsed, so it must be written like `[nx, ny]`.  A
+variable, a function parameter, or a function result can't be used.
+
+[Example](../src/tests/test-src/errors/E121-reshape-shape-lit.syntran)
+
+### E122 -- std-unknown-name
+
+`use std::name;` named something that is not a function of the standard library.
+May include a "did you mean" suggestion.
+
+[Example](../src/tests/test-src/errors/E122-std-unknown-name.syntran)
+
+### E123 -- mod-import-name
+
+`use module::name;` imports a single name from a user module, which isn't
+supported.  Only `std` can be imported that way.  Use `use module::*;` to import
+every name, or `use module;` and call `module::name`.
+
+[Example](../src/tests/test-src/errors/E123-mod-import-name.syntran)
+
+### E124 -- file-array
+
+Arrays of `file` handles (e.g. `[f, g]` or `[std::OUT; 2]`) are not supported: array
+storage has no case for `file`-typed values.
+
+[Example](../src/tests/test-src/errors/E124-file-array.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type
@@ -894,6 +997,26 @@ A file handle member read or write reached the struct-array code path.  Unreacha
 
 ## Runtime errors
 
+Every runtime error also prints a stack trace: a Rust-style `--> file:line:col`
+snippet of the innermost statement that threw, followed by `at <fn> (file:line)`
+for each enclosing call frame down to `at <main>`. For example:
+
+```
+Runtime error[R33]: subscript 5 is out of bounds for size 5
+  --> src/foo.syntran:12:5
+   |
+12 |     let b = a[i];
+   |
+  at inner (src/foo.syntran:12)
+  at outer (src/foo.syntran:20)
+  at <main> (src/foo.syntran:31)
+```
+
+To get the same call-chain info on demand, without throwing an error, call
+[`std::print_trace()`](intrinsics.md#print_trace) (prints to stdout) or
+[`std::stack_trace()`](intrinsics.md#stack_trace) (returns it as a `str`), or get
+just one frame's label with [`std::caller()`](intrinsics.md#caller).
+
 ### R1 -- matmul-dim
 
 The `@` matrix-multiplication operator's operands have incompatible inner dimensions.
@@ -926,13 +1049,14 @@ The `@` matrix-multiplication operator's operands have incompatible inner dimens
 
 ### R6 -- bad-file-mode
 
-`open()` was given a file-mode character other than `r` or `w`.
+`open()` was given a file-mode character other than `r`, `w`, `a`, or `b`.
 
 [Example](../src/tests/test-src/errors/R6-bad-file-mode.syntran)
 
 ### R7 -- file-rw-mode
 
-`open()` was given a mode string combining `r` and `w`, which isn't supported.
+`open()` was given a mode string combining read (`r`) with write (`w`) or append
+(`a`), which isn't supported.
 
 [Example](../src/tests/test-src/errors/R7-file-rw-mode.syntran)
 
@@ -1095,6 +1219,81 @@ The `mask` argument of `sum(array, mask)` or `sum(array, dim, mask)` doesn't hav
 `minval()` or `maxval()` has nothing to reduce, so there is no sensible result.  This happens with an empty array, a `dim` reduction whose extent along `dim` is 0, or a mask (`minval(array, mask)` or `minval(array, dim, mask)`) that selects no elements in one of the reduced lanes.  Other reductions are fine on nothing: `sum` gives `0` and `product` gives `1`.
 
 [Example](../src/tests/test-src/errors/R36-minmax-empty.syntran)
+
+### R37 -- binop-shape-mismatch
+
+An element-wise binary operator, such as `+`, `*`, `==`, `and`, or `&`, or its compound assignment form, such as `a += b`, was given two arrays with different extents.  The ranks of the operands are already checked at compile time ([E49](#e49----binary-ranks)), but their sizes aren't known until runtime.  The matrix product `@` has its own check, [R1](#r1----matmul-dim).  A scalar operand is fine with an array of any shape.
+
+[Example](../src/tests/test-src/errors/R37-binop-shape-mismatch.syntran)
+
+### R38 -- dot-size-mismatch
+
+The two vectors passed to [`dot()`](intrinsics.md#dot) have different lengths.  Their ranks and element types are checked at compile time, but their lengths aren't known until runtime.  This is the vector analogue of [R37](#r37----binop-shape-mismatch), and of [R1](#r1----matmul-dim) for the `@` operator.
+
+[Example](../src/tests/test-src/errors/R38-dot-size-mismatch.syntran)
+
+### R39 -- repeat-negative
+
+The `ncopies` argument of [`repeat()`](intrinsics.md#repeat) is negative.  Zero is allowed, and gives the empty string.
+
+[Example](../src/tests/test-src/errors/R39-repeat-negative.syntran)
+
+### R40 -- solve-shape
+
+The matrix `A` passed to [`std::solve()`](intrinsics.md#solve) or [`std::lu_solve()`](intrinsics.md#lu_solve) is not square, or the right-hand side `b` has a number of rows that is different from the order of `A`.  The element types and ranks are checked at compile time, but the extents aren't known until runtime.
+
+[`std::lu_factor()`](intrinsics.md#lu_factor) accepts a matrix of any shape, so it doesn't raise this error.
+
+[Example](../src/tests/test-src/errors/R40-solve-shape.syntran)
+
+### R41 -- solve-singular
+
+The matrix `A` passed to [`std::solve()`](intrinsics.md#solve), [`std::lu_factor()`](intrinsics.md#lu_factor), or [`std::lu_solve()`](intrinsics.md#lu_solve) is exactly singular, i.e. LU factorization hit a zero pivot, so the system has no unique solution.  A matrix that is merely close to singular doesn't raise this error.
+
+`std::lu_factor()` doesn't raise this error if it is given its optional `info` argument.  It sets `info` instead.
+
+[Example](../src/tests/test-src/errors/R41-solve-singular.syntran)
+
+### R42 -- lu-bad-pivots
+
+The pivots `ipiv` passed to [`std::lu_solve()`](intrinsics.md#lu_solve) are not valid for its `n x n` factors `A`.  Either `ipiv` doesn't have `n` elements, or an entry is outside of `[0, n)`.  Pass the pivots returned by [`std::lu_factor()`](intrinsics.md#lu_factor) as they are.
+
+[Example](../src/tests/test-src/errors/R42-lu-bad-pivots.syntran)
+
+### R43 -- text-op-on-binary-file
+
+[`readln()`](intrinsics.md#readln), [`writeln()`](intrinsics.md#writeln), or
+[`eof()`](intrinsics.md#eof) was called for a file which was opened in binary mode
+(a `b` in the mode of [`open()`](intrinsics.md#open)).  A binary file has raw bytes
+and no lines.  Write one with [`std::write()`](intrinsics.md#write) and read one with
+[`std::read_i32()`](intrinsics.md#read_i32) and its siblings.
+
+[Example](../src/tests/test-src/errors/R43-text-op-on-binary-file.syntran)
+
+### R44 -- read-fail
+
+[`std::read_i32()`](intrinsics.md#read_i32) or one of its siblings failed to read
+from an open file.  Either the end of the file was reached before all of the values
+were read, or the text of a text file was not a number, or `n` is negative.  The
+message has the `iostat` of the failed read when it isn't the end of the file.
+
+[Example](../src/tests/test-src/errors/R44-read-fail.syntran)
+
+### R45 -- binary-write-type
+
+[`std::write()`](intrinsics.md#write) was given a value that has no raw bytes, for a file
+that was opened in binary mode.  Numbers, bools, strings, and arrays of numbers and
+bools can be written to a binary file, but not structs, enums, files, functions, or
+arrays of strings.
+
+[Example](../src/tests/test-src/errors/R45-binary-write-type.syntran)
+
+### R46 -- parse-bool
+
+`parse_bool()` could not parse its string argument as a `bool`.  Only `"true"` and
+`"false"` are accepted, optionally with surrounding spaces.
+
+[Example](../src/tests/test-src/errors/R46-parse-bool.syntran)
 
 ## Warnings
 

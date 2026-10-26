@@ -667,7 +667,7 @@ recursive module subroutine parse_expr(parser, parent_prec, expr)
 			span = new_span(op%pos, len(op%text))
 			call parser%diagnostics%push( &
 				err_unary_types(parser%context(), span, op%text, &
-				kind_name(expr%right%val%type)))
+				type_name(expr%right%val)))
 
 		end if
 
@@ -680,7 +680,15 @@ recursive module subroutine parse_expr(parser, parent_prec, expr)
 		if (prec == 0 .or. prec <= parent_precl) exit
 
 		call parser%next(op)
-		call parser%parse_expr(prec, right)
+		if (op%kind == sstar_token) then
+			! `**` is right-associative, like Fortran:  `a ** b ** c` is
+			! `a ** (b ** c)`.  Parsing the right operand with a parent
+			! precedence one lower lets another `**` nest into it.  That is
+			! also the precedence of the unary ops, so `a ** -b` still works
+			call parser%parse_expr(prec - 1, right)
+		else
+			call parser%parse_expr(prec, right)
+		end if
 		call new_binary_expr(expr, op, right, bin_tmp)
 		call syntax_node_move_into(bin_tmp, expr)
 
@@ -697,8 +705,8 @@ recursive module subroutine parse_expr(parser, parent_prec, expr)
 			call parser%diagnostics%push( &
 				err_binary_types(parser%context(), &
 				span, op%text, &
-				kind_name(ltype), &
-				kind_name(rtype)))
+				type_name(expr%left%val), &
+				type_name(expr%right%val)))
 
 		end if
 
@@ -901,10 +909,18 @@ recursive module subroutine parse_primary_expr(parser, expr)
 			call parser%match(f32_token, token)
 			call new_f32(token%val%sca%f32, expr)
 
+			! Keep the source text, which the Fortran backend writes out as is
+			! instead of the rounded value
+			expr%identifier = token
+
 		case (f64_token)
 
 			call parser%match(f64_token, token)
 			call new_f64(token%val%sca%f64, expr)
+
+			! Keep the source text, which the Fortran backend writes out as is
+			! instead of the rounded value
+			expr%identifier = token
 
 		case (str_token)
 
@@ -1196,6 +1212,10 @@ module subroutine build_method_call_node(parser, node, receiver, &
 
 	integer :: i, method_i
 
+	logical, allocatable :: alias_mut(:)
+
+	type(text_span_t), allocatable :: alias_spans(:)
+
 	character(len = :), allocatable :: param_name
 
 	logical :: param_is_ref, param_is_const_ref
@@ -1281,6 +1301,30 @@ module subroutine build_method_call_node(parser, node, receiver, &
 		node%is_ref(1 + method_i) = eff_is_ref(method_i)
 	end do
 
+	! The receiver is by-ref too, so it can't alias another ref arg (see
+	! check_ref_aliases).  It is mutable unless the method is `const`
+	if (allocated(method_fn%node)) then
+		allocate(alias_mut(1 + call_args%len_), alias_spans(1 + call_args%len_))
+
+		alias_mut  (1) = .true.
+		alias_spans(1) = new_span(identifier%pos, len(identifier%text))
+		if (allocated(method_fn%node%is_const_ref)) &
+			alias_mut(1) = .not. method_fn%node%is_const_ref(1)
+
+		do method_i = 1, call_args%len_
+			alias_mut(1 + method_i) = method_fn%node%is_ref(1 + method_i)
+			if (allocated(method_fn%node%is_const_ref)) then
+				if (method_fn%node%is_const_ref(1 + method_i)) &
+					alias_mut(1 + method_i) = .false.
+			end if
+			alias_spans(1 + method_i) = new_span(pos_args%v(method_i), &
+				pos_args%v(method_i+1) - pos_args%v(method_i) - 1)
+		end do
+
+		call check_ref_aliases(parser, node%args, node%is_ref, alias_mut, &
+			alias_spans, identifier%text)
+	end if
+
 	! node%body is *not* set here -- same reasoning as parse_fn_call() in
 	! parse_fn.f90: the body is looked up via id_index at eval/compile time,
 	! not copied per call site.  Params and num_locs are still needed
@@ -1358,6 +1402,16 @@ module subroutine build_fn_ptr_call_node(parser, node, callee_val, callee_name, 
 	! All args are by-value in v1
 	node%kind = fn_call_ptr_expr
 	node%val  = callee_val%fn_ret
+
+	! Not the name of the fn this call will actually run at runtime (that's
+	! resolved from the callee value's fn_index, not known until OP_CALL_PTR
+	! executes) -- callee_name is the call-site expression's own name, e.g.
+	! the pointer variable `f` in `let f = boom; f(1);`, or the fn-typed
+	! member name in `s.f(x)`.  Stack traces prefer prog%fn_names(fn_id)
+	! (rt_frame_fname(), vm_exec.f90) and only fall back to this when that's
+	! unavailable; set here mainly so that fallback is never an unallocated
+	! string
+	node%identifier%text = callee_name
 
 	allocate(node%is_ref(call_args%len_))
 	node%is_ref = .false.

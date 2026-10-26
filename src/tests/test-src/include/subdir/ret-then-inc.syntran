@@ -1,0 +1,9 @@
+
+fn f(): i32
+{
+	let x = 1;
+	return "abc";
+#include("stmt-inc.syntran");
+}
+
+return f();

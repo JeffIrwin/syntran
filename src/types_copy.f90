@@ -227,6 +227,18 @@ recursive module subroutine fn_copy(dst, src)
 		deallocate(dst%variadic_name)
 	end if
 
+	if (allocated(src%ref_params)) then
+		dst%ref_params = src%ref_params
+	else if (allocated(dst%ref_params)) then
+		deallocate(dst%ref_params)
+	end if
+
+	if (allocated(src%const_ref_params)) then
+		dst%const_ref_params = src%const_ref_params
+	else if (allocated(dst%const_ref_params)) then
+		deallocate(dst%const_ref_params)
+	end if
+
 	if (allocated(src%params)) then
 		! Not a bare `deallocate(dst%params)`: this is an array of value_t, the
 		! nested-allocatable shape this codebase never trusts to gfortran's
@@ -304,6 +316,8 @@ recursive module subroutine fn_move(src, dst)
 	dst%variadic_max  = src%variadic_max
 	dst%variadic_type = src%variadic_type
 	call move_alloc(src%variadic_name, dst%variadic_name)
+	call move_alloc(src%ref_params, dst%ref_params)
+	call move_alloc(src%const_ref_params, dst%const_ref_params)
 
 	call move_alloc(src%node, dst%node)
 
@@ -729,6 +743,8 @@ recursive module subroutine syntax_node_copy(dst, src)
 	dst%num_locs      = src%num_locs
 	dst%is_loc        = src%is_loc
 	dst%root_kind     = src%root_kind
+	dst%src_id        = src%src_id
+	dst%src_pos       = src%src_pos
 	dst%is_enum_name  = src%is_enum_name
 
 	if (allocated(src%struct_name)) then
@@ -948,7 +964,11 @@ recursive module subroutine syntax_node_move(src, dst)
 
 	allocate(dst)
 
-	! POD scalars
+	! POD (plain old data) scalars
+	!
+	! Claude's use of the POD acronym means a type that only holds simple
+	! intrinsic values and no allocatable or pointer components. These members
+	! can be copied simply with no manual deep-copy definition
 	dst%kind            = src%kind
 	dst%op              = src%op
 	dst%identifier      = src%identifier
@@ -956,6 +976,8 @@ recursive module subroutine syntax_node_move(src, dst)
 	dst%num_locs        = src%num_locs
 	dst%is_loc          = src%is_loc
 	dst%root_kind       = src%root_kind
+	dst%src_id          = src%src_id
+	dst%src_pos         = src%src_pos
 	dst%is_enum_name    = src%is_enum_name
 	dst%sub_kind        = src%sub_kind
 	dst%lsub_omit       = src%lsub_omit
@@ -1031,6 +1053,8 @@ recursive module subroutine syntax_node_move_into(src, dst)
 	dst%num_locs        = src%num_locs
 	dst%is_loc          = src%is_loc
 	dst%root_kind       = src%root_kind
+	dst%src_id          = src%src_id
+	dst%src_pos         = src%src_pos
 	dst%is_enum_name    = src%is_enum_name
 	dst%sub_kind        = src%sub_kind
 	dst%lsub_omit       = src%lsub_omit

@@ -41,6 +41,13 @@ module syntran__types_m
 		integer :: variadic_min = -1, variadic_max = -1, variadic_type
 		character(len = :), allocatable :: variadic_name
 
+		! By-ref params of an *intrinsic* fn, indexed by arg position (including
+		! variadic positions).  User fns instead use node%is_ref/is_const_ref
+		! below.  Unallocated means that no param is by-ref.  A by-ref arg is
+		! moved out of its variable for the call and moved back afterwards, see
+		! OP_CALL_INTR_REF
+		logical, allocatable :: ref_params(:), const_ref_params(:)
+
 		! Reference to the function definition, i.e. the syntax node containing
 		! the function parameters and body
 		type(syntax_node_t), allocatable :: node
@@ -182,6 +189,16 @@ module syntran__types_m
 		! `fn().field`), root_kind stores the original kind so evaluators can
 		! re-evaluate the root as a function call and then apply the member chain.
 		integer :: root_kind = 0
+
+		! Source location of this statement, set by parse_statement() (and,
+		! for fn headers, parse_fn_declaration()) for runtime-error stack
+		! traces (c.f. append_rt_trace() in vm_exec.f90).  src_id indexes
+		! the errors module's src_registry (register_src() in errors.f90);
+		! src_pos is a character offset into that entry's %text, same
+		! coordinate space as text_span_t%start.  0 means "not a
+		! traceable statement" (most node kinds never go through
+		! parse_statement, e.g. sub-expressions)
+		integer :: src_id = 0, src_pos = 0
 
 		integer, allocatable :: params(:)
 		logical, allocatable :: is_ref(:)       ! is param passed by reference?
@@ -641,9 +658,10 @@ module syntran__types_m
 			character(len = :), allocatable :: closest
 		end function var_closest
 
-		module function fn_closest(dict, key) result(closest)
+		module function fn_closest(dict, key, std_only) result(closest)
 			class(fns_t), intent(in) :: dict
 			character(len = *), intent(in) :: key
+			logical, intent(in), optional :: std_only
 			character(len = :), allocatable :: closest
 		end function fn_closest
 

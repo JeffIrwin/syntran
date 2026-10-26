@@ -53,6 +53,33 @@ fpm test test --profile debug --flag "-DSYNTRAN_BOUNDS_CHECK"
 See `src/compiler.F90`'s `bounds_check` docstring for why the flag lives in
 that one uppercase `.F90` file instead of a `#ifdef` at each check site.
 
+#### BLAS/LAPACK
+
+`@` on f32/f64, `std::solve()`, and `std::lu_factor()`/`std::lu_solve()` call BLAS
+`gemm` / LAPACK `gesv`, `getrf`, and `getrs` through
+`src/linalg.F90`, which is the only file with BLAS `#ifdef`s.  macOS resolves
+`-llapack -lblas` to Accelerate with no install.  Linux needs an *optimized*
+implementation (`sudo apt-get install libopenblas-dev`), not the reference
+`libblas-dev`/`liblapack-dev`.
+
+fpm links them through the `blas` feature in `fpm.toml`, which the default
+profile always enables, so `fpm build`, `--profile debug`, etc. all link BLAS.
+Opt out with `--features release,noblas` (or `debug,noblas`).  That defines
+`SYNTRAN_NO_BLAS`, which swaps in portable Fortran fallbacks (intrinsic
+`matmul`, a built-in LU), and links nothing.  `--features` can't be combined
+with `--profile`, and it also drops the default profile.  CMake spells it
+`-DSYNTRAN_NO_BLAS=ON`.  Features need fpm >= 0.13.0.  The test suite must
+pass both ways:
+
+```bash
+fpm test test --profile debug
+fpm test test --features debug,noblas
+```
+
+A project that *depends* on syntran links BLAS too, but can't select its
+features, so it opts out with `--flag "-DSYNTRAN_NO_BLAS"`, which still links
+the libraries.  See `doc/api.md`.
+
 #### Getting a stable path to a built binary
 
 fpm puts its output in `build/gfortran_<HASH>/`, where the hash changes with
@@ -117,6 +144,17 @@ Syntran script tests are in `src/tests/test-src/` organized by category. To run 
 fpm run --profile debug -- src/tests/test-src/modules/test-01.syntran
 ```
 
+### Testing the Fortran backend
+`unit_test_transpile` in `src/tests/test.f90` only checks the generated source.
+To compile and run every test program and sample through both backends and diff
+their output, which needs a Fortran compiler:
+```bash
+bash utils/test-transpile.sh                  # uses build/v1/bin/syntran and gfortran
+bash utils/test-transpile.sh --only 'fns/'    # a subset, by path regex
+bash utils/test-transpile.sh --update-pass-list  # after coverage grows
+```
+Every file in `utils/transpile-pass.txt` must keep passing.
+
 ### Testing README.md code blocks
 `README.md`'s code blocks are annotated with hidden `<!-- syntran-begin -->`
 markers and run in CI to catch doc drift. Requires a build at
@@ -144,6 +182,7 @@ The interpreter follows a lexer → parser → bytecode compiler → VM pipeline
   - `parse_expr.f90` - Expression parsing
   - `parse_control.f90` - Control flow (if/while/for) and **module imports (`use` statements)**
   - `parse_fn.f90` - Function declarations
+  - `parse_struct.f90` - Struct/enum declarations, struct instances, and methods
   - `parse_array.f90` - Array syntax
   - `parse_misc.f90` - Preprocessing (`#include`) and other misc parsing
 - `src/compile.f90` - Bytecode compiler orchestration
@@ -174,6 +213,30 @@ The interpreter follows a lexer → parser → bytecode compiler → VM pipeline
   - `intr_fns_math.f90` - Math functions (abs, exp, log, etc.)
   - `intr_fns_minmax.f90` - Min/max functions
   - `intr_fns_trig.f90` - Trigonometric functions (sin, cos, etc.)
+
+### Fortran Backend (`--transpile`)
+An alternative to `compile*.f90` + `vm*.f90`: instead of bytecode, the typed AST
+is lowered to the source of a standalone modern Fortran program that the user
+compiles themselves.  User docs are in `doc/transpile.md`.
+- `src/transpile.f90` - Interface module (`syntran__transpile_m`), the public
+  `transpile_t` options/result type, and the internal `emitter_t` state
+- `src/transpile_*.f90` - Submodules:
+  - `transpile_expr.f90` - Expressions, array literals, subscripts, intrinsics
+  - `transpile_stmt.f90` - Statements, fns, and assembling the whole program
+  - `transpile_rt.f90` - **Generated**, never edit by hand.  The runtime below
+    as a table of string literals.  Regenerate with `bash src/gen_transpile_rt.sh`
+- `src/rt/syntran_rt.f90` - The runtime module that is embedded in every
+  transpiled program (number formatting, ranges, etc.).  It is also compiled
+  into the library, so it is checked on every build.  **Use spaces, not tabs**,
+  because it ends up in users' programs, and keep lines under 100 chars
+- Diagnostic `E115` is reported for constructs that aren't supported yet
+
+A variable keeps its own name, unless it shadows another or could clash with a
+Fortran intrinsic or a name that the emitter makes up.  Those are emitted as
+`<name>_g<id>`/`<name>_l<id>` using the parser's unique slot ids, so syntran's
+block scopes and shadowing never need to be mirrored in Fortran (see
+`collect_names()` and `bare_ok()`).  The emitter reads types from `node%val`, and
+fn signatures from `state%fns`, since a `fn_declaration` node only has slots.
 
 ### Math Operations (auto-generated)
 Binary arithmetic operations are generated from `src/math_bin_template.f90` via `src/gen_math.sh`:
@@ -210,7 +273,8 @@ Module paths in `use` statements are resolved relative to the current source fil
 - `src/tests/test-src/` - Syntran script unit test files by category
 - `src/tests/long/aoc/` - Longer integration tests
 - `samples/` - Example syntran programs (not tested in CI)
-- `doc/README.md` - Intrinsic function documentation
+- `doc/README.md` - Table of contents for the other doc pages
+- `doc/intrinsics.md` - Intrinsic function documentation
 
 New features and bug fixes should have unit tests.
 Short syntran program strings can be evaluated directly in `test.f90`.

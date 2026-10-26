@@ -66,6 +66,12 @@ module syntran__runtime_m
 		type(structs_t) :: structs
 		type(enums_t) :: enums
 
+		! `use std::*;` seen on a previous REPL line, c.f. parser_t%std_glob
+		logical :: std_glob = .false.
+
+		! `use std::name;` seen on previous REPL lines, c.f. parser_t%std_names
+		character(len = :), allocatable :: std_names
+
 		type(vars_t) :: vars, locs
 
 		! Script arguments passed after `--` on the command line
@@ -207,6 +213,12 @@ module syntran__runtime_m
 			type(syntax_token_t), intent(in) :: op
 		end subroutine
 
+		module subroutine compound_shape_err(lhs, rhs, op, rt_err)
+			type(value_t), intent(in) :: lhs, rhs
+			type(syntax_token_t), intent(in) :: op
+			character(len = :), allocatable, intent(out) :: rt_err
+		end subroutine compound_shape_err
+
 		module subroutine eval_subscript_1d(node, state, i, lsub, ssub, usub, asub, contributes_rank, slots)
 			type(syntax_node_t), intent(in)    :: node
 			type(state_t),       intent(inout) :: state
@@ -263,6 +275,15 @@ module syntran__runtime_m
 			integer(kind = 8),   intent(in)    :: sz
 			type(state_t),       intent(inout) :: state
 			integer(kind = 8),   intent(out)   :: il, iu, step
+			type(value_t),       intent(in)    :: slots(:)
+		end subroutine
+
+		module subroutine str_arr_sub_indices(node, isub, sz, state, idx, slots)
+			type(syntax_node_t), intent(in)    :: node
+			integer,             intent(in)    :: isub
+			integer(kind = 8),   intent(in)    :: sz
+			type(state_t),       intent(inout) :: state
+			integer(kind = 8), allocatable, intent(out) :: idx(:)
 			type(value_t),       intent(in)    :: slots(:)
 		end subroutine
 
@@ -377,6 +398,16 @@ subroutine state_destroy(state)
 	! types_copy.f90.  Call this at every exit of syntran_interpret()/
 	! syntran_eval() (syntran.f90), which own state_t's only instance per
 	! interpret/eval call
+	!
+	! Also resets the errors module's process-global src_registry
+	! (reset_src_registry(), errors.f90): every fn/statement node that
+	! could reference a src_id lives in the %fns/AST just destroyed above
+	! (or in a program_t/syntax_node_t local to the caller that's about to
+	! go out of scope too), so nothing reachable after this call still
+	! needs an entry registered during it.  This is what keeps a
+	! long-running embedder calling syntran_eval()/syntran_interpret_file()
+	! in a loop with many distinct one-off scripts from growing
+	! src_registry without bound
 
 	type(state_t), intent(inout) :: state
 
@@ -385,6 +416,8 @@ subroutine state_destroy(state)
 	call structs_destroy(state%structs)
 	call enums_destroy(state%enums)
 	call fns_destroy(state%fns)
+
+	call reset_src_registry()
 
 end subroutine state_destroy
 
@@ -428,7 +461,7 @@ subroutine open_file_impl(state, filename, mode, must_open, file_)
 	!********
 
 	character :: char_
-	character(len = :), allocatable :: status_, resolved_path
+	character(len = :), allocatable :: status_, position_, resolved_path
 	integer :: i, io
 
 	file_%name_ = filename   ! Keep original name for error messages
@@ -442,6 +475,15 @@ subroutine open_file_impl(state, filename, mode, must_open, file_)
 
 		case ("w")
 			file_%mode_write = .true.
+
+		case ("a")
+			! Append is a write mode that doesn't truncate.  It sets mode_write
+			! too, so "ra" is rejected as a combined read/write mode below
+			file_%mode_write = .true.
+			file_%append     = .true.
+
+		case ("b")
+			file_%binary = .true.
 
 		case default
 			call rt_throw(state, err_rt(RC_BAD_FILE_MODE, "bad file mode character """// &
@@ -470,8 +512,20 @@ subroutine open_file_impl(state, filename, mode, must_open, file_)
 	! This is the key change for thread-safety
 	resolved_path = resolve_path(state%src_dir, filename)
 
-	open(newunit = file_%unit_, file = resolved_path, &
-		status = status_, iostat = io)
+	position_ = "asis"
+	if (file_%append) position_ = "append"
+
+	if (file_%binary) then
+		! Writing doesn't truncate a stream, so replace the file, unless we're
+		! appending to it
+		if (file_%mode_write .and. .not. file_%append) status_ = "replace"
+		open(newunit = file_%unit_, file = resolved_path, status = status_, &
+			access = "stream", form = "unformatted", position = position_, &
+			iostat = io)
+	else
+		open(newunit = file_%unit_, file = resolved_path, &
+			status = status_, position = position_, iostat = io)
+	end if
 
 	if (io /= 0) then
 		! Decode fortran iostat codes in message?  I just looked up the docs

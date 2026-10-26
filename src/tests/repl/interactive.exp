@@ -1,0 +1,18 @@
+#!/usr/bin/env expect
+
+# `syntran -i file` runs a startup file and then keeps the REPL going with the
+# same variables.  See the `args%interactive` branch of src/main.f90
+
+set timeout 10
+source [file join [file dirname [info script]] common.tcl]
+
+set bin [lindex $argv 0]
+set startup [file join [file dirname [info script]] .. test-src io startup-cd.syntran]
+spawn $bin -i $startup
+wait_prompt
+
+# A variable declared by the startup file is still there at the prompt
+send "startup_cd_loaded;\r"
+wait_result "1"
+
+finish

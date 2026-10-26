@@ -34,6 +34,10 @@ module subroutine parse_return_statement(parser, statement)
 	call parser%match(return_keyword, return_token)
 	parser%returned = .true.
 
+	! The diagnostics below are pushed after the trailing `;` is matched, when
+	! the current token can belong to a `#include` spliced in right after, so
+	! parser%context() would report them against the wrong file.  c.f.
+	! parse_use_statement().  return_token%unit_ indexes parser%contexts
 	statement%kind = return_statement
 
 	if (parser%current_kind() == semicolon_token) then
@@ -56,7 +60,7 @@ module subroutine parse_return_statement(parser, statement)
 	if (parser%is_module .and. .not. parser%in_fn_body) then
 		span = new_span(return_token%pos, len(return_token%text))
 		call parser%diagnostics%push( &
-			err_module_return(parser%context(), span))
+			err_module_return(parser%contexts%v(return_token%unit_), span))
 	end if
 
 	! Check return type (unless we're at global level ifn == 1, in which case
@@ -83,7 +87,7 @@ module subroutine parse_return_statement(parser, statement)
 	if (.not. right_unknown) then  ! don't cascade
 		span = new_span(right_beg, right_end - right_beg + 1)
 		call parser%diagnostics%push( &
-			err_bad_ret_type(parser%context(), &
+			err_bad_ret_type(parser%contexts%v(return_token%unit_), &
 			span, parser%fn_name, &
 			type_name(parser%fn_type), &
 			type_name(statement%right%val)))
@@ -142,10 +146,11 @@ recursive module subroutine parse_use_statement(parser, statement)
 	character(len = :), allocatable :: mod_filename, mod_text, src_dir, fn_name
 	character(len = :), allocatable :: insert_name, var_name, struct_name
 	character(len = :), allocatable :: enum_name
-	character(len = :), allocatable :: alias_name
+	character(len = :), allocatable :: alias_name, method_alias
 	type(syntax_token_t) :: use_token, mod_identifier, double_colon, &
 		name_identifier, semi, star, dummy, as_identifier, alias_identifier
 	type(text_span_t) :: span
+	type(text_context_t) :: use_ctx
 	type(parser_t), target :: mod_parser
 	type(syntax_node_t) :: mod_unit
 	type(text_context_vector_t) :: mod_contexts
@@ -153,11 +158,17 @@ recursive module subroutine parse_use_statement(parser, statement)
 	type(value_t) :: var_val
 	type(struct_t), pointer :: struct_val
 	type(enum_t), pointer :: enum_val
-	integer :: i, io, iostat, mod_unit_, id_index, struct_slot, fn_slot, enum_slot
-	logical :: qualified_import, is_const_var
-	character(len = :), allocatable :: qualified_prefix
+	integer :: i, io, iostat, id_index, struct_slot, fn_slot, enum_slot
+	logical :: qualified_import, is_const_var, is_legacy
+	character(len = :), allocatable :: qualified_prefix, suggest
 
 	call parser%match(use_keyword, use_token)
+
+	! Capture the context of the `use` itself.  After the trailing `;` is
+	! matched, the current token can belong to a different unit if a `#include`
+	! is spliced in right after, so parser%context() would resolve the module
+	! path (and report diagnostics) against the wrong file
+	use_ctx = parser%contexts%v(use_token%unit_)
 
 	! Handle parent directory references (e.g., `use ../module;` or `use ../../module;`)
 	! module_path includes "../" for file resolution, module_name is for namespacing
@@ -198,8 +209,14 @@ recursive module subroutine parse_use_statement(parser, statement)
 		return
 	end if
 
-	! Ban "std" as a user-defined module name (reserved for standard library)
-	if (module_name == "std") then
+	! Ban "std" as a user-defined module name (reserved for standard library).
+	! The only forms allowed are the glob `use std::*;` and a single name
+	! `use std::name;`, which let std-only fns be called without the `std::`
+	! prefix
+	if (module_name == "std" .and. .not. ( &
+		parser%current_kind() == double_colon_token .and. &
+		(parser%peek_kind(1) == star_token .or. &
+		parser%peek_kind(1) == identifier_token))) then
 		span = new_span(mod_identifier%pos, len(mod_identifier%text))
 		call parser%diagnostics%push( &
 			err_mod_reserved_std(parser%context(), span))
@@ -331,6 +348,15 @@ recursive module subroutine parse_use_statement(parser, statement)
 
 	call parser%match(semicolon_token, semi)
 
+	! `use mod::name;` is only supported for `std`, which has no file to load.
+	! For a user module it used to silently import everything, like the glob
+	if (import_name /= "" .and. import_name /= "*" .and. module_name /= "std") then
+		span = new_span(name_identifier%pos, len(name_identifier%text))
+		call parser%diagnostics%push( &
+			err_mod_import_name(use_ctx, span, module_name, import_name))
+		return
+	end if
+
 	! Compute qualified_prefix once for qualified imports
 	! Use alias if provided, otherwise convert module_name (with "/" -> "::")
 	if (qualified_import) then
@@ -345,18 +371,56 @@ recursive module subroutine parse_use_statement(parser, statement)
 	statement%kind = expr_statement
 	statement%is_empty = .true.
 
-	! For std::, all intrinsics are already globally available
-	if (module_name == "std") return
+	! For `use std::*;` and `use std::name;`, there's no file to load.  Just let
+	! the parser resolve bare names to std-only fns from here on
+	if (module_name == "std") then
+		if (import_name == "*") then
+			parser%std_glob = .true.
+		else
+			if (parser%fns%find("std::" // import_name) /= 0) then
+				if (.not. allocated(parser%std_names)) parser%std_names = " "
+				if (index(parser%std_names, " " // import_name // " ") == 0) then
+					parser%std_names = parser%std_names // import_name // " "
+				end if
+			else
+				! A legacy intrinsic like `println` is already callable without the
+				! prefix, so importing it is a no-op.  Anything else isn't in std
+				fn_slot = parser%fns%find(import_name)
+				is_legacy = .false.
+				if (fn_slot /= 0) then
+					fn => parser%fns%get(fn_slot)
+					is_legacy = fn%is_intr
+				end if
+
+				if (.not. is_legacy) then
+					suggest = parser%fns%closest("std::" // import_name, std_only = .true.)
+					if (index(suggest, "std::") == 1) suggest = suggest(6:)
+					if (suggest == import_name) suggest = ""
+					span = new_span(name_identifier%pos, len(name_identifier%text))
+					call parser%diagnostics%push( &
+						err_std_unknown_name(use_ctx, span, import_name, suggest))
+					return
+				end if
+			end if
+		end if
+
+		! A use_statement with no member compiles to just a unit value, c.f.
+		! compile_node().  The generic empty expr_statement above isn't handled
+		! by the compiler
+		statement%kind = use_statement
+		statement%is_empty = .false.
+		return
+	end if
 
 	! Get the directory of the current source file
-	src_dir = get_dir(parser%contexts%v(parser%current_unit())%src_file)
+	src_dir = get_dir(use_ctx%src_file)
 	mod_filename = src_dir // module_path // ".syntran"
 
 	! Check if module file exists
 	if (.not. exists(mod_filename)) then
 		span = new_span(mod_identifier%pos, len(mod_identifier%text))
 		call parser%diagnostics%push( &
-			err_mod_404(parser%context(), span, mod_filename))
+			err_mod_404(use_ctx, span, mod_filename))
 		return
 	end if
 
@@ -364,7 +428,7 @@ recursive module subroutine parse_use_statement(parser, statement)
 	if (parser%import_stack%contains(mod_filename)) then
 		span = new_span(mod_identifier%pos, len(mod_identifier%text))
 		call parser%diagnostics%push( &
-			err_circular_import(parser%context(), span, module_name))
+			err_circular_import(use_ctx, span, module_name))
 		return
 	end if
 
@@ -382,7 +446,7 @@ recursive module subroutine parse_use_statement(parser, statement)
 	if (parser%imported_modules%contains(mod_filename)) then
 		span = new_span(mod_identifier%pos, len(mod_identifier%text))
 		call parser%diagnostics%push( &
-			err_duplicate_import(parser%context(), span, module_name))
+			err_duplicate_import(use_ctx, span, module_name))
 		return
 	end if
 
@@ -394,14 +458,13 @@ recursive module subroutine parse_use_statement(parser, statement)
 	if (iostat /= exit_success) then
 		span = new_span(mod_identifier%pos, len(mod_identifier%text))
 		call parser%diagnostics%push( &
-			err_mod_read(parser%context(), span, mod_filename))
+			err_mod_read(use_ctx, span, mod_filename))
 		return
 	end if
 
 	! Create a new parser for the module
 	mod_contexts = new_context_vector()
-	mod_unit_ = 0
-	call new_parser(mod_parser, mod_text, mod_filename, mod_contexts, mod_unit_)
+	call new_parser(mod_parser, mod_text, mod_filename, mod_contexts)
 
 	! The module's global scope can return any type, same as the main
 	! program's global scope (see syntax_parse() in core.f90).  Otherwise
@@ -486,19 +549,6 @@ recursive module subroutine parse_use_statement(parser, statement)
 			call qualify_fn_struct_names(fn, qualified_prefix)
 		else
 			insert_name = fn_name
-
-			! Check if this would shadow an overloaded intrinsic function. Note:
-			! we only check overloaded intrinsics here because non-overloaded
-			! intrinsics are handled mostly like normal user-defined fns
-			!
-			! TODO: is this still needed since we already handle
-			! err_redeclare_intr_fn() elsewhere?
-			if (is_overloaded_intr(fn_name)) then
-				span = new_span(mod_identifier%pos, len(mod_identifier%text))
-				call parser%diagnostics%push( &
-					err_redeclare_intr_fn(parser%context(), span, fn_name))
-				cycle
-			end if
 		end if
 
 		! Insert into current parser with the SAME id_index from module parser.
@@ -508,6 +558,20 @@ recursive module subroutine parse_use_statement(parser, statement)
 
 		! Only push to fn_names in the first pass (like parse_fn_declaration)
 		if (parser%ipass == 0) call parser%fn_names%push(insert_name)
+
+		! A module imported twice (directly and through another module) is
+		! parsed twice, so its methods have two ids under one unqualified key
+		! "0Struct::method", and the second insert above overwrites the first.
+		! The flat fn array is filled by name (syntax_parse() in core.f90), so
+		! also insert each method under a key that is unique to its id, to
+		! keep both copies alive.  The leading "0" keeps it out of spelling
+		! suggestions, and nothing looks it up by name.  A "#" means that this
+		! is already an alias, re-exported from a nested import
+		if (fn%is_method .and. index(fn_name, "#") == 0) then
+			method_alias = fn_name // "#" // str(id_index)
+			call parser%fns%insert(method_alias, fn, id_index)
+			if (parser%ipass == 0) call parser%fn_names%push(method_alias)
+		end if
 	end do
 
 	! Copy parsed module variables to current parser.
@@ -782,6 +846,13 @@ recursive module subroutine parse_for_statement(parser, statement)
 			! mismatch check, which requires enum_name/enum_cookie to be set
 			if (allocated(array%val%enum_name)) dummy%enum_name = array%val%enum_name
 			if (allocated(array%val%enum_cookie)) dummy%enum_cookie = array%val%enum_cookie
+		else if (dummy%type == struct_type) then
+			! Likewise for the identity of a struct, which the Fortran backend needs
+			! to know the type of the loop var
+			if (allocated(array%val%struct_name)) dummy%struct_name = array%val%struct_name
+			if (allocated(array%val%struct_cookie)) &
+				dummy%struct_cookie = array%val%struct_cookie
+			dummy%struct_reg_idx = array%val%struct_reg_idx
 		end if
 		if (parser%is_loc) then
 			call parser%locs%insert(identifier%text, dummy, statement%id_index)
@@ -866,7 +937,7 @@ logical function at_case_body_start(parser) result(at_body)
 	! True when the parser is sitting at the start of a `case` arm's body
 	! statement rather than another match-value expression.  Used to allow a
 	! trailing comma in the value list, e.g. `case 1, 2, { ... }`, consistent
-	! with enum declarations (parse_fn.f90's at_method_start() neighbor) and
+	! with enum declarations (parse_struct.f90's at_method_start() neighbor) and
 	! array literals (parse_array.f90's trailing-comma check).  Kind list
 	! mirrors parse_statement()'s select-case dispatch above.  when_keyword is
 	! included too, so a trailing comma before a guard, e.g. `case 1, 2, when
@@ -883,7 +954,7 @@ end function at_case_body_start
 
 !===============================================================================
 
-subroutine check_case_range_bound(parser, subj_type, bound, beg, end_)
+subroutine check_case_range_bound(parser, subj_type, subj_val, bound, beg, end_)
 
 	! Shared type check for both ends of a `case lo:hi` range: the bound must
 	! be orderable against the switch subject with `<`, mirroring the
@@ -894,6 +965,7 @@ subroutine check_case_range_bound(parser, subj_type, bound, beg, end_)
 
 	class(parser_t) :: parser
 	integer, intent(in) :: subj_type, beg, end_
+	type(value_t), intent(in) :: subj_val
 	type(syntax_node_t), intent(in) :: bound
 
 	!********
@@ -921,14 +993,15 @@ subroutine check_case_range_bound(parser, subj_type, bound, beg, end_)
 		span = new_span(beg, end_ - beg + 1)
 		call parser%diagnostics%push(err_bad_case_range_type( &
 			parser%context(), span, parser%text(beg, end_), &
-			kind_name(bound_type), kind_name(subj_type)))
+			type_name(bound%val), type_name(subj_val)))
 	end if
 
 end subroutine check_case_range_bound
 
 !===============================================================================
 
-recursive subroutine parse_case_range(parser, subj_type, lo, lo_beg, lo_end, range)
+recursive subroutine parse_case_range(parser, subj_type, subj_val, lo, lo_beg, lo_end, &
+		range)
 
 	! Parse the `:hi` half of a `case lo:hi` range, given the already-parsed
 	! `lo` bound.  Half-open like every other `:` range in syntran (e.g.
@@ -941,6 +1014,7 @@ recursive subroutine parse_case_range(parser, subj_type, lo, lo_beg, lo_end, ran
 
 	class(parser_t) :: parser
 	integer, intent(in) :: subj_type
+	type(value_t), intent(in) :: subj_val
 	type(syntax_node_t), intent(inout) :: lo
 	integer, intent(in) :: lo_beg, lo_end
 	type(syntax_node_t), intent(out) :: range
@@ -950,7 +1024,7 @@ recursive subroutine parse_case_range(parser, subj_type, lo, lo_beg, lo_end, ran
 	integer :: hi_beg, hi_end
 	type(syntax_node_t) :: hi
 
-	call check_case_range_bound(parser, subj_type, lo, lo_beg, lo_end)
+	call check_case_range_bound(parser, subj_type, subj_val, lo, lo_beg, lo_end)
 
 	hi_beg = parser%peek_pos(0)
 	call parser%parse_expr(expr = hi)
@@ -959,9 +1033,9 @@ recursive subroutine parse_case_range(parser, subj_type, lo, lo_beg, lo_end, ran
 	! An array subject makes both bounds unorderable for the same one reason,
 	! so it's reported on lo only
 	if (subj_type == array_type) then
-		call check_case_range_bound(parser, unknown_type, hi, hi_beg, hi_end)
+		call check_case_range_bound(parser, unknown_type, subj_val, hi, hi_beg, hi_end)
 	else
-		call check_case_range_bound(parser, subj_type, hi, hi_beg, hi_end)
+		call check_case_range_bound(parser, subj_type, subj_val, hi, hi_beg, hi_end)
 	end if
 
 	range%kind = case_range
@@ -1000,10 +1074,8 @@ recursive subroutine parse_case_clause(parser, subj_type, subj_val, clause)
 
 	!********
 
-	integer :: i, val_beg, val_end, val_type, cond_beg, cond_end, subj_arr, &
-		val_arr
+	integer :: i, val_beg, val_end, val_type, cond_beg, cond_end
 	logical :: is_op_allowed
-	character(len = :), allocatable :: val_name, subj_name
 
 	type(syntax_node_t)  :: val_tmp, range_tmp, guard, body
 	type(syntax_node_vector_t) :: vals
@@ -1020,9 +1092,8 @@ recursive subroutine parse_case_clause(parser, subj_type, subj_val, clause)
 		! zero-length -- compile_switch_statement() then falls straight into the
 		! guard instead of emitting a "nothing matched" jump.  Only reachable on
 		! the first iteration, since a trailing comma already exits the loop via
-		! at_case_body_start().  This is sugar for the wildcard `case _ when
-		! <cond>` reserved in core.f90's switch TODO, and must keep meaning the
-		! same thing if `_` ever lands
+		! at_case_body_start().  This is sugar for a wildcard `case _ when
+		! <cond>`, and must keep meaning the same thing if `_` ever lands
 		if (parser%current_kind() == when_keyword .and. vals%len_ == 0) exit
 
 		val_beg = parser%peek_pos(0)
@@ -1033,8 +1104,8 @@ recursive subroutine parse_case_clause(parser, subj_type, subj_val, clause)
 
 			! `case lo:hi` range, e.g. `case 1:10`
 			call parser%match(colon_token, colon)
-			call parse_case_range(parser, subj_type, val_tmp, val_beg, val_end, &
-				range_tmp)
+			call parse_case_range(parser, subj_type, subj_val, val_tmp, val_beg, &
+				val_end, range_tmp)
 			call vals%push_move(range_tmp)
 
 		else
@@ -1046,14 +1117,6 @@ recursive subroutine parse_case_clause(parser, subj_type, subj_val, clause)
 				! or a case value depends on a fn declared later in the file
 				is_op_allowed = .true.
 			else
-				! Element types, for the diagnostic below
-				subj_arr = unknown_type
-				val_arr  = unknown_type
-				if (subj_type == array_type .and. allocated(subj_val%array)) &
-					subj_arr = subj_val%array%type
-				if (val_type == array_type .and. allocated(val_tmp%val%array)) &
-					val_arr = val_tmp%val%array%type
-
 				! Array vs scalar is never allowed here: an array subject only
 				! matches whole-array values, and vice versa
 				is_op_allowed = (subj_type == array_type) .eqv. &
@@ -1066,15 +1129,9 @@ recursive subroutine parse_case_clause(parser, subj_type, subj_val, clause)
 
 			if (.not. is_op_allowed) then
 				span = new_span(val_beg, val_end - val_beg + 1)
-				val_name  = kind_name(val_type)
-				subj_name = kind_name(subj_type)
-				if (val_arr /= unknown_type) &
-					val_name = kind_name(val_arr)//" "//val_name
-				if (subj_arr /= unknown_type) &
-					subj_name = kind_name(subj_arr)//" "//subj_name
 				call parser%diagnostics%push(err_bad_case_type( &
 					parser%context(), span, parser%text(val_beg, val_end), &
-					val_name, subj_name))
+					type_name(val_tmp%val), type_name(subj_val)))
 
 			else if (subj_type == array_type .and. val_type == array_type .and. &
 				allocated(subj_val%array) .and. allocated(val_tmp%val%array)) then
@@ -1082,7 +1139,8 @@ recursive subroutine parse_case_clause(parser, subj_type, subj_val, clause)
 				! E49 in parse_expr.f90, so `case v` (defined as `subj == v`)
 				! reports the same.  A differing *extent* is a runtime
 				! non-match instead, since sizes aren't static.  The allocated()
-				! guards mirror the subj_arr/val_arr computation above
+				! guards are needed since a value can be array_type with its
+				! array not yet resolved (e.g. pass 0)
 				if (subj_val%array%rank /= val_tmp%val%array%rank) then
 					span = new_span(val_beg, val_end - val_beg + 1)
 					call parser%diagnostics%push(err_binary_ranks( &
@@ -1108,7 +1166,7 @@ recursive subroutine parse_case_clause(parser, subj_type, subj_val, clause)
 		! `when <cond>` guard, checked only once one of this arm's values or
 		! ranges has already matched.  Must be spelled `when`, never `if`:
 		! `case 1 if c { ... }` already parses as value `1` with the
-		! if-statement as the arm's body (see core.f90's switch TODO)
+		! if-statement as the arm's body
 		call parser%match(when_keyword, when_token)
 
 		cond_beg = parser%peek_pos(0)
@@ -1176,7 +1234,6 @@ recursive module subroutine parse_switch_statement(parser, statement)
 
 	integer :: i, subj_beg, subj_end, subj_type, pos0
 	logical :: has_default, bad_subj
-	character(len = :), allocatable :: type_name
 
 	type(syntax_node_t)  :: subject, def_body, clause
 	type(syntax_node_vector_t) :: arms
@@ -1205,13 +1262,10 @@ recursive module subroutine parse_switch_statement(parser, statement)
 		end if
 	end if
 	if (bad_subj) then
-		type_name = kind_name(subj_type)
-		if (subj_type == array_type .and. allocated(subject%val%array)) &
-			type_name = kind_name(subject%val%array%type)//" "//type_name
 		span = new_span(subj_beg, subj_end - subj_beg + 1)
 		call parser%diagnostics%push(err_bad_switch_type( &
 			parser%context(), span, parser%text(subj_beg, subj_end), &
-			type_name))
+			type_name(subject%val)))
 		! Stop cascading errors: treat the subject as unknown_type so
 		! parse_case_clause() doesn't also flag every case value as
 		! incomparable to it
@@ -1344,6 +1398,26 @@ recursive module subroutine parse_statement(parser, statement)
 
 	type(text_span_t) :: span
 
+	! Unit (file) of the statement's first token, for diagnostics pushed after
+	! its trailing `;` is matched.  By then the current token can belong to a
+	! `#include` spliced in right after, so parser%context() would report them
+	! against the wrong file.  c.f. parse_use_statement().  This is an index,
+	! not a copy of the context, because that would copy the whole source text
+	! for every statement
+	integer :: stmt_unit
+
+	! Captured before dispatch so every statement kind gets a location --
+	! not just the `default` expr-statement case below -- for runtime-error
+	! stack traces (c.f. append_rt_trace(), vm_exec.f90).  parser%contexts
+	! is a per-compilation copy (new_parser(), parse_misc.f90) of the
+	! process-global src_registry (errors.f90); its %src_id field is what
+	! survives past parsing
+	integer :: stmt_src_id, stmt_src_pos
+
+	stmt_src_pos = parser%peek_pos(0)
+	stmt_unit    = parser%current_unit()
+	stmt_src_id  = parser%contexts%v(stmt_unit)%src_id
+
 	select case (parser%current_kind())
 	case (lbrace_token)
 		call parser%parse_block_statement(statement)
@@ -1384,7 +1458,7 @@ recursive module subroutine parse_statement(parser, statement)
 		if (parser%ipass > 0 .and. statement%kind == fn_ref_expr) then
 			span = new_span(statement%identifier%pos, len(statement%identifier%text))
 			call parser%diagnostics%push( &
-				err_fn_missing_parens(parser%context(), &
+				err_fn_missing_parens(parser%contexts%v(stmt_unit), &
 				span, statement%identifier%text))
 		end if
 
@@ -1423,14 +1497,14 @@ recursive module subroutine parse_statement(parser, statement)
 					if (statement%val%type /= void_type) then
 						span = new_span(pos_beg, pos_end - pos_beg + 1)
 						call parser%diagnostics%push( &
-							err_bad_expr(parser%context(), &
+							err_bad_expr(parser%contexts%v(stmt_unit), &
 							span))
 					end if
 
 				case default
 					span = new_span(pos_beg, pos_end - pos_beg + 1)
 					call parser%diagnostics%push( &
-						err_bad_expr(parser%context(), &
+						err_bad_expr(parser%contexts%v(stmt_unit), &
 						span))
 				end select
 
@@ -1439,6 +1513,12 @@ recursive module subroutine parse_statement(parser, statement)
 		end if
 
 	end select
+
+	! Stamp the location captured above onto the finished node.  statement
+	! is intent(out), so this must come after every branch above has had a
+	! chance to set it -- not before
+	statement%src_id  = stmt_src_id
+	statement%src_pos = stmt_src_pos
 
 end subroutine parse_statement
 

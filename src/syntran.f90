@@ -12,6 +12,7 @@ module syntran
 	use syntran__vm_m
 	use syntran__line_edit_m
 	use syntran__repl_m
+	use syntran__transpile_m
 
 	implicit none
 
@@ -69,7 +70,7 @@ end subroutine log_rt_diags
 
 !===============================================================================
 
-function syntran_interpret(str_, quiet, startup_file, script_args) result(res_str)
+function syntran_interpret(str_, quiet, startup_file, script_args, chdir_) result(res_str)
 
 	! This is the interactive interpreter shell REPL
 	!
@@ -91,12 +92,18 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 	character(len = *), intent(in), optional :: startup_file
 	type(string_vector_t), optional, intent(in) :: script_args
 
+	! Resolve relative file paths (e.g. for open()) against the directory of
+	! startup_file instead of the working directory.  A logical, like the
+	! chdir_ arg of syntran_interpret_file().  Does nothing without a
+	! startup_file
+	logical, intent(in), optional :: chdir_
+
 	character(len = :), allocatable :: res_str
 
 	!********
 
 	character(len = :), allocatable :: line, chunk, src_file, source_text, &
-		prompt, prompt_color
+		prompt, prompt_color, src_dir
 
 	integer, parameter :: iu = input_unit, ou = output_unit
 	integer :: io, dir_action
@@ -124,8 +131,9 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 
 	! Only use interactive line editing (history, arrow keys) when reading a
 	! real terminal.  Piped stdin, `-c` strings, and file interpretation all
-	! keep using the plain read_line() path in utils.f90
-	interactive = .not. present(str_) .and. is_tty()
+	! keep using the plain read_line() path in utils.f90, as does a build
+	! without isocline (-DSYNTRAN_NO_ISOCLINE)
+	interactive = .not. present(str_) .and. line_edit_available() .and. is_tty()
 	if (interactive) call line_edit_init()
 
 	if (present(str_)) then
@@ -135,12 +143,17 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 	end if
 	!print *, "src_file = ", src_file
 
-	call init_state(state, script_args)
+	src_dir = ''
+	if (present(chdir_) .and. present(startup_file)) then
+		if (chdir_) src_dir = get_dir(startup_file)
+	end if
+
+	call init_state(state, script_args, src_dir)
 	state%quiet = .false.
 	if (present(quiet)) state%quiet = quiet
 
 	if (.not. interactive .and. .not. present(str_) .and. &
-			.not. state%quiet .and. is_mintty()) then
+			.not. state%quiet .and. line_edit_available() .and. is_mintty()) then
 		write(*,*) 'Note: interactive line editing (history, arrow keys) is'// &
 			' not available in Git Bash / MinTTY.'
 		write(*,*) 'For full REPL editing use: winpty syntran'// &
@@ -167,7 +180,6 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 			return
 		end if
 
-		! TODO: chdir option?
 		call eval_dispatch(compilation, state, res)
 		if (state%rt_halt) then
 			! eval_dispatch() already printed and exited for non-quiet
@@ -269,7 +281,7 @@ function syntran_interpret(str_, quiet, startup_file, script_args) result(res_st
 			! was started with
 			saved_quiet    = state%quiet
 			call state_destroy(state)
-			call init_state(state, script_args)
+			call init_state(state, script_args, src_dir)
 			state%quiet = saved_quiet
 			continue_ = .false.
 			cycle
@@ -346,7 +358,7 @@ end function syntran_interpret
 !===============================================================================
 
 subroutine syntran_eval_value(str_, val, quiet, want_type, src_file, chdir_, &
-		script_args, diags, syntax_only, io)
+		script_args, diags, syntax_only, transpile, io)
 
 	! Shared front end for syntran_eval() and the typed syntran_eval_i32() /
 	! _i64() / _f32() / _f64() / _bool() / _str() wrappers below.  Parses and
@@ -383,6 +395,12 @@ subroutine syntran_eval_value(str_, val, quiet, want_type, src_file, chdir_, &
 	! Backs the `--syntax-only` CLI option
 	logical, optional, intent(in) :: syntax_only
 
+	! Transpile to a Fortran program instead of evaluating.  Nothing runs, and
+	! `val` is unset.  The program's source goes in transpile%src.  Constructs
+	! which are not supported by the transpiler yet are diagnostics, as if they
+	! were parser errors.  Backs the `--transpile` CLI option
+	type(transpile_t), optional, intent(inout) :: transpile
+
 	! exit_success/exit_failure status for callers.  Failure means the
 	! expression did not run to completion (parser diagnostics, or a runtime
 	! halt for quiet callers -- non-quiet callers exit the process from
@@ -397,6 +415,7 @@ subroutine syntran_eval_value(str_, val, quiet, want_type, src_file, chdir_, &
 	logical :: repl, syntax_onlyl
 
 	type(state_t) :: state
+	type(string_vector_t) :: transpile_diags
 	type(syntax_node_t) :: tree
 
 	! Determine source directory first
@@ -408,6 +427,9 @@ subroutine syntran_eval_value(str_, val, quiet, want_type, src_file, chdir_, &
 	call init_state(state, script_args, dir)
 	state%quiet = .false.
 	if (present(quiet)) state%quiet = quiet
+
+	! So that it's safe to read even if parsing fails before transpiling starts
+	if (present(transpile)) transpile%src = new_string_vector()
 
 	syntax_onlyl = .false.
 	if (present(syntax_only)) syntax_onlyl = syntax_only
@@ -442,6 +464,23 @@ subroutine syntran_eval_value(str_, val, quiet, want_type, src_file, chdir_, &
 		return
 	end if
 
+	if (present(transpile)) then
+		! Emit Fortran source instead of compiling to bytecode.  Nothing is
+		! executed, so as with syntax_only, module-level statements pulled in by
+		! `use` must not run either
+		call transpile_tree(tree, state, transpile, transpile_diags)
+
+		if (transpile_diags%len_ > 0) then
+			call tree%diagnostics%push_all(transpile_diags)
+			if (.not. state%quiet) call tree%log_diagnostics()
+			if (present(diags)) diags = tree%diagnostics
+			if (present(io)) io = exit_failure
+		end if
+
+		call state_destroy(state)
+		return
+	end if
+
 	call eval_dispatch(tree, state, val)
 
 	! A runtime error halted evaluation.  eval_dispatch() already printed and
@@ -460,8 +499,8 @@ subroutine syntran_eval_value(str_, val, quiet, want_type, src_file, chdir_, &
 	if (present(want_type)) then
 		if (val%type /= want_type) then
 			if (.not. state%quiet) write(*,*) err_prefix// &
-				'syntran_eval_value() expected type `'//kind_name(want_type)// &
-				'` but the expression has type `'//kind_name(val%type)//'`'//color_reset
+				'syntran_eval_value() expected type `'//type_name_primitive(want_type)// &
+				'` but the expression has type `'//type_name(val)//'`'//color_reset
 			if (present(io)) io = exit_failure
 			call state_destroy(state)
 			return
@@ -657,7 +696,7 @@ end subroutine init_state
 !===============================================================================
 
 function syntran_eval(str_, quiet, src_file, chdir_, script_args, diags, &
-		syntax_only, io) result(res)
+		syntax_only, transpile, io) result(res)
 
 	! Note that this chdir_ optional arg is a str_, while the chdir_ optional arg
 	! for syntran_interpret_file() is boolean
@@ -681,6 +720,9 @@ function syntran_eval(str_, quiet, src_file, chdir_, script_args, diags, &
 	! Backs the `--syntax-only` CLI option
 	logical, optional, intent(in) :: syntax_only
 
+	! Transpile to Fortran instead of evaluating.  See syntran_eval_value()
+	type(transpile_t), optional, intent(inout) :: transpile
+
 	! exit_success/exit_failure status for non-interactive callers (the CLI in
 	! file or `-c` mode).  Failure means the program did not run to
 	! completion: parser diagnostics, or a runtime halt for quiet callers
@@ -695,12 +737,15 @@ function syntran_eval(str_, quiet, src_file, chdir_, script_args, diags, &
 
 	call syntran_eval_value(str_, val, quiet, src_file = src_file, chdir_ = chdir_, &
 		script_args = script_args, diags = diags, &
-		syntax_only = syntax_only, io = iol)
+		syntax_only = syntax_only, transpile = transpile, io = iol)
 
 	if (present(io)) io = iol
 
 	res = ''
 	if (iol /= exit_success) return
+
+	! Nothing was evaluated when transpiling either
+	if (present(transpile)) return
 
 	if (present(syntax_only)) then
 		! Parse and type check succeeded, but nothing was evaluated (see
@@ -715,29 +760,54 @@ end function syntran_eval
 
 !===============================================================================
 
-function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args, diags, &
-		syntax_only, io) result(res)
+subroutine syntran_write_transpiled(transpile, filename, io)
 
-	! TODO:
-	!   - enable input echo for file input (not for stdin)
-	!   - echo inputs w/o "syntran$" prompt and print outputs after a comment,
-	!     for ease of updating documentation with consistent styling
+	! Write the Fortran source from a transpilation to a file, or to stdout if
+	! the filename is "-"
+
+	type(transpile_t), intent(in) :: transpile
+	character(len = *), intent(in) :: filename
+	integer, optional, intent(out) :: io
+
+	!********
+
+	integer :: i, ou, iostat
+
+	if (present(io)) io = exit_success
+
+	if (filename == '-') then
+		do i = 1, transpile%src%len_
+			write(output_unit, '(a)') transpile%src%v(i)%s
+		end do
+		return
+	end if
+
+	open(newunit = ou, file = filename, action = 'write', status = 'replace', &
+		iostat = iostat)
+	if (iostat /= 0) then
+		write(*,*) err_prefix//'cannot open output file `'//filename//'` for writing'//color_reset
+		if (present(io)) io = exit_failure
+		return
+	end if
+
+	do i = 1, transpile%src%len_
+		write(ou, '(a)') transpile%src%v(i)%s
+	end do
+	close(ou)
+
+end subroutine syntran_write_transpiled
+
+!===============================================================================
+
+function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args, diags, &
+		syntax_only, transpile, io) result(res)
 
 	character(len = *), intent(in)  :: filename
 	character(len = :), allocatable :: res
 
-	! TODO: refactor verbosity as an int for silent, error, warn, info, debug, etc.
-	! Maybe not all those options yet, but at least silent, error, and info.
-	! Debug/trace could have an impact on perf so maybe that should still be a
-	! compile-time const:
-	!
-	!     SILENT = -20
-	!     ERROR  = -10
-	!     WARN   =   0
-	!     INFO   =  10
-	!     DEBUG  =  20
-	!     TRACE  =  30
-	!
+	! `quiet` suppresses diagnostics and the `Interpreting file` line, and keeps
+	! a runtime error from calling exit().  `quiet_info` only suppresses the
+	! `Interpreting file` line
 	logical, optional, intent(in) :: quiet, quiet_info
 
 	logical, optional, intent(in) :: chdir_
@@ -751,6 +821,10 @@ function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args
 
 	! Parse and type-check only, without evaluating.  See syntran_eval()
 	logical, optional, intent(in) :: syntax_only
+
+	! Transpile to Fortran instead of evaluating.  See syntran_eval_value().
+	! The CLI trims the result of a file, so this sets transpile%trim_result
+	type(transpile_t), optional, intent(inout) :: transpile
 
 	! exit_success/exit_failure status.  See syntran_eval()
 	integer, optional, intent(out) :: io
@@ -776,8 +850,13 @@ function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args
 	syntax_onlyl = .false.
 	if (present(syntax_only)) syntax_onlyl = syntax_only
 
-	! Syntax checking is silent on success, so suppress the info line too
+	! Syntax checking is silent on success, so suppress the info line too.
+	! Transpiling is the same, and its stdout may be the generated source
 	if (syntax_onlyl) quiet_infol = .true.
+	if (present(transpile)) then
+		quiet_infol = .true.
+		transpile%trim_result = .true.
+	end if
 
 	if (present(io)) io = exit_success
 
@@ -802,11 +881,11 @@ function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args
 	if (chdirl) then
 		res = trim(adjustl(syntran_eval(source_text, state%quiet, filename, &
 			chdir_ = get_dir(filename), script_args = script_args, diags = diags, &
-			syntax_only = syntax_only, io = io)))
+			syntax_only = syntax_only, transpile = transpile, io = io)))
 	else
 		res = trim(adjustl(syntran_eval(source_text, state%quiet, filename, &
 			script_args = script_args, diags = diags, &
-			syntax_only = syntax_only, io = io)))
+			syntax_only = syntax_only, transpile = transpile, io = io)))
 	end if
 
 end function syntran_interpret_file

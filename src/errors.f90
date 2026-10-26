@@ -130,6 +130,16 @@ module syntran__errors_m
 		EC_FN_MISSING_PARENS = "E112", &
 		EC_MISSING_LET_EQUALS = "E113", &
 		EC_MISSING_LET_NAME = "E114", &
+		EC_TRANSPILE_UNSUPPORTED = "E115", &
+		EC_REF_ALIAS = "E116", &
+		EC_FORMAT_NOT_LITERAL = "E117", &
+		EC_BAD_FORMAT = "E118", &
+		EC_FORMAT_TYPE = "E119", &
+		EC_FORMAT_COUNT = "E120", &
+		EC_RESHAPE_SHAPE_LIT = "E121", &
+		EC_STD_UNKNOWN_NAME = "E122", &
+		EC_MOD_IMPORT_NAME = "E123", &
+		EC_FILE_ARRAY = "E124", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -209,6 +219,16 @@ module syntran__errors_m
 		RC_REDUCE_DIM_RANGE = "R34", &
 		RC_MASK_SHAPE_MISMATCH = "R35", &
 		RC_MINMAX_EMPTY = "R36", &
+		RC_BINOP_SHAPE_MISMATCH = "R37", &
+		RC_DOT_SIZE_MISMATCH = "R38", &
+		RC_REPEAT_NEGATIVE = "R39", &
+		RC_SOLVE_SHAPE = "R40", &
+		RC_SOLVE_SINGULAR = "R41", &
+		RC_LU_BAD_PIVOTS = "R42", &
+		RC_BINARY_TEXT_OP = "R43", &
+		RC_READ_FAIL = "R44", &
+		RC_BINARY_WRITE_TYPE = "R45", &
+		RC_PARSE_BOOL = "R46", &
 		WC_MISSING_RETURN = "W1"
 
 	! A text span indicates which characters to underline in a faulty line of
@@ -229,6 +249,13 @@ module syntran__errors_m
 		character(len = :), allocatable :: text, src_file
 		integer, allocatable :: lines(:)
 
+		! Index into src_registry (below), set by register_src() and copied
+		! onto each parser's local %contexts entries (new_parser(),
+		! parse_misc.f90) so parse_statement() (parse_control.f90) can stamp
+		! it onto every statement node for runtime-error stack traces.  0
+		! until registered
+		integer :: src_id = 0
+
 	end type text_context_t
 
 	!********
@@ -241,6 +268,40 @@ module syntran__errors_m
 		contains
 			procedure :: push => push_context
 	end type text_context_vector_t
+
+	! Process-global registry of every distinct parsed source (main file,
+	! each #include, each `use`d module) so that runtime-error stack traces
+	! (append_rt_trace(), vm_exec.f90) can look up a statement's
+	! file/line/source-text long after the parser's own per-compilation
+	! text_context_vector_t (parser%contexts / mod_contexts) has gone out of
+	! scope -- `use` modules in particular get their own throwaway
+	! mod_contexts (parse_control.f90), so a child module's lines wouldn't
+	! otherwise survive past parsing.  Mirrors the struct_reg_map/
+	! struct_reg_names pattern in value.f90, the other process-global
+	! registry in this codebase, for the same reason: the alternative is
+	! threading a text_context_vector_t all the way down through
+	! compile_tree()/program_t/vm_run(), which never otherwise needs parser
+	! state.  register_src() dedupes by (src_file, text) so re-parsing the
+	! same file (the parser's two passes, a module imported from two call
+	! sites) doesn't grow this without bound; each REPL line still gets its
+	! own entry since its text differs even though src_file ("<stdin>")
+	! repeats.
+	!
+	! Bounded lifetime: append-only *within* one top-level
+	! syntran_interpret()/syntran_eval_value() call (and across the whole
+	! REPL loop inside one syntran_interpret() call, so an earlier-declared
+	! fn's src_id stays valid for as long as it's callable), but
+	! reset_src_registry() below clears both tables from state_destroy()
+	! (runtime.f90), which every one of those top-level calls runs on
+	! every exit path (including the REPL's `#clear` directive).  That
+	! keeps a long-running embedder that calls syntran_eval()/
+	! syntran_interpret_file() in a loop with many distinct one-off source
+	! strings from growing this without bound: by the time such a call
+	! returns, nothing reachable still points at a src_id it registered --
+	! state_t (and the program_t/AST built from it) are that call's own
+	! locals, already gone
+	type(text_context_vector_t), save :: src_registry
+	type(map_i32_t), save :: src_registry_map
 
 !===============================================================================
 
@@ -279,6 +340,45 @@ module syntran__errors_m
 			character(len = *), intent(in) :: code, msg
 			character(len = :), allocatable :: err
 		end function err_rt
+
+		! Register `context` in src_registry (deduping by src_file + text)
+		! and return its id, for later lookup by rt_trace_snippet()/
+		! src_loc_str() once parsing has finished and only node%src_id/
+		! src_pos survive.  Called once per new_parser() (parse_misc.f90),
+		! i.e. once per file/include/module, not per statement
+		module function register_src(context) result(id)
+			type(text_context_t), intent(in) :: context
+			integer :: id
+		end function register_src
+
+		! Clear src_registry/src_registry_map.  Called from state_destroy()
+		! (runtime.f90) on every exit of a top-level syntran_interpret()/
+		! syntran_eval_value() call -- see src_registry's own docstring
+		! above for why that's always safe.  Must clear src_registry_map
+		! alongside src_registry itself: register_src()'s dedup lookup
+		! would otherwise match a stale id left over from before the
+		! reset, which (if still in range of the now-shorter/reused
+		! src_registry) could silently alias two unrelated sources
+		module subroutine reset_src_registry()
+		end subroutine reset_src_registry
+
+		! "file:line" for one stack-trace frame (append_rt_trace(),
+		! vm_exec.f90).  Returns '' if src_id is 0, stale, or reset out
+		! from under the caller (defensive only; shouldn't happen in
+		! practice -- see reset_src_registry() above)
+		module function src_loc_str(src_id, pos) result(str_)
+			integer, intent(in) :: src_id, pos
+			character(len = :), allocatable :: str_
+		end function src_loc_str
+
+		! Rust-style "--> file:line:col" + source-line snippet (no carets --
+		! unlike underline(), there's no token span, just one position) for
+		! the innermost frame of a runtime-error stack trace. Returns '' if
+		! src_id is 0 or stale
+		module function rt_trace_snippet(src_id, pos) result(str_)
+			integer, intent(in) :: src_id, pos
+			character(len = :), allocatable :: str_
+		end function rt_trace_snippet
 
 		module function get_all_error_codes() result(codes)
 			type(string_vector_t) :: codes
@@ -680,6 +780,69 @@ module syntran__errors_m
 			character(len = *), intent(in) :: keyword
 		end function err_missing_let_name
 
+		module function err_transpile_unsupported(context, span, what) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+			character(len = *), intent(in) :: what
+		end function err_transpile_unsupported
+
+		module function err_ref_alias(context, span, var, fn) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+			character(len = *), intent(in) :: var, fn
+		end function err_ref_alias
+
+		module function err_format_not_literal(context, span, fn) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+			character(len = *), intent(in) :: fn
+		end function err_format_not_literal
+
+		module function err_bad_format(context, span, what) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+			character(len = *), intent(in) :: what
+		end function err_bad_format
+
+		module function err_format_type(context, span, spec, type_, why) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+			character(len = *), intent(in) :: spec, type_, why
+		end function err_format_type
+
+		module function err_format_count(context, span, nspecs, nargs) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+			integer, intent(in) :: nspecs, nargs
+		end function err_format_count
+
+		module function err_reshape_shape_lit(context, span) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+		end function err_reshape_shape_lit
+
+		module function err_std_unknown_name(context, span, name, suggest) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+			character(len = *), intent(in) :: name
+			character(len = *), intent(in), optional :: suggest
+		end function err_std_unknown_name
+
+		module function err_mod_import_name(context, span, module, name) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+			character(len = *), intent(in) :: module, name
+		end function err_mod_import_name
+
 		module function err_not_callable(context, span, var, type) result(err)
 			type(text_context_t) :: context
 			type(text_span_t), intent(in) :: span
@@ -693,6 +856,13 @@ module syntran__errors_m
 			character(len = :), allocatable :: err
 			character(len = *), intent(in) :: elem
 		end function err_fn_ptr_array
+
+		module function err_file_array(context, span, elem) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+			character(len = *), intent(in) :: elem
+		end function err_file_array
 
 		module function err_missing_return(context, span, fn) result(err)
 			type(text_context_t) :: context
@@ -975,6 +1145,41 @@ module syntran__errors_m
 			integer(kind = 8), intent(in) :: sizes(:)
 			character(len = :), allocatable :: err
 		end function err_rt_expl_array_size
+
+		module function err_rt_binop_shape(op_text, lsizes, rsizes) result(err)
+			character(len = *), intent(in) :: op_text
+			integer(kind = 8), intent(in) :: lsizes(:), rsizes(:)
+			character(len = :), allocatable :: err
+		end function err_rt_binop_shape
+
+		module function err_rt_dot_size(lsize, rsize) result(err)
+			integer(kind = 8), intent(in) :: lsize, rsize
+			character(len = :), allocatable :: err
+		end function err_rt_dot_size
+
+		module function err_rt_repeat_negative(ncopies) result(err)
+			integer(kind = 8), intent(in) :: ncopies
+			character(len = :), allocatable :: err
+		end function err_rt_repeat_negative
+
+		module function err_rt_solve_shape(fn, arows, acols, brows) result(err)
+			character(len = *), intent(in) :: fn
+			integer(kind = 8), intent(in) :: arows, acols, brows
+			character(len = :), allocatable :: err
+		end function err_rt_solve_shape
+
+		module function err_rt_solve_singular(fn, pivot) result(err)
+			character(len = *), intent(in) :: fn
+			integer, intent(in) :: pivot
+			character(len = :), allocatable :: err
+		end function err_rt_solve_singular
+
+		module function err_rt_lu_bad_pivots(n, len_, i, p) result(err)
+			integer(kind = 8), intent(in) :: n, len_
+			integer(kind = 8), intent(in) :: i
+			integer, intent(in) :: p
+			character(len = :), allocatable :: err
+		end function err_rt_lu_bad_pivots
 
 		! RC_SUBSCRIPT_OOB (R33) pair: only raised in builds compiled with
 		! -DSYNTRAN_BOUNDS_CHECK (bounds_check, compiler.F90) -- see its

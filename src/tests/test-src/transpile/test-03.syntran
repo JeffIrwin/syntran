@@ -1,0 +1,216 @@
+// Control flow, scopes, and functions.  Run by both the interpreter and the
+// Fortran transpiler, which must print the same thing.  The return value is the
+// number of failed checks
+
+let status = 0;
+
+fn check(ok: bool): i32
+{
+	if (ok) return 0;
+	return 1;
+}
+
+// Shadowing, even across types, and in nested blocks and loops
+let x = 1;
+{
+	let x = "shadow";
+	println(x);
+	{
+		let x = 2.5;
+		println(x);
+	}
+	println(x);
+}
+println(x);
+for i in [0: 3]
+{
+	let x = i * 10;
+	let y = "y" + str(x);
+	println(y);
+}
+println(x);
+
+// break and continue, in nested loops
+let count = 0;
+for i in [0: 5]
+{
+	if (i == 1) continue;
+	for j in [0: 5]
+	{
+		if (j > i) break;
+		if (j == 2) continue;
+		count += 1;
+	}
+	if (i == 3) break;
+}
+println(count);
+status += check(count == 6);
+
+let w = 0;
+while (true)
+{
+	w += 1;
+	if (w < 5) continue;
+	break;
+}
+println(w);
+
+// A break outside of a loop leaves its outermost block
+{
+	println("before");
+	{
+		println("inner");
+		break;
+		println("never");
+	}
+	println("never");
+}
+println("after");
+
+// The loop variable can be assigned to without changing the iteration
+let seen = 0;
+for i in [0: 4]
+{
+	seen += 1;
+	i = 100;
+}
+println(seen, " ", i32(seen));
+
+// The bounds of a loop are evaluated once
+let n = 3;
+let iters = 0;
+for i in [0: n]
+{
+	n = 10;
+	iters += 1;
+}
+println(iters);
+
+// Empty and reversed ranges
+for i in [3: 0]
+	println("never");
+for i in [3: -1: 0]
+	println("down ", i);
+
+// else if chains
+fn classify(v: i32): str
+{
+	if (v < 0) return "neg";
+	else if (v == 0) return "zero";
+	else if (v < 10) return "small";
+	else return "big";
+}
+println(classify(-1), " ", classify(0), " ", classify(5), " ", classify(50));
+
+// Recursion, with locals that must not be shared between calls
+fn fact(k: i32): i32
+{
+	if (k <= 1) return 1;
+	let local = k;
+	let rest = fact(k - 1);
+	return local * rest;
+}
+println(fact(10));
+status += check(fact(5) == 120);
+
+fn fib(k: i32): i32
+{
+	if (k < 2) return k;
+	return fib(k - 1) + fib(k - 2);
+}
+println(fib(20));
+
+// Mutual recursion, and a fn called before it is declared
+fn is_even(k: i32): bool
+{
+	if (k == 0) return true;
+	return is_odd(k - 1);
+}
+fn is_odd(k: i32): bool
+{
+	if (k == 0) return false;
+	return is_even(k - 1);
+}
+println(is_even(10), " ", is_odd(7), " ", is_even(7));
+println(later(3));
+fn later(k: i32): i32
+{
+	return k * 2;
+}
+
+// By-reference parameters, including scalars and strings
+fn incr(v: &i32, s: &str)
+{
+	v += 1;
+	s += "!";
+	return;
+}
+let counter = 0;
+let word = "hey";
+incr(&counter, &word);
+incr(&counter, &word);
+println(counter, " ", word);
+status += check(counter == 2);
+
+fn swap(a: &i32, b: &i32)
+{
+	let tmp = a;
+	a = b;
+	b = tmp;
+	return;
+}
+let p = 1;
+let q = 2;
+swap(&p, &q);
+println(p, " ", q);
+
+// Parameters can be assigned to in the callee without changing the caller's
+fn clobber(v: i32, s: str): i32
+{
+	v = 100;
+	s = "clobbered";
+	return v + i32(len(s));
+}
+let orig = 5;
+let origs = "keep";
+println(clobber(orig, origs), " ", orig, " ", origs);
+
+// A fn with no return value, and an early return
+fn say(v: i32)
+{
+	if (v < 0)
+	{
+		println("negative");
+		return;
+	}
+	println("value ", v);
+	return;
+}
+say(-1);
+say(7);
+
+// A fn that assigns a global
+let total = 0;
+fn add_total(v: i32)
+{
+	total += v;
+	return;
+}
+add_total(5);
+add_total(6);
+println(total);
+
+// Assignment as a value
+let aa = 0;
+let bb = 0;
+aa = bb = 7;
+println(aa, " ", bb);
+let arr = [0; 3];
+let k = 0;
+arr[(k += 1)] = 9;
+println(arr, " ", k);
+
+// Nested fn calls and the value of a block
+println(max(fib(5), fact(3)), " ", fib(fib(5)));
+
+return status;

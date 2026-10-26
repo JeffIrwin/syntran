@@ -4,6 +4,7 @@
 module syntran__bytecode_m
 
 	use syntran__types_m
+	use syntran_rt, only: rt_str_t, rt_fmt_spec_t, rt_fmt_split, rt_fmt_parse
 
 	implicit none
 
@@ -38,6 +39,7 @@ module syntran__bytecode_m
 		OP_LOAD_MEMBER_TOS  = 1139, &	! M5: dot_expr read when root is a fn return: root on TOS, a=member-wrapper node_idx
 		OP_CALL_INTR        = 1022, &	! M6: intrinsic call; native: a=intr_id b=argc (args on stack);
 		                            	!   readln/close: a=intr_id b=1 c=(id_index*2+is_loc) for slot writeback
+		                            	!   format: a=INTR_FORMAT b=nvalues (the format string isn't pushed) c=prog%fmts index
 		OP_FOR_SETUP        = 1023, &	! M8: for-loop setup: a=node_idx; pushes iter onto for_iter stack
 		OP_FOR_NEXT         = 1024, &	! M8: for-loop advance: a=L_pop; exhausted->jump (no pop), else write loop var
 		OP_FOR_POP          = 1025, &	! M8: for-loop exit: pop for_iter stack (emitted at all loop exits)
@@ -226,7 +228,17 @@ module syntran__bytecode_m
 		OP_LE_STR           = 1243, &
 		OP_GT_STR           = 1244, &
 		OP_GE_STR           = 1245, &
-		OP_EQ_ARRAY         = 1247
+		OP_EQ_ARRAY         = 1247, &
+		OP_CALL_INTR_REF    = 1248
+
+	! OP_CALL_INTR_REF: intrinsic call with by-ref args (fn_t%ref_params), e.g.
+	! std::lu_factor(&A).  a = intr_id, b = prog%nodes index of the call node
+	! (nargs = size(args), is_ref(:) says which args are by-ref and their
+	! variable slots are args(i)%id_index/is_loc).  The stack layout on entry is
+	! the same as OP_CALL's: [by-value args][by-ref args], both in ascending
+	! arg order.  By-ref args are moved out of their variables with
+	! OP_LOAD_REF_*, and moved back at the end of the call, even after a
+	! runtime error, so a variable is never left empty
 
 	! OP_EQ_ARRAY: whole-array equality for switch-statement case tests.
 	!   Pushes a SCALAR bool.  True iff the subject and the case value have
@@ -461,6 +473,38 @@ module syntran__bytecode_m
 		INTR_MINVAL_EXT   = 142, INTR_MAXVAL_EXT   = 143, &
 		INTR_PRODUCT_EXT  = 144
 
+	! On-demand stack trace (std::print_trace()/std::stack_trace()/
+	! std::caller()), handled inline in OP_CALL_INTR (vm_exec.f90) like
+	! INTR_READLN/INTR_CLOSE because they need the VM's call-frame stack,
+	! which vm_call_intr() (vm_intr.f90) doesn't receive
+	integer, parameter :: &
+		INTR_PRINT_TRACE  = 145, INTR_STACK_TRACE  = 146, &
+		INTR_CALLER       = 147
+
+	! std::solve(A, b), for both f32 and f64
+	integer, parameter :: INTR_SOLVE = 148
+
+	! std::lu_factor(&A[, &info]) and std::lu_solve(A, ipiv, &b), both f32 and
+	! f64.  These take by-ref args, so they're dispatched by OP_CALL_INTR_REF
+	! instead of OP_CALL_INTR
+	integer, parameter :: INTR_LU_FACTOR = 149, INTR_LU_SOLVE = 150
+
+	! print() and write(file, ...) are println() and writeln() without the newline
+	integer, parameter :: INTR_PRINT = 151, INTR_WRITE = 152
+
+	! format(fmt, values...) with a literal format string
+	integer, parameter :: INTR_FORMAT = 153
+
+	! std::read_i32(), read_i64(), read_f32(), read_f64(), each for one value or
+	! an array of n
+	integer, parameter :: INTR_READ_I32 = 154, INTR_READ_I64 = 155, &
+		INTR_READ_F32 = 156, INTR_READ_F64 = 157
+
+	! parse_bool(), and the f32() and f64() casts, each for one value or an array
+	integer, parameter :: INTR_PARSE_BOOL = 158, &
+		INTR_F32_SCA = 159, INTR_F32_ARR = 160, &
+		INTR_F64_SCA = 161, INTR_F64_ARR = 162
+
 	!********
 
 	! A single bytecode instruction.  Kept as a plain POD record (no allocatable
@@ -480,6 +524,17 @@ module syntran__bytecode_m
 
 	!********
 
+	! The literal format string of one format() call, split and parsed once by
+	! add_fmt() at compile time instead of on every call.  There is one more
+	! piece (the text around the placeholders) than there are specs
+
+	type fmt_t
+		type(rt_str_t), allocatable :: pieces(:)
+		type(rt_fmt_spec_t), allocatable :: specs(:)
+	end type fmt_t
+
+	!********
+
 	! A compiled program.  All function bodies and the top-level code are
 	! concatenated into a single flat code(:) array; per-function entry offsets
 	! are stored in fn_entry(:).
@@ -496,8 +551,26 @@ module syntran__bytecode_m
 		type(instr_t), allocatable :: code(:)
 		integer :: len_ = 0, cap = 0
 
+		! Per-instruction source location, parallel to code(:) (grown/indexed
+		! together in emit() below) rather than packed into instr_t itself --
+		! instr_t stays a small POD record copied on every stack/jump op in
+		! the VM's hot dispatch loop (vm_exec.f90), while loc_id/loc_pos are
+		! only ever read once, after a runtime error has already halted
+		! execution (append_rt_trace(), vm_exec.f90).  loc_id indexes the
+		! errors module's src_registry (register_src(), errors.f90); loc_pos
+		! is a character offset into that entry's %text.  cur_id/cur_pos are
+		! the "current statement" compile_node() (compile_ctrl.f90) stamps
+		! every instruction with as it emits them
+		integer, allocatable :: loc_id(:), loc_pos(:)
+		integer :: cur_id = 0, cur_pos = 0
+
 		type(value_t), allocatable :: consts(:)
 		integer :: nconsts = 0
+
+		! Pre-split format strings referenced by OP_CALL_INTR for INTR_FORMAT
+		! (c = index)
+		type(fmt_t), allocatable :: fmts(:)
+		integer :: nfmts = 0
 
 		! AST node pool for opcodes that delegate to the AST layer
 		type(syntax_node_t), allocatable :: nodes(:)
@@ -506,6 +579,18 @@ module syntran__bytecode_m
 		integer, allocatable :: fn_entry(:)
 		integer, allocatable :: fn_num_locs(:)
 		integer :: entry_main = 1
+
+		! Fn/method name, parallel to fn_entry(:)/fn_num_locs(:) (grown
+		! together in ensure_fn_entry(), compile_ctrl.f90), for stack-trace
+		! frame labels (rt_frame_fname(), vm_exec.f90).  Set once the fn's
+		! body is compiled (emit_fn_epilogue(), compile_ctrl.f90) -- unset
+		! (unallocated %s) for an id that is only forward-registered, which
+		! can't happen by the time the VM runs since every registered id is
+		! compiled before entry_main.  Needed because a call through a fn
+		! pointer (OP_CALL_PTR) has no call-site identifier naming the
+		! callee -- only the call node's AST, which names the *variable*
+		! holding the pointer, not the fn it resolves to at this call
+		type(string_t), allocatable :: fn_names(:)
 
 	end type program_t
 
@@ -636,6 +721,52 @@ end function add_const
 
 !===============================================================================
 
+function add_fmt(prog, fmt) result(idx)
+
+	! Split and parse the literal format string of a format() call, add it to
+	! the format pool, and return its 1-based index.  The parser already checked
+	! the string and its specs (check_format_call()), so neither can fail here
+
+	type(program_t), intent(inout) :: prog
+	character(len = *), intent(in) :: fmt
+	integer :: idx
+
+	!*******
+
+	integer :: i, ierr
+	type(fmt_t), allocatable :: tmp(:)
+	type(rt_str_t), allocatable :: specs(:)
+
+	integer, parameter :: INIT_FMT_CAP = 4
+
+	prog%nfmts = prog%nfmts + 1
+	idx = prog%nfmts
+
+	if (.not. allocated(prog%fmts)) then
+		allocate(prog%fmts(INIT_FMT_CAP))
+
+	else if (prog%nfmts > size(prog%fmts)) then
+		allocate(tmp(2 * prog%nfmts))
+		do i = 1, prog%nfmts - 1
+			call move_alloc(prog%fmts(i)%pieces, tmp(i)%pieces)
+			call move_alloc(prog%fmts(i)%specs, tmp(i)%specs)
+		end do
+		call move_alloc(tmp, prog%fmts)
+	end if
+
+	call rt_fmt_split(fmt, prog%fmts(idx)%pieces, specs, ierr)
+	if (ierr /= 0) call internal_error()
+
+	allocate(prog%fmts(idx)%specs(size(specs)))
+	do i = 1, size(specs)
+		call rt_fmt_parse(specs(i)%s, prog%fmts(idx)%specs(i), ierr)
+		if (ierr /= 0) call internal_error()
+	end do
+
+end function add_fmt
+
+!===============================================================================
+
 function new_program() result(prog)
 
 	type(program_t) :: prog
@@ -647,10 +778,15 @@ function new_program() result(prog)
 	prog%cap     = INIT_CAP
 	prog%len_    = 0
 	prog%nconsts = 0
+	prog%nfmts   = 0
 	prog%nnodes  = 0
 	prog%entry_main = 1
+	prog%cur_id  = 0
+	prog%cur_pos = 0
 
 	allocate(prog%code(INIT_CAP))
+	allocate(prog%loc_id (INIT_CAP))
+	allocate(prog%loc_pos(INIT_CAP))
 
 end function new_program
 
@@ -670,6 +806,7 @@ subroutine emit(prog, op, a, b, c)
 	!*******
 
 	type(instr_t), allocatable :: tmp(:)
+	integer, allocatable :: tmp_loc(:)
 
 	prog%len_ = prog%len_ + 1
 
@@ -678,6 +815,15 @@ subroutine emit(prog, op, a, b, c)
 		allocate(tmp(prog%cap))
 		tmp(1 : prog%len_ - 1) = prog%code(1 : prog%len_ - 1)
 		call move_alloc(tmp, prog%code)
+
+		! loc_id/loc_pos grow in lockstep with code(:), same cap
+		allocate(tmp_loc(prog%cap))
+		tmp_loc(1 : prog%len_ - 1) = prog%loc_id(1 : prog%len_ - 1)
+		call move_alloc(tmp_loc, prog%loc_id)
+
+		allocate(tmp_loc(prog%cap))
+		tmp_loc(1 : prog%len_ - 1) = prog%loc_pos(1 : prog%len_ - 1)
+		call move_alloc(tmp_loc, prog%loc_pos)
 	end if
 
 	prog%code(prog%len_)%op = op
@@ -687,6 +833,9 @@ subroutine emit(prog, op, a, b, c)
 	if (present(a)) prog%code(prog%len_)%a = a
 	if (present(b)) prog%code(prog%len_)%b = b
 	if (present(c)) prog%code(prog%len_)%c = c
+
+	prog%loc_id (prog%len_) = prog%cur_id
+	prog%loc_pos(prog%len_) = prog%cur_pos
 
 end subroutine emit
 
@@ -843,9 +992,20 @@ pure integer function intr_id_from_name(name) result(id)
 	case ("0max_f64");       id = INTR_MAX_F64
 	! String / conversion
 	case ("println");        id = INTR_PRINTLN
+	case ("print");          id = INTR_PRINT
+	case ("format");         id = INTR_FORMAT
+	case ("read_i32", "0read_i32_sca", "0read_i32_arr")
+		id = INTR_READ_I32
+	case ("read_i64", "0read_i64_sca", "0read_i64_arr")
+		id = INTR_READ_I64
+	case ("read_f32", "0read_f32_sca", "0read_f32_arr")
+		id = INTR_READ_F32
+	case ("read_f64", "0read_f64_sca", "0read_f64_arr")
+		id = INTR_READ_F64
 	case ("str");            id = INTR_STR
 	case ("len");            id = INTR_LEN
-	case ("repeat");         id = INTR_REPEAT
+	case ("0repeat_i32", "0repeat_i64"); id = INTR_REPEAT
+	case ("parse_bool");     id = INTR_PARSE_BOOL
 	case ("parse_i32");      id = INTR_PARSE_I32
 	case ("parse_i64");      id = INTR_PARSE_I64
 	case ("parse_f32");      id = INTR_PARSE_F32
@@ -855,10 +1015,20 @@ pure integer function intr_id_from_name(name) result(id)
 	case ("0i32_arr");       id = INTR_I32_ARR
 	case ("0i64_sca");       id = INTR_I64_SCA
 	case ("0i64_arr");       id = INTR_I64_ARR
+	case ("0f32_sca");       id = INTR_F32_SCA
+	case ("0f32_arr");       id = INTR_F32_ARR
+	case ("0f64_sca");       id = INTR_F64_SCA
+	case ("0f64_arr");       id = INTR_F64_ARR
 	! I/O
 	case ("open");           id = INTR_OPEN
 	case ("readln");         id = INTR_READLN
 	case ("writeln");        id = INTR_WRITELN
+	case ("write");          id = INTR_WRITE
+	! The parser rewrites printf() and writef() into print(format()) and
+	! write(f, format()), so they never reach the compiler.  They are only here
+	! to keep every registered name mapped to an id
+	case ("printf");         id = INTR_PRINT
+	case ("writef");         id = INTR_WRITE
 	case ("eof");            id = INTR_EOF
 	case ("close");          id = INTR_CLOSE
 	! Misc + reduction
@@ -885,6 +1055,18 @@ pure integer function intr_id_from_name(name) result(id)
 	case ("0norm2_f64");     id = INTR_NORM2_F64
 	case ("0dot_f32");       id = INTR_DOT_F32
 	case ("0dot_f64");       id = INTR_DOT_F64
+	! The bare "solve" is only the registered "std::solve" stub, which exists to
+	! diagnose an unqualified call.  A real call is always resolved to one of
+	! the typed names first
+	! The `_mat` overloads are for a matrix `b`, as opposed to a vector
+	case ("0solve_f32", "0solve_f64", "0solve_f32_mat", "0solve_f64_mat", &
+		"solve")
+		id = INTR_SOLVE
+	case ("0lu_factor_f32", "0lu_factor_f64", "lu_factor")
+		id = INTR_LU_FACTOR
+	case ("0lu_solve_f32", "0lu_solve_f64", "0lu_solve_f32_mat", &
+		"0lu_solve_f64_mat", "lu_solve")
+		id = INTR_LU_SOLVE
 	case ("0dot_i32");       id = INTR_DOT_I32
 	case ("0dot_i64");       id = INTR_DOT_I64
 	case ("all");            id = INTR_ALL
@@ -897,6 +1079,9 @@ pure integer function intr_id_from_name(name) result(id)
 	case ("hasenv");         id = INTR_HASENV
 	case ("exists");         id = INTR_EXISTS
 	case ("try_open");       id = INTR_TRY_OPEN
+	case ("print_trace");    id = INTR_PRINT_TRACE
+	case ("stack_trace");    id = INTR_STACK_TRACE
+	case ("caller");         id = INTR_CALLER
 	case ("0count_dim");     id = INTR_COUNT_DIM
 	case ("0all_dim");       id = INTR_ALL_DIM
 	case ("0any_dim");       id = INTR_ANY_DIM

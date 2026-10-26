@@ -1,0 +1,13 @@
+// #include'd by include.syntran (stack-trace regression test, see
+// nested.syntran's docstring).  The throw needs to happen inside a fn whose
+// own source file (this one) differs from the including file's, so the
+// innermost snippet's path can be checked against the right one.
+
+fn incfn(): i32
+{
+	let s = 0;
+	for i in [0: s: 5]
+	{
+	}
+	return 0;
+}

@@ -45,6 +45,11 @@
 			},
 			{
 				"if": "matrix.os == 'ubuntu-24.04'",
+				"name": "Check embedded transpiler runtime is up to date",
+				"run": "bash src/gen_transpile_rt.sh && git diff --exit-code src/transpile_rt.f90"
+			},
+			{
+				"if": "matrix.os == 'ubuntu-24.04'",
 				"name": "Set ubuntu PATH",
 				"run": "echo \"$HOME/bin\" >> $GITHUB_PATH"
 			},
@@ -52,7 +57,21 @@
 				"if": "matrix.os == 'ubuntu-24.04'",
 				"run":
 				"
-					sudo apt-get install gfortran-14 \n
+					# libopenblas-dev (not the reference libblas-dev/ \n
+					# liblapack-dev) provides the fast BLAS/LAPACK for \n
+					# fpm.toml's `link`.  macOS gets Accelerate for free \n
+					sudo apt-get install gfortran-14 libopenblas-dev \n
+
+					# Ubuntu's `-llapack -lblas` would resolve to shared \n
+					# libs, which a bare container doesn't have.  Like \n
+					# Dockerfile.rocky, link libopenblas.a (which also \n
+					# contains LAPACK) statically through a private dir \n
+					# that is first in the linker search path \n
+					a=$(find /usr/lib -name libopenblas.a | head -n 1) \n
+					[[ -n \"$a\" ]] \n
+					sudo mkdir -p /opt/blas-static \n
+					sudo ln -sf \"$a\" /opt/blas-static/libblas.a \n
+					sudo ln -sf \"$a\" /opt/blas-static/liblapack.a \n
 				"
 			},
 			{
@@ -113,6 +132,13 @@
 						diff ${f%.syntran}.out ${f%.syntran}.exp \n
 					done
 
+					# Fortran API examples in example/.  They `error stop` on a \n
+					# wrong result, so any failure fails the job.  They read \n
+					# example/hello.syntran relative to the project root \n
+					for ex in hello_world eval_basic eval_errors interpret_file ; do
+						fpm run --example $ex --profile debug --link-flag \"$lflags\" \n
+					done
+
 					# Short tests only.  Long tests are only done in release \n
 					fpm test test --profile debug --link-flag \"$lflags\" \n
 
@@ -141,7 +167,7 @@
 					fpm install
 					  --profile release
 					  --link-flag
-					  '-static-libgcc -static-libgfortran -static-libquadmath'
+					  '-L/opt/blas-static -static-libgcc -static-libgfortran -static-libquadmath'
 					  --prefix='$HOME' \n
 
 					# TODO: copy to a subdir for easier upload \n
@@ -151,12 +177,18 @@
 					chmod +x ./syntran \n
 					patchelf --set-rpath '$ORIGIN' ./syntran \n
 
+					# BLAS/LAPACK and the gfortran runtime must be static, \n
+					# or the binary won't run in a bare container \n
+					ldd ./syntran \n
+					if ldd ./syntran | grep -Eq 'blas|lapack|gfortran' ; then exit 1 ; fi \n
+					./syntran -c 'let A = [2.0, 1.0, 1.0, 3.0; 2, 2]; println(std::solve(A, [3.0, 5.0])); println(A @ A);' \n
+
 					dir_='src/tests/test-src/explorer/' \n
 					for f in $dir_/*.syntran ; do
 						fpm run
 							--profile release
 							--link-flag
-							'-static-libgcc -static-libgfortran -static-libquadmath'
+							'-L/opt/blas-static -static-libgcc -static-libgfortran -static-libquadmath'
 							-- -q $f > ${f%.syntran}.out \n
 						diff ${f%.syntran}.out ${f%.syntran}.exp \n
 					done
@@ -184,6 +216,32 @@
 			},
 			{
 				"if": "matrix.os == 'windows-latest'",
+				"name": "Install OpenBLAS windows",
+				"run":
+				"
+					# MSYS2 is preinstalled on the runner at C:\\msys64, but \n
+					# not on the PATH.  Its OpenBLAS is built with \n
+					# DYNAMIC_ARCH (CPU kernel picked at run time, so the \n
+					# shipped binary is portable) and has a static archive \n
+					# with both BLAS and LAPACK.  ucrt64 matches the \n
+					# runner's UCRT mingw gfortran \n
+					C:\\msys64\\usr\\bin\\pacman.exe -Sy --noconfirm --needed mingw-w64-ucrt-x86_64-openblas \n
+
+					# fpm.toml's `blas` feature links `-llapack -lblas`, so \n
+					# present the one archive under both names in a private \n
+					# dir.  Don't put C:\\msys64\\ucrt64\\lib itself on -L, \n
+					# since its libgfortran.a/libgomp.a would shadow the \n
+					# runner toolchain's \n
+					New-Item -ItemType Directory -Force build/openblas | Out-Null \n
+					Copy-Item C:\\msys64\\ucrt64\\lib\\libopenblas.a build/openblas/libblas.a \n
+					Copy-Item C:\\msys64\\ucrt64\\lib\\libopenblas.a build/openblas/liblapack.a \n
+
+					# Log the toolchain's CRT (--with-default-msvcrt) \n
+					gfortran -v \n
+				"
+			},
+			{
+				"if": "matrix.os == 'windows-latest'",
 				"name": "Test fpm windows",
 				"run":
 				"
@@ -203,8 +261,12 @@
 					# \n
 					# All go through `--flag`, not `--link-flag`, which fpm \n
 					# 0.12-alpha silently ignores. \n
-					fpm test test --profile release --flag \"-static -Wl,--wrap=setlocale -Wl,--stack,67108864\" \n
-					fpm test long --profile release --flag \"-static -Wl,--wrap=setlocale -Wl,--stack,67108864\" \n
+					# \n
+					# BLAS/LAPACK is OpenBLAS from the \"Install OpenBLAS \n
+					# windows\" step, found through `-Lbuild/openblas`.  It's \n
+					# built with OpenMP, so `-fopenmp` pulls in libgomp \n
+					fpm test test --profile release --flag \"-static -fopenmp -Lbuild/openblas -Wl,--wrap=setlocale -Wl,--stack,67108864\" \n
+					fpm test long --profile release --flag \"-static -fopenmp -Lbuild/openblas -Wl,--wrap=setlocale -Wl,--stack,67108864\" \n
 				"
 			},
 			{
@@ -236,6 +298,17 @@
 				"run":
 				"
 					bash ./utils/test-samples.sh \n
+				"
+			},
+			{
+				"if": "matrix.os == 'ubuntu-24.04'",
+				"name": "Test transpiler",
+				"shell": "bash",
+				"run":
+				"
+					# Transpile every test program and sample to Fortran, \n
+					# compile it, and compare its output with the interpreter's \n
+					bash ./utils/test-transpile.sh ./build/Debug/syntran gfortran-14 \n
 				"
 			},
 			{
@@ -274,9 +347,14 @@
 					# release binary from the \"Test fpm windows\" step instead \n
 					# of rebuilding from scratch with cmake.  --prefix places \n
 					# it in a predictable location for packaging \n
-					fpm install --profile release --flag \"-static -Wl,--wrap=setlocale -Wl,--stack,67108864\" --prefix ./build/ \n
+					fpm install --profile release --flag \"-static -fopenmp -Lbuild/openblas -Wl,--wrap=setlocale -Wl,--stack,67108864\" --prefix ./build/ \n
 
 					copy .\\build\\bin\\syntran.exe .\\ \n
+
+					# OpenBLAS, libgomp and libgfortran must be linked in \n
+					# statically, or the exe won't run without the toolchain \n
+					objdump -p .\\syntran.exe | Select-String \"DLL Name\" \n
+					if (objdump -p .\\syntran.exe | Select-String -Pattern \"openblas|libgomp|libgfortran\") { exit 1 } \n
 				"
 			},
 			{
@@ -320,7 +398,7 @@
 				"uses": "actions/upload-artifact@v7",
 				"if": "matrix.os == 'macOS-latest'",
 				"with": {
-					"path": "./syntran\n./libgomp.1.dylib",
+					"path": "./syntran\n./libgomp.1.dylib\n./LICENSE\n./THIRD_PARTY_NOTICES.md",
 					"name": "syntran-macos"
 				}
 			},
@@ -328,7 +406,7 @@
 				"uses": "actions/upload-artifact@v7",
 				"if": "matrix.os == 'windows-latest'",
 				"with": {
-					"path": "./syntran.exe",
+					"path": "./syntran.exe\n./LICENSE\n./THIRD_PARTY_NOTICES.md",
 					"name": "syntran-windows"
 				}
 			},
@@ -336,7 +414,7 @@
 				"uses": "actions/upload-artifact@v7",
 				"if": "matrix.os == 'ubuntu-24.04'",
 				"with": {
-					"path": "./syntran",
+					"path": "./syntran\n./LICENSE\n./THIRD_PARTY_NOTICES.md",
 					"name": "syntran-ubuntu"
 				}
 			},
@@ -399,7 +477,7 @@
 			{
 				"uses": "actions/upload-artifact@v7",
 				"with": {
-					"path": "./bin/syntran",
+					"path": "./bin/syntran\n./bin/LICENSE\n./bin/THIRD_PARTY_NOTICES.md",
 					"name": "syntran-linux"
 				}
 			},
@@ -449,7 +527,7 @@
 			},
 			{
 				"if": "matrix.os == 'ubuntu-latest'",
-				"run": "sudo apt-get install gfortran-${{ matrix.gfortran }}"
+				"run": "sudo apt-get install gfortran-${{ matrix.gfortran }} libopenblas-dev"
 			},
 			{
 				"if": "matrix.os == 'ubuntu-latest'",
@@ -515,6 +593,11 @@
 			},
 			{
 				"if": "matrix.os == 'ubuntu-latest'",
+				"name": "Install BLAS/LAPACK",
+				"run": "sudo apt-get install -y libopenblas-dev"
+			},
+			{
+				"if": "matrix.os == 'ubuntu-latest'",
 				"name": "Test ${{ matrix.toolchain.compiler }} ${{ matrix.toolchain.version }}",
 				"timeout-minutes": 90,
 				"env": {
@@ -526,12 +609,16 @@
 
 					ulimit -s unlimited \n
 
-					fpm test test --profile debug   --verbose --flag \"-DSYNTRAN_INTEL -fpp\" \n
+					# fpm's Intel debug profile uses `-check all`, which makes \n
+					# every array-temporary copy-in print a forrtl warning (406) \n
+					# with a backtrace.  They're harmless, so turn just that one \n
+					# check off. \n
+					fpm test test --profile debug   --verbose --flag \"-DSYNTRAN_INTEL -fpp -check noarg_temp_created\" \n
 
 					# Same short tests again, with runtime subscript/string-index \n
 					# bounds checking (RC_SUBSCRIPT_OOB, R33) turned on -- exercises \n
 					# unit_test_bounds_check, which is a no-op without this flag \n
-					fpm test test --profile debug   --verbose --flag \"-DSYNTRAN_INTEL -DSYNTRAN_BOUNDS_CHECK -fpp\" \n
+					fpm test test --profile debug   --verbose --flag \"-DSYNTRAN_INTEL -DSYNTRAN_BOUNDS_CHECK -fpp -check noarg_temp_created\" \n
 
 					# The optimized -Ofast build goes through cmake instead of \n
 					# fpm (see CMakeLists.txt), which also builds the core lib \n
@@ -704,10 +791,12 @@
 				"run":
 				"
 					# Test this to run syntran without the runner image's \n
-					# pre-installed mingw64/strawberry/git toolchain DLLs \n
-					move C:\\mingw64 C:\\mingw64-BACKUP \n
-					move C:\\Strawberry C:\\Strawberry-BACKUP \n
-					move \"C:\\Program Files\\Git\\mingw64\" \"C:\\Program Files\\Git\\mingw64-BACKUP\" \n
+					# pre-installed mingw64/strawberry/git toolchain DLLs.  Skip dirs \n
+					# that a given runner image doesn't have \n
+					foreach ($d in @('C:\\mingw64', 'C:\\Strawberry', 'C:\\Program Files\\Git\\mingw64')) { \n
+						if (Test-Path $d) { Move-Item $d \"$d-BACKUP\"; echo \"hid $d\" } \n
+						else { echo \"not found: $d\" } \n
+					} \n
 				"
 			},
 			#{

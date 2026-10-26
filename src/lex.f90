@@ -987,18 +987,18 @@ function new_lexer(text, src_file, unit_) result(lexer)
 
 	type(lexer_t) :: lexer
 
-	integer, intent(inout) :: unit_
+	! Index that this lexer's context will have in the parser's context vector,
+	! i.e. 1 + the number of contexts already pushed
+	integer, intent(in) :: unit_
 
 	!********
 
 	integer :: i, i0, nlines
-	!integer, save :: unit_ = 0
 
 	integer, allocatable :: lines(:)
 
 	! Every token keeps track of which file it came from for error diagnostic
 	! context
-	unit_ = unit_ + 1
 	lexer%unit_ = unit_
 
 	!print *, 'lexer%unit_ = ', lexer%unit_

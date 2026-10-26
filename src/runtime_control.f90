@@ -42,9 +42,11 @@ recursive module subroutine eval_assignment_expr(node, state, res, rhs_in, slots
 	integer :: rank_slice, id, type_, nelem
 	integer(kind = 8) :: i8, j8, index_, len8, size_i, il, iu, sstep
 	integer(kind = 8), allocatable :: lsubs(:), ssubs(:), usubs(:), subs(:), &
-		size_tmp(:)
+		size_tmp(:), cidx(:)
 
 	logical :: has_char_sub
+
+	character(len = :), allocatable :: rt_err
 
 	type(i64_vector_t), allocatable :: asubs(:)
 	type(value_t) :: array_val, tmp, tmp_array
@@ -95,6 +97,19 @@ recursive module subroutine eval_assignment_expr(node, state, res, rhs_in, slots
 		! test.f90's `let i = 20; i += 5.1;` == '25' assertions
 
 		!print *, 'lhs type = ', kind_name( state%vars%vals(id)%type )
+
+		! Whole-array compound assignment needs conforming shapes, and the
+		! math kernels don't check (a mismatched `a += b` otherwise aborts in
+		! Fortran).  The variable is left unchanged
+		if (node%is_loc) then
+			call compound_shape_err(state%locs%vals(id), res, node%op, rt_err)
+		else
+			call compound_shape_err(state%vars%vals(id), res, node%op, rt_err)
+		end if
+		if (allocated(rt_err)) then
+			call rt_throw(state, rt_err)
+			return
+		end if
 
 		!print *, "apply_assign_op is_loc = ", node%is_loc
 		if (node%is_loc) then
@@ -162,6 +177,36 @@ recursive module subroutine eval_assignment_expr(node, state, res, rhs_in, slots
 			! slice can't express a length-changing op like +=, so node%op
 			! reaching this branch is always equals_token
 
+			! An index array scatters characters, `s[[0, 3, 5]] = "abc"`.  It
+			! has no (il, iu, step) window, so it can't go through
+			! str_slice_bounds() below.  A repeated index is written more
+			! than once, so the last one wins
+			if (node%lsubscripts(1)%sub_kind == arr_sub) then
+				if (node%is_loc) then
+					call str_arr_sub_indices(node, 1, &
+						int(len(state%locs%vals(id)%str%s), 8), state, cidx, slots)
+				else
+					call str_arr_sub_indices(node, 1, &
+						int(len(state%vars%vals(id)%str%s), 8), state, cidx, slots)
+				end if
+				if (state%rt_halt) return
+
+				if (int(len(res%str%s), 8) /= size(cidx, kind = 8)) then
+					call rt_throw(state, err_rt(RC_ARRAY_SIZE_MISMATCH, &
+						"size of RHS does not match size of LHS slice"))
+					return
+				end if
+
+				do j8 = 1, size(cidx, kind = 8)
+					if (node%is_loc) then
+						state%locs%vals(id)%str%s(cidx(j8)+1: cidx(j8)+1) = res%str%s(j8:j8)
+					else
+						state%vars%vals(id)%str%s(cidx(j8)+1: cidx(j8)+1) = res%str%s(j8:j8)
+					end if
+				end do
+
+			else
+
 			! str_slice_bounds() handles scalar_sub/range_sub/step_sub/all_sub
 			! uniformly, so stepped/reversed slice assignment (e.g.
 			! s[:-1:] = "olleh") works the same as it does for arrays.
@@ -193,6 +238,8 @@ recursive module subroutine eval_assignment_expr(node, state, res, rhs_in, slots
 				i8 = i8 + sstep
 				j8 = j8 + 1
 			end do
+
+			end if   ! arr_sub / (il, iu, step) window
 
 		else if (has_char_sub) then
 
@@ -433,8 +480,40 @@ contains
 
 		integer :: isub
 		integer(kind = 8) :: il, iu, step, i8, j8
+		integer(kind = 8), allocatable :: idx(:)
 
 		isub = nelem_ + 1
+
+		! An index array scatters characters, see the scalar str case above
+		if (node%lsubscripts(isub)%sub_kind == arr_sub) then
+			if (node%is_loc) then
+				call str_arr_sub_indices(node, isub, &
+					int(len(state%locs%vals(id)%array%str(elem_idx+1)%s), 8), &
+					state, idx, slots)
+			else
+				call str_arr_sub_indices(node, isub, &
+					int(len(state%vars%vals(id)%array%str(elem_idx+1)%s), 8), &
+					state, idx, slots)
+			end if
+			if (state%rt_halt) return
+
+			if (int(len(rhs%str%s), 8) /= size(idx, kind = 8)) then
+				call rt_throw(state, err_rt(RC_ARRAY_SIZE_MISMATCH, &
+					"size of RHS does not match size of LHS slice"))
+				return
+			end if
+
+			do j8 = 1, size(idx, kind = 8)
+				if (node%is_loc) then
+					state%locs%vals(id)%array%str(elem_idx+1)%s(idx(j8)+1 : idx(j8)+1) = &
+						rhs%str%s(j8:j8)
+				else
+					state%vars%vals(id)%array%str(elem_idx+1)%s(idx(j8)+1 : idx(j8)+1) = &
+						rhs%str%s(j8:j8)
+				end if
+			end do
+			return
+		end if
 
 		if (node%is_loc) then
 			call str_slice_bounds(node, isub, &
@@ -493,7 +572,7 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 	!********
 
 	integer :: i, j, k
-	integer(kind = 8) :: i8, j8
+	integer(kind = 8) :: i8, j8, n_elems8
 
 	logical :: is_cat
 
@@ -826,7 +905,7 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 			if (allocated(lbound_%enum_cookie)) res%enum_cookie = lbound_%enum_cookie
 
 		case default
-			write(*,*) err_eval_len_array(kind_name(res%array%type))
+			write(*,*) err_eval_len_array(type_name_primitive(res%array%type))
 			call internal_error()
 		end select
 
@@ -892,36 +971,62 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 
 		! Explicit array with size
 
-		array = new_array(node%val%array%type, size(node%elems))
+		if (any(node%val%array%type == [struct_type, enum_type])) then
+			! Struct and enum elements are stored in res%struct(:), which
+			! new_array() and push() can't handle.  Assign one element at a
+			! time so that value_copy() deep copies each one, like expl_array
+			! below
+			allocate(res%array)
+			res%array%type = node%val%array%type
+			call allocate_array(res, size(node%elems, kind = 8))
+			do i = 1, size(node%elems)
+				k = k + 1; elem = slots(k)
+				if (state%rt_halt) return
+				res%struct(i) = elem
+			end do
+			res%array%len_ = size(node%elems)
 
-		do i = 1, size(node%elems)
-			k = k + 1; elem = slots(k)
-			if (state%rt_halt) return
-			!print *, 'elem['//str(i)//'] = ', elem%to_str()
-			call array%push(elem)
-		end do
+			if (allocated(node%val%struct_name)) then
+				res%struct_name = node%val%struct_name
+			end if
+			if (allocated(node%val%struct_cookie)) then
+				res%struct_cookie = node%val%struct_cookie
+			end if
+			res%struct_reg_idx = node%val%struct_reg_idx
+			if (allocated(node%val%enum_name)) then
+				res%enum_name = node%val%enum_name
+			end if
+			if (allocated(node%val%enum_cookie)) then
+				res%enum_cookie = node%val%enum_cookie
+			end if
+		else
+			array = new_array(node%val%array%type, size(node%elems))
 
-		array%rank = size( node%size_ )
-		allocate(array%size( array%rank ))
-		do i = 1, array%rank
+			do i = 1, size(node%elems)
+				k = k + 1; elem = slots(k)
+				if (state%rt_halt) return
+				!print *, 'elem['//str(i)//'] = ', elem%to_str()
+				call array%push(elem)
+			end do
+
+			allocate(res%array)
+			res%array = array
+		end if
+
+		res%array%rank = size( node%size_ )
+		allocate(res%array%size( res%array%rank ))
+		do i = 1, res%array%rank
 			k = k + 1; len_ = slots(k)
 			if (state%rt_halt) return
-			array%size(i) = len_%to_i64()
+			res%array%size(i) = len_%to_i64()
 		end do
 
-		if (size(node%elems) /= product(array%size)) then
-			call rt_throw(state, err_rt_expl_array_size(size(node%elems), array%size))
+		if (size(node%elems) /= product(res%array%size)) then
+			call rt_throw(state, err_rt_expl_array_size(size(node%elems), res%array%size))
 			return
 		end if
 
-		!print *, 'copying array'
-		allocate(res%array)
 		res%type  = array_type
-		res%array = array
-		!print *, 'done'
-
-		!print *, "size_array"
-		!print *, "size = ", array%size
 
 	else if (node%val%array%kind == expl_array) then
 		!print *, 'expl_array'
@@ -938,10 +1043,27 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 
 		!print *, "elem 1 type = ", kind_name(node%elems(1)%val%type)
 
-		call allocate_array(res, size(node%elems, kind = 8))
+		! Struct and enum elements are stored in res%struct(:), which can't be
+		! pushed to, so the concatenated length must be known up front.  Each
+		! array element contributes all of its elements and every other element
+		! contributes one
+		n_elems8 = size(node%elems, kind = 8)
+		if (any(res%array%type == [struct_type, enum_type])) then
+			n_elems8 = 0
+			do i = 1, size(node%elems)
+				if (slots(k + i)%type == array_type) then
+					n_elems8 = n_elems8 + slots(k + i)%array%len_
+				else
+					n_elems8 = n_elems8 + 1
+				end if
+			end do
+		end if
+
+		call allocate_array(res, n_elems8)
 
 		res%array%len_ = 0
 		is_cat = .false.
+		i8 = 0
 
 		do i = 1, size(node%elems)
 			k = k + 1; elem = slots(k)
@@ -949,7 +1071,18 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 			!print *, 'elem['//str(i)//'] = ', elem%to_str()
 
 			if (any(res%array%type == [struct_type, enum_type])) then
-				res%struct(i) = elem
+				if (elem%type == array_type) then
+					! Concatenate a struct/enum array, like the primitive branch
+					! below.  Assign one element at a time so that value_copy()
+					! deep copies each one
+					do j8 = 1, elem%array%len_
+						i8 = i8 + 1
+						res%struct(i8) = elem%struct(j8)
+					end do
+				else
+					i8 = i8 + 1
+					res%struct(i8) = elem
+				end if
 
 			else if (elem%type == array_type) then
 				is_cat = .true.
@@ -972,7 +1105,7 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 		end if
 
 		if (any(res%array%type == [struct_type, enum_type])) then
-			res%array%len_ = size(node%elems)
+			res%array%len_ = n_elems8
 		end if
 
 		res%array%rank = 1

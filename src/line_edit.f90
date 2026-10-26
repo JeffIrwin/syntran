@@ -50,10 +50,20 @@ module syntran__line_edit_m
 			character(kind = c_char), intent(in) :: cont_marker(*)
 		end subroutine ic_set_prompt_marker_c
 
+		function syntran_has_isocline_c() bind(c, name = "syntran_has_isocline") result(res)
+			import :: c_int
+			integer(c_int) :: res
+		end function syntran_has_isocline_c
+
 		function syntran_isatty_c() bind(c, name = "syntran_isatty") result(res)
 			import :: c_int
 			integer(c_int) :: res
 		end function syntran_isatty_c
+
+		function syntran_stdout_isatty_c() bind(c, name = "syntran_stdout_isatty") result(res)
+			import :: c_int
+			integer(c_int) :: res
+		end function syntran_stdout_isatty_c
 
 		function syntran_is_mintty_c() bind(c, name = "syntran_is_mintty") result(res)
 			import :: c_int
@@ -87,6 +97,15 @@ contains
 
 !===============================================================================
 
+logical function line_edit_available()
+	! Was isocline compiled into this build?  False for a build with
+	! -DSYNTRAN_NO_ISOCLINE, in which case the REPL always uses the plain
+	! read_line() path, even on a real terminal
+	line_edit_available = syntran_has_isocline_c() /= 0
+end function line_edit_available
+
+!===============================================================================
+
 logical function is_tty()
 	! Are stdin AND stdout both real terminals (vs. a pipe or redirected
 	! file)?  Line editing only makes sense when both are: isocline needs an
@@ -95,6 +114,14 @@ logical function is_tty()
 	! sequences into a redirected pipe or file
 	is_tty = syntran_isatty_c() /= 0
 end function is_tty
+
+!===============================================================================
+
+logical function is_stdout_tty()
+	! Is stdout alone a real terminal?  Used to default to colored output, which
+	! doesn't depend on stdin
+	is_stdout_tty = syntran_stdout_isatty_c() /= 0
+end function is_stdout_tty
 
 !===============================================================================
 

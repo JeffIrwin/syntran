@@ -32,6 +32,24 @@ else()
 	message("NOT defining _WIN32 in cmake")
 endif()
 
+# Leave the vendored isocline REPL line editor (external/isocline) out of the
+# build.  Only src/c/isocline_wrap.c reads this macro.  fpm builds spell it
+# `--c-flag "-DSYNTRAN_NO_ISOCLINE"`
+option(SYNTRAN_NO_ISOCLINE "Build without the isocline REPL line editor" OFF)
+if(SYNTRAN_NO_ISOCLINE)
+	add_compile_definitions(SYNTRAN_NO_ISOCLINE)
+endif()
+
+# Build without BLAS/LAPACK.  The matmul `@` operator, std::solve(), and
+# std::lu_factor()/std::lu_solve() use portable Fortran fallbacks instead of
+# sgemm/dgemm/sgesv/dgesv/sgetrf/dgetrf/sgetrs/dgetrs.  Only
+# src/linalg.F90 reads this macro.  fpm builds spell it `--features
+# release,noblas` (see [features] in fpm.toml)
+option(SYNTRAN_NO_BLAS "Build without BLAS/LAPACK" OFF)
+if(SYNTRAN_NO_BLAS)
+	add_compile_definitions(SYNTRAN_NO_BLAS)
+endif()
+
 if(DEFINED ENV{SYNTRAN_INTEL})
 	# ifort-specific flags must NOT reach the C compiler (icx doesn't
 	# understand -fpp/etc), so gate them to Fortran only.
@@ -103,10 +121,9 @@ message("")
 if(APPLE)
 	add_link_options(-openmp)
 elseif(DEFINED ENV{SYNTRAN_INTEL})
-	# No -qmkl: nothing in this codebase calls into BLAS/LAPACK (grep finds
-	# only a speculative TODO comment), and CI's Intel install doesn't
-	# provide the MKL libraries -- linking it just fails with "cannot find
-	# -lmkl_intel_lp64" et al.
+	# No -qmkl: CI's Intel install doesn't provide the MKL libraries --
+	# linking it just fails with "cannot find -lmkl_intel_lp64" et al.  BLAS
+	# and LAPACK come from find_package(LAPACK) below instead.
 	add_link_options(-fopenmp)
 else()
 	add_link_options(-fopenmp)
@@ -195,6 +212,7 @@ set(LIB_SRC
 	${SRC_DIR}/intr_vars.f90
 	${SRC_DIR}/lex.f90
 	${SRC_DIR}/line_edit.f90
+	${SRC_DIR}/linalg.F90
 	${SRC_DIR}/math.f90
 	${SRC_DIR}/math_bin_add.f90
 	${SRC_DIR}/math_bin_div.f90
@@ -213,13 +231,19 @@ set(LIB_SRC
 	${SRC_DIR}/parse_control.f90
 	${SRC_DIR}/parse_expr.f90
 	${SRC_DIR}/parse_fn.f90
+	${SRC_DIR}/parse_struct.f90
 	${SRC_DIR}/parse_misc.f90
 	${SRC_DIR}/repl.f90
+	${SRC_DIR}/rt/syntran_rt.f90
 	${SRC_DIR}/runtime.f90
 	${SRC_DIR}/runtime_array.f90
 	${SRC_DIR}/runtime_control.f90
 	${SRC_DIR}/runtime_expr.f90
 	${SRC_DIR}/syntran.f90
+	${SRC_DIR}/transpile.f90
+	${SRC_DIR}/transpile_expr.f90
+	${SRC_DIR}/transpile_rt.f90
+	${SRC_DIR}/transpile_stmt.f90
 	${SRC_DIR}/types.f90
 	${SRC_DIR}/types_copy.f90
 	${SRC_DIR}/types_dict.f90
@@ -230,23 +254,6 @@ set(LIB_SRC
 	${SRC_DIR}/value.f90
 	${SRC_DIR}/value_impl.f90
 )
-
-if(NOT DEFINED ENV{SYNTRAN_INTEL})
-	# app.f90's `use ifport` (for isatty()) is Intel-only; under Intel it
-	# resolves to the compiler's own built-in IFPORT module and produces no
-	# local .mod.  ifport_shim.f90 provides an empty local module of the same
-	# name so fpm's (and, without this exclusion, cmake's) source-text-based
-	# Fortran module scanner -- which isn't preprocessor-aware and can't tell
-	# the `use` is inactive here -- has a real producer to satisfy.  Under
-	# Intel, cmake must NOT compile this file at all: if it did, the scanner
-	# would expect a real "ifport.mod" build artifact that Intel never
-	# actually writes (it comes from the compiler's own module path instead),
-	# and cmake's copy-module-between-targets step would fail trying to find
-	# it.  fpm has no per-compiler source exclusion, so it always compiles
-	# this file; ifport_shim.f90's own internal `#if defined(__GFORTRAN__)`
-	# guard keeps that safe under fpm+Intel too.
-	list(APPEND LIB_SRC ${SRC_DIR}/ifport_shim.f90)
-endif()
 
 if(DEFINED ENV{SYNTRAN_INTEL})
 	# This build previously used -ipo, which emits LLVM-IR objects instead of
@@ -267,6 +274,15 @@ else()
 endif()
 
 set(LINK_LIBS "${LIB}")
+
+if(NOT SYNTRAN_NO_BLAS)
+	# Accelerate on Apple, otherwise whatever BLAS/LAPACK the system provides
+	# (prefer an optimized one, e.g. OpenBLAS, over reference Netlib)
+	find_package(LAPACK REQUIRED)
+	# Appended to LINK_LIBS (which each exe links) rather than linked to ${LIB},
+	# since link deps of an OBJECT library (the Intel build) aren't propagated
+	list(APPEND LINK_LIBS ${LAPACK_LIBRARIES})
+endif()
 
 #===============================================================================
 

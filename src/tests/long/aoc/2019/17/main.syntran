@@ -1,0 +1,448 @@
+
+use ../../utils_2026::*;
+use ../../queues/queue_i64 as queue_i64;
+use ../../stacks/stack_vec_i32 as stack_vec_i32;
+
+use ../intcode;
+
+let filename = "input.txt";
+
+//==============================================================================
+
+fn part1(): str
+{
+	let sum_ = 0'i64;
+
+	const prog0 = read_i64_mat_delim(filename, ",")[:,0];
+	//println("prog0 = ", prog0);
+
+	let prog = intcode::new_program(prog0);
+	let inputs = queue_i64::new();
+	let status = intcode::new_status();
+
+	let outputs = prog.exec(&inputs, &status);
+	//println("outputs = ", outputs);
+
+	let s = repeat(" ", outputs.len());
+	let i = 0;
+	while not outputs.is_empty()
+	{
+		s[i] = char(i32(outputs.pop()));
+		i += 1;
+	}
+	//println("s = ");
+	//println(s);
+
+	const g0 = str_to_char_mat(&s, NEWLINE_);
+	const nx0 = size(g0, 0);
+	const ny0 = size(g0, 1);
+
+	// Pad with a row/col of "." on every side to simplify the next steps
+	const nx = nx0 + 2;
+	const ny = ny0 + 2;
+	let g = ["."; nx, ny];
+	g[1: nx-1, 1: ny-1] = g0;
+
+	//print_char_mat(&g);
+
+	for y in [1: ny-1]
+	for x in [1: nx-1]
+	{
+		// Current char and neighbors up, down, left, and right
+		const c  = g[x,y];
+		const cu = g[x,y-1];
+		const cd = g[x,y+1];
+		const cl = g[x-1,y];
+		const cr = g[x+1,y];
+		if all([c, cu, cd, cl, cr] == "#")
+		{
+			//println("x, y = ", [x, y]);
+			sum_ += (x-1) * (y-1);  // minus 1 to account for padding
+		}
+	}
+
+	println("part 1 = ", sum_);
+	return str(sum_);
+}
+
+enum Heading
+{
+	up,
+	down,
+	left,
+	right,
+}
+fn part2(): str
+{
+	let sum_ = 0'i64;
+
+	let prog0 = read_i64_mat_delim(filename, ",")[:,0];
+	//println("prog0 = ", prog0);
+
+	let prog = intcode::new_program(prog0);
+	let inputs = queue_i64::new();
+	let status = intcode::new_status();
+
+	let outputs = prog.exec(&inputs, &status);
+	//println("outputs = ", outputs);
+
+	let s = repeat(" ", outputs.len());
+	let i = 0;
+	while not outputs.is_empty()
+	{
+		s[i] = char(i32(outputs.pop()));
+		i += 1;
+	}
+	//println("s = ");
+	//println(s);
+
+	const g0 = str_to_char_mat(&s, NEWLINE_);
+	const nx0 = size(g0, 0);
+	const ny0 = size(g0, 1);
+
+	// Pad with a row/col of "." on every side to simplify the next steps
+	const nx = nx0 + 2;
+	const ny = ny0 + 2;
+	let g = ["."; nx, ny];
+	g[1: nx-1, 1: ny-1] = g0;
+
+	//print_char_mat(&g);
+
+	// Find initial robot position "^"
+	//
+	// No need to correct for padded coordinates here, only relative movement
+	// commands matter, which are invariant to padding
+	let rx = 0;
+	let ry = 0;
+	for y in [0: ny]
+	for x in [0: nx]
+		if g[x,y] == "^"
+		{
+			rx = x;
+			ry = y;
+		}
+	//println("rx, ry = ", [rx, ry]);
+	let x = rx;
+	let y = ry;
+
+	// Find the path as a polyline. TODO: just push heading to polyline too?
+	let pl = stack_vec_i32::new();
+	let heading = Heading.up;
+	pl.push([x, y, i32(heading)]);
+	if (g[x-1,y] == "#") heading = Heading.left;
+	if (g[x+1,y] == "#") heading = Heading.right;
+	if (g[x,y-1] == "#") heading = Heading.up;
+	if (g[x,y+1] == "#") heading = Heading.down;
+	//println("heading = ", heading);
+
+	while true
+	{
+		// Move along heading until we hit a corner
+		//println("x, y = ", [x, y]);
+		const x0 = x;
+		const y0 = y;
+		switch heading
+		{
+			case Heading.left
+				x -= 1;
+			case Heading.right
+				x += 1;
+			case Heading.up
+				y -= 1;
+			case Heading.down
+				y += 1;
+		}
+		if (g[x,y] == "#") continue;
+
+		// Corner. Backup and change heading
+		x = x0;
+		y = y0;
+		pl.push([x, y, i32(heading)]);
+		const cu = g[x,y-1];
+		const cd = g[x,y+1];
+		const cl = g[x-1,y];
+		const cr = g[x+1,y];
+		switch heading
+		{
+			case Heading.left, Heading.right
+			{
+				heading = Heading.up;
+				if cd == "#"
+					heading = Heading.down;
+				else if cu != "#"
+					break;  // terminus
+			}
+			case Heading.up, Heading.down
+			{
+				heading = Heading.right;
+				if cl == "#"
+					heading = Heading.left;
+				else if cr != "#"
+					break;  // terminus
+			}
+		}
+		//println("heading = ", heading);
+	}
+	//println("pl = ", pl.vals[:, :pl.len]);
+
+	// Re-draw grid from polyline alone. Verify that it matches the original
+	// grid, otherwise we have failed to visit every scaffold point
+	let g2 = ["."; nx, ny];
+	for ip in [0: pl.len-1]
+	{
+		let x0 = pl.vals[0, ip];
+		let y0 = pl.vals[1, ip];
+		let x1 = pl.vals[0, ip+1];
+		let y1 = pl.vals[1, ip+1];
+		if x0 == x1
+		{
+			if y0 > y1
+			{
+				let tmp = y0;
+				y0 = y1;
+				y1 = tmp;
+			}
+			g2[x0, y0:y1+1] = "#";
+		}
+		else if y0 == y1
+		{
+			if x0 > x1
+			{
+				let tmp = x0;
+				x0 = x1;
+				x1 = tmp;
+			}
+			g2[x0:x1+1, y0] = "#";
+		}
+		else
+		{
+			println(ERROR_STR + "bad polyline");
+			exit(1);
+		}
+	}
+	// Draw initial position
+	g2[rx, ry] = "^";
+	//print_char_mat(&g2);
+	//println("g == g2 = ", all(g == g2));
+	if not all(g == g2)
+	{
+		println(ERROR_STR + "naive walk failed to visit all points");
+		exit(2);
+	}
+
+	// Build instruction str from polyline (with headings) as turn+walk
+	// instructions
+	let instr_str = "";
+	for ip in [0: pl.len-1]
+	{
+		let x0 = pl.vals[0, ip];
+		let y0 = pl.vals[1, ip];
+		let h0 = Heading(pl.vals[2, ip]);
+		let x1 = pl.vals[0, ip+1];
+		let y1 = pl.vals[1, ip+1];
+		let h1 = Heading(pl.vals[2, ip+1]);
+		const dist = sum(abs([x0,y0] - [x1,y1]));
+		//println("h0, h1 = ", [h0, h1]);
+		switch [h0, h1]
+		{
+			case
+				[Heading.up   , Heading.left ],
+				[Heading.left , Heading.down ],
+				[Heading.down , Heading.right],
+				[Heading.right, Heading.up   ]
+					instr_str += "L," + str(dist) + ",";
+			case
+				[Heading.left , Heading.up   ],
+				[Heading.down , Heading.left ],
+				[Heading.right, Heading.down ],
+				[Heading.up   , Heading.right]
+					instr_str += "R," + str(dist) + ",";
+		}
+	}
+	//println("instr_str = ", instr_str);
+
+	// Finally, compress the instruction str as 3 functions
+	//
+	// I did this part manually on my first solve because it seemed small enough
+	// to be tractable and easier than automating compress_str3(). Probably the
+	// right call although it did take several minutes of staring at strings in
+	// vim and playing around with different substrings. I wouldn't recommend
+	// that if you're not comfortable with regex in your text editor
+	let a_fn = "";
+	let b_fn = "";
+	let c_fn = "";
+	let main_routine = compress_str3(instr_str, &a_fn, &b_fn, &c_fn);
+
+	let main_str = cat_strs(main_routine + ",");
+	main_str = main_str[0: len(main_str)-1];  // trim trailing comma
+	a_fn = a_fn[0: len(a_fn)-1];
+	b_fn = b_fn[0: len(b_fn)-1];
+	c_fn = c_fn[0: len(c_fn)-1];
+	println("main_str = ", main_str);
+	println("a_fn = ", a_fn);
+	println("b_fn = ", b_fn);
+	println("c_fn = ", c_fn);
+
+	const input_str =
+		main_str + NEWLINE_ +
+		a_fn + NEWLINE_ +
+		b_fn + NEWLINE_ +
+		c_fn + NEWLINE_ +
+		"n" + NEWLINE_  // y/n for continuous video feed debugging
+	;
+	//println("input_str = ");
+	//println(input_str);
+
+	inputs = queue_i64::new();
+	for c in input_str
+		inputs.push(i64(i32(c)));
+	//println("inputs = ", inputs);
+
+	// Force the vacuum robot to wake up by changing the value in your ASCII
+	// program at address 0 from 1 to 2
+	prog0[0] = 2;
+	prog = intcode::new_program(prog0);
+
+	outputs = prog.exec(&inputs, &status);
+	//println("outputs = ", outputs);
+
+	// I forgot how my queue worked and thought I had to debug this. The final
+	// queue value isn't usually at the end of the queue array!
+	s = repeat(" ", outputs.len());
+	i = 0;
+	while not outputs.is_empty()
+	{
+		sum_ = outputs.pop();
+		s[i] = char(i32(sum_));
+		i += 1;
+	}
+	//println("final s = ");
+	//println(s);
+
+	println("part 2 = ", sum_);
+	return str(sum_);
+}
+
+fn compress_str3(s: str, a: &str, b: &str, c: &str): [str; :]
+{
+	// Special-purpose brute force str compressor
+	//
+	// Find substrings `a`, `b`, and `c` such that input string `s` can be built
+	// as a concatenation like regex a[abc]*c
+	//
+	// Return out-args a, b, c, and return encoded string array [A, [ABC],
+	// [ABC], ..., C]
+
+	const n = len(s);
+	//println("s = ", s);
+	//println("n = ", n);
+
+	let found = false;
+
+	// The hard-coded 22's are what makes this special-purpose for this
+	// particular AOC problem
+	//
+	// Strings can be length 21 instead of 20 because they can have a trailing
+	// comma which is removed later. The bound is 22 and not 21 because upper
+	// bounds are exclusive in syntran (like most languages)
+	for na in [1: 22]
+	for nc in [1: 22]
+	{
+		if (found) break;
+		let s = s; // local shadow
+		a = s[0: na];
+		c = s[n-nc: n];
+		//println("a = ", a);
+		//println("c = ", c);
+
+		rm_all_substrs(&s, a);  // perf could be better with this in outer loop
+		rm_all_substrs(&s, c);
+		//println("removed = ", s);
+
+		// This is not correct in general. String `b` could be built out of
+		// nonconsecutive chunks due to removal of `a` and `c` substrings
+		//
+		// For robustness, the encoding (below this loop) should be attempted
+		// here, and if it fails to match the whole input, we should continue to
+		// the next abc combination instead of breaking
+		for nb in [1: 22]
+		{
+			b = s[0: nb];
+			let s = s;  // local shadow
+			rm_all_substrs(&s, b);
+			if len(s) == 0
+			{
+				found = true;
+				break;
+			}
+		}
+	}
+	//println("found = ", found);
+	//println("a = ", a);
+	//println("b = ", b);
+	//println("c = ", c);
+	//println("s = ", s);
+	if not found
+	{
+		println(ERROR_STR + "failed to decompose compressed string");
+		exit(4);
+	}
+
+	// Build the encoding
+	const na = len(a);
+	const nb = len(b);
+	const nc = len(c);
+	let encoding = [""; 0];
+	let i = 0;
+	while len(s) > 0
+	{
+		i += 1;
+		if starts_with_(s, a)
+		{
+			s = s[na:];
+			encoding = [encoding, ["A"]];
+		}
+		if starts_with_(s, b)
+		{
+			s = s[nb:];
+			encoding = [encoding, ["B"]];
+		}
+		if starts_with_(s, c)
+		{
+			s = s[nc:];
+			encoding = [encoding, ["C"]];
+		}
+		if i > n
+		{
+			// In worst case we should match 1 char per loop iteration
+			println(ERROR_STR + "failed to encode compressed string");
+			exit(5);
+		}
+	}
+	//println("encoding = ", encoding);
+	return encoding;
+}
+
+//==============================================================================
+
+fn main(): str
+{
+	// For unit-testing (within the syntran repo), this main fn returns a value
+	// to be compared with expected results
+	println();
+	println("Starting AOC syntran main 2019/17");
+
+	let p1 = part1();
+	let p2 = part2();
+
+	println("Ending AOC syntran main");
+	println();
+	return p1 + ":" + p2;
+}
+
+//==============================================================================
+
+return main();
+
+//==============================================================================
+

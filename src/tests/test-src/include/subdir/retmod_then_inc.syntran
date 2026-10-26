@@ -1,0 +1,5 @@
+
+fn g(): i32 { return 1; }
+
+return 3;
+#include("../test-01-inc.syntran");

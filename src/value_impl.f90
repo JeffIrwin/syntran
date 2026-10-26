@@ -664,6 +664,21 @@ end procedure mold
 
 !===============================================================================
 
+module procedure same_shape
+
+	! Whether two arrays have the same rank and extents.  Used to check that a
+	! reduction's `mask` matches its array, and that the operands of an
+	! element-wise binary operator conform
+
+	same_shape = .false.
+	if (a%rank /= b%rank) return
+	same_shape = all(a%size(1: a%rank) == b%size(1: b%rank))
+
+end procedure same_shape
+
+
+!===============================================================================
+
 module procedure copy_composite_id
 
 	! Copy the components that describe a struct or enum type beyond
@@ -810,9 +825,8 @@ module procedure trim_array
 	case (str_type)
 		vector%str = vector%str(1: vector%len_)
 
-	! TODO: str case, bool case.  File?  Struct?  Other types?
 	case default
-		write(*,*) err_int(IC_TRIM_ARRAY_TYPE, 'trim_array() implemented for this type')
+		write(*,*) err_int(IC_TRIM_ARRAY_TYPE, 'trim_array() not implemented for this type')
 		call internal_error()
 	end select
 
@@ -841,14 +855,15 @@ module procedure value_to_f32
 
 		case (str_type)
 
-			! There is no user-facing `f32()` fn (or `f64()`) yet anyway, unlike `i32()`
+			! Unlike `i32()`, the user-facing `f32()` and `f64()` casts only take
+			! numeric types
 			write(*,*) err_int(IC_CONVERT_F32, 'cannot convert from type `' &
-				//kind_name(val%type)//'` to f32.  Use `parse_f32()`')
+				//value_type_name(val)//'` to f32.  Use `parse_f32()`')
 			call internal_error()
 
 		case default
 			write(*,*) err_int(IC_CONVERT_F32, 'cannot convert from type `' &
-				//kind_name(val%type)//'` to f32 ')
+				//value_type_name(val)//'` to f32 ')
 			call internal_error()
 
 	end select
@@ -879,12 +894,12 @@ module procedure value_to_f64
 		case (str_type)
 
 			write(*,*) err_int(IC_CONVERT_F64, 'cannot convert from type `' &
-				//kind_name(val%type)//'` to f64.  Use `parse_f64()`')
+				//value_type_name(val)//'` to f64.  Use `parse_f64()`')
 			call internal_error()
 
 		case default
 			write(*,*) err_int(IC_CONVERT_F64, 'cannot convert from type `' &
-				//kind_name(val%type)//'` to f64 ')
+				//value_type_name(val)//'` to f64 ')
 			call internal_error()
 
 	end select
@@ -922,13 +937,13 @@ module procedure value_to_i32
 				ans = iachar(val%str%s)
 			else
 				write(*,*) err_int(IC_CONVERT_I32, 'cannot convert from type `' &
-					//kind_name(val%type)//'` to i32.  Use `parse_i32()`')
+					//value_type_name(val)//'` to i32.  Use `parse_i32()`')
 				call internal_error()
 			end if
 
 		case default
 			write(*,*) err_int(IC_CONVERT_I32, 'cannot convert from type `' &
-				//kind_name(val%type)//'` to i32 ')
+				//value_type_name(val)//'` to i32 ')
 			call internal_error()
 
 	end select
@@ -940,7 +955,7 @@ end procedure value_to_i32
 
 module procedure value_to_i32_array
 
-
+	integer(kind = 8) :: i8
 
 	!print *, "starting value_to_i32_array()"
 	!print *, "val%type = ", kind_name(val%type)
@@ -962,22 +977,26 @@ module procedure value_to_i32_array
 		case (i64_type)
 			ans%i32 = int(val%array%i64, 4)
 
-		!case (str_type)
+		case (enum_type)
+			! Enum elements live in val%struct(:), not in the typed arrays
+			ans%i32 = val%struct%sca%i32
 
-		!	! TODO: loops are needed for str array conversion via iachar
-		!	if (all(len(val%sca%str%s) == 1)) then
-		!		!ans = iachar(val%sca%str%s)
-		!		ans%i32 = iachar(val%array%str%s)
+		case (str_type)
 
-		!	else
-		!		write(*,*) err_int_prefix//'cannot convert from type `' &
-		!			//kind_name(val%type)//'` to i32.  Use `parse_i32()`'//color_reset
-		!		call internal_error()
-		!	end if
+			! Like the scalar case, only single-character strings can be cast
+			allocate(ans%i32( size(val%array%str, kind = 8) ))
+			do i8 = 1, val%array%len_
+				if (len(val%array%str(i8)%s) /= 1) then
+					write(*,*) err_int(IC_CONVERT_I32_ARR, 'cannot convert from type `' &
+						//value_type_name(val)//'` to i32.  Use `parse_i32()`')
+					call internal_error()
+				end if
+				ans%i32(i8) = iachar(val%array%str(i8)%s)
+			end do
 
 		case default
 			write(*,*) err_int(IC_CONVERT_I32_ARR, 'cannot convert from type `' &
-				//kind_name(val%type)//'` to i32 ')
+				//value_type_name(val)//'` to i32 ')
 			call internal_error()
 
 	end select
@@ -1005,9 +1024,23 @@ module procedure value_to_i64
 		case (i64_type)
 			ans = val%sca%i64
 
+		case (enum_type)
+			! The backing ordinal, e.g. i64(Card.Queen) -> 11
+			ans = val%sca%i32
+
+		case (str_type)
+
+			if (allocated(val%str) .and. len(val%str%s) == 1) then
+				ans = iachar(val%str%s)
+			else
+				write(*,*) err_int(IC_CONVERT_I64, 'cannot convert from type `' &
+					//value_type_name(val)//'` to i64.  Use `parse_i64()`')
+				call internal_error()
+			end if
+
 		case default
 			write(*,*) err_int(IC_CONVERT_I64, 'cannot convert from type `' &
-				//kind_name(val%type)//'` to i64.  Use `parse_i64()`')
+				//value_type_name(val)//'` to i64.  Use `parse_i64()`')
 			call internal_error()
 
 	end select
@@ -1019,7 +1052,7 @@ end procedure value_to_i64
 
 module procedure value_to_i64_array
 
-
+	integer(kind = 8) :: i8
 
 	!print *, "starting value_to_i64_array()"
 	!print *, "val%type = ", kind_name(val%type)
@@ -1042,9 +1075,26 @@ module procedure value_to_i64_array
 			!ans%i64 = int(val%array%i64, 4)
 			ans%i64 = val%array%i64
 
+		case (enum_type)
+			! Enum elements live in val%struct(:), not in the typed arrays
+			ans%i64 = val%struct%sca%i32
+
+		case (str_type)
+
+			! Like the scalar case, only single-character strings can be cast
+			allocate(ans%i64( size(val%array%str, kind = 8) ))
+			do i8 = 1, val%array%len_
+				if (len(val%array%str(i8)%s) /= 1) then
+					write(*,*) err_int(IC_CONVERT_I64_ARR, 'cannot convert from type `' &
+						//value_type_name(val)//'` to i64.  Use `parse_i64()`')
+					call internal_error()
+				end if
+				ans%i64(i8) = iachar(val%array%str(i8)%s)
+			end do
+
 		case default
 			write(*,*) err_int(IC_CONVERT_I64_ARR, 'cannot convert from type `' &
-				//kind_name(val%type)//'` to i64 ')
+				//value_type_name(val)//'` to i64 ')
 			call internal_error()
 
 	end select
@@ -1076,7 +1126,7 @@ module procedure value_to_f32_array
 
 		case default
 			write(*,*) err_int(IC_CONVERT_F32_ARR, 'cannot convert from type `' &
-				//kind_name(val%type)//'` to f32 ')
+				//value_type_name(val)//'` to f32 ')
 			call internal_error()
 
 	end select
@@ -1108,7 +1158,7 @@ module procedure value_to_f64_array
 
 		case default
 			write(*,*) err_int(IC_CONVERT_F64_ARR, 'cannot convert from type `' &
-				//kind_name(val%type)//'` to f64 ')
+				//value_type_name(val)//'` to f64 ')
 			call internal_error()
 
 	end select
@@ -1123,7 +1173,7 @@ module procedure struct_reg_set
 	! Register (or overwrite, e.g. on REPL struct redeclaration) a struct's
 	! member names under its canonical cookie, and return the slot index.
 	! Called once per struct declaration by parse_struct_declaration()
-	! (parse_fn.f90), which stashes the returned idx on every value_t built
+	! (parse_struct.f90), which stashes the returned idx on every value_t built
 	! from that struct (c.f. value_t%struct_reg_idx) so that
 	! value_to_str()'s round-trip struct branch below can look member names
 	! up with a plain array index -- this hash-by-cookie lookup only runs
@@ -1177,14 +1227,12 @@ end procedure struct_reg_set
 
 module procedure value_to_str
 
-
 	! When .true., render str members quoted/escaped and give f32/i64
 	! scalars an explicit `'f32`/`'i64` type suffix, so the result lexes back
 	! to an equivalent syntran literal.  Only meant to be set by the
 	! struct_type case below (labeling members also implies round-trip mode
 	! for their values) -- top-level println()/str() calls never pass this,
 	! so plain `println("hi")` and `println(1.5f)` are unaffected
-
 
 	!********
 
@@ -1471,7 +1519,6 @@ module procedure value_to_str
 
 end procedure value_to_str
 
-
 !===============================================================================
 
 module procedure value_type_name
@@ -1488,8 +1535,6 @@ module procedure value_type_name
 	! call it directly: syntran__types_m depends on syntran__value_m, not the
 	! other way around, so only this direction avoids a circular dependency
 
-
-
 	!********
 
 	character(len = :), allocatable :: array_name
@@ -1500,6 +1545,9 @@ module procedure value_type_name
 		str_ = a%struct_name
 	else if (a%type == enum_type) then
 		str_ = a%enum_name
+	else if (a%type == array_type .and. .not. allocated(a%array)) then
+		! Array whose element type isn't resolved yet, e.g. on parse pass 0
+		str_ = "array"
 	else if (a%type == array_type) then
 
 		if (a%array%type == struct_type) then
@@ -1544,8 +1592,6 @@ module procedure value_type_name_primitive
 	! Primitive (non-struct/array/fn) type-name mapping.  c.f. lookup_type()
 	! which is mostly the inverse of this
 
-
-
 	select case (itype)
 	case (i32_type)
 		str_ = "i32"
@@ -1576,9 +1622,6 @@ end procedure value_type_name_primitive
 
 module procedure scalar_to_str
 
-
-
-
 	!********
 
 	character(len = 16) :: buf16
@@ -1590,7 +1633,7 @@ module procedure scalar_to_str
 			ans = ''
 
 		case (bool_type)
-			! TODO: use bool1_str() and other primitive converters
+			! bool1_str() takes a logical(1) array element, not this default-kind scalar
 			if (val%bool) then
 				ans = "true"
 			else

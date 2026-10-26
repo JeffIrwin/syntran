@@ -1,0 +1,28 @@
+// Module with a struct that has methods, to test a module that is imported
+// twice (directly and through another module, a diamond).  Each import is
+// parsed separately, so the methods get two sets of fn ids
+
+struct Acc
+{
+	n: i32,
+
+	fn add(k: i32)
+	{
+		n = n + k;
+	}
+	const fn get(): i32
+	{
+		return n;
+	}
+}
+
+fn new_acc(): Acc
+{
+	return Acc{n = 0};
+}
+
+fn add_twice(a: &Acc, k: i32)
+{
+	a.add(k);
+	a.add(k);
+}

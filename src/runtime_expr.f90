@@ -291,16 +291,23 @@ module subroutine promote_i32_i64(val)
 
 	! If val is i32 type, change it to i64 and copy the values
 	!
-	! TODO: consider refactoring with to_i64()? at least add internal error.
-	! to_i64() is a fn which returns a new val, whereas this is a subroutine
-	! that changes the type of a given value
+	! This is not refactored with to_i64() because to_i64() is a fn which
+	! returns a new val, whereas this is a subroutine that changes the type of a
+	! given value
 
 	type(value_t), intent(inout) :: val
 
-	if (val%type == i32_type) then
+	select case (val%type)
+	case (i32_type)
 		val%type = i64_type
 		val%sca%i64 = val%sca%i32
-	end if
+	case (i64_type)
+		! Already promoted
+	case default
+		write(*,*) err_int(IC_CONVERT_I64, 'cannot convert from type `' &
+			//value_type_name(val)//'` to i64')
+		call internal_error()
+	end select
 
 end subroutine promote_i32_i64
 
@@ -331,6 +338,22 @@ module function str_char_slice(s, node, state, isub, slots) result(out)
 	!********
 
 	integer(kind = 8) :: il, iu, step, i8, j8, n_out
+	integer(kind = 8), allocatable :: idx(:)
+
+	! An index array gathers characters (`s[[0, 3, 5]]`), which isn't a
+	! (il, iu, step) window like the kinds below
+	if (node%lsubscripts(isub)%sub_kind == arr_sub) then
+		call str_arr_sub_indices(node, isub, int(len(s), 8), state, idx, slots)
+		if (state%rt_halt) then
+			out = ""
+			return
+		end if
+		allocate(character(len = size(idx)) :: out)
+		do j8 = 1, size(idx, kind = 8)
+			out(j8:j8) = s(idx(j8)+1 : idx(j8)+1)
+		end do
+		return
+	end if
 
 	! str_slice_bounds() handles scalar/range/step/all subscript kinds
 	! uniformly (0-based, upper-exclusive in the direction of step), so a
@@ -388,9 +411,34 @@ module subroutine str_char_assign(s, node, state, isub, rhs, slots)
 	!********
 
 	integer(kind = 8) :: il, iu, step, i8, j8
+	integer(kind = 8), allocatable :: idx(:)
+
+	! An index array scatters characters (`s[[0, 3, 5]] = "abc"`).  A
+	! repeated index is written more than once, so the last one wins
+	if (node%lsubscripts(isub)%sub_kind == arr_sub) then
+		call str_arr_sub_indices(node, isub, int(len(s), 8), state, idx, slots)
+		if (state%rt_halt) return
+		if (int(len(rhs), 8) /= size(idx, kind = 8)) then
+			call rt_throw(state, err_rt(RC_ARRAY_SIZE_MISMATCH, &
+				"size of RHS does not match size of LHS slice"))
+			return
+		end if
+		do j8 = 1, size(idx, kind = 8)
+			s(idx(j8)+1 : idx(j8)+1) = rhs(j8:j8)
+		end do
+		return
+	end if
 
 	call str_slice_bounds(node, isub, int(len(s), 8), state, il, iu, step, slots)
 	if (state%rt_halt) return
+
+	! The RHS string must exactly fill the selected window: a fixed-width
+	! character slice can't grow or shrink the string
+	if (int(len(rhs), 8) /= slice_len(il, step, iu)) then
+		call rt_throw(state, err_rt(RC_ARRAY_SIZE_MISMATCH, &
+			"size of RHS does not match size of LHS slice"))
+		return
+	end if
 
 	i8 = il
 	j8 = 1
