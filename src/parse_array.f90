@@ -31,6 +31,8 @@ recursive module subroutine parse_array_expr(parser, expr)
 
 	logical :: range_non_num
 
+	character(len = :), allocatable :: type_text
+
 	type(syntax_node_t)  :: lbound_, step, ubound_, len_, elem
 	type(syntax_node_vector_t) :: elems, size_
 	type(syntax_token_t) :: lbracket, rbracket, colon, semicolon, comma, dummy
@@ -72,6 +74,11 @@ recursive module subroutine parse_array_expr(parser, expr)
 	! something below a vector called a "rank-0" array :exploding-head:
 
 	call parser%match(lbracket_token, lbracket)
+
+	if (at_typed_array(parser, type_text)) then
+		call parse_typed_array_expr(parser, expr, type_text)
+		return
+	end if
 
 	span_beg = parser%peek_pos(0)
 	lb_beg   = span_beg
@@ -912,6 +919,178 @@ recursive module subroutine parse_subscripts(parser, expr)
 	end if
 
 end subroutine parse_subscripts
+
+!===============================================================================
+
+function at_typed_array(parser, type_text) result(at_type)
+
+	! Is the parser just after the `[` of a type-name array literal like
+	! `[Node; 0]` or `[mod::Node; 0]`?  That is a (possibly module-qualified)
+	! struct, enum, or primitive type name followed by a `;`.  A variable with
+	! the same name as the type wins, so `[bool; 3]` still works for a variable
+	! named `bool`
+
+	class(parser_t) :: parser
+	character(len = :), allocatable, intent(out) :: type_text
+	logical :: at_type
+
+	!********
+
+	integer :: k, id_index, io
+
+	logical :: is_loc
+
+	type(value_t) :: val
+
+	at_type = .false.
+	type_text = ""
+
+	if (parser%current_kind() /= identifier_token) return
+
+	type_text = parser%peek_text(0)
+	k = 1
+	do while (parser%peek_kind(k) == double_colon_token .and. &
+	          parser%peek_kind(k+1) == identifier_token)
+		type_text = type_text//"::"//parser%peek_text(k+1)
+		k = k + 2
+	end do
+	if (parser%peek_kind(k) /= semicolon_token) return
+
+	if (k == 1) then
+		call parser%search(type_text, id_index, io, val, is_loc)
+		if (io == exit_success) return
+	end if
+
+	at_type = lookup_type(type_text, parser%structs, parser%enums) /= unknown_type
+
+end function at_typed_array
+
+!===============================================================================
+
+recursive subroutine parse_typed_array_expr(parser, expr, type_text)
+
+	! Parse the rest of an empty array literal with a type name instead of a
+	! fill value, e.g. `[Node; 0]` or `[str; 0, 0]`.  Without this there is no
+	! way to make the first empty array of a struct type, which recursive
+	! structs like `struct Tree { kids: [Tree; :] }` need as a base case
+	!
+	! It is lowered to an ordinary uniform array, `[proto; 0]`, where proto is a
+	! throwaway fill value of the right type.  Every size must be a literal zero,
+	! so proto is never copied into an element
+
+	class(parser_t) :: parser
+	type(syntax_node_t), intent(out) :: expr
+	character(len = *), intent(in) :: type_text
+
+	!********
+
+	character(len = :), allocatable :: cookie
+
+	integer :: i, itype, span_beg, span_end, struct_id
+
+	type(syntax_node_t) :: proto
+	type(syntax_node_vector_t) :: size_
+	type(syntax_token_t) :: ident, semicolon, rbracket, double_colon
+	type(text_span_t) :: span
+
+	type(struct_t), pointer :: struct_ptr
+
+	itype = lookup_type(type_text, parser%structs, parser%enums, cookie)
+
+	! Consume the (qualified) type name
+	call parser%match(identifier_token, ident)
+	do while (parser%current_kind() == double_colon_token)
+		call parser%match(double_colon_token, double_colon)
+		call parser%match(identifier_token, ident)
+	end do
+	call parser%match(semicolon_token, semicolon)
+
+	span_beg = parser%peek_pos(0)
+	call parser%parse_size(size_)
+	span_end = parser%peek_pos(0) - 1
+	call parser%match(rbracket_token, rbracket)
+
+	do i = 1, size_%len_
+		if (is_zero_literal(size_%v(i))) cycle
+		span = new_span(span_beg, span_end - span_beg + 1)
+		call parser%diagnostics%push(err_typed_array_size( &
+			parser%context(), span, parser%text(span_beg, span_end)))
+		exit
+	end do
+
+	proto%kind = literal_expr
+	select case (itype)
+	case (bool_type)
+		call new_bool(.false., proto)
+	case (i32_type)
+		call new_i32(0_4, proto)
+	case (i64_type)
+		call new_i64(0_8, proto)
+	case (f32_type)
+		call new_f32(0.0_4, proto)
+	case (f64_type)
+		call new_f64(0.0_8, proto)
+	case (str_type)
+		call new_str("", proto)
+
+	case (struct_type)
+		proto%val%type = struct_type
+		allocate(proto%val%struct(0))
+		proto%val%struct_name = type_text
+		proto%val%struct_cookie = cookie
+		struct_id = parser%structs%find(type_text)
+		struct_ptr => parser%structs%get(struct_id)
+		proto%val%struct_reg_idx = struct_ptr%reg_idx
+
+	case (enum_type)
+		proto%val%type = enum_type
+		proto%val%enum_name = type_text
+		proto%val%enum_cookie = cookie
+
+	end select
+
+	allocate(expr%val%array)
+
+	expr%kind = array_expr
+	expr%val%type = array_type
+	if (itype == struct_type) then
+		expr%val%struct_name = proto%val%struct_name
+		expr%val%struct_cookie = proto%val%struct_cookie
+		expr%val%struct_reg_idx = proto%val%struct_reg_idx
+	else if (itype == enum_type) then
+		expr%val%enum_name = proto%val%enum_name
+		expr%val%enum_cookie = proto%val%enum_cookie
+	end if
+
+	expr%val%array%type = itype
+	expr%val%array%kind = unif_array
+	expr%val%array%rank = size_%len_
+
+	call syntax_node_move(proto, expr%lbound_)
+	allocate(expr%size_(size_%len_))
+	do i = 1, size_%len_
+		call syntax_node_move_into(size_%v(i), expr%size_(i))
+	end do
+
+end subroutine parse_typed_array_expr
+
+!********
+
+logical function is_zero_literal(node)
+
+	type(syntax_node_t), intent(in) :: node
+
+	is_zero_literal = .false.
+	if (node%kind /= literal_expr) return
+
+	select case (node%val%type)
+	case (i32_type)
+		is_zero_literal = node%val%sca%i32 == 0
+	case (i64_type)
+		is_zero_literal = node%val%sca%i64 == 0
+	end select
+
+end function is_zero_literal
 
 !===============================================================================
 

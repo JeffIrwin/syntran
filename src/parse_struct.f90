@@ -47,6 +47,63 @@ end function at_method_start
 
 !===============================================================================
 
+recursive function struct_contains_cookie(parser, cur_name, target_cookie, visited) &
+		result(found)
+
+	! Does the struct named `cur_name` hold a *scalar* member of the struct with
+	! `target_cookie`, directly or through other scalar struct members?  Array
+	! members don't count, since an empty array takes no space.  A struct that
+	! holds itself this way would have infinite size.  Names that aren't found
+	! (e.g. a member of an imported module's struct, which was already checked
+	! when that module was parsed) just end the search.  Same rationale as
+	! at_method_start() for not being type-bound
+
+	class(parser_t) :: parser
+	character(len = *), intent(in) :: cur_name, target_cookie
+	type(string_vector_t), intent(inout) :: visited
+
+	logical :: found
+
+	!********
+
+	integer :: i, id, member_id, io
+
+	type(struct_t), pointer :: cur
+	type(value_t) :: member
+
+	found = .false.
+
+	id = parser%structs%find(cur_name)
+	if (id <= 0) return
+	cur => parser%structs%get(id)
+
+	! Visited-set so a cycle that doesn't include the target can't loop forever
+	do i = 1, visited%len_
+		if (visited%v(i)%s == cur%cookie) return
+	end do
+	call visited%push(cur%cookie)
+
+	do i = 1, cur%num_vars
+		call cur%vars%search(cur%member_names%v(i)%s, member_id, io, member)
+		if (io /= exit_success) cycle
+		if (member%type /= struct_type) cycle
+		if (.not. allocated(member%struct_name)) cycle
+
+		if (allocated(member%struct_cookie)) then
+			if (member%struct_cookie == target_cookie) then
+				found = .true.
+				return
+			end if
+		end if
+
+		found = struct_contains_cookie(parser, member%struct_name, target_cookie, visited)
+		if (found) return
+	end do
+
+end function struct_contains_cookie
+
+!===============================================================================
+
 module subroutine parse_struct_declaration(parser, decl)
 
 	class(parser_t) :: parser
@@ -58,7 +115,7 @@ module subroutine parse_struct_declaration(parser, decl)
 
 	integer :: itype, i, io, pos0
 
-	logical :: overwrite
+	logical :: overwrite, is_infinite
 
 	type(struct_t) :: struct
 
@@ -75,7 +132,7 @@ module subroutine parse_struct_declaration(parser, decl)
 
 	type(text_span_t) :: span
 
-	type( string_vector_t) :: names
+	type( string_vector_t) :: names, visited
 	type(integer_vector_t) :: pos_mems
 
 	type(value_t) :: member  ! local type meta-data
@@ -215,6 +272,25 @@ module subroutine parse_struct_declaration(parser, decl)
 				parser%context(), &
 				span, &
 				names%v(i)%s))
+		end if
+
+		! E126: a scalar member that contains this struct again would make it
+		! infinite.  Only check in the final passes, when every struct is
+		! registered in parser%structs, and only once per member.  Members
+		! that are arrays (`[Node; :]`) are fine: recurse through those
+		if (parser%ipass > 0 .and. member%type == struct_type .and. &
+			allocated(member%struct_name)) then
+			visited = new_string_vector()
+			is_infinite = .false.
+			if (allocated(member%struct_cookie)) &
+				is_infinite = member%struct_cookie == struct%cookie
+			if (.not. is_infinite) is_infinite = struct_contains_cookie( &
+				parser, member%struct_name, struct%cookie, visited)
+			if (is_infinite) then
+				span = new_span(pos_mems%v(i), len(names%v(i)%s))
+				call parser%diagnostics%push(err_infinite_struct( &
+					parser%context(), span, identifier%text, names%v(i)%s))
+			end if
 		end if
 
 		if (allocated(member%array)) deallocate(member%array)

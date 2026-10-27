@@ -87,6 +87,8 @@ which isn't supported.  Run them with the interpreter instead.
 - Printing an array, or having an array of strings, with a rank above 4
 - Solving a linear system with `std::solve()`, or factoring a matrix and solving
   from its factors with `std::lu_factor()` and `std::lu_solve()`
+- Recursive structs, which contain themselves through an array member like
+  `kids: [Tree; :]`
 
 ## Differences from the interpreter
 

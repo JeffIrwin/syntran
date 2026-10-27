@@ -2680,8 +2680,26 @@ recursive function emit_array_expr(em, node) result(s)
 		s = 'rt_linspace_'//sfx//'('//lb//', '//ub//', '//n_str//')'
 
 	case (unif_array)
-		! [v; n, m] is v repeated n * m times, in the shape [n, m]
-		v = emit_expr(em, node%lbound_)
+		! [Name; 0] has no fill value to emit, just a struct type for the
+		! empty array.  The parser makes a throwaway fill value for it
+		if (t == struct_type .and. node%lbound_%kind == literal_expr) then
+			k = struct_slot_of(em, node%lbound_%val)
+			if (k == 0 .or. size(node%size_) > 1) then
+				call em_unsupported(em, 'an array of structs of rank above 1')
+				s = '[0]'
+				return
+			end if
+			s = '['//struct_tname(em, k)//' :: ]'
+			return
+		end if
+
+		! [v; n, m] is v repeated n * m times, in the shape [n, m].  An enum is
+		! its i32 ordinal, and so is the throwaway fill value of [Name; 0]
+		if (t == enum_type .and. node%lbound_%kind == literal_expr) then
+			v = '0_int32'
+		else
+			v = emit_expr(em, node%lbound_)
+		end if
 		if (t /= str_type .and. t /= struct_type) v = convert(v, elem_type(node%lbound_%val), t)
 
 		n_str = ''

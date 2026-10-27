@@ -1494,6 +1494,14 @@ recursive module subroutine parse_dot(parser, expr)
 		if (parser%current_kind() == lparen_token) then
 			call parse_swallow_arg_list(parser)
 		end if
+
+		! An unknown receiver type is silent above and has no diagnostic of
+		! its own to explain it, e.g. a member of a struct that is not
+		! registered yet during parse pass 0 (`t.kids[0].kids[0].val` for a
+		! recursive struct).  Swallow the rest of the chain too, or the stray
+		! `[0].val` would cascade into a bogus E28 that survives the pass 0
+		! merge in parse_unit()
+		if (expr%val%type == unknown_type) call parse_swallow_member_tail(parser)
 		return
 	end if
 
@@ -1822,6 +1830,54 @@ subroutine parse_call_arg_list(parser, call_args, call_is_ref, pos_args, &
 	call parser%match(rparen_token, rparen_)
 
 end subroutine parse_call_arg_list
+
+!===============================================================================
+
+subroutine parse_swallow_member_tail(parser)
+
+	! Error recovery: consume the rest of a member chain whose receiver type is
+	! unknown -- any `[...]` subscripts and `.name` / `.name(...)` accesses that
+	! follow -- without building an AST for them
+
+	class(parser_t) :: parser
+
+	!********
+
+	integer :: depth
+
+	type(syntax_token_t) :: dummy
+
+	do
+		select case (parser%current_kind())
+
+		case (lbracket_token)
+			depth = 0
+			do
+				select case (parser%current_kind())
+				case (lbracket_token)
+					depth = depth + 1
+				case (rbracket_token)
+					depth = depth - 1
+				case (eof_token)
+					return
+				end select
+				call parser%next(dummy)
+				if (depth <= 0) exit
+			end do
+
+		case (dot_token)
+			if (parser%peek_kind(1) /= identifier_token) return
+			call parser%next(dummy)
+			call parser%next(dummy)
+			if (parser%current_kind() == lparen_token) call parse_swallow_arg_list(parser)
+
+		case default
+			return
+
+		end select
+	end do
+
+end subroutine parse_swallow_member_tail
 
 !===============================================================================
 

@@ -6664,6 +6664,7 @@ subroutine unit_test_struct_long(npass, nfail)
 			interpret_file(path//'test-04.syntran', quiet) == '0'   , &
 			interpret_file(path//'test-methods.syntran', quiet) == 'true', &
 			interpret_file(path//'test-05.syntran', quiet) == 'true', &
+			interpret_file(path//'test-06.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -8514,6 +8515,32 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_has_code(get_diags('let a = [std::OUT; 2];'), EC_FILE_ARRAY), &
 			diag_count_code(get_diags_file(P//'E124-file-array.syntran'), &
 				EC_FILE_ARRAY) == 1, &
+
+			! E125: a type-name array literal like `[Node; 0]` can only be empty
+			diag_has_code(get_diags( &
+				'struct N{v:i32,} let a = [N; 3];'), EC_TYPED_ARRAY_SIZE), &
+			diag_has_code(get_diags('let n = 2; let a = [str; n];'), &
+				EC_TYPED_ARRAY_SIZE), &
+			diag_has_code(get_diags('let a = [i32; 0, 2];'), EC_TYPED_ARRAY_SIZE), &
+			.not. diag_has_code(get_diags('struct N{v:i32,} let a = [N; 0, 0];'), &
+				EC_TYPED_ARRAY_SIZE), &
+			.not. diag_has_code(get_diags('let bool = 1; let a = [bool; 3];'), &
+				EC_TYPED_ARRAY_SIZE), &
+			diag_count_code(get_diags_file(P//'E125-typed-array-size.syntran'), &
+				EC_TYPED_ARRAY_SIZE) == 1, &
+
+			! E126: a struct that holds itself directly (or through other scalar
+			! struct members) has infinite size.  Arrays are fine
+			diag_has_code(get_diags('struct N{v:i32, next:N,}'), EC_INFINITE_STRUCT), &
+			diag_has_code(get_diags('struct A{b:B,} struct B{a:A,}'), EC_INFINITE_STRUCT), &
+			diag_count_code(get_diags('struct A{b:B,} struct B{a:A,}'), &
+				EC_INFINITE_STRUCT) == 2, &
+			.not. diag_has_code(get_diags('struct N{v:i32, next:[N; :],}'), &
+				EC_INFINITE_STRUCT), &
+			.not. diag_has_code(get_diags('struct A{b:[B; :],} struct B{a:A,}'), &
+				EC_INFINITE_STRUCT), &
+			diag_count_code(get_diags_file(P//'E126-infinite-struct.syntran'), &
+				EC_INFINITE_STRUCT) == 1, &
 
 			! E90 (retired): fn-pointer-typed struct members used to be
 			! rejected here (musl/gfortran segfault in the member dict's
@@ -10646,7 +10673,11 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E123-mod-import-name.syntran'), &
 				EC_MOD_IMPORT_NAME, P//'E123-mod-import-name.syntran', 6, 12, 6), &
 			diag_loc_ok(get_diags_file(P//'E124-file-array.syntran'), &
-				EC_FILE_ARRAY, P//'E124-file-array.syntran', 6, 14, 2) &
+				EC_FILE_ARRAY, P//'E124-file-array.syntran', 6, 14, 2), &
+			diag_loc_ok(get_diags_file(P//'E125-typed-array-size.syntran'), &
+				EC_TYPED_ARRAY_SIZE, P//'E125-typed-array-size.syntran', 7, 20, 1), &
+			diag_loc_ok(get_diags_file(P//'E126-infinite-struct.syntran'), &
+				EC_INFINITE_STRUCT, P//'E126-infinite-struct.syntran', 8, 2, 4) &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
@@ -11200,6 +11231,20 @@ subroutine unit_test_transpile(npass, nfail)
 			diag_has_code(get_diags_transpile( &
 				'let v = ["ab", "cd"]; println(v[:, [1, 0]]);'), &
 				EC_TRANSPILE_UNSUPPORTED), &
+
+			! A recursive struct is unsupported, and must not hang the emitter.  The
+			! type-name empty array `[Name; 0]` is supported for a plain struct,
+			! an enum, and the other element types
+			diag_has_text(get_diags_transpile( &
+				'struct T{v:i32, kids:[T; :],} let t = T{v = 1, kids = [T; 0]};'), &
+				'a recursive struct'), &
+			diag_has_text(get_diags_transpile('struct A{b:[B; :],} struct B{a:[A; :],}'), &
+				'a recursive struct'), &
+			index(transpile_src('struct P{x:i32,} let a = [P; 0]; println(size(a, 0));'), &
+				' :: ]') > 0, &
+			.not. diag_has_code(get_diags_transpile( &
+				'struct P{x:i32,} enum C{R,G} let a = [P; 0]; let b = [C; 0]; ' &
+				//'let c = [str; 0, 0]; let d = [f64; 0];'), EC_TRANSPILE_UNSUPPORTED), &
 
 			! Unsupported constructs are diagnostics.  Everything else in the
 			! program is still checked, one diagnostic per statement

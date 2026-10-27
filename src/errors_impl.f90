@@ -326,6 +326,8 @@ module procedure get_all_error_codes
 	call codes%push(EC_STD_UNKNOWN_NAME)
 	call codes%push(EC_MOD_IMPORT_NAME)
 	call codes%push(EC_FILE_ARRAY)
+	call codes%push(EC_TYPED_ARRAY_SIZE)
+	call codes%push(EC_INFINITE_STRUCT)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -1342,6 +1344,30 @@ module procedure err_file_array
 
 end procedure err_file_array
 
+
+!===============================================================================
+
+module procedure err_typed_array_size
+
+	err = err_pre(EC_TYPED_ARRAY_SIZE) &
+		//'size `'//size_text//'` of a type-name array literal is not zero.  ' &
+		//'A type name has no value to fill an array with, so only ' &
+		//'empty arrays like `[Node; 0]` are allowed' &
+		//underline(context, span)//" size must be literal 0"//color_reset
+
+end procedure err_typed_array_size
+
+!===============================================================================
+
+module procedure err_infinite_struct
+
+	err = err_pre(EC_INFINITE_STRUCT) &
+		//'struct `'//struct_name//'` contains itself through member `'//member//'`, ' &
+		//'so it would have infinite size.  Make `'//member//'` an array like ' &
+		//'`[Type; :]` instead, which can be empty' &
+		//underline(context, span)//" recursive member"//color_reset
+
+end procedure err_infinite_struct
 
 !===============================================================================
 
