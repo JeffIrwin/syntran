@@ -2512,6 +2512,12 @@ subroutine check_struct_members(em, node)
 		call struct_member(em, k, i, mval, mname, ok)
 		if (.not. ok) cycle
 
+		if (mval%is_opt) then
+			call em_unsupported(em, 'an optional struct member (`?'//mval%struct_name//'`)')
+			call value_destroy(mval)
+			return
+		end if
+
 		line = decl_line(em, mval, 'm', ok)
 		if (.not. ok) then
 			call em_unsupported(em, 'a struct member of type `'//kind_name(mval%type)//'`')

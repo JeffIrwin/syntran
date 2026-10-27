@@ -102,6 +102,13 @@ recursive module subroutine parse_array_expr(parser, expr)
 			parser%context(), span, parser%text(lb_beg, lb_end)))
 	end if
 
+	! Neither are arrays of optionals: an element of null_type has no array
+	! storage, like the file case below
+	if (lbound_%val%type == null_type) then
+		span = new_span(lb_beg, lb_end - lb_beg + 1)
+		call parser%diagnostics%push(err_null_array(parser%context(), span))
+	end if
+
 	! Arrays of files are not supported either: file_t has no array storage
 	! (array_t has no file component), so this would hit the
 	! IC_ALLOC_ARRAY_TYPE internal error

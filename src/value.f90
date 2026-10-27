@@ -148,6 +148,12 @@ module syntran__value_m
 		! hash lookup by struct_cookie
 		integer :: struct_reg_idx = 0
 
+		! True for the type of a `?Struct` optional, which can also hold null
+		! (type == null_type at run time).  Only meaningful in type
+		! descriptors and parse-time values; never changes how a struct value
+		! is stored
+		logical :: is_opt = .false.
+
 		! Enum type name, e.g. "Dir", used when value%type == enum_type.
 		! Mirrors struct_name's role for type-descriptor rendering (fn param/
 		! return types, etc.)

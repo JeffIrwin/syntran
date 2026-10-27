@@ -1,0 +1,182 @@
+
+// Recursive structs which terminate with an optional member, `?Node`, that can
+// be null
+
+struct Node
+{
+	val: i32,
+	next: ?Node,
+
+	const fn has_next(): bool
+	{
+		return next != null;
+	}
+}
+
+struct Tree
+{
+	key: i32,
+	left: ?Tree,
+	right: ?Tree,
+}
+
+fn cons(v: i32, rest: ?Node): Node
+{
+	return Node{val = v, next = rest};
+}
+
+fn nothing(): ?Node
+{
+	return null;
+}
+
+fn list_len(n: ?Node): i32
+{
+	if n == null
+	{
+		return 0;
+	}
+	return 1 + list_len(n.next);
+}
+
+fn list_total(n: ?Node): i32
+{
+	if null == n
+	{
+		return 0;
+	}
+	return n.val + list_total(n.next);
+}
+
+fn push_back(n: ?Node, v: i32): Node
+{
+	if n == null
+	{
+		return Node{val = v, next = null};
+	}
+	return Node{val = n.val, next = push_back(n.next, v)};
+}
+
+fn reverse(n: ?Node, acc: ?Node): ?Node
+{
+	if n == null
+	{
+		return acc;
+	}
+	return reverse(n.next, cons(n.val, acc));
+}
+
+fn insert(t: ?Tree, k: i32): Tree
+{
+	if t == null
+	{
+		return Tree{key = k, left = null, right = null};
+	}
+	let r = t;
+	if k < r.key
+	{
+		r.left = insert(r.left, k);
+	}
+	else
+	{
+		r.right = insert(r.right, k);
+	}
+	return r;
+}
+
+fn inorder_sum(t: ?Tree, weight: i32): i32
+{
+	// Weights each key by its position, to check the order
+	if t == null
+	{
+		return 0;
+	}
+	return inorder_sum(t.left, weight + 1) + weight * t.key + inorder_sum(t.right, weight + 1);
+}
+
+fn height(t: ?Tree): i32
+{
+	if t == null
+	{
+		return 0;
+	}
+	let hl = height(t.left);
+	let hr = height(t.right);
+	if hl > hr
+	{
+		return 1 + hl;
+	}
+	return 1 + hr;
+}
+
+let ok = true;
+
+// Null itself
+ok = ok and null == null;
+ok = ok and not (null != null);
+ok = ok and str(null) == "null";
+ok = ok and nothing() == null;
+
+// A list
+let l = cons(1, cons(2, cons(3, nothing())));
+ok = ok and list_len(l) == 3;
+ok = ok and list_total(l) == 6;
+ok = ok and l.next != null and null != l.next;
+ok = ok and l.next.next.next == null;
+ok = ok and l.has_next() and not l.next.next.has_next();
+ok = ok and str(l) == "Node{val = 1, next = Node{val = 2, next = Node{val = 3, next = null}}}";
+
+// Value semantics: a copy doesn't alias
+let m = l;
+m.next.val = 20;
+ok = ok and list_total(l) == 6 and list_total(m) == 24;
+
+// Assign over a null member, and back to null
+let k = Node{val = 4, next = null};
+k.next = l;
+ok = ok and list_len(k) == 4 and k.next.val == 1;
+k.next = null;
+ok = ok and list_len(k) == 1 and k.next == null;
+k.next = Node{val = 5, next = null};
+ok = ok and list_total(k) == 9;
+
+// Walk a list with a loop
+let cur = l;
+let sum = 0;
+let count = 0;
+while cur != null
+{
+	sum += cur.val;
+	count += 1;
+	cur = cur.next;
+}
+ok = ok and sum == 6 and count == 3 and cur == null;
+
+// Build by pushing at the back, and reverse
+let p = push_back(push_back(push_back(nothing(), 7), 8), 9);
+ok = ok and p.val == 7 and p.next.val == 8 and p.next.next.val == 9;
+let r = reverse(p, nothing());
+ok = ok and r.val == 9 and r.next.val == 8 and r.next.next.val == 7;
+ok = ok and list_len(r) == 3 and r.next.next.next == null;
+
+// A binary search tree
+let t = Tree{key = 5, left = null, right = null};
+for x in [3, 8, 1, 4, 7, 9, 2]
+{
+	t = insert(t, x);
+}
+ok = ok and t.key == 5 and t.left.key == 3 and t.right.key == 8;
+ok = ok and t.left.left.key == 1 and t.left.left.right.key == 2;
+ok = ok and t.left.left.left == null and t.right.right.right == null;
+ok = ok and height(t) == 4;
+
+// In order, a key's weight is its depth, so the sum below is unique to the tree
+// 1*5 + 2*(3 + 8) + 3*(1 + 4 + 7 + 9) + 4*2
+ok = ok and inorder_sum(t, 1) == 5 + 2 * 11 + 3 * 21 + 4 * 2;
+
+// Trees in arrays
+let forest = [t, Tree{key = 0, left = null, right = null}];
+ok = ok and forest[1].left == null and forest[0].left != null;
+ok = ok and height(forest[0]) == 4 and height(forest[1]) == 1;
+
+return ok;

@@ -6665,6 +6665,7 @@ subroutine unit_test_struct_long(npass, nfail)
 			interpret_file(path//'test-methods.syntran', quiet) == 'true', &
 			interpret_file(path//'test-05.syntran', quiet) == 'true', &
 			interpret_file(path//'test-06.syntran', quiet) == 'true', &
+			interpret_file(path//'test-07.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -8541,6 +8542,48 @@ subroutine unit_test_error_codes(npass, nfail)
 				EC_INFINITE_STRUCT), &
 			diag_count_code(get_diags_file(P//'E126-infinite-struct.syntran'), &
 				EC_INFINITE_STRUCT) == 1, &
+			! ... except through an optional member
+			.not. diag_has_code(get_diags('struct N{v:i32, next:?N,}'), EC_INFINITE_STRUCT), &
+			.not. diag_has_code(get_diags('struct A{b:?B,} struct B{a:?A,}'), &
+				EC_INFINITE_STRUCT), &
+
+			! E127: only a scalar struct can be optional
+			diag_has_code(get_diags('struct N{v:?i32,}'), EC_BAD_OPTIONAL), &
+			diag_has_code(get_diags('struct N{v:i32,} struct M{v:?[N; :],}'), EC_BAD_OPTIONAL), &
+			diag_has_code(get_diags('fn f(x: ?fn(i32): i32) {}'), EC_BAD_OPTIONAL), &
+			diag_has_code(get_diags('fn f(x: ?str): i32 { return 0; }'), EC_BAD_OPTIONAL), &
+			.not. diag_has_code(get_diags('struct N{v:i32, next:?N,}'), EC_BAD_OPTIONAL), &
+			.not. diag_has_code(get_diags('struct N{v:i32,} fn f(x: ?N): ?N { return x; }'), &
+				EC_BAD_OPTIONAL), &
+			diag_count_code(get_diags_file(P//'E127-bad-optional.syntran'), &
+				EC_BAD_OPTIONAL) == 1, &
+
+			! E128: no arrays of optionals
+			diag_has_code(get_diags('let a = [null, null];'), EC_NULL_ARRAY), &
+			diag_has_code(get_diags('let a = [null];'), EC_NULL_ARRAY), &
+			diag_count_code(get_diags_file(P//'E128-null-array.syntran'), &
+				EC_NULL_ARRAY) == 1, &
+
+			! null is only for optionals
+			diag_has_code(get_diags('struct N{v:i32,} let n = N{v = 1}; n = null;'), &
+				EC_BINARY_TYPES), &
+			diag_has_code(get_diags('struct N{v:i32,} fn f(n: N) {} f(null);'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags('struct N{v:i32,} fn f(): N { return null; }'), &
+				EC_BAD_RET_TYPE), &
+			diag_has_code(get_diags('struct N{v:i32,} struct M{n:N,} let m = M{n = null};'), &
+				EC_BAD_MEMBER_TYPE), &
+			diag_has_code(get_diags('let x = null + 1;'), EC_BINARY_TYPES), &
+			! ... and comparing to it isn't ordinary struct equality
+			diag_has_code(get_diags('struct N{v:i32,} let n = N{v = 1}; println(n == n);'), &
+				EC_BINARY_TYPES), &
+			diag_has_code(get_diags('let x = null < null;'), EC_BINARY_TYPES), &
+			.not. diag_has_code(get_diags( &
+				'struct N{v:i32, next:?N,} let n = N{v = 1, next = null}; ' &
+				//'println(n == null, null == n, n.next != null, null == null);'), &
+				EC_BINARY_TYPES), &
+			.not. diag_has_code(get_diags( &
+				'struct N{v:i32, next:?N,} fn f(n: ?N): ?N { return null; } ' &
+				//'let n = f(null); println(n);'), EC_BAD_ARG_TYPE), &
 
 			! E90 (retired): fn-pointer-typed struct members used to be
 			! rejected here (musl/gfortran segfault in the member dict's
@@ -9844,6 +9887,22 @@ subroutine unit_test_runtime_errors(npass, nfail)
 			.not. diag_has_code(get_diags('println(parse_bool("true"));'), RC_PARSE_BOOL), &
 			.not. diag_has_code(get_diags('println(parse_bool(" false "));'), RC_PARSE_BOOL), &
 
+			! R47: member of an optional which is null
+			rt_code_both_file(P//'R47-null-member.syntran', RC_NULL_MEMBER), &
+			diag_count_code(get_diags_file(P//'R47-null-member.syntran'), RC_NULL_MEMBER) == 1, &
+			diag_has_code(get_diags( &
+				'struct N{v:i32, next:?N,} let n = N{v = 1, next = null}; println(n.next.v);'), &
+				RC_NULL_MEMBER), &
+			diag_has_code(get_diags( &
+				'struct N{v:i32, next:?N,} let n = N{v = 1, next = null}; n.next.v = 2;'), &
+				RC_NULL_MEMBER), &
+			diag_has_code(get_diags( &
+				'struct N{v:i32, next:?N,} fn f(n: N): i32 { return n.v; } ' &
+				//'let n = N{v = 1, next = null}; println(f(n.next));'), RC_NULL_MEMBER), &
+			.not. diag_has_code(get_diags( &
+				'struct N{v:i32, next:?N,} let n = N{v = 1, next = null}; ' &
+				//'n.next = N{v = 2, next = null}; println(n.next.v);'), RC_NULL_MEMBER), &
+
 			! R39 again, for the i64 overload of repeat()
 			diag_has_code(get_diags("println(repeat(""ab"", -1'i64));"), RC_REPEAT_NEGATIVE), &
 			.not. diag_has_code(get_diags("println(repeat(""ab"", 2'i64));"), RC_REPEAT_NEGATIVE) &
@@ -10677,7 +10736,11 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E125-typed-array-size.syntran'), &
 				EC_TYPED_ARRAY_SIZE, P//'E125-typed-array-size.syntran', 7, 20, 1), &
 			diag_loc_ok(get_diags_file(P//'E126-infinite-struct.syntran'), &
-				EC_INFINITE_STRUCT, P//'E126-infinite-struct.syntran', 8, 2, 4) &
+				EC_INFINITE_STRUCT, P//'E126-infinite-struct.syntran', 8, 2, 4), &
+			diag_loc_ok(get_diags_file(P//'E127-bad-optional.syntran'), &
+				EC_BAD_OPTIONAL, P//'E127-bad-optional.syntran', 7, 7, 4), &
+			diag_loc_ok(get_diags_file(P//'E128-null-array.syntran'), &
+				EC_NULL_ARRAY, P//'E128-null-array.syntran', 6, 14, 4) &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
@@ -11240,6 +11303,15 @@ subroutine unit_test_transpile(npass, nfail)
 				'a recursive struct'), &
 			diag_has_text(get_diags_transpile('struct A{b:[B; :],} struct B{a:[A; :],}'), &
 				'a recursive struct'), &
+			diag_has_text(get_diags_transpile( &
+				'struct T{v:i32, next:?T,} let t = T{v = 1, next = null};'), &
+				'a recursive struct'), &
+			diag_has_text(get_diags_transpile( &
+				'struct P{x:i32,} struct S{p:?P,} let s = S{p = P{x = 1}};'), &
+				'an optional struct member'), &
+			diag_has_text(get_diags_transpile( &
+				'struct P{x:i32,} let p = P{x = 1}; println(p == null);'), &
+				'the `null` literal'), &
 			index(transpile_src('struct P{x:i32,} let a = [P; 0]; println(size(a, 0));'), &
 				' :: ]') > 0, &
 			.not. diag_has_code(get_diags_transpile( &

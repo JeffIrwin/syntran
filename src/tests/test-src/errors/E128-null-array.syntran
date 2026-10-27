@@ -1,0 +1,6 @@
+// E128: null-array
+// Arrays of optionals aren't supported, so `null` can't be an array element
+
+struct Node { val: i32, }
+
+let nodes = [null, null];

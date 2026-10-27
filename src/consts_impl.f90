@@ -309,6 +309,9 @@ module procedure kind_name
 			"case_clause          ", & ! 138
 			"case_range           ", & ! 139
 			"when_keyword         ", & ! 140
+			"question_token       ", & ! 141
+			"null_keyword         ", & ! 142
+			"null_type            ", & ! 143
 			"unknown              "  & ! inf (trailing comma hack)
 		]
 

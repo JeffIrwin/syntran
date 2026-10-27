@@ -723,6 +723,9 @@ subroutine lex_impl(lexer, token)
 		case ("#")
 			call new_token(token, hash_token, lexer%pos, lexer%current())
 
+		case ("?")
+			call new_token(token, question_token, lexer%pos, lexer%current())
+
 		case ("=")
 			if (lexer%lookahead() == "=") then
 				lexer%pos = lexer%pos + 1

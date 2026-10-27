@@ -111,6 +111,10 @@ subroutine assign_value_t(left, right, op_text)
 		case (struct_type)
 			left = right
 
+		case (null_type)
+			! An optional that held null, being assigned a struct (or null)
+			left = right
+
 		case (enum_type)
 			left = right
 

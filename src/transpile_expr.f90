@@ -1330,6 +1330,10 @@ function emit_literal(em, node) result(s)
 		case (str_type)
 			s = str_literal(val%str%s)
 
+		case (null_type)
+			call em_unsupported(em, 'the `null` literal of an optional struct')
+			s = '0'
+
 		case default
 			call em_unsupported(em, 'a literal of type `'//kind_name(val%type)//'`')
 			s = '0'

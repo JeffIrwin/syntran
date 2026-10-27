@@ -2687,6 +2687,56 @@ total = 12
 Structs can also be mutually recursive, such as a directory that contains files
 and other directories, again as long as the recursion goes through arrays.
 
+#### Optional members
+
+An array is a clumsy way to hold "zero or one" thing, as in a linked list.  For
+that, put a `?` before the name of a struct to make it _optional_.  An optional
+can hold either a struct or `null`, and you test for `null` with `==` or `!=`:
+<!-- syntran-begin mode=file group=optional-structs -->
+```rust
+struct Node
+{
+    val: i32,
+    next: ?Node,
+}
+
+fn list_sum(n: ?Node): i32
+{
+    if n == null
+    {
+        return 0;
+    }
+    return n.val + list_sum(n.next);
+}
+
+let tail = Node{val = 3, next = null};
+let list = Node{val = 1, next = Node{val = 2, next = tail}};
+
+println(list);
+println("sum = ", list_sum(list));
+println(tail.next == null);
+```
+<!-- syntran-expect
+Node{val = 1, next = Node{val = 2, next = Node{val = 3, next = null}}}
+sum = 6
+true
+-->
+<!-- syntran-end -->
+
+Only a struct can be optional: `?i32`, `?[Node; :]`, and arrays of optionals are
+errors.  A plain `Node` can't be set to `null`, but an optional can be used
+anywhere a `Node` is expected.
+
+Syntran does not check ahead of time that an optional isn't `null` before you use
+its members, like Rust or Kotlin do.  Reading `tail.next.val` above is a runtime
+error, similar to using an unallocated component in Fortran.  Check with `== null`
+first.
+
+Like all other values, structs are copied.  So `let cur = list;` copies the
+whole list, and `cur = cur.next` in a loop copies the rest of it every time.
+That is fine for short lists, but a tree or an array of nodes that refer to each
+other by index scales better.
+
 ## Enums
 
 Enums declare a named type with a fixed set of integer-valued variants:
