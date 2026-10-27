@@ -208,6 +208,8 @@ module syntran__core_m
 	!  - using `in` (a keyword) as a fn arg name crashes the parser
 	!    * when? check blame for this comment. can't repro in 1.0.1
 	!  - print improvements:
+	!    * is there a way to repeat a format, something like
+	!      `printf("3{{} }", 1, 2, 3);` ?
 	!    * newline shortcut in fmt str? char(10) can be interpolated into "{}"
 	!      fmt at end but it's a bit awkward
 	!      + \n would be a breaking change but i might do it anyway. currently
