@@ -2639,6 +2639,54 @@ println(e[0].d.c[0].b.a[0]._);
 ```
 <!-- syntran-end -->
 
+### Recursive structs
+
+A struct can contain itself, as long as it does so through an array member.  An
+array can be empty, so it ends the recursion where a scalar member could not.
+(A scalar member such as `next: Node` would make the struct infinitely large,
+which is an error.)  This is how to write a tree:
+<!-- syntran-begin mode=file group=recursive-structs -->
+```rust
+struct Tree
+{
+    val: i32,
+    kids: [Tree; :],
+}
+
+fn total(t: Tree): i32
+{
+    let sum = t.val;
+    for i in [0: size(t.kids, 0)]
+    {
+        sum += total(t.kids[i]);
+    }
+    return sum;
+}
+```
+<!-- syntran-end -->
+
+A leaf has no children.  There is no value to fill an array of `Tree` with
+yet, so an empty array is written with the type name instead of a fill value, as
+in `[Tree; 0]`.  The size after the semicolon can only be the literal `0` in
+this form.  Other types work too, for example `[str; 0]` or `[f64; 0, 0]`:
+<!-- syntran-begin mode=file group=recursive-structs -->
+```rust
+let leaf = Tree{val = 3, kids = [Tree; 0]};
+let branch = Tree{val = 2, kids = [leaf, leaf]};
+let root = Tree{val = 1, kids = [branch, leaf]};
+
+println("total = ", total(root));
+println(root.kids[0].kids[1].val);
+```
+<!-- syntran-expect
+total = 12
+3
+-->
+<!-- syntran-end -->
+
+Structs can also be mutually recursive, such as a directory that contains files
+and other directories, again as long as the recursion goes through arrays.
+
 ## Enums
 
 Enums declare a named type with a fixed set of integer-valued variants:

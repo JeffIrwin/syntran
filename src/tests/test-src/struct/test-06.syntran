@@ -1,0 +1,128 @@
+
+// Recursive structs, which terminate through an array member.  An empty array
+// of a struct type is written with the type name, e.g. `[Tree; 0]`
+
+struct Tree
+{
+	val: i32,
+	kids: [Tree; :],
+}
+
+// Mutually recursive, again only through arrays
+struct Dir
+{
+	name: str,
+	files: [File; :],
+	subdirs: [Dir; :],
+}
+
+struct File
+{
+	size: i32,
+	parent: [Dir; :],  // 0 or 1 elements
+}
+
+fn build(depth: i32): Tree
+{
+	if depth == 0
+	{
+		return Tree{val = 1, kids = [Tree; 0]};
+	}
+	let c = build(depth - 1);
+	return Tree{val = depth, kids = [c, c]};
+}
+
+fn total(t: Tree): i32
+{
+	let s = t.val;
+	for i in [0: size(t.kids, 0)]
+	{
+		s += total(t.kids[i]);
+	}
+	return s;
+}
+
+fn depth_of(t: Tree): i32
+{
+	let d = 0;
+	for i in [0: size(t.kids, 0)]
+	{
+		let di = depth_of(t.kids[i]);
+		if di > d
+		{
+			d = di;
+		}
+	}
+	return d + 1;
+}
+
+fn file_bytes(d: Dir): i32
+{
+	let s = 0;
+	for i in [0: size(d.files, 0)]
+	{
+		s += d.files[i].size;
+	}
+	for i in [0: size(d.subdirs, 0)]
+	{
+		s += file_bytes(d.subdirs[i]);
+	}
+	return s;
+}
+
+let ok = true;
+
+let leaf = Tree{val = 3, kids = [Tree; 0]};
+ok = ok and size(leaf.kids, 0) == 0;
+ok = ok and total(leaf) == 3;
+ok = ok and str(leaf) == "Tree{val = 3, kids = []}";
+
+let root = Tree{val = 1, kids = [Tree{val = 2, kids = [leaf, leaf]}, leaf]};
+ok = ok and total(root) == 1 + (2 + 3 + 3) + 3;
+ok = ok and depth_of(root) == 3;
+
+// build(2) = 2 -> [1, 1] -> total is 2 + 2 * (1 + (1 + 1) + ...), so check a
+// closed form instead: build(0) = 1, build(d) = d + 2 * build(d - 1)
+ok = ok and total(build(0)) == 1;
+ok = ok and total(build(1)) == 1 + 2 * 1;
+ok = ok and total(build(2)) == 2 + 2 * 3;
+ok = ok and total(build(3)) == 3 + 2 * 8;
+ok = ok and depth_of(build(5)) == 6;
+
+// Nested member assignment through an array of structs
+root.kids[0].kids[1].val = 100;
+ok = ok and total(root) == 1 + (2 + 3 + 100) + 3;
+
+// Assigning a tree copies it, with no aliasing
+let copy = root;
+copy.kids[1].val = -1;
+ok = ok and root.kids[1].val == 3 and copy.kids[1].val == -1;
+
+// Mutual recursion
+let f1 = File{size = 10, parent = [Dir; 0]};
+let f2 = File{size = 32, parent = [Dir; 0]};
+let sub = Dir{name = "sub", files = [f2], subdirs = [Dir; 0]};
+let top = Dir{name = "top", files = [f1, f1], subdirs = [sub, sub]};
+ok = ok and file_bytes(top) == 10 + 10 + 32 + 32;
+
+// A file whose parent is the sub dir
+let f3 = File{size = 5, parent = [sub]};
+ok = ok and f3.parent[0].name == "sub";
+ok = ok and f3.parent[0].files[0].size == 32;
+
+// Typed empty arrays of other types, of any rank
+let e1 = [i32; 0];
+let e2 = [str; 0, 0];
+let e3 = [f64; 0];
+let e4 = [bool; 0];
+let e5 = [i64; 0];
+ok = ok and size(e1, 0) == 0 and size(e2, 0) == 0 and size(e2, 1) == 0;
+ok = ok and size(e3, 0) == 0 and size(e4, 0) == 0 and size(e5, 0) == 0;
+ok = ok and len(str(e1)) == 2;
+
+// A variable that shadows a type name still wins in `[x; n]`
+let bool_ = false;
+let ones = [1; 3];
+ok = ok and size(ones, 0) == 3;
+
+return ok;

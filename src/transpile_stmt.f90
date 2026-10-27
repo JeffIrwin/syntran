@@ -2433,6 +2433,50 @@ end function struct_slot_by_id
 
 !===============================================================================
 
+recursive function struct_reaches(em, target, k, seen) result(found)
+
+	! Does the struct at slot `k` have a member, directly or through the
+	! members of other structs, that is (an array of) the struct at slot
+	! `target`?  `seen` marks the structs that were already searched
+
+	type(emitter_t), intent(inout) :: em
+	integer, intent(in) :: target, k
+	logical, intent(inout) :: seen(:)
+	logical :: found
+
+	!********
+
+	character(len = :), allocatable :: mname
+
+	integer :: m, j
+
+	logical :: ok
+
+	type(value_t) :: mval
+
+	found = .false.
+	if (seen(k)) return
+	seen(k) = .true.
+
+	do m = 1, em%structs%table(k)%val%num_vars
+		call struct_member(em, k, m, mval, mname, ok)
+		if (.not. ok) cycle
+		if (elem_type(mval) /= struct_type) cycle
+
+		j = struct_slot_of(em, mval)
+		if (j == 0) cycle
+
+		found = j == target
+		if (.not. found) found = struct_reaches(em, target, j, seen)
+		if (found) exit
+	end do
+
+	call value_destroy(mval)
+
+end function struct_reaches
+
+!===============================================================================
+
 subroutine check_struct_members(em, node)
 
 	! Report a struct member whose type can't be a component of a derived type
@@ -2448,11 +2492,21 @@ subroutine check_struct_members(em, node)
 	integer :: i, k
 
 	logical :: ok
+	logical, allocatable :: seen(:)
 
 	type(value_t) :: mval
 
 	k = struct_slot_by_id(em, node%id_index)
 	if (k == 0) return
+
+	! A recursive struct is a derived type with a component of its own type,
+	! which has to be allocatable and have its own copy semantics.  Not yet
+	allocate(seen(size(em%structs%table)))
+	seen = .false.
+	if (struct_reaches(em, k, k, seen)) then
+		call em_unsupported(em, 'a recursive struct')
+		return
+	end if
 
 	do i = 1, em%structs%table(k)%val%num_vars
 		call struct_member(em, k, i, mval, mname, ok)
@@ -2566,16 +2620,36 @@ recursive function struct_level(em, k) result(lv)
 
 	integer :: m
 
+	! Which structs are being measured further up the call stack, shared by
+	! the recursion on purpose.  A recursive struct is reported as unsupported
+	! (c.f. check_struct_members()), but the types still get measured after
+	! that, and would never stop going down otherwise
+	logical, allocatable, save :: busy(:)
+
 	logical :: ok
 
 	type(value_t) :: mval
 
 	lv = 0
+
+	if (.not. allocated(busy)) then
+		allocate(busy(size(em%structs%table)))
+		busy = .false.
+	else if (size(busy) /= size(em%structs%table)) then
+		deallocate(busy)
+		allocate(busy(size(em%structs%table)))
+		busy = .false.
+	end if
+	if (busy(k)) return
+	busy(k) = .true.
+
 	do m = 1, em%structs%table(k)%val%num_vars
 		call struct_member(em, k, m, mval, mname, ok)
 		if (.not. ok) cycle
 		lv = max(lv, val_level(em, mval))
 	end do
+
+	busy(k) = .false.
 
 	call value_destroy(mval)
 

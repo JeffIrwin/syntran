@@ -807,6 +807,23 @@ storage has no case for `file`-typed values.
 
 [Example](../src/tests/test-src/errors/E124-file-array.syntran)
 
+### E125 -- typed-array-size
+
+An array literal with a type name instead of a fill value, like `[Node; 0]` or
+`[str; 0, 0]`, can only be empty.  A type name has no value to fill elements with, so every
+size must be the literal `0`.  This is how to make the empty base case of a recursive
+struct like `struct Tree { kids: [Tree; :] }`.
+
+[Example](../src/tests/test-src/errors/E125-typed-array-size.syntran)
+
+### E126 -- infinite-struct
+
+A struct holds itself in a scalar member, either directly (`next: Node`) or through other
+scalar struct members (`A { b: B }`, `B { a: A }`), so it would have infinite size.  Make
+one of the members an array like `[Node; :]`, which can be empty, to recurse.
+
+[Example](../src/tests/test-src/errors/E126-infinite-struct.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type
