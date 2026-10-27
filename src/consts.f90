@@ -36,6 +36,9 @@ module syntran__consts_m
 	! Token and syntax node kinds enum.  Is there a better way to do this that
 	! allows re-ordering enums?  Currently it would break kind_name()
 	integer, parameter ::          &
+			null_type             = 143, &
+			null_keyword          = 142, &
+			question_token        = 141, &
 			when_keyword          = 140, &
 			case_range            = 139, &
 			case_clause           = 138, &

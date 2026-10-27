@@ -48,6 +48,11 @@ recursive module subroutine set_val(node, var, state, val, index_, slots, pos)
 		call internal_error()
 	end if
 
+	if (var%type == null_type) then
+		call rt_throw(state, err_rt(RC_NULL_MEMBER, "cannot assign a member of null"))
+		return
+	end if
+
 	if (allocated(node%lsubscripts) .and. allocated(node%member)) then
 
 		if (present(index_)) then
@@ -235,6 +240,13 @@ recursive module subroutine get_val(node, var, state, res, index_, slots, pos)
 				res = member_val
 			end if
 		end block
+		return
+	end if
+
+	! A member of an optional (`?Struct`) that holds null.  There is no
+	! struct(:) to index, like an unallocated component in Fortran
+	if (var%type == null_type) then
+		call rt_throw(state, err_rt(RC_NULL_MEMBER, "cannot access a member of null"))
 		return
 	end if
 

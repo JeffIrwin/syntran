@@ -142,6 +142,8 @@ module syntran__errors_m
 		EC_FILE_ARRAY = "E124", &
 		EC_TYPED_ARRAY_SIZE = "E125", &
 		EC_INFINITE_STRUCT = "E126", &
+		EC_BAD_OPTIONAL = "E127", &
+		EC_NULL_ARRAY = "E128", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -231,6 +233,7 @@ module syntran__errors_m
 		RC_READ_FAIL = "R44", &
 		RC_BINARY_WRITE_TYPE = "R45", &
 		RC_PARSE_BOOL = "R46", &
+		RC_NULL_MEMBER = "R47", &
 		WC_MISSING_RETURN = "W1"
 
 	! A text span indicates which characters to underline in a faulty line of
@@ -879,6 +882,19 @@ module syntran__errors_m
 			character(len = :), allocatable :: err
 			character(len = *), intent(in) :: struct_name, member
 		end function err_infinite_struct
+
+		module function err_null_array(context, span) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+		end function err_null_array
+
+		module function err_bad_optional(context, span, type_text) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+			character(len = *), intent(in) :: type_text
+		end function err_bad_optional
 
 		module function err_missing_return(context, span, fn) result(err)
 			type(text_context_t) :: context

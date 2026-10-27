@@ -786,6 +786,13 @@ recursive module subroutine parse_primary_expr(parser, expr)
 
 			!print *, 'expr%val%sca%bool = ', expr%val%sca%bool
 
+		case (null_keyword)
+
+			! The value of an optional (`?Struct`) that holds nothing
+			call parser%next(keyword)
+			expr%kind = literal_expr
+			expr%val%type = null_type
+
 		case (identifier_token)
 
 			!print *, "parser%peek_kind(1) = ", kind_name(parser%peek_kind(1))
@@ -1172,7 +1179,7 @@ recursive module subroutine skip_juxtaposed_arg(parser, skipped)
 
 	select case (parser%current_kind())
 	case (identifier_token, i32_token, i64_token, f32_token, f64_token, &
-			str_token, true_keyword, false_keyword, lbracket_token)
+			str_token, true_keyword, false_keyword, null_keyword, lbracket_token)
 		is_operand = .true.
 	case default
 		is_operand = .false.

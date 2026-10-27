@@ -1,0 +1,11 @@
+// R47: null-member
+// Accessing a member of an optional which is null
+
+struct Node
+{
+	val: i32,
+	next: ?Node,
+}
+
+let tail = Node{val = 1, next = null};
+let v = tail.next.val;

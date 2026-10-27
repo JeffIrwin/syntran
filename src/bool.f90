@@ -50,6 +50,14 @@ subroutine is_eq_value_t(left, right, res, op_text)
 
 	integer(kind = 8) :: i8
 
+	! `x == null` for an optional struct.  Only null equals null.  This is the
+	! one kind of struct equality that is allowed (c.f. is_binary_op_allowed()),
+	! and it never looks at the struct
+	if (left%type == null_type .or. right%type == null_type) then
+		res%sca%bool = left%type == right%type
+		return
+	end if
+
 	select case (magic * left%type + right%type)
 	case        (magic * i32_type + i32_type)
 		res%sca%bool = left%sca%i32 == right%sca%i32

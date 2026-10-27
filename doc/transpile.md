@@ -88,7 +88,8 @@ which isn't supported.  Run them with the interpreter instead.
 - Solving a linear system with `std::solve()`, or factoring a matrix and solving
   from its factors with `std::lu_factor()` and `std::lu_solve()`
 - Recursive structs, which contain themselves through an array member like
-  `kids: [Tree; :]`
+  `kids: [Tree; :]` or an optional member like `next: ?Node`
+- Optional structs, `?Node`, and the `null` literal
 
 ## Differences from the interpreter
 

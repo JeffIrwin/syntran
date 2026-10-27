@@ -99,10 +99,20 @@ module syntran__core_m
 	!  - something like python's "if name == main" feature. it could be nice to
 	!    run a module like a program, e.g. to unit test itself, but ignore when
 	!    imported
-	!  - recursive data structs
-	!    * recursive fns are available, but not structs
-	!    * would we need allocation, pointer, or null features for this?
-	!      otherwise one recursive struct just immediately uses infinite memory
+	!  - recursive data structs follow-ups:
+	!    * done: recursion through arrays (`kids: [Tree; :]`, with `[Tree; 0]`
+	!      as the base case) and through optional members (`next: ?Node`,
+	!      `null`, `x == null`).  Value semantics, no pointers
+	!    * null safety is only checked at run time (R47), like an unallocated
+	!      Fortran component.  A compile-time check would need flow typing,
+	!      e.g. narrowing `?Node` to `Node` inside `if x != null { ... }`
+	!    * `cur = cur.next` deep copies the rest of a list, so walking a list is
+	!      O(n**2).  Related to the `move` todo below
+	!    * the transpiler rejects recursive structs, `?T`, and `null` (E115).
+	!      Fortran supports this natively with allocatable components, but
+	!      the generated copy/print/fill helpers would need to be recursive
+	!    * calling a method on a bare member inside a method, e.g. `next.push()`,
+	!      is not supported (E9), so recursive methods are awkward
 	!  - method improvements:
 	!    * stretch, arguably not very useful: slice method calls? e.g.
 	!      `struct[0:3].method()`. for void methods, just iterate and call it.

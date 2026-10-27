@@ -1,0 +1,9 @@
+// E127: bad-optional
+// Only a struct can be optional, like `?Node`.  Primitives, arrays, and fn
+// pointers can't
+
+struct Node
+{
+	val: ?i32,
+	next: ?Node,
+}

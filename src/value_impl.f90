@@ -186,6 +186,7 @@ module procedure value_move
 	! Plain integer, not allocatable -- always cheap to copy regardless of
 	! type, same as %sca in value_copy()
 	dst%struct_reg_idx = src%struct_reg_idx
+	dst%is_opt = src%is_opt
 
 	select case (src%type)
 	case (array_type)
@@ -387,6 +388,7 @@ module procedure value_copy
 	! Plain integer, not allocatable -- always cheap to copy regardless of
 	! type, same as %sca above
 	dst%struct_reg_idx = src%struct_reg_idx
+	dst%is_opt = src%is_opt
 
 	! Guard str/file_ copies on type, not just on allocated().  A reused stack
 	! slot may carry a stale allocatable from a prior value (different type); we
@@ -1286,6 +1288,9 @@ module procedure value_to_str
 			call str_vec%push("}")
 			ans = str_vec%trim()
 
+		case (null_type)
+			ans = "null"
+
 		case (enum_type)
 			ans = val%enum_name//"."//val%enum_variant
 
@@ -1543,6 +1548,7 @@ module procedure value_type_name
 
 	if (a%type == struct_type) then
 		str_ = a%struct_name
+		if (a%is_opt) str_ = "?"//str_
 	else if (a%type == enum_type) then
 		str_ = a%enum_name
 	else if (a%type == array_type .and. .not. allocated(a%array)) then
@@ -1611,6 +1617,8 @@ module procedure value_type_name_primitive
 		str_ = "void"
 	case (fn_type)
 		str_ = "fn"
+	case (null_type)
+		str_ = "null"
 	case default
 		str_ = "unknown"
 	end select

@@ -824,6 +824,20 @@ one of the members an array like `[Node; :]`, which can be empty, to recurse.
 
 [Example](../src/tests/test-src/errors/E126-infinite-struct.syntran)
 
+### E127 -- bad-optional
+
+Only a struct can be optional, like `?Node`.  Primitive types, arrays, and fn pointers
+can't, so `?i32`, `?[Node; :]`, and `?fn(i32): i32` are errors.
+
+[Example](../src/tests/test-src/errors/E127-bad-optional.syntran)
+
+### E128 -- null-array
+
+`null` can't be an element of an array literal like `[null, null]`, because arrays of
+optionals aren't supported.
+
+[Example](../src/tests/test-src/errors/E128-null-array.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type
@@ -1311,6 +1325,13 @@ arrays of strings.
 `"false"` are accepted, optionally with surrounding spaces.
 
 [Example](../src/tests/test-src/errors/R46-parse-bool.syntran)
+
+### R47 -- null-member
+
+A member was read or assigned through an optional struct (`?Node`) that is `null`, like
+`tail.next.val` when `tail.next` is `null`.  Compare with `x == null` first.
+
+[Example](../src/tests/test-src/errors/R47-null-member.syntran)
 
 ## Warnings
 

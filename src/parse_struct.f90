@@ -86,7 +86,7 @@ recursive function struct_contains_cookie(parser, cur_name, target_cookie, visit
 	do i = 1, cur%num_vars
 		call cur%vars%search(cur%member_names%v(i)%s, member_id, io, member)
 		if (io /= exit_success) cycle
-		if (member%type /= struct_type) cycle
+		if (member%type /= struct_type .or. member%is_opt) cycle
 		if (.not. allocated(member%struct_name)) cycle
 
 		if (allocated(member%struct_cookie)) then
@@ -115,9 +115,11 @@ module subroutine parse_struct_declaration(parser, decl)
 
 	integer :: itype, i, io, pos0
 
-	logical :: overwrite, is_infinite
+	logical :: is_infinite
 
-	type(struct_t) :: struct
+	integer :: pre_id, io_pre
+
+	type(struct_t) :: struct, placeholder
 
 	type(syntax_node_t) :: method_decl
 
@@ -157,6 +159,30 @@ module subroutine parse_struct_declaration(parser, decl)
 	call parser%check_var_clash(identifier%text, identifier%pos, "struct")
 
 	call parser%match(lbrace_token, lbrace)
+
+	! Canonical alias-independent identity, set once at declaration time.  This
+	! is invariant to the module alias/import path used to reach the struct, so
+	! it lets type_match() recognize the same struct imported two different ways
+	! as the same type (c.f. struct_cookie in types_ops.f90)
+	struct%cookie = parser%contexts%v(parser%current_unit())%src_file &
+		// "::" // identifier%text
+
+	! Register the struct by name before parsing its members and methods, so
+	! that they can refer to the struct itself, e.g. `kids: [Tree; :]` or a
+	! `Tree{...}` instance in a method.  Otherwise, in pass 0 (and for the
+	! methods in pass 1, which see pass 0's struct) such a type would be unknown.
+	! This is only a placeholder with no members, which is replaced by the
+	! full struct below.  It is also where a redeclaration is caught, since
+	! the name already being in the dict in pass 0 means it was declared before
+	io_pre = exit_success
+	if (parser%ipass == 0) then
+		allocate(placeholder%member_names%v(0))
+		allocate(placeholder%vars%dicts(1))
+		placeholder%cookie = struct%cookie
+		pre_id = parser%num_structs + 1
+		call parser%structs%insert( &
+			identifier%text, placeholder, pre_id, io_pre, overwrite = .false.)
+	end if
 
 	! Structs use this syntax:
 	!
@@ -234,13 +260,6 @@ module subroutine parse_struct_declaration(parser, decl)
 	allocate(struct%member_names%v( names%len_ ))
 	allocate(struct%vars%dicts(1))
 
-	! Canonical alias-independent identity, set once at declaration time.  This
-	! is invariant to the module alias/import path used to reach the struct, so
-	! it lets type_match() recognize the same struct imported two different ways
-	! as the same type (c.f. struct_cookie in types_ops.f90)
-	struct%cookie = parser%contexts%v(parser%current_unit())%src_file &
-		// "::" // identifier%text
-
 	do i = 1, names%len_
 		!print *, "name = ", names%v(i)%s
 
@@ -277,9 +296,10 @@ module subroutine parse_struct_declaration(parser, decl)
 		! E126: a scalar member that contains this struct again would make it
 		! infinite.  Only check in the final passes, when every struct is
 		! registered in parser%structs, and only once per member.  Members
-		! that are arrays (`[Node; :]`) are fine: recurse through those
+		! that are arrays (`[Node; :]`) or optional (`?Node`) are fine: recurse
+		! through those
 		if (parser%ipass > 0 .and. member%type == struct_type .and. &
-			allocated(member%struct_name)) then
+			.not. member%is_opt .and. allocated(member%struct_name)) then
 			visited = new_string_vector()
 			is_infinite = .false.
 			if (allocated(member%struct_cookie)) &
@@ -352,12 +372,14 @@ module subroutine parse_struct_declaration(parser, decl)
 	parser%num_structs = parser%num_structs + 1
 	decl%id_index  = parser%num_structs
 
-	overwrite = .false.
-	if (parser%ipass > 0) overwrite = .true.
-
-	!print *, "inserting identifier ", identifier%text, " into parser structs"
-	call parser%structs%insert( &
-		identifier%text, struct, decl%id_index, io, overwrite = overwrite)
+	! Replaces the placeholder from above (and, in pass 1, pass 0's struct).  A
+	! redeclared struct keeps the first declaration, as it always has
+	io = io_pre
+	if (io_pre == exit_success) then
+		!print *, "inserting identifier ", identifier%text, " into parser structs"
+		call parser%structs%insert( &
+			identifier%text, struct, decl%id_index, io, overwrite = .true.)
+	end if
 	if (parser%ipass == 0) call parser%struct_names%push(identifier%text)
 	!print *, "io = ", io
 	if (io /= 0) then
