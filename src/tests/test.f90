@@ -6988,6 +6988,44 @@ subroutine unit_test_methods(npass, nfail)
 				//'return s.g()[1];' &
 				, quiet) == 'cd', &
 
+			! --- method calls on a bare member of the implicit self ---
+			eval('struct B{x:i32, fn inc(){x+=1;} const fn get():i32{return x;}}' &   ! 55
+				//'struct A{b:B, fn f(){b.inc();} const fn g():i32{return b.get();}}' &
+				//'let a=A{b=B{x=1}}; a.f(); a.f(); return a.g();' &
+				, quiet) == '3', &
+
+			! two-level member chain
+			eval('struct C{x:i32, fn inc(){x+=1;}}' &                                 ! 56
+				//'struct B{c:C}' &
+				//'struct A{b:B, fn f(){b.c.inc();} const fn g():i32{return b.c.x;}}' &
+				//'let a=A{b=B{c=C{x=5}}}; a.f(); return a.g();' &
+				, quiet) == '6', &
+
+			! subscripted member
+			eval('struct C{x:i32, fn inc(){x+=1;}}' &                                 ! 57
+				//'struct A{v:[C;:], fn f(){v[1].inc();} const fn g():i32{return v[1].x;}}' &
+				//'let a=A{v=[C{x=1},C{x=10}]}; a.f(); return a.g();' &
+				, quiet) == '11', &
+
+			! fn-typed member called inside a method
+			eval('fn dbl(x:i32):i32{return 2*x;}' &                                   ! 58
+				//'struct A{f:fn(i32):i32, const fn g():i32{return f(21);}}' &
+				//'let a=A{f=dbl}; return a.g();' &
+				, quiet) == '42', &
+
+			! a recursive method on an optional member
+			eval('struct N{v:i32, next:?N,' &                                         ! 59
+				//'fn push(x:i32){if next==null{next=N{v=x,next=null};}else{next.push(x);}}' &
+				//'const fn len():i32{if next==null{return 1;}return 1+next.len();}}' &
+				//'let n=N{v=1,next=null}; n.push(2); n.push(3); n.push(4); return n.len();' &
+				, quiet) == '4', &
+
+			! error: const method calling a mutating method on a member
+			diag_has_code(get_diags( &                                               ! 60
+				'struct C{x:i32, fn inc(){x+=1;}}' &
+				//'struct A{c:C, const fn bad(){c.inc();}}'), &
+				EC_CONST_ASSIGN), &
+
 			.false. &
 		]
 
