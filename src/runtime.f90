@@ -198,7 +198,7 @@ module syntran__runtime_m
 
 		module subroutine member_is_null(node, var, state, is_null)
 			type(syntax_node_t), intent(in), target :: node
-			type(value_t), intent(in), target :: var
+			type(value_t), intent(inout), target :: var
 			type(state_t), intent(inout) :: state
 			logical, intent(out) :: is_null
 		end subroutine
@@ -207,6 +207,20 @@ module syntran__runtime_m
 			type(syntax_node_t), intent(in), target :: node
 			type(value_t), intent(inout), target :: var
 			type(state_t), intent(inout) :: state
+		end subroutine
+
+		module subroutine move_member_out(node, var, state, val)
+			type(syntax_node_t), intent(in), target :: node
+			type(value_t), intent(inout), target :: var
+			type(state_t), intent(inout) :: state
+			type(value_t), intent(out) :: val
+		end subroutine
+
+		module subroutine move_member_in(node, var, state, val)
+			type(syntax_node_t), intent(in), target :: node
+			type(value_t), intent(inout), target :: var
+			type(state_t), intent(inout) :: state
+			type(value_t), intent(inout) :: val
 		end subroutine
 
 		module subroutine allocate_array(val, cap)

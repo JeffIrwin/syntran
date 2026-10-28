@@ -121,25 +121,6 @@ end subroutine compile_member_chain_slots
 
 !===============================================================================
 
-function plain_member_chain(node) result(ok)
-
-	! Whether node is a dot chain `x.a.b` rooted at a variable with no subscripts
-	! anywhere, so that no slots are needed to evaluate it and member_is_null()
-	! and take_member() (runtime_array.f90) can walk it
-
-	type(syntax_node_t), intent(in) :: node
-	logical :: ok
-
-	ok = .false.
-	if (node%kind /= dot_expr) return
-	if (node%root_kind /= 0) return
-	if (.not. allocated(node%member)) return
-	ok = chain_total_nslots(node) == 0
-
-end function plain_member_chain
-
-!===============================================================================
-
 function null_test_operand(node) result(which)
 
 	! For `x == null`, `x != null`, `null == x` and `null != x` where x is a
@@ -1762,7 +1743,11 @@ recursive subroutine compile_node_impl(prog, cs, node)
 				! Pass 2: move by-ref args from their variable slots onto stack.
 				do i = 1, size(node%is_ref)
 					if (node%is_ref(i)) then
-						if (allocated(node%args(i)%lsubscripts) .or. &
+						if (call_recv_moved(node, i)) then
+							! Plain dot chain: move the member out instead of
+							! copying it; OP_RET moves it back
+							call emit(prog, OP_LOAD_REF_MEMBER, a = add_node(prog, node%args(i)))
+						else if (allocated(node%args(i)%lsubscripts) .or. &
 						    node%args(i)%kind == dot_expr .or. &
 						    node%args(i)%kind == fn_call_expr .or. &
 						    node%args(i)%kind == method_call_expr .or. &

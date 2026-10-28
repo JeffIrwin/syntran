@@ -96,6 +96,27 @@ struct Tree
 	}
 }
 
+struct Inner
+{
+	list: Node,
+	tag: i32,
+}
+
+struct Wrap
+{
+	inner: Inner,
+	other: Node,
+}
+
+fn local_chain(): i32
+{
+	// A chain receiver rooted at a local, not a global
+	let w = Wrap{inner = Inner{list = Node{val = 1, next = null}, tag = 0}, other = Node{val = 7, next = null}};
+	w.inner.list.push(2);
+	w.inner.list.push(3);
+	return w.inner.list.total() * 100 + w.other.total();
+}
+
 fn walk_sum(head: Node): i32
 {
 	// A fn local, to move in the local (not global) slots
@@ -229,5 +250,33 @@ while big != null
 	big = big.next;
 }
 ok = ok and bigsum == 19999 * 20000 / 2 and big == null;
+
+// A method on a member chain moves the member in and out of the call.  That
+// must not be visible: other members are untouched, and a copy taken first is
+// independent
+let w = Wrap{inner = Inner{list = Node{val = 1, next = null}, tag = 5}, other = Node{val = 7, next = null}};
+let wcopy = w;
+w.inner.list.push(2);
+w.inner.list.push(3);
+ok = ok and w.inner.list.len() == 3 and w.inner.list.total() == 6 and w.inner.tag == 5;
+ok = ok and w.other.len() == 1 and w.other.val == 7;
+ok = ok and wcopy.inner.list.len() == 1 and wcopy.inner.tag == 5;
+w.inner.list.bump();
+ok = ok and w.inner.list.total() == 9 and wcopy.inner.list.total() == 1;
+ok = ok and local_chain() == 600 + 7;
+
+// A copy of a member taken before a mutating call through the member
+let lc = w.inner.list;
+w.inner.list.push(10);
+ok = ok and lc.len() == 3 and w.inner.list.len() == 4;
+
+// Recursive methods are linear in the length of the list per call.  Cubic
+// copies would take hours here
+let pl = Node{val = 0, next = null};
+for i in [1: 3000]
+{
+	pl.push(i);
+}
+ok = ok and pl.len() == 3000 and pl.total() == 2999 * 3000 / 2;
 
 return ok;
