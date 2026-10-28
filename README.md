@@ -107,7 +107,12 @@ where you downloaded the binary.
 I recommend running `ulimit -s unlimited` in `~/.bashrc` or at least in your
 current shell to remove the stack limit.  Otherwise, syntran can crash with
 large recursion depths of recursive function calls (see issue
-https://github.com/JeffIrwin/syntran/issues/28).
+https://github.com/JeffIrwin/syntran/issues/28).  Copying a very long linked
+list, e.g. `let cur = list;`, can also overflow the stack, because it recurses
+once per node.
+
+On macOS, the hard limit is about 64 MB, so `ulimit -s unlimited` fails with
+`value exceeds hard limit`.  Use `ulimit -s 65520` instead.
 
 ## Build the interpreter from source
 
