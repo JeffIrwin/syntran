@@ -166,6 +166,49 @@ end subroutine vm_pop_discard
 
 !===============================================================================
 
+function store_can_move(prog, ip, tos, slot) result(can)
+	! Whether OP_STORE_* at `ip` can move TOS into `slot` instead of
+	! deep-copying it.  TOS is kept on the stack after a store, but when the
+	! next op is OP_POP nobody reads it again.  Only struct/null values, which
+	! are the ones that can be arbitrarily large (a linked list) and whose
+	! assign_() is a plain copy anyway
+	type(program_t), intent(in) :: prog
+	integer, intent(in) :: ip
+	type(value_t), intent(in) :: tos, slot
+	logical :: can
+
+	can = .false.
+	if (.not. any(tos%type == [struct_type, null_type])) return
+	if (.not. any(slot%type == [struct_type, null_type, unknown_type])) return
+	can = next_op_is_pop(prog, ip)
+
+end function store_can_move
+
+!===============================================================================
+
+function next_op_is_pop(prog, ip) result(is_pop)
+	type(program_t), intent(in) :: prog
+	integer, intent(in) :: ip
+	logical :: is_pop
+
+	is_pop = .false.
+	if (ip >= prog%len_) return
+	is_pop = prog%code(ip + 1)%op == OP_POP
+
+end function next_op_is_pop
+
+!===============================================================================
+
+subroutine store_move(tos, slot)
+	! Move TOS into a variable slot, leaving TOS an empty value for the OP_POP
+	! that follows.  See store_can_move()
+	type(value_t), intent(inout) :: tos, slot
+	call value_move(tos, slot)
+	tos%type = unknown_type
+end subroutine store_move
+
+!===============================================================================
+
 subroutine vm_stack_grow(stack)
 	! Grow the operand stack when len_ > cap.  Called from the typed-load fast
 	! path which increments len_ before checking capacity.
@@ -948,14 +991,18 @@ module subroutine vm_run(prog, state, res)
 		! to preserve the lhs type and cast the rhs. Raw copy for let_expr init
 		! (slot starts as unknown_type).
 		case (OP_STORE_GLOBAL)
-			if (state%vars%vals(instr%a)%type == unknown_type) then
+			if (store_can_move(prog, ip, stack%v(stack%len_), state%vars%vals(instr%a))) then
+				call store_move(stack%v(stack%len_), state%vars%vals(instr%a))
+			else if (state%vars%vals(instr%a)%type == unknown_type) then
 				state%vars%vals(instr%a) = stack%v(stack%len_)
 			else
 				call assign_(state%vars%vals(instr%a), stack%v(stack%len_), '=')
 			end if
 
 		case (OP_STORE_LOCAL)
-			if (state%locs%vals(instr%a)%type == unknown_type) then
+			if (store_can_move(prog, ip, stack%v(stack%len_), state%locs%vals(instr%a))) then
+				call store_move(stack%v(stack%len_), state%locs%vals(instr%a))
+			else if (state%locs%vals(instr%a)%type == unknown_type) then
 				state%locs%vals(instr%a) = stack%v(stack%len_)
 			else
 				call assign_(state%locs%vals(instr%a), stack%v(stack%len_), '=')
@@ -1539,6 +1586,55 @@ module subroutine vm_run(prog, state, res)
 		! nested, and subscripted member access chains.  Chain subscript
 		! slots (compile_member_chain_slots) are on TOS; pop them as a slot
 		! window with a fresh consumption cursor instead of AST-walking.
+		! --- null tests and moves for recursive structs (see bytecode.f90) ---
+		case (OP_IS_NULL)
+			block
+			logical :: is_null_
+			if (instr%c /= 0) then
+				is_null_ = state%locs%vals(instr%a)%type == null_type
+			else
+				is_null_ = state%vars%vals(instr%a)%type == null_type
+			end if
+			val%type = bool_type
+			val%sca%bool = is_null_ .neqv. (instr%b /= 0)
+			end block
+			call vm_push_move(stack, val)
+
+		case (OP_IS_NULL_MEMBER)
+			block
+			logical :: is_null_
+			associate(n => prog%nodes(instr%a))
+			if (n%is_loc) then
+				call member_is_null(n, state%locs%vals(n%id_index), state, is_null_)
+			else
+				call member_is_null(n, state%vars%vals(n%id_index), state, is_null_)
+			end if
+			end associate
+			if (state%rt_halt) exit
+			val%type = bool_type
+			val%sca%bool = is_null_ .neqv. (instr%b /= 0)
+			end block
+			call vm_push_move(stack, val)
+
+		case (OP_TAKE_MEMBER)
+			associate(n => prog%nodes(instr%a))
+			if (n%is_loc) then
+				call take_member(n, state%locs%vals(n%id_index), state)
+			else
+				call take_member(n, state%vars%vals(n%id_index), state)
+			end if
+			if (state%rt_halt) exit
+			if (next_op_is_pop(prog, ip)) then
+				! Nobody reads the value of the assignment
+				val%type = unknown_type
+				call vm_push_move(stack, val)
+			else if (n%is_loc) then
+				call vm_push_copy(stack, state%locs%vals(n%id_index))
+			else
+				call vm_push_copy(stack, state%vars%vals(n%id_index))
+			end if
+			end associate
+
 		case (OP_LOAD_MEMBER)
 			associate(n => prog%nodes(instr%a))
 			block

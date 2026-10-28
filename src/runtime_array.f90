@@ -408,6 +408,79 @@ end subroutine get_val
 
 !===============================================================================
 
+module subroutine member_is_null(node, var, state, is_null)
+
+	! Whether the member at the end of a plain dot chain `x.a.b` (no
+	! subscripts) holds null, without copying it like get_val() would.  The
+	! chain must have been checked by chain_is_plain() at compile time
+
+	type(syntax_node_t), intent(in), target :: node
+	type(value_t), intent(in), target :: var
+	type(state_t), intent(inout) :: state
+	logical, intent(out) :: is_null
+
+	!********
+
+	type(syntax_node_t), pointer :: n
+	type(value_t), pointer :: v
+
+	is_null = .false.
+
+	v => var
+	n => node%member
+	! Mirrors get_val(): each link indexes v%struct(), which is R47 for null
+	do
+		if (v%type == null_type) then
+			call rt_throw(state, err_rt(RC_NULL_MEMBER, "cannot access a member of null"))
+			return
+		end if
+		v => v%struct(n%id_index)
+		if (n%kind /= dot_expr) exit
+		n => n%member
+	end do
+
+	is_null = v%type == null_type
+
+end subroutine member_is_null
+
+!===============================================================================
+
+module subroutine take_member(node, var, state)
+
+	! `x = x.a.b`: move the member x.a.b out of x and overwrite x with it, so
+	! that the rest of x is freed instead of copying the member.  x ends up
+	! the same as it would after an assignment from a get_val() copy.  The chain
+	! must be plain, as in member_is_null()
+
+	type(syntax_node_t), intent(in), target :: node
+	type(value_t), intent(inout), target :: var
+	type(state_t), intent(inout) :: state
+
+	!********
+
+	type(syntax_node_t), pointer :: n
+	type(value_t), pointer :: v
+	type(value_t) :: tmp
+
+	n => node%member
+	v => var
+	do
+		if (v%type == null_type) then
+			call rt_throw(state, err_rt(RC_NULL_MEMBER, "cannot access a member of null"))
+			return
+		end if
+		v => v%struct(n%id_index)
+		if (n%kind /= dot_expr) exit
+		n => n%member
+	end do
+
+	call value_move(v, tmp)
+	call value_move(tmp, var)
+
+end subroutine take_member
+
+!===============================================================================
+
 subroutine get_file_member(member_node, var, state, res)
 
 	! Read one of a file handle's fixed read-only members (c.f. FILE_MEM_*

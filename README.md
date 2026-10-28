@@ -2732,10 +2732,59 @@ its members, like Rust or Kotlin do.  Reading `tail.next.val` above is a runtime
 error, similar to using an unallocated component in Fortran.  Check with `== null`
 first.
 
-Like all other values, structs are copied.  So `let cur = list;` copies the
-whole list, and `cur = cur.next` in a loop copies the rest of it every time.
-That is fine for short lists, but a tree or an array of nodes that refer to each
-other by index scales better.
+Methods can be recursive too.  A method can call another method on one of its
+own members, such as `next.push(v)` below:
+<!-- syntran-begin mode=file group=optional-methods -->
+```rust
+struct Node
+{
+    val: i32,
+    next: ?Node,
+
+    fn push(v: i32)
+    {
+        if next == null
+        {
+            next = Node{val = v, next = null};
+        }
+        else
+        {
+            next.push(v);
+        }
+    }
+
+    const fn len(): i32
+    {
+        if next == null
+        {
+            return 1;
+        }
+        return 1 + next.len();
+    }
+}
+
+let list = Node{val = 1, next = null};
+list.push(2);
+list.push(3);
+println(list);
+println("len = ", list.len());
+```
+<!-- syntran-expect
+Node{val = 1, next = Node{val = 2, next = Node{val = 3, next = null}}}
+len = 3
+-->
+<!-- syntran-end -->
+
+Like all other values, structs are copied, so `let cur = list;` copies the whole
+list.  The interpreter avoids the copy when it can tell that the old value is
+about to be overwritten anyway, so walking a list with `cur = cur.next`, testing
+for `cur != null`, or building one with `list = Node{val = i, next = list}` does
+not copy the rest of the list at every step.  A recursive method like `push`
+above is slow for long lists though, because it copies the part of the list
+after the receiver at every level of recursion.  Building a list of 800 nodes
+by calling `push` on the back takes several seconds, but a loop that assigns
+`list = Node{val = i, next = list}` takes milliseconds.  For a big tree, an array
+of nodes that refer to each other by index scales better.
 
 ## Enums
 
