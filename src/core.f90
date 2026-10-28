@@ -106,13 +106,31 @@ module syntran__core_m
 	!    * null safety is only checked at run time (R47), like an unallocated
 	!      Fortran component.  A compile-time check would need flow typing,
 	!      e.g. narrowing `?Node` to `Node` inside `if x != null { ... }`
-	!    * `cur = cur.next` deep copies the rest of a list, so walking a list is
-	!      O(n**2).  Related to the `move` todo below
+	!    * done: walking a list (`cur = cur.next`, `cur != null`) and building
+	!      one (`l = Node{val = i, next = l}`) no longer copy the list at every
+	!      step.  The VM moves the value when the old one is dead anyway
+	!      (OP_TAKE_MEMBER, OP_IS_NULL*, struct stores followed by OP_POP, and
+	!      struct_move_member() in compile_ctrl.f90).  Copies are still O(n):
+	!      `let cur = l`, passing a list to a fn, and a fn returning one.
+	!      Recursive methods like `next.push()` are much worse: the by-ref
+	!      receiver is copied in (OP_LOAD_MEMBER) and written back (set_val in
+	!      OP_RET) at every level, so one push costs O(n**2) and building a list
+	!      of n by pushing is O(n**3) (800 pushes take 16 s).  A fix would move
+	!      a dot-chain receiver in and out, like OP_LOAD_REF_* does for a plain
+	!      variable.  Related to the `move` todo below
+	!    * value_copy() recurses once per node, so copying a list of more than
+	!      ~14000 nodes overflows an 8 MB stack (e.g. `let cur = l` on a 16000
+	!      node list segfaults).  value_destroy() recurses the same way.  Could
+	!      be made iterative for chains with a single struct member, like a Rust
+	!      `Drop` impl
 	!    * the transpiler rejects recursive structs, `?T`, and `null` (E115).
 	!      Fortran supports this natively with allocatable components, but
 	!      the generated copy/print/fill helpers would need to be recursive
-	!    * calling a method on a bare member inside a method, e.g. `next.push()`,
-	!      is not supported (E9), so recursive methods are awkward
+	!    * done: calling a method on a bare member inside a method, e.g.
+	!      `next.push()`.  Still broken, unrelated: a method call in the middle of
+	!      a chain, e.g. `a.b.mk().y` or `b.mk().y` in a method, crashes in
+	!      get_val().  parse_dot() only splices a method_call_expr that is the
+	!      direct member, not a dot_expr whose root_kind is method_call_expr
 	!  - method improvements:
 	!    * stretch, arguably not very useful: slice method calls? e.g.
 	!      `struct[0:3].method()`. for void methods, just iterate and call it.

@@ -6666,6 +6666,7 @@ subroutine unit_test_struct_long(npass, nfail)
 			interpret_file(path//'test-05.syntran', quiet) == 'true', &
 			interpret_file(path//'test-06.syntran', quiet) == 'true', &
 			interpret_file(path//'test-07.syntran', quiet) == 'true', &
+			interpret_file(path//'test-08.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -9940,6 +9941,20 @@ subroutine unit_test_runtime_errors(npass, nfail)
 			.not. diag_has_code(get_diags( &
 				'struct N{v:i32, next:?N,} let n = N{v = 1, next = null}; ' &
 				//'n.next = N{v = 2, next = null}; println(n.next.v);'), RC_NULL_MEMBER), &
+
+			! the moving forms of a member read: `x = x.next` and `x.next == null`
+			.not. diag_has_code(get_diags( &
+				'struct N{v:i32, next:?N,} let n = N{v = 1, next = null}; ' &
+				//'n = n.next; println(n == null);'), RC_NULL_MEMBER), &
+			diag_has_code(get_diags( &
+				'struct N{v:i32, next:?N,} let n = N{v = 1, next = null}; ' &
+				//'n = n.next.next;'), RC_NULL_MEMBER), &
+			diag_has_code(get_diags( &
+				'struct N{v:i32, next:?N,} let n = N{v = 1, next = null}; ' &
+				//'println(n.next.next == null);'), RC_NULL_MEMBER), &
+			diag_has_code(get_diags( &
+				'struct N{v:i32, next:?N,} fn f(n: N): bool { return n.next.next != null; } ' &
+				//'println(f(N{v = 1, next = null}));'), RC_NULL_MEMBER), &
 
 			! R39 again, for the i64 overload of repeat()
 			diag_has_code(get_diags("println(repeat(""ab"", -1'i64));"), RC_REPEAT_NEGATIVE), &

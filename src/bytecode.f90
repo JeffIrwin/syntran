@@ -229,7 +229,26 @@ module syntran__bytecode_m
 		OP_GT_STR           = 1244, &
 		OP_GE_STR           = 1245, &
 		OP_EQ_ARRAY         = 1247, &
-		OP_CALL_INTR_REF    = 1248
+		OP_CALL_INTR_REF    = 1248, &
+		OP_IS_NULL          = 1249, &
+		OP_IS_NULL_MEMBER   = 1250, &
+		OP_TAKE_MEMBER      = 1251
+
+	! Moves instead of copies for recursive structs (linked lists).  A struct
+	! variable load deep-copies the whole value, so `cur != null` and
+	! `cur = cur.next` would be O(n) each, and walking a list O(n**2)
+	!
+	! OP_IS_NULL: `x == null` or `x != null` for a variable x, without loading it.
+	! a = slot, b = 1 for `!=`, c = 1 if x is a local.  Pushes a bool
+	!
+	! OP_IS_NULL_MEMBER: the same for a plain dot chain `x.a.b` with no
+	! subscripts.  a = prog%nodes index of the dot_expr, b = 1 for `!=`.  A null
+	! in the middle of the chain is R47, like a load of the member would be
+	!
+	! OP_TAKE_MEMBER: `x = x.a.b` for struct/null members and a plain dot chain.
+	! a = prog%nodes index of the RHS dot_expr, whose id_index/is_loc is x.  The
+	! member is moved out of x, then x is overwritten by it.  Pushes an empty
+	! value if the next op is OP_POP, else a copy of the new x
 
 	! OP_CALL_INTR_REF: intrinsic call with by-ref args (fn_t%ref_params), e.g.
 	! std::lu_factor(&A).  a = intr_id, b = prog%nodes index of the call node
@@ -636,6 +655,12 @@ module syntran__bytecode_m
 		! a function-level return_statement (emit OP_RET) from a top-level one
 		! (emit OP_HALT).
 		logical :: in_fn_body = .false.
+
+		! Index of the member of the next struct_instance_expr that is loaded
+		! with OP_LOAD_REF_* (moved out of its variable) instead of copied, for
+		! `x = S{..., m = x}`.  Set by the assignment that contains the literal
+		! and cleared by the literal
+		integer :: struct_move_slot = 0
 
 		! REPL support: fns declared on an earlier REPL line have no
 		! fn_declaration node in the tree being compiled now (each REPL line

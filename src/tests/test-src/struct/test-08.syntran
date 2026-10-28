@@ -1,0 +1,233 @@
+
+// Recursive methods on `?Node` members, and the places where the interpreter
+// moves a struct instead of copying it (null tests, `x = x.next`,
+// `x = Node{..., next = x}`).  Moves must never be visible: value semantics
+// are the same as if everything was copied
+
+struct Node
+{
+	val: i32,
+	next: ?Node,
+
+	fn push(v: i32)
+	{
+		if next == null
+		{
+			next = Node{val = v, next = null};
+		}
+		else
+		{
+			next.push(v);
+		}
+	}
+
+	const fn len(): i32
+	{
+		if next == null
+		{
+			return 1;
+		}
+		return 1 + next.len();
+	}
+
+	const fn total(): i32
+	{
+		if next == null
+		{
+			return val;
+		}
+		return val + next.total();
+	}
+
+	fn bump()
+	{
+		val += 1;
+		if next != null
+		{
+			next.bump();
+		}
+	}
+}
+
+struct Tree
+{
+	key: i32,
+	left: ?Tree,
+	right: ?Tree,
+
+	fn insert(k: i32)
+	{
+		if k < key
+		{
+			if left == null
+			{
+				left = Tree{key = k, left = null, right = null};
+			}
+			else
+			{
+				left.insert(k);
+			}
+		}
+		else
+		{
+			if right == null
+			{
+				right = Tree{key = k, left = null, right = null};
+			}
+			else
+			{
+				right.insert(k);
+			}
+		}
+	}
+
+	const fn count(): i32
+	{
+		let n = 1;
+		if left != null
+		{
+			n += left.count();
+		}
+		if right != null
+		{
+			n += right.count();
+		}
+		return n;
+	}
+}
+
+fn walk_sum(head: Node): i32
+{
+	// A fn local, to move in the local (not global) slots
+	let cur = head;
+	let s = 0;
+	while cur != null
+	{
+		s += cur.val;
+		cur = cur.next;
+	}
+	return s;
+}
+
+fn build(n: i32): Node
+{
+	let l = Node{val = 0, next = null};
+	for i in [1: n]
+	{
+		l = Node{val = i, next = l};
+	}
+	return l;
+}
+
+fn is_last(n: Node): bool
+{
+	return n.next == null;
+}
+
+let ok = true;
+
+// Recursive methods
+let n = Node{val = 1, next = null};
+n.push(2);
+n.push(3);
+n.push(4);
+ok = ok and n.len() == 4 and n.total() == 10;
+ok = ok and str(n) == "Node{val = 1, next = Node{val = 2, next = Node{val = 3, next = Node{val = 4, next = null}}}}";
+n.bump();
+ok = ok and n.total() == 14 and n.val == 2 and n.next.next.next.val == 5;
+
+let t = Tree{key = 50, left = null, right = null};
+for k in [30, 70, 20, 40, 60, 80, 10]
+{
+	t.insert(k);
+}
+ok = ok and t.count() == 8 and t.left.left.left.key == 10 and t.right.right.key == 80;
+ok = ok and t.left.right.left == null;
+
+// `cur = cur.next` must not alter the list it walked, and a copy taken before
+// the walk is independent of it
+let l = build(5);
+let orig = l;
+let cur = l;
+let steps = 0;
+while cur != null
+{
+	cur = cur.next;
+	steps += 1;
+}
+ok = ok and steps == 5 and cur == null;
+ok = ok and l.len() == 5 and orig.len() == 5 and l.val == 4;
+ok = ok and walk_sum(l) == 0 + 1 + 2 + 3 + 4;
+
+// Two links at once, and the assignment used as a value
+cur = l;
+cur = cur.next.next;
+ok = ok and cur.val == 2 and cur.len() == 3;
+let alias = (cur = cur.next);
+ok = ok and alias.val == 1 and cur.val == 1;
+
+// A tail that is null, and then null itself
+cur = l.next.next.next.next;
+ok = ok and cur.val == 0 and cur.next == null;
+cur = cur.next;
+ok = ok and cur == null and null == cur;
+cur = Node{val = 9, next = null};
+ok = ok and cur != null and null != cur and cur.val == 9;
+
+// `x = Node{..., next = x}` moves x into the new node.  The old x must not be
+// visible afterwards, but a copy of it made first must still be intact
+let m = Node{val = 1, next = null};
+let before = m;
+m = Node{val = 2, next = m};
+ok = ok and m.len() == 2 and m.next.val == 1 and before.len() == 1;
+
+// ... but not when another member reads x, which keeps the copy
+m = Node{val = m.val + 10, next = m};
+ok = ok and m.len() == 3 and m.val == 12 and m.next.val == 2 and m.next.next.val == 1;
+
+// ... or when x appears twice
+let both = Tree{key = 1, left = null, right = null};
+both = Tree{key = 2, left = both, right = both};
+ok = ok and both.left.key == 1 and both.right.key == 1 and both.count() == 3;
+
+// ... or when a later member could fail
+fn two(): i32 { return 2; }
+m = Node{val = two(), next = m};
+ok = ok and m.len() == 4 and m.next.val == 12;
+
+// ... or in the middle of other members, with arithmetic
+let k = Tree{key = 1, left = null, right = null};
+k = Tree{key = 1 + 2 * 3, left = k, right = null};
+ok = ok and k.key == 7 and k.left.key == 1 and k.right == null;
+
+// In a fn, with the local slots
+ok = ok and build(10).len() == 10 and walk_sum(build(10)) == 45;
+ok = ok and not is_last(build(2)) and is_last(build(1));
+
+// Null tests of members, both ways round
+let e = Node{val = 1, next = Node{val = 2, next = null}};
+ok = ok and e.next != null and null != e.next and not (e.next == null);
+ok = ok and e.next.next == null and null == e.next.next;
+ok = ok and not (e.next.next != null);
+
+// Assigning null over a list frees it, leaving a usable variable
+let z = build(3);
+z.next = null;
+ok = ok and z.len() == 1 and z.next == null;
+
+// A long list is built and walked quickly.  Quadratic copies would take
+// minutes here
+let big = Node{val = 0, next = null};
+for i in [1: 20000]
+{
+	big = Node{val = i, next = big};
+}
+let bigsum = 0;
+while big != null
+{
+	bigsum += big.val;
+	big = big.next;
+}
+ok = ok and bigsum == 19999 * 20000 / 2 and big == null;
+
+return ok;
