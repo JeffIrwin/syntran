@@ -979,6 +979,8 @@ recursive module subroutine parse_name_expr(parser, expr)
 
 	type(fn_t), pointer :: fn
 
+	type(syntax_node_t) :: recv
+
 	! Variable name expression
 
 	call parser%match(identifier_token, identifier)
@@ -1018,8 +1020,14 @@ recursive module subroutine parse_name_expr(parser, expr)
 					call parser%parse_subscripts(expr%member)
 					call value_copy(expr%val, expr%member%val)
 					if (parser%current_kind() == dot_token) then
+						recv = expr   ! dot_expr("0self", field), before parse_dot() rewrites expr%member
 						call parser%parse_dot(expr%member)
-						call value_copy(expr%val, expr%member%val)
+						if (expr%member%kind == method_call_expr .or. &
+						    expr%member%kind == fn_call_ptr_expr) then
+							call splice_implicit_self_call(parser, recv, expr)
+						else
+							call value_copy(expr%val, expr%member%val)
+						end if
 					end if
 					return
 				end if
@@ -1774,6 +1782,65 @@ recursive module subroutine parse_dot(parser, expr)
 	end if
 
 end subroutine parse_dot
+
+!===============================================================================
+
+subroutine splice_implicit_self_call(parser, recv, expr)
+
+	! A method or fn-typed member is called on a member of the implicit self
+	! inside a method, e.g. `next.push(v)`.  parse_name_expr() builds
+	! expr = dot_expr("0self", field) and calls parse_dot() on expr%member, which
+	! turns expr%member into the call node.  Its receiver (or callee) only holds
+	! the fragment from the field down, so make the call node the top-level expr
+	! and give it the full chain rooted at "0self", like the splice in parse_dot()
+	! does for `a.b.m()`
+	!
+	! recv is expr as it was before the parse_dot() call
+
+	class(parser_t), target :: parser
+	type(syntax_node_t), intent(inout) :: recv, expr
+
+	!********
+
+	integer :: fn_slot
+
+	type(fn_t), pointer :: fn_check
+
+	type(syntax_node_t) :: call_node
+
+	type(text_span_t) :: span
+
+	if (expr%member%kind == method_call_expr) then
+
+		! A const method can't mutate self, so it can't call a mutating method
+		! on one of self's members either
+		if (parser%in_const_method) then
+			fn_slot = parser%fns%find( &
+				"0" // unqualified_name(expr%member%args(1)%val%struct_name) // &
+				"::" // expr%member%identifier%text)
+			if (fn_slot /= 0) then
+				fn_check => parser%fns%get(fn_slot)
+				if (.not. fn_check%is_const_method) then
+					span = new_span(expr%member%identifier%pos, len(expr%member%identifier%text))
+					call parser%diagnostics%push(err_const_assign( &
+						parser%context(), span, "self"))
+				end if
+			end if
+		end if
+
+		recv%member = expr%member%args(1)
+		call_node = expr%member
+		call_node%args(1) = recv
+
+	else
+		recv%member = expr%member%left
+		call_node = expr%member
+		call_node%left = recv
+	end if
+
+	expr = call_node
+
+end subroutine splice_implicit_self_call
 
 !===============================================================================
 
