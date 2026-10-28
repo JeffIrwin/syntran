@@ -9956,6 +9956,15 @@ subroutine unit_test_runtime_errors(npass, nfail)
 				'struct N{v:i32, next:?N,} fn f(n: N): bool { return n.next.next != null; } ' &
 				//'println(f(N{v = 1, next = null}));'), RC_NULL_MEMBER), &
 
+			! a null in the middle of a method call receiver chain, which is moved
+			! out of its variable for the call
+			diag_has_code(get_diags( &
+				'struct N{v:i32, next:?N, const fn len():i32{return v;}} ' &
+				//'let n = N{v = 1, next = null}; println(n.next.next.len());'), RC_NULL_MEMBER), &
+			diag_has_code(get_diags( &
+				'struct N{v:i32, next:?N, fn set(x:i32){v = x;}} ' &
+				//'let n = N{v = 1, next = null}; n.next.next.set(2);'), RC_NULL_MEMBER), &
+
 			! R39 again, for the i64 overload of repeat()
 			diag_has_code(get_diags("println(repeat(""ab"", -1'i64));"), RC_REPEAT_NEGATIVE), &
 			.not. diag_has_code(get_diags("println(repeat(""ab"", 2'i64));"), RC_REPEAT_NEGATIVE) &

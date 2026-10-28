@@ -112,12 +112,13 @@ module syntran__core_m
 	!      (OP_TAKE_MEMBER, OP_IS_NULL*, struct stores followed by OP_POP, and
 	!      struct_move_member() in compile_ctrl.f90).  Copies are still O(n):
 	!      `let cur = l`, passing a list to a fn, and a fn returning one.
-	!      Recursive methods like `next.push()` are much worse: the by-ref
-	!      receiver is copied in (OP_LOAD_MEMBER) and written back (set_val in
-	!      OP_RET) at every level, so one push costs O(n**2) and building a list
-	!      of n by pushing is O(n**3) (800 pushes take 16 s).  A fix would move
-	!      a dot-chain receiver in and out, like OP_LOAD_REF_* does for a plain
-	!      variable.  Related to the `move` todo below
+	!      The receiver of a method call on a plain dot chain (`next.push()`)
+	!      is moved too: OP_LOAD_REF_MEMBER moves it out and OP_RET moves it back
+	!      (call_recv_moved() in bytecode.f90), so building a list of 800 nodes by
+	!      pushing takes milliseconds, not 16 s.  A chain with a subscript, or a
+	!      call with another by-ref arg that has one, still copies the receiver
+	!      (OP_LOAD_MEMBER and set_val).  Only method receivers can be chains,
+	!      `f(&a.b)` is a parse error.  Related to the `move` todo below
 	!    * value_copy() recurses once per node, so copying a list of more than
 	!      ~14000 nodes overflows an 8 MB stack (e.g. `let cur = l` on a 16000
 	!      node list segfaults).  value_destroy() recurses the same way.  Could

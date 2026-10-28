@@ -232,7 +232,8 @@ module syntran__bytecode_m
 		OP_CALL_INTR_REF    = 1248, &
 		OP_IS_NULL          = 1249, &
 		OP_IS_NULL_MEMBER   = 1250, &
-		OP_TAKE_MEMBER      = 1251
+		OP_TAKE_MEMBER      = 1251, &
+		OP_LOAD_REF_MEMBER  = 1252
 
 	! Moves instead of copies for recursive structs (linked lists).  A struct
 	! variable load deep-copies the whole value, so `cur != null` and
@@ -249,6 +250,12 @@ module syntran__bytecode_m
 	! a = prog%nodes index of the RHS dot_expr, whose id_index/is_loc is x.  The
 	! member is moved out of x, then x is overwritten by it.  Pushes an empty
 	! value if the next op is OP_POP, else a copy of the new x
+	!
+	! OP_LOAD_REF_MEMBER: a by-ref call arg that is a plain dot chain `x.a.b`, e.g.
+	! the receiver `next` of `next.push(v)`.  a = prog%nodes index of the dot_expr.
+	! Like OP_LOAD_REF_LOCAL/GLOBAL, the member is moved out of x onto the stack
+	! instead of copied, and OP_RET moves it back (see call_recv_moved()).  A null
+	! in the middle of the chain is R47
 
 	! OP_CALL_INTR_REF: intrinsic call with by-ref args (fn_t%ref_params), e.g.
 	! std::lu_factor(&A).  a = intr_id, b = prog%nodes index of the call node
@@ -1929,6 +1936,62 @@ pure function call_recv_slot_start(cn, i) result(s0)
 	end do
 
 end function call_recv_slot_start
+
+!===============================================================================
+
+pure function plain_member_chain(node) result(ok)
+
+	! Whether node is a dot chain `x.a.b` rooted at a variable with no subscripts
+	! anywhere, so that no slots are needed to evaluate it and member_is_null(),
+	! take_member(), and move_member_out() (runtime_array.f90) can walk it
+
+	type(syntax_node_t), intent(in) :: node
+	logical :: ok
+
+	ok = .false.
+	if (node%kind /= dot_expr) return
+	if (node%root_kind /= 0) return
+	if (.not. allocated(node%member)) return
+	ok = chain_total_nslots(node) == 0
+
+end function plain_member_chain
+
+!===============================================================================
+
+pure function call_recv_moved(cn, i) result(ok)
+
+	! Whether by-ref param i's arg (cn%args(i)) is moved out of its variable at the
+	! call with OP_LOAD_REF_MEMBER and moved back at OP_RET, instead of copied in
+	! with OP_LOAD_MEMBER and written back with set_val.  That needs a plain dot
+	! chain `x.a.b`.  Every other by-ref arg must also be a bare name or a plain
+	! chain, because a subscript or a fn call in one of them could otherwise read
+	! the member after it has been moved out.  (By-value args are all evaluated
+	! first.)  compile_ctrl.f90's by-ref arg loading and OP_RET must agree, so both
+	! call this
+
+	type(syntax_node_t), intent(in) :: cn
+	integer, intent(in) :: i
+	logical :: ok
+
+	integer :: j
+
+	ok = .false.
+	if (.not. cn%is_ref(i)) return
+	if (.not. plain_member_chain(cn%args(i))) return
+
+	do j = 1, size(cn%is_ref)
+		if (j == i .or. .not. cn%is_ref(j)) cycle
+		associate(a => cn%args(j))
+			if (a%kind == name_expr) then
+				if (allocated(a%lsubscripts)) return
+			else if (.not. plain_member_chain(a)) then
+				return
+			end if
+		end associate
+	end do
+	ok = .true.
+
+end function call_recv_moved
 
 !===============================================================================
 

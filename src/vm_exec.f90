@@ -1056,6 +1056,17 @@ module subroutine vm_run(prog, state, res)
 			call value_move(state%locs%vals(instr%a), val)
 			call vm_push_move(stack, val)
 
+		case (OP_LOAD_REF_MEMBER)
+			associate(n => prog%nodes(instr%a))
+			if (n%is_loc) then
+				call move_member_out(n, state%locs%vals(n%id_index), state, val)
+			else
+				call move_member_out(n, state%vars%vals(n%id_index), state, val)
+			end if
+			end associate
+			if (state%rt_halt) exit
+			call vm_push_move(stack, val)
+
 		! --- user function call -----------------------------------------------
 		! Stack layout on entry (bottom to top):
 		!   [by-value args][by-ref args][by-ref receiver-chain slots]
@@ -1281,7 +1292,17 @@ module subroutine vm_run(prog, state, res)
 				    cn%args(i)%kind == method_call_expr .or. &
 				    cn%args(i)%kind == fn_call_intr_expr .or. &
 				    cn%args(i)%root_kind /= 0) cycle
-				if (allocated(cn%args(i)%lsubscripts) .or. &
+				if (call_recv_moved(cn, i)) then
+					! Plain dot chain, moved out by OP_LOAD_REF_MEMBER
+					if (cn%args(i)%is_loc) then
+						call move_member_in(cn%args(i), &
+							state%locs%vals(cn%args(i)%id_index), state, params_pool(i))
+					else
+						call move_member_in(cn%args(i), &
+							state%vars%vals(cn%args(i)%id_index), state, params_pool(i))
+					end if
+					if (state%rt_halt) exit
+				else if (allocated(cn%args(i)%lsubscripts) .or. &
 				    cn%args(i)%kind == dot_expr) then
 					! Subscripted or dot-expr receiver: write element back via
 					! set_val, using this param's own window of the
