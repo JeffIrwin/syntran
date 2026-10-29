@@ -144,9 +144,9 @@ module syntran__core_m
 	!      chain, e.g. `a.b.mk().y`, `a.b.mk2().mk().y`, or `b.mk().y` in a
 	!      method.  splice_chain_root() in parse_expr.f90 roots the innermost
 	!      call's receiver at the full chain
-	!    * the const-receiver check in parse_dot() treats each member of a chain
-	!      with 3+ levels as a variable at the intermediate recursion levels, so
-	!      `const b = 0;` plus `a.b.c.inc()` gives a false E83
+	!    * done: the const-receiver check in parse_dot() only runs in the frame
+	!      whose expr is the root variable, so `const b = 0;` plus `a.b.c.inc()`
+	!      no longer gives a false E83 from a member name matching a const
 	!  - method improvements:
 	!    * stretch, arguably not very useful: slice method calls? e.g.
 	!      `struct[0:3].method()`. for void methods, just iterate and call it.
