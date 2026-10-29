@@ -1708,6 +1708,23 @@ module subroutine vm_run(prog, state, res)
 		case (OP_STORE_MEMBER)
 			call vm_pop_copy(stack, right)
 			associate(n => prog%nodes(instr%a))
+			if (instr%c /= 0) then
+				! Plain `x.a.b = <struct>`: move the value into place.  The chain
+				! has no subscript slots.  Nobody reads the value of the
+				! assignment if an OP_POP follows, else push a copy
+				if (next_op_is_pop(prog, ip)) then
+					val%type = unknown_type
+				else
+					call value_copy(val, right)
+				end if
+				if (n%is_loc) then
+					call move_member_in(n, state%locs%vals(n%id_index), state, right)
+				else
+					call move_member_in(n, state%vars%vals(n%id_index), state, right)
+				end if
+				if (state%rt_halt) exit
+				call vm_push_move(stack, val)
+			else
 			block
 			integer :: nslots_, base_, pos_
 			nslots_ = chain_total_nslots(n)
@@ -1745,6 +1762,7 @@ module subroutine vm_run(prog, state, res)
 			if (state%rt_halt) exit
 			call vm_push_move(stack, val)
 			end block
+			end if
 			end associate
 
 		! --- M6: intrinsic function call -----------------------------------------

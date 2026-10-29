@@ -2737,45 +2737,38 @@ its members, like Rust or Kotlin do.  Reading `tail.next.val` above is a runtime
 error, similar to using an unallocated component in Fortran.  Check with `== null`
 first.
 
-Methods can be recursive too.  A method can call another method on one of its
-own members, such as `next.push(v)` below:
+Methods can change an optional member too.  A linked list can be wrapped in a
+`List` struct whose `push()` adds a node to the front in constant time, so the
+list reads in reverse order of the pushes:
 <!-- syntran-begin mode=file group=optional-methods -->
 ```rust
 struct Node
 {
     val: i32,
     next: ?Node,
+}
+
+struct List
+{
+    head: ?Node,
+    len: i32,
 
     fn push(v: i32)
     {
-        if next == null
-        {
-            next = Node{val = v, next = null};
-        }
-        else
-        {
-            next.push(v);
-        }
-    }
-
-    const fn len(): i32
-    {
-        if next == null
-        {
-            return 1;
-        }
-        return 1 + next.len();
+        head = Node{val = v, next = head};
+        len += 1;
     }
 }
 
-let list = Node{val = 1, next = null};
+let list = List{head = null, len = 0};
+list.push(1);
 list.push(2);
 list.push(3);
 println(list);
-println("len = ", list.len());
+println("len = ", list.len);
 ```
 <!-- syntran-expect
-Node{val = 1, next = Node{val = 2, next = Node{val = 3, next = null}}}
+List{head = Node{val = 3, next = Node{val = 2, next = Node{val = 1, next = null}}}, len = 3}
 len = 3
 -->
 <!-- syntran-end -->
@@ -2784,12 +2777,12 @@ Like all other values, structs are copied, so `let cur = list;` copies the whole
 list.  The interpreter avoids the copy when it can tell that the old value is
 about to be overwritten anyway, so walking a list with `cur = cur.next`, testing
 for `cur != null`, or building one with `list = Node{val = i, next = list}` does
-not copy the rest of the list at every step.  The receiver of a method call on a
-member, like `next.push(v)` above, is moved into the call and back out again
-instead of copied, so a recursive method does not copy the list at each level
-either.  Copies are still made by `let cur = list;`, when a list is passed to
-a fn by value, and when a fn returns one.  For a big tree, an array of nodes that
-refer to each other by index scales better.
+not copy the rest of the list at every step.  The same goes for a member:
+`head = Node{val = v, next = head}` above moves the old list into the new node, so
+`push()` takes the same time no matter how long the list is.  Copies are still
+made by `let cur = list;`, when a list is passed to a fn by value, and when a fn
+returns one.  For a big tree, an array of nodes that refer to each other by index
+scales better.
 
 ## Enums
 

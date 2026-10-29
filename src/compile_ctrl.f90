@@ -259,6 +259,79 @@ end function struct_move_member
 
 !===============================================================================
 
+function same_plain_chain(a, b) result(ok)
+
+	! Whether a and b, each a dot_expr or an assignment to one, are plain dot
+	! chains (no subscripts, no call root) that name the same member of the same
+	! variable
+
+	type(syntax_node_t), intent(in), target :: a, b
+	logical :: ok
+
+	type(syntax_node_t), pointer :: pa, pb
+
+	ok = .false.
+	if (a%root_kind /= 0 .or. b%root_kind /= 0) return
+	if (.not. allocated(a%member) .or. .not. allocated(b%member)) return
+	if (chain_total_nslots(a) /= 0 .or. chain_total_nslots(b) /= 0) return
+	if (a%id_index /= b%id_index) return
+	if (a%is_loc .neqv. b%is_loc) return
+
+	pa => a%member
+	pb => b%member
+	do
+		if (pa%id_index /= pb%id_index) return
+		if ((pa%kind == dot_expr) .neqv. (pb%kind == dot_expr)) return
+		if (pa%kind /= dot_expr) exit
+		pa => pa%member
+		pb => pb%member
+	end do
+	ok = .true.
+
+end function same_plain_chain
+
+!===============================================================================
+
+function struct_move_chain(node, lhs) result(imove)
+
+	! For `x.a.b = S{..., m = x.a.b, ...}` where node is the struct literal and
+	! lhs is the assignment, return the index of the member m that is exactly the
+	! chain being assigned, so it can be moved out of x.a.b instead of deep-copied.
+	! This is `head = Node{val = v, next = head}` inside a method.  Zero if there
+	! is no such member, or any other member could read x or fail (cant_fail())
+
+	type(syntax_node_t), intent(in) :: node, lhs
+	integer :: imove
+
+	integer :: i
+
+	imove = 0
+	if (node%kind /= struct_instance_expr) return
+	if (.not. allocated(lhs%member)) return
+
+	do i = 1, size(node%members)
+		associate(m => node%members(i))
+			if (m%kind == dot_expr .and. any(m%val%type == [struct_type, null_type])) then
+				if (same_plain_chain(m, lhs)) then
+					if (imove /= 0) then
+						imove = 0
+						return
+					end if
+					imove = i
+					cycle
+				end if
+			end if
+			if (.not. cant_fail(m, lhs%id_index, lhs%is_loc)) then
+				imove = 0
+				return
+			end if
+		end associate
+	end do
+
+end function struct_move_chain
+
+!===============================================================================
+
 subroutine compile_null_test(prog, node, negate)
 
 	! Emit OP_IS_NULL/OP_IS_NULL_MEMBER for the operand x of `x == null`
@@ -839,7 +912,7 @@ recursive subroutine compile_node_impl(prog, cs, node)
 
 	!*******
 
-	integer :: idx, i, j, const_idx, typed_op, move_slot
+	integer :: idx, i, j, const_idx, typed_op, move_slot, c_
 	integer :: jf_ip, j_ip, l_top, l_else, l_end, l_pad
 	integer :: nblock_saved
 	logical :: first, entering_ctx
@@ -1026,9 +1099,18 @@ recursive subroutine compile_node_impl(prog, cs, node)
 			! OP_STORE_IDX's [subscripts...][rhs] layout -- the VM's
 			! vm_pop_copy grabs the RHS, leaving the slot window below it.
 			call compile_member_chain_slots(prog, cs, node)
+			if (node%op%kind == equals_token) &
+				cs%struct_move_slot = struct_move_chain(node%right, node)
 			call compile_node(prog, cs, node%right)
+			cs%struct_move_slot = 0
 			idx = add_node(prog, node)
-			call emit(prog, OP_STORE_MEMBER, a = idx, b = node%op%kind)
+			! c = 1: plain `=` of a struct onto a plain chain, which the VM can
+			! move into place instead of copying (see OP_STORE_MEMBER)
+			c_ = 0
+			if (node%op%kind == equals_token .and. &
+			    any(node%right%val%type == [struct_type, null_type]) .and. &
+			    chain_total_nslots(node) == 0) c_ = 1
+			call emit(prog, OP_STORE_MEMBER, a = idx, b = node%op%kind, c = int(c_, 8))
 
 		else if (.not. allocated(node%lsubscripts) .and. &
 		         node%op%kind == equals_token) then
@@ -1631,8 +1713,10 @@ recursive subroutine compile_node_impl(prog, cs, node)
 		cs%struct_move_slot = 0
 		do i = 1, size(node%members)
 			if (i == move_slot) then
-				! Moved out of the variable being assigned
-				if (node%members(i)%is_loc) then
+				! Moved out of the variable or member being assigned
+				if (node%members(i)%kind == dot_expr) then
+					call emit(prog, OP_LOAD_REF_MEMBER, a = add_node(prog, node%members(i)))
+				else if (node%members(i)%is_loc) then
 					call emit(prog, OP_LOAD_REF_LOCAL,  a = node%members(i)%id_index)
 				else
 					call emit(prog, OP_LOAD_REF_GLOBAL, a = node%members(i)%id_index)
