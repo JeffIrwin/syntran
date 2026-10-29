@@ -8696,6 +8696,16 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_count_code(get_diags_file(P//'E128-null-array.syntran'), &
 				EC_NULL_ARRAY) == 1, &
 
+			! E129: a variable can't be declared from a bare `null`
+			diag_has_code(get_diags('let x = null;'), EC_UNTYPED_NULL), &
+			diag_has_code(get_diags('const x = null;'), EC_UNTYPED_NULL), &
+			diag_count_code(get_diags_file(P//'E129-untyped-null.syntran'), &
+				EC_UNTYPED_NULL) == 1, &
+			! ... but an optional that holds null is a struct variable
+			.not. diag_has_code(get_diags( &
+				'struct N{v:i32, next:?N,} let n = N{v = 1, next = null}; ' &
+				//'let k = n.next; k = null; println(k == null);'), EC_UNTYPED_NULL), &
+
 			! null is only for optionals
 			diag_has_code(get_diags('struct N{v:i32,} let n = N{v = 1}; n = null;'), &
 				EC_BINARY_TYPES), &
@@ -10895,7 +10905,9 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E127-bad-optional.syntran'), &
 				EC_BAD_OPTIONAL, P//'E127-bad-optional.syntran', 7, 7, 4), &
 			diag_loc_ok(get_diags_file(P//'E128-null-array.syntran'), &
-				EC_NULL_ARRAY, P//'E128-null-array.syntran', 6, 14, 4) &
+				EC_NULL_ARRAY, P//'E128-null-array.syntran', 6, 14, 4), &
+			diag_loc_ok(get_diags_file(P//'E129-untyped-null.syntran'), &
+				EC_UNTYPED_NULL, P//'E129-untyped-null.syntran', 9, 1, 18) &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

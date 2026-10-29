@@ -330,6 +330,7 @@ module procedure get_all_error_codes
 	call codes%push(EC_INFINITE_STRUCT)
 	call codes%push(EC_BAD_OPTIONAL)
 	call codes%push(EC_NULL_ARRAY)
+	call codes%push(EC_UNTYPED_NULL)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -1366,8 +1367,8 @@ module procedure err_infinite_struct
 
 	err = err_pre(EC_INFINITE_STRUCT) &
 		//'struct `'//struct_name//'` contains itself through member `'//member//'`, ' &
-		//'so it would have infinite size.  Make `'//member//'` an array like ' &
-		//'`[Type; :]` instead, which can be empty' &
+		//'so it would have infinite size.  Make `'//member//'` optional like ' &
+		//'`?Type`, or an array like `[Type; :]`, which can be empty' &
 		//underline(context, span)//" recursive member"//color_reset
 
 end procedure err_infinite_struct
@@ -1382,6 +1383,18 @@ module procedure err_null_array
 		//underline(context, span)//" null in array literal"//color_reset
 
 end procedure err_null_array
+
+!===============================================================================
+
+module procedure err_untyped_null
+
+	err = err_pre(EC_UNTYPED_NULL) &
+		//'`null` has no struct type, so variable `'//var//'` could never hold ' &
+		//'anything else.  Only a `?Struct` member, parameter, or fn return ' &
+		//'value can be null' &
+		//underline(context, span)//" untyped null"//color_reset
+
+end procedure err_untyped_null
 
 !===============================================================================
 

@@ -1,6 +1,6 @@
 // E126: infinite-struct
 // A struct can't hold itself directly, because it would have infinite size.
-// Recurse through an array member instead, e.g. `next: [Node; :]`
+// Use `next: ?Node` or `next: [Node; :]` instead
 
 struct Node
 {

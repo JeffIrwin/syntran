@@ -2729,8 +2729,9 @@ true
 <!-- syntran-end -->
 
 Only a struct can be optional: `?i32`, `?[Node; :]`, and arrays of optionals are
-errors.  A plain `Node` can't be set to `null`, but an optional can be used
-anywhere a `Node` is expected.
+errors.  The literal `null` can't be assigned to a plain `Node`, but an optional can
+be used anywhere a `Node` is expected, so a plain `Node` variable can still end up
+holding `null`, e.g. after `cur = cur.next`.
 
 Syntran does not check ahead of time that an optional isn't `null` before you use
 its members, like Rust or Kotlin do.  Reading `tail.next.val` above is a runtime

@@ -820,7 +820,8 @@ struct like `struct Tree { kids: [Tree; :] }`.
 
 A struct holds itself in a scalar member, either directly (`next: Node`) or through other
 scalar struct members (`A { b: B }`, `B { a: A }`), so it would have infinite size.  Make
-one of the members an array like `[Node; :]`, which can be empty, to recurse.
+one of the members optional like `?Node`, or an array like `[Node; :]`, which can be
+empty, to recurse.
 
 [Example](../src/tests/test-src/errors/E126-infinite-struct.syntran)
 
@@ -837,6 +838,15 @@ can't, so `?i32`, `?[Node; :]`, and `?fn(i32): i32` are errors.
 optionals aren't supported.
 
 [Example](../src/tests/test-src/errors/E128-null-array.syntran)
+
+### E129 -- untyped-null
+
+A variable is declared directly from `null`, like `let x = null;`.  A variable's type is
+inferred from its initializer and `null` has no struct type, so `x` could never be
+assigned a struct afterwards.  Only a `?Struct` member, fn parameter, or fn return value
+can be null.
+
+[Example](../src/tests/test-src/errors/E129-untyped-null.syntran)
 
 ## Internal errors
 
