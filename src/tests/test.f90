@@ -6703,6 +6703,18 @@ subroutine unit_test_methods(npass, nfail)
 		'fn add_ref(x:&i32){n+=x; x+=1;}' // &
 		'}'
 
+	! Structs for calls in the middle of a member chain, e.g. `a.b.mk().y`
+	character(len = *), parameter :: CHAIN = &
+		'struct P{y:i32, v:[i32;:]}' // &
+		'fn dbl(x:i32):P{return P{y=2*x, v=[x,x+1]};}' // &
+		'struct B{x:i32, f:fn(i32):P,' // &
+		'const fn mk():P{return P{y=x+1, v=[x,7]};}' // &
+		'const fn mk2():B{return B{x=x*10, f=f};}' // &
+		'const fn get():i32{return x;}' // &
+		'fn inc():B{x+=1; return B{x=x, f=f};}}' // &
+		'struct A{b:B, w:[B;:]}' // &
+		'let a=A{b=B{x=5,f=dbl}, w=[B{x=1,f=dbl},B{x=2,f=dbl}]};'
+
 	write(*,*) 'Unit testing '//label//' ...'
 
 	tests = &
@@ -7026,6 +7038,63 @@ subroutine unit_test_methods(npass, nfail)
 			diag_has_code(get_diags( &                                               ! 60
 				'struct C{x:i32, fn inc(){x+=1;}}' &
 				//'struct A{c:C, const fn bad(){c.inc();}}'), &
+				EC_CONST_ASSIGN), &
+
+			! a.b.mk().y
+			eval(CHAIN &
+				//'return a.b.mk().y;' &
+				, quiet) == '6', &   ! 61
+
+			! subscript on the result
+			eval(CHAIN &
+				//'return a.b.mk().v[1];' &
+				, quiet) == '7', &   ! 62
+
+			! subscripted receiver member
+			eval(CHAIN &
+				//'return a.w[1].mk().y;' &
+				, quiet) == '3', &   ! 63
+
+			! call chained on a call
+			eval(CHAIN &
+				//'return a.b.mk2().mk().y;' &
+				, quiet) == '51', &   ! 64
+
+			! call at the end of a chain on a call
+			eval(CHAIN &
+				//'return a.b.mk2().get();' &
+				, quiet) == '50', &   ! 65
+
+			! fn-typed member call in the middle
+			eval(CHAIN &
+				//'return a.b.f(3).y;' &
+				, quiet) == '6', &   ! 66
+
+			! mutating method in the middle writes back the receiver
+			eval(CHAIN &
+				//'let r = a.b.inc().x; return r + 10*a.b.x;' &
+				, quiet) == '66', &   ! 67
+
+			! calls in the middle of a chain on a bare member of the implicit self
+			eval('struct R{x:i32}' &
+				//'struct C{x:i32, fn inc():R{x+=1; return R{x=x};} const fn mk():R{return R{x=x+100};}}' &
+				//'struct B{c:C, const fn m():i32{return c.mk().x;} fn ok():i32{return c.inc().x;}}' &
+				//'let b=B{c=C{x=1}}; return b.m()*1000 + b.ok()*10 + b.c.x;' &
+				, quiet) == '101022', &   ! 68
+
+			! error: mutating method in the middle of a chain on a const
+			diag_has_code(get_diags( &                                               ! 69
+				'struct R{x:i32}' &
+				//'struct C{x:i32, fn inc():R{x+=1; return R{x=x};}}' &
+				//'struct B{c:C}' &
+				//'const b=B{c=C{x=1}}; let r=b.c.inc().x;'), &
+				EC_CONST_ASSIGN), &
+
+			! error: const method calling a mutating method in the middle of a chain on a member
+			diag_has_code(get_diags( &                                               ! 70
+				'struct R{x:i32}' &
+				//'struct C{x:i32, fn inc():R{x+=1; return R{x=x};}}' &
+				//'struct B{c:C, const fn bad():i32{return c.inc().x;}}'), &
 				EC_CONST_ASSIGN), &
 
 			.false. &
