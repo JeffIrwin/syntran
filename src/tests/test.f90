@@ -7097,6 +7097,29 @@ subroutine unit_test_methods(npass, nfail)
 				//'struct B{c:C, const fn bad():i32{return c.inc().x;}}'), &
 				EC_CONST_ASSIGN), &
 
+			! a const that shares a name with a member in the middle of a chain
+			! is not the receiver
+			.not. diag_has_code(get_diags( &                                         ! 71
+				'struct C{x:i32, fn inc(){x+=1;}} struct B{c:C} struct A{b:B}' &
+				//'const b=0; let a=A{b=B{c=C{x=1}}}; a.b.c.inc();'), &
+				EC_CONST_ASSIGN), &
+
+			.not. diag_has_code(get_diags( &                                         ! 72
+				'struct C{x:i32, fn inc(){x+=1;}} struct D{c:C} struct B{d:D}' &
+				//'struct A{b:B} const b=0; const d=0;' &
+				//'let a=A{b=B{d=D{c=C{x=1}}}}; a.b.d.c.inc();'), &
+				EC_CONST_ASSIGN), &
+
+			eval('struct C{x:i32, fn inc(){x+=1;}} struct B{c:C} struct A{b:B}' &    ! 73
+				//'const b=0; let a=A{b=B{c=C{x=1}}}; a.b.c.inc(); return a.b.c.x;' &
+				, quiet) == '2', &
+
+			! error: the root itself is const
+			diag_has_code(get_diags( &                                               ! 74
+				'struct C{x:i32, fn inc(){x+=1;}} struct B{c:C} struct A{b:B}' &
+				//'const a=A{b=B{c=C{x=1}}}; a.b.c.inc();'), &
+				EC_CONST_ASSIGN), &
+
 			.false. &
 		]
 

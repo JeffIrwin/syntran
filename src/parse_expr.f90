@@ -1449,7 +1449,7 @@ recursive module subroutine parse_dot(parser, expr)
 
 	integer :: io, struct_id, member_id, pos0, pos1, method_fn_id, method_io, method_slot
 
-	logical :: is_ok, is_const_var, is_const_receiver, has_meth
+	logical :: is_ok, is_const_var, is_const_receiver, has_meth, is_root_name
 
 	character(len = :), allocatable :: exp_type, act_type, meth_struct
 
@@ -1472,6 +1472,11 @@ recursive module subroutine parse_dot(parser, expr)
 	type(value_t) :: member
 
 	if (parser%current_kind() /= dot_token) return
+
+	! Whether expr is the root variable of the chain, as opposed to a member
+	! fragment from a recursive call, whose identifier is a member name and not
+	! a variable.  Must be captured before expr%kind is overwritten below
+	is_root_name = expr%kind == name_expr
 
 	!print *, "parsing dot"
 	!print *, "expr type = ", type_name(expr%val)
@@ -1728,8 +1733,11 @@ recursive module subroutine parse_dot(parser, expr)
 
 			! Const-receiver check for the innermost method call (e.g. `const s =
 			! O{...}; s.field.method()`).  receiver_cand%identifier / is_loc
-			! are the root variable (s)
-			if (has_meth) then
+			! are the root variable (s).  Only the frame whose expr is the root
+			! variable checks: a deeper frame only holds a member fragment, and
+			! looking its member name up as a variable would give a false E83
+			! when a const has the same name, e.g. `a.b.c.inc()` with `const b`
+			if (has_meth .and. is_root_name) then
 				method_slot = parser%fns%find( &
 					"0" // unqualified_name(meth_struct) // "::" // meth%text)
 				if (method_slot /= 0) then
