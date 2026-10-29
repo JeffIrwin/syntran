@@ -1,0 +1,121 @@
+
+// Assigning a struct literal that contains the member it replaces, as in
+// `head = Node{val = v, next = head}`, moves the old member into the literal
+// instead of copying it.  Moves must never be visible: value semantics are the
+// same as if everything was copied
+
+struct Node
+{
+	val: i32,
+	next: ?Node,
+}
+
+struct List
+{
+	head: ?Node,
+	len: i32,
+
+	fn push(v: i32)
+	{
+		head = Node{val = v, next = head};
+		len += 1;
+	}
+
+	const fn total(): i32
+	{
+		let sum = 0;
+		let cur = head;
+		while cur != null
+		{
+			sum += cur.val;
+			cur = cur.next;
+		}
+		return sum;
+	}
+}
+
+struct Inner
+{
+	list: List,
+	tag: i32,
+}
+
+struct Wrap
+{
+	inner: Inner,
+	other: List,
+}
+
+fn local_chain(): i32
+{
+	let w = Wrap{
+		inner = Inner{list = List{head = null, len = 0}, tag = 5},
+		other = List{head = null, len = 0}};
+	w.inner.list.head = Node{val = 100, next = w.inner.list.head};
+	w.inner.list.head = Node{val = 200, next = w.inner.list.head};
+	w.other.head = Node{val = 1, next = w.other.head};
+	return w.inner.list.head.val + w.inner.list.head.next.val + w.other.head.val;
+}
+
+let ok = true;
+
+// Pushes add to the front
+let l = List{head = null, len = 0};
+l.push(1);
+l.push(2);
+l.push(3);
+ok = ok and l.len == 3 and l.total() == 6;
+ok = ok and l.head.val == 3 and l.head.next.val == 2 and l.head.next.next.val == 1;
+ok = ok and l.head.next.next.next == null;
+
+// A copy taken before further pushes is independent
+let lcopy = l;
+l.push(4);
+ok = ok and lcopy.len == 3 and lcopy.total() == 6 and l.len == 4 and l.total() == 10;
+
+// Top-level chains, nested through other structs, leave siblings alone
+let w = Wrap{
+	inner = Inner{list = List{head = null, len = 0}, tag = 5},
+	other = List{head = Node{val = 7, next = null}, len = 1}};
+let wcopy = w;
+w.inner.list.head = Node{val = 1, next = w.inner.list.head};
+w.inner.list.head = Node{val = 2, next = w.inner.list.head};
+ok = ok and w.inner.list.head.val == 2 and w.inner.list.head.next.val == 1;
+ok = ok and w.inner.list.head.next.next == null and w.inner.tag == 5;
+ok = ok and w.other.head.val == 7 and w.other.head.next == null;
+ok = ok and wcopy.inner.list.head == null and wcopy.other.head.val == 7;
+ok = ok and local_chain() == 200 + 100 + 1;
+
+// The value of the assignment is still the new member
+let r = Node{val = 0, next = null};
+let sw = Wrap{
+	inner = Inner{list = List{head = null, len = 0}, tag = 0},
+	other = List{head = Node{val = 9, next = null}, len = 1}};
+r = (sw.other.head = Node{val = 8, next = sw.other.head});
+ok = ok and r.val == 8 and r.next.val == 9 and sw.other.head.val == 8;
+ok = ok and sw.other.head.next.val == 9;
+
+// Another member reads the chain, so it falls back to copying
+let c = List{head = Node{val = 5, next = null}, len = 1};
+c.head = Node{val = c.head.val + 1, next = c.head};
+ok = ok and c.head.val == 6 and c.head.next.val == 5 and c.head.next.next == null;
+
+// Replacing with something that isn't the old member
+c.head = Node{val = 0, next = null};
+ok = ok and c.head.val == 0 and c.head.next == null;
+
+// Two members both read the old member, so neither is moved
+c.head = Node{val = 1, next = c.head};
+c.head = Node{val = c.head.val, next = c.head};
+ok = ok and c.head.val == 1 and c.head.next.val == 1 and c.head.next.next.val == 0;
+ok = ok and c.head.next.next.next == null;
+
+// Pushes are constant time, not a copy of the whole list each
+let big = List{head = null, len = 0};
+for i in [0: 500]
+{
+	big.push(i);
+}
+ok = ok and big.len == 500 and big.head.val == 499 and big.head.next.val == 498;
+
+return ok;

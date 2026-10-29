@@ -96,10 +96,19 @@ module syntran__core_m
 	!      statement
 	!    * small compatibility break when evaluation of part a bool expression
 	!      calls a fn with side effects
+	!  - pointers? we have fn pointers but lack data/value pointers
+	!    * i thought about making a 'List' struct example containing references
+	!      to head and tail nodes while working on recursive data structs, but i
+	!      believe such references are not possible without adding pointers to
+	!      the language
+	!    * can this be done safely and without massively complicating the
+	!      language? are there real applications that can't be refactored to not
+	!      require pointers?
 	!  - something like python's "if name == main" feature. it could be nice to
 	!    run a module like a program, e.g. to unit test itself, but ignore when
 	!    imported
 	!  - recursive data structs follow-ups:
+	!    * Method call in the middle of a chain crashes. a.b.mk().y crashes in get_val. It was already broken and is also noted in core.f90.
 	!    * done: recursion through arrays (`kids: [Tree; :]`, with `[Tree; 0]`
 	!      as the base case) and through optional members (`next: ?Node`,
 	!      `null`, `x == null`).  Value semantics, no pointers
@@ -119,6 +128,10 @@ module syntran__core_m
 	!      call with another by-ref arg that has one, still copies the receiver
 	!      (OP_LOAD_MEMBER and set_val).  Only method receivers can be chains,
 	!      `f(&a.b)` is a parse error.  Related to the `move` todo below
+	!      A member store `x.a = S{..., m = x.a}` (`head = Node{val = v, next =
+	!      head}` in a method) moves the member into the literal with
+	!      OP_LOAD_REF_MEMBER (struct_move_chain() in compile_ctrl.f90) and the
+	!      plain OP_STORE_MEMBER (instr%c = 1) moves the result back in
 	!    * value_copy() recurses once per node, so copying a list of more than
 	!      ~14000 nodes overflows an 8 MB stack (e.g. `let cur = l` on a 16000
 	!      node list segfaults).  value_destroy() recurses the same way.  Could
