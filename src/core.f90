@@ -108,7 +108,6 @@ module syntran__core_m
 	!    run a module like a program, e.g. to unit test itself, but ignore when
 	!    imported
 	!  - recursive data structs follow-ups:
-	!    * Method call in the middle of a chain crashes. a.b.mk().y crashes in get_val. It was already broken and is also noted in core.f90.
 	!    * done: recursion through arrays (`kids: [Tree; :]`, with `[Tree; 0]`
 	!      as the base case) and through optional members (`next: ?Node`,
 	!      `null`, `x == null`).  Value semantics, no pointers
@@ -141,10 +140,13 @@ module syntran__core_m
 	!      Fortran supports this natively with allocatable components, but
 	!      the generated copy/print/fill helpers would need to be recursive
 	!    * done: calling a method on a bare member inside a method, e.g.
-	!      `next.push()`.  Still broken, unrelated: a method call in the middle of
-	!      a chain, e.g. `a.b.mk().y` or `b.mk().y` in a method, crashes in
-	!      get_val().  parse_dot() only splices a method_call_expr that is the
-	!      direct member, not a dot_expr whose root_kind is method_call_expr
+	!      `next.push()`, and a method or fn-typed member call in the middle of a
+	!      chain, e.g. `a.b.mk().y`, `a.b.mk2().mk().y`, or `b.mk().y` in a
+	!      method.  splice_chain_root() in parse_expr.f90 roots the innermost
+	!      call's receiver at the full chain
+	!    * the const-receiver check in parse_dot() treats each member of a chain
+	!      with 3+ levels as a variable at the intermediate recursion levels, so
+	!      `const b = 0;` plus `a.b.c.inc()` gives a false E83
 	!  - method improvements:
 	!    * stretch, arguably not very useful: slice method calls? e.g.
 	!      `struct[0:3].method()`. for void methods, just iterate and call it.
