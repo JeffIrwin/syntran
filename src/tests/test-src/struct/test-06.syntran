@@ -121,8 +121,8 @@ ok = ok and size(e3, 0) == 0 and size(e4, 0) == 0 and size(e5, 0) == 0;
 ok = ok and len(str(e1)) == 2;
 
 // A variable that shadows a type name still wins in `[x; n]`
-let bool_ = false;
-let ones = [1; 3];
-ok = ok and size(ones, 0) == 3;
+let bool = 2;
+let twos = [bool; 3];
+ok = ok and size(twos, 0) == 3 and twos[0] == 2;
 
 return ok;

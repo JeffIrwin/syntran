@@ -108,29 +108,13 @@ module syntran__core_m
 	!    run a module like a program, e.g. to unit test itself, but ignore when
 	!    imported
 	!  - recursive data structs follow-ups:
-	!    * done: recursion through arrays (`kids: [Tree; :]`, with `[Tree; 0]`
-	!      as the base case) and through optional members (`next: ?Node`,
-	!      `null`, `x == null`).  Value semantics, no pointers
 	!    * null safety is only checked at run time (R47), like an unallocated
 	!      Fortran component.  A compile-time check would need flow typing,
 	!      e.g. narrowing `?Node` to `Node` inside `if x != null { ... }`
-	!    * done: walking a list (`cur = cur.next`, `cur != null`) and building
-	!      one (`l = Node{val = i, next = l}`) no longer copy the list at every
-	!      step.  The VM moves the value when the old one is dead anyway
-	!      (OP_TAKE_MEMBER, OP_IS_NULL*, struct stores followed by OP_POP, and
-	!      struct_move_member() in compile_ctrl.f90).  Copies are still O(n):
-	!      `let cur = l`, passing a list to a fn, and a fn returning one.
-	!      The receiver of a method call on a plain dot chain (`next.push()`)
-	!      is moved too: OP_LOAD_REF_MEMBER moves it out and OP_RET moves it back
-	!      (call_recv_moved() in bytecode.f90), so building a list of 800 nodes by
-	!      pushing takes milliseconds, not 16 s.  A chain with a subscript, or a
-	!      call with another by-ref arg that has one, still copies the receiver
-	!      (OP_LOAD_MEMBER and set_val).  Only method receivers can be chains,
-	!      `f(&a.b)` is a parse error.  Related to the `move` todo below
-	!      A member store `x.a = S{..., m = x.a}` (`head = Node{val = v, next =
-	!      head}` in a method) moves the member into the literal with
-	!      OP_LOAD_REF_MEMBER (struct_move_chain() in compile_ctrl.f90) and the
-	!      plain OP_STORE_MEMBER (instr%c = 1) moves the result back in
+	!    * copies of a list are still O(n): `let cur = l`, passing a list to a
+	!      fn, and a fn returning one.  A method receiver chain with a
+	!      subscript also still copies (OP_LOAD_MEMBER).  Related to the `move`
+	!      todo below
 	!    * value_copy() recurses once per node, so copying a list of more than
 	!      ~14000 nodes overflows an 8 MB stack (e.g. `let cur = l` on a 16000
 	!      node list segfaults).  value_destroy() recurses the same way.  Could
@@ -139,14 +123,6 @@ module syntran__core_m
 	!    * the transpiler rejects recursive structs, `?T`, and `null` (E115).
 	!      Fortran supports this natively with allocatable components, but
 	!      the generated copy/print/fill helpers would need to be recursive
-	!    * done: calling a method on a bare member inside a method, e.g.
-	!      `next.push()`, and a method or fn-typed member call in the middle of a
-	!      chain, e.g. `a.b.mk().y`, `a.b.mk2().mk().y`, or `b.mk().y` in a
-	!      method.  splice_chain_root() in parse_expr.f90 roots the innermost
-	!      call's receiver at the full chain
-	!    * done: the const-receiver check in parse_dot() only runs in the frame
-	!      whose expr is the root variable, so `const b = 0;` plus `a.b.c.inc()`
-	!      no longer gives a false E83 from a member name matching a const
 	!  - method improvements:
 	!    * stretch, arguably not very useful: slice method calls? e.g.
 	!      `struct[0:3].method()`. for void methods, just iterate and call it.

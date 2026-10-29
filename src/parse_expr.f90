@@ -148,6 +148,13 @@ recursive module subroutine parse_let_expr(parser, is_const, expr)
 				span, identifier%text))
 		end if
 
+		! `let x = null;` can never hold a struct later, as x's type is null_type
+		if (right%val%type == null_type) then
+			span = new_span(let%pos, parser%current_pos() - let%pos)
+			call parser%diagnostics%push( &
+				err_untyped_null(parser%context(), span, identifier%text))
+		end if
+
 		call new_declaration_expr(identifier, op, right, expr)
 
 		! Increment the variable array index and save it in the expr node
