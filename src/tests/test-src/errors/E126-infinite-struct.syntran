@@ -1,0 +1,9 @@
+// E126: infinite-struct
+// A struct can't hold itself directly, because it would have infinite size.
+// Use `next: ?Node` or `next: [Node; :]` instead
+
+struct Node
+{
+	val: i32,
+	next: Node,
+}

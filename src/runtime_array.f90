@@ -48,6 +48,11 @@ recursive module subroutine set_val(node, var, state, val, index_, slots, pos)
 		call internal_error()
 	end if
 
+	if (var%type == null_type) then
+		call rt_throw(state, err_rt(RC_NULL_MEMBER, "cannot assign a member of null"))
+		return
+	end if
+
 	if (allocated(node%lsubscripts) .and. allocated(node%member)) then
 
 		if (present(index_)) then
@@ -238,6 +243,13 @@ recursive module subroutine get_val(node, var, state, res, index_, slots, pos)
 		return
 	end if
 
+	! A member of an optional (`?Struct`) that holds null.  There is no
+	! struct(:) to index, like an unallocated component in Fortran
+	if (var%type == null_type) then
+		call rt_throw(state, err_rt(RC_NULL_MEMBER, "cannot access a member of null"))
+		return
+	end if
+
 	if (allocated(node%lsubscripts) .and. allocated(node%member)) then
 
 		if (present(index_)) then
@@ -393,6 +405,142 @@ recursive module subroutine get_val(node, var, state, res, index_, slots, pos)
 	res = var%struct(id)%struct(i8+1)
 
 end subroutine get_val
+
+!===============================================================================
+
+function member_leaf(node, var, state, assign) result(v)
+
+	! Pointer to the member at the end of a plain dot chain `x.a.b` (no
+	! subscripts) rooted at var, or null() after throwing R47 if a link in the
+	! middle of the chain is null.  The chain must have been checked by
+	! plain_member_chain() at compile time.  assign only selects the message
+
+	type(syntax_node_t), intent(in), target :: node
+	type(value_t), intent(inout), target :: var
+	type(state_t), intent(inout) :: state
+	logical, intent(in) :: assign
+	type(value_t), pointer :: v
+
+	!********
+
+	type(syntax_node_t), pointer :: n
+
+	v => var
+	n => node%member
+	! Mirrors get_val(): each link indexes v%struct(), which is R47 for null
+	do
+		if (v%type == null_type) then
+			if (assign) then
+				call rt_throw(state, err_rt(RC_NULL_MEMBER, "cannot assign a member of null"))
+			else
+				call rt_throw(state, err_rt(RC_NULL_MEMBER, "cannot access a member of null"))
+			end if
+			v => null()
+			return
+		end if
+		v => v%struct(n%id_index)
+		if (n%kind /= dot_expr) exit
+		n => n%member
+	end do
+
+end function member_leaf
+
+!===============================================================================
+
+module subroutine member_is_null(node, var, state, is_null)
+
+	! Whether the member at the end of a plain dot chain `x.a.b` (no
+	! subscripts) holds null, without copying it like get_val() would
+
+	type(syntax_node_t), intent(in), target :: node
+	type(value_t), intent(inout), target :: var
+	type(state_t), intent(inout) :: state
+	logical, intent(out) :: is_null
+
+	!********
+
+	type(value_t), pointer :: v
+
+	is_null = .false.
+	v => member_leaf(node, var, state, .false.)
+	if (.not. associated(v)) return
+	is_null = v%type == null_type
+
+end subroutine member_is_null
+
+!===============================================================================
+
+module subroutine take_member(node, var, state)
+
+	! `x = x.a.b`: move the member x.a.b out of x and overwrite x with it, so
+	! that the rest of x is freed instead of copying the member.  x ends up
+	! the same as it would after an assignment from a get_val() copy.  The chain
+	! must be plain, as in member_is_null()
+
+	type(syntax_node_t), intent(in), target :: node
+	type(value_t), intent(inout), target :: var
+	type(state_t), intent(inout) :: state
+
+	!********
+
+	type(value_t), pointer :: v
+	type(value_t) :: tmp
+
+	v => member_leaf(node, var, state, .false.)
+	if (.not. associated(v)) return
+
+	call value_move(v, tmp)
+	call value_move(tmp, var)
+
+end subroutine take_member
+
+!===============================================================================
+
+module subroutine move_member_out(node, var, state, val)
+
+	! Move the member x.a.b of a plain dot chain out of x into val, for a by-ref
+	! call arg (OP_LOAD_REF_MEMBER).  The member in x is left empty until
+	! move_member_in() puts it back.  val is unknown_type after R47
+
+	type(syntax_node_t), intent(in), target :: node
+	type(value_t), intent(inout), target :: var
+	type(state_t), intent(inout) :: state
+	type(value_t), intent(out) :: val
+
+	!********
+
+	type(value_t), pointer :: v
+
+	v => member_leaf(node, var, state, .false.)
+	if (.not. associated(v)) return
+
+	call value_move(v, val)
+
+end subroutine move_member_out
+
+!===============================================================================
+
+module subroutine move_member_in(node, var, state, val)
+
+	! Move val back into the member x.a.b of a plain dot chain, after a by-ref
+	! call (OP_RET).  If the callee made a link in the chain null through a
+	! global, this is R47 and val is left alone for the caller to free
+
+	type(syntax_node_t), intent(in), target :: node
+	type(value_t), intent(inout), target :: var
+	type(state_t), intent(inout) :: state
+	type(value_t), intent(inout) :: val
+
+	!********
+
+	type(value_t), pointer :: v
+
+	v => member_leaf(node, var, state, .true.)
+	if (.not. associated(v)) return
+
+	call value_move(val, v)
+
+end subroutine move_member_in
 
 !===============================================================================
 

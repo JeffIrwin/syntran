@@ -107,7 +107,12 @@ where you downloaded the binary.
 I recommend running `ulimit -s unlimited` in `~/.bashrc` or at least in your
 current shell to remove the stack limit.  Otherwise, syntran can crash with
 large recursion depths of recursive function calls (see issue
-https://github.com/JeffIrwin/syntran/issues/28).
+https://github.com/JeffIrwin/syntran/issues/28).  Copying a very long linked
+list, e.g. `let cur = list;`, can also overflow the stack, because it recurses
+once per node.
+
+On macOS, the hard limit is about 64 MB, so `ulimit -s unlimited` fails with
+`value exceeds hard limit`.  Use `ulimit -s 65520` instead.
 
 ## Build the interpreter from source
 
@@ -2638,6 +2643,147 @@ println(e[0].d.c[0].b.a[0]._);
 // 42
 ```
 <!-- syntran-end -->
+
+### Recursive structs
+
+A struct can contain itself, as long as it does so through an array member.  An
+array can be empty, so it ends the recursion where a scalar member could not.
+(A scalar member such as `next: Node` would make the struct infinitely large,
+which is an error.)  This is how to write a tree:
+<!-- syntran-begin mode=file group=recursive-structs -->
+```rust
+struct Tree
+{
+    val: i32,
+    kids: [Tree; :],
+}
+
+fn total(t: Tree): i32
+{
+    let sum = t.val;
+    for i in [0: size(t.kids, 0)]
+    {
+        sum += total(t.kids[i]);
+    }
+    return sum;
+}
+```
+<!-- syntran-end -->
+
+A leaf has no children.  There is no value to fill an array of `Tree` with
+yet, so an empty array is written with the type name instead of a fill value, as
+in `[Tree; 0]`.  The size after the semicolon can only be the literal `0` in
+this form.  Other types work too, for example `[str; 0]` or `[f64; 0, 0]`:
+<!-- syntran-begin mode=file group=recursive-structs -->
+```rust
+let leaf = Tree{val = 3, kids = [Tree; 0]};
+let branch = Tree{val = 2, kids = [leaf, leaf]};
+let root = Tree{val = 1, kids = [branch, leaf]};
+
+println("total = ", total(root));
+println(root.kids[0].kids[1].val);
+```
+<!-- syntran-expect
+total = 12
+3
+-->
+<!-- syntran-end -->
+
+Structs can also be mutually recursive, such as a directory that contains files
+and other directories, again as long as the recursion goes through arrays.
+
+#### Optional members
+
+An array is a clumsy way to hold "zero or one" thing, as in a linked list.  For
+that, put a `?` before the name of a struct to make it _optional_.  An optional
+can hold either a struct or `null`, and you test for `null` with `==` or `!=`:
+<!-- syntran-begin mode=file group=optional-structs -->
+```rust
+struct Node
+{
+    val: i32,
+    next: ?Node,
+}
+
+fn list_sum(n: ?Node): i32
+{
+    if n == null
+    {
+        return 0;
+    }
+    return n.val + list_sum(n.next);
+}
+
+let tail = Node{val = 3, next = null};
+let list = Node{val = 1, next = Node{val = 2, next = tail}};
+
+println(list);
+println("sum = ", list_sum(list));
+println(tail.next == null);
+```
+<!-- syntran-expect
+Node{val = 1, next = Node{val = 2, next = Node{val = 3, next = null}}}
+sum = 6
+true
+-->
+<!-- syntran-end -->
+
+Only a struct can be optional: `?i32`, `?[Node; :]`, and arrays of optionals are
+errors.  The literal `null` can't be assigned to a plain `Node`, but an optional can
+be used anywhere a `Node` is expected, so a plain `Node` variable can still end up
+holding `null`, e.g. after `cur = cur.next`.
+
+Syntran does not check ahead of time that an optional isn't `null` before you use
+its members, like Rust or Kotlin do.  Reading `tail.next.val` above is a runtime
+error, similar to using an unallocated component in Fortran.  Check with `== null`
+first.
+
+Methods can change an optional member too.  A linked list can be wrapped in a
+`List` struct whose `push()` adds a node to the front in constant time, so the
+list reads in reverse order of the pushes:
+<!-- syntran-begin mode=file group=optional-methods -->
+```rust
+struct Node
+{
+    val: i32,
+    next: ?Node,
+}
+
+struct List
+{
+    head: ?Node,
+    len: i32,
+
+    fn push(v: i32)
+    {
+        head = Node{val = v, next = head};
+        len += 1;
+    }
+}
+
+let list = List{head = null, len = 0};
+list.push(1);
+list.push(2);
+list.push(3);
+println(list);
+println("len = ", list.len);
+```
+<!-- syntran-expect
+List{head = Node{val = 3, next = Node{val = 2, next = Node{val = 1, next = null}}}, len = 3}
+len = 3
+-->
+<!-- syntran-end -->
+
+Like all other values, structs are copied, so `let cur = list;` copies the whole
+list.  The interpreter avoids the copy when it can tell that the old value is
+about to be overwritten anyway, so walking a list with `cur = cur.next`, testing
+for `cur != null`, or building one with `list = Node{val = i, next = list}` does
+not copy the rest of the list at every step.  The same goes for a member:
+`head = Node{val = v, next = head}` above moves the old list into the new node, so
+`push()` takes the same time no matter how long the list is.  Copies are still
+made by `let cur = list;`, when a list is passed to a fn by value, and when a fn
+returns one.  For a big tree, an array of nodes that refer to each other by index
+scales better.
 
 ## Enums
 

@@ -326,6 +326,11 @@ module procedure get_all_error_codes
 	call codes%push(EC_STD_UNKNOWN_NAME)
 	call codes%push(EC_MOD_IMPORT_NAME)
 	call codes%push(EC_FILE_ARRAY)
+	call codes%push(EC_TYPED_ARRAY_SIZE)
+	call codes%push(EC_INFINITE_STRUCT)
+	call codes%push(EC_BAD_OPTIONAL)
+	call codes%push(EC_NULL_ARRAY)
+	call codes%push(EC_UNTYPED_NULL)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -415,6 +420,7 @@ module procedure get_all_error_codes
 	call codes%push(RC_READ_FAIL)
 	call codes%push(RC_BINARY_WRITE_TYPE)
 	call codes%push(RC_PARSE_BOOL)
+	call codes%push(RC_NULL_MEMBER)
 	call codes%push(WC_MISSING_RETURN)
 end procedure get_all_error_codes
 
@@ -1342,6 +1348,65 @@ module procedure err_file_array
 
 end procedure err_file_array
 
+
+!===============================================================================
+
+module procedure err_typed_array_size
+
+	err = err_pre(EC_TYPED_ARRAY_SIZE) &
+		//'size `'//size_text//'` of a type-name array literal is not zero.  ' &
+		//'A type name has no value to fill an array with, so only ' &
+		//'empty arrays like `[Node; 0]` are allowed' &
+		//underline(context, span)//" size must be literal 0"//color_reset
+
+end procedure err_typed_array_size
+
+!===============================================================================
+
+module procedure err_infinite_struct
+
+	err = err_pre(EC_INFINITE_STRUCT) &
+		//'struct `'//struct_name//'` contains itself through member `'//member//'`, ' &
+		//'so it would have infinite size.  Make `'//member//'` optional like ' &
+		//'`?Type`, or an array like `[Type; :]`, which can be empty' &
+		//underline(context, span)//" recursive member"//color_reset
+
+end procedure err_infinite_struct
+
+!===============================================================================
+
+module procedure err_null_array
+
+	err = err_pre(EC_NULL_ARRAY) &
+		//'array element is `null`.  ' &
+		//'Arrays of optionals are not supported' &
+		//underline(context, span)//" null in array literal"//color_reset
+
+end procedure err_null_array
+
+!===============================================================================
+
+module procedure err_untyped_null
+
+	err = err_pre(EC_UNTYPED_NULL) &
+		//'`null` has no struct type, so variable `'//var//'` could never hold ' &
+		//'anything else.  Only a `?Struct` member, parameter, or fn return ' &
+		//'value can be null' &
+		//underline(context, span)//" untyped null"//color_reset
+
+end procedure err_untyped_null
+
+!===============================================================================
+
+module procedure err_bad_optional
+
+	err = err_pre(EC_BAD_OPTIONAL) &
+		//'`?'//type_text//'` is not a valid optional type.  ' &
+		//'Only a struct can be optional, like `?Node`, not an array, fn pointer, ' &
+		//'or primitive type' &
+		//underline(context, span)//" bad optional type"//color_reset
+
+end procedure err_bad_optional
 
 !===============================================================================
 

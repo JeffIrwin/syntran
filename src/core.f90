@@ -96,13 +96,33 @@ module syntran__core_m
 	!      statement
 	!    * small compatibility break when evaluation of part a bool expression
 	!      calls a fn with side effects
+	!  - pointers? we have fn pointers but lack data/value pointers
+	!    * i thought about making a 'List' struct example containing references
+	!      to head and tail nodes while working on recursive data structs, but i
+	!      believe such references are not possible without adding pointers to
+	!      the language
+	!    * can this be done safely and without massively complicating the
+	!      language? are there real applications that can't be refactored to not
+	!      require pointers?
 	!  - something like python's "if name == main" feature. it could be nice to
 	!    run a module like a program, e.g. to unit test itself, but ignore when
 	!    imported
-	!  - recursive data structs
-	!    * recursive fns are available, but not structs
-	!    * would we need allocation, pointer, or null features for this?
-	!      otherwise one recursive struct just immediately uses infinite memory
+	!  - recursive data structs follow-ups:
+	!    * null safety is only checked at run time (R47), like an unallocated
+	!      Fortran component.  A compile-time check would need flow typing,
+	!      e.g. narrowing `?Node` to `Node` inside `if x != null { ... }`
+	!    * copies of a list are still O(n): `let cur = l`, passing a list to a
+	!      fn, and a fn returning one.  A method receiver chain with a
+	!      subscript also still copies (OP_LOAD_MEMBER).  Related to the `move`
+	!      todo below
+	!    * value_copy() recurses once per node, so copying a list of more than
+	!      ~14000 nodes overflows an 8 MB stack (e.g. `let cur = l` on a 16000
+	!      node list segfaults).  value_destroy() recurses the same way.  Could
+	!      be made iterative for chains with a single struct member, like a Rust
+	!      `Drop` impl
+	!    * the transpiler rejects recursive structs, `?T`, and `null` (E115).
+	!      Fortran supports this natively with allocatable components, but
+	!      the generated copy/print/fill helpers would need to be recursive
 	!  - method improvements:
 	!    * stretch, arguably not very useful: slice method calls? e.g.
 	!      `struct[0:3].method()`. for void methods, just iterate and call it.

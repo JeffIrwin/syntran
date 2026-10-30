@@ -121,6 +121,242 @@ end subroutine compile_member_chain_slots
 
 !===============================================================================
 
+function null_test_operand(node) result(which)
+
+	! For `x == null`, `x != null`, `null == x` and `null != x` where x is a
+	! variable or a plain member chain of a struct, return which operand is x
+	! (1 = left, 2 = right).  Otherwise 0
+
+	type(syntax_node_t), intent(in) :: node
+	integer :: which
+
+	which = 0
+	if (.not. any(node%op%kind == [eequals_token, bang_equals_token])) return
+
+	if (is_null_literal(node%right)) then
+		if (is_null_test_var(node%left)) which = 1
+	else if (is_null_literal(node%left)) then
+		if (is_null_test_var(node%right)) which = 2
+	end if
+
+end function null_test_operand
+
+!===============================================================================
+
+function is_null_literal(node) result(ok)
+	type(syntax_node_t), intent(in) :: node
+	logical :: ok
+	ok = node%kind == literal_expr
+	if (ok) ok = node%val%type == null_type
+end function is_null_literal
+
+!===============================================================================
+
+function is_null_test_var(node) result(ok)
+	type(syntax_node_t), intent(in) :: node
+	logical :: ok
+
+	ok = .false.
+	if (.not. any(node%val%type == [struct_type, null_type])) return
+	if (node%kind == name_expr) then
+		ok = .not. allocated(node%lsubscripts)
+	else
+		ok = plain_member_chain(node)
+	end if
+
+end function is_null_test_var
+
+!===============================================================================
+
+function take_member_assign(node) result(ok)
+
+	! Whether the assignment `x = x.a.b` can move the member out of x with
+	! OP_TAKE_MEMBER instead of copying it.  Only plain chains of struct/null
+	! members, rooted at the same variable as the LHS
+
+	type(syntax_node_t), intent(in) :: node
+	logical :: ok
+
+	ok = .false.
+	if (.not. any(node%right%val%type == [struct_type, null_type])) return
+	if (.not. plain_member_chain(node%right)) return
+	if (node%right%id_index /= node%id_index) return
+	ok = node%right%is_loc .eqv. node%is_loc
+
+end function take_member_assign
+
+!===============================================================================
+
+recursive function cant_fail(node, id, is_loc) result(ok)
+
+	! Whether node is a cheap expression that can't read variable (id, is_loc)
+	! and can't raise a runtime error, so a struct literal that moves that
+	! variable can't be interrupted half way, e.g. in the REPL
+
+	type(syntax_node_t), intent(in) :: node
+	integer, intent(in) :: id
+	logical, intent(in) :: is_loc
+	logical :: ok
+
+	ok = .false.
+	select case (node%kind)
+	case (literal_expr)
+		ok = .true.
+	case (name_expr)
+		if (allocated(node%lsubscripts)) return
+		ok = .not. (node%id_index == id .and. (node%is_loc .eqv. is_loc))
+	case (unary_expr)
+		ok = node%op%kind == minus_token
+		if (ok) ok = cant_fail(node%right, id, is_loc)
+	case (binary_expr)
+		if (.not. any(node%op%kind == [plus_token, minus_token, star_token])) return
+		ok = cant_fail(node%left, id, is_loc)
+		if (ok) ok = cant_fail(node%right, id, is_loc)
+	end select
+
+end function cant_fail
+
+!===============================================================================
+
+function struct_move_member(node, id, is_loc) result(imove)
+
+	! For `x = S{..., m = x, ...}` where node is the struct literal, return the
+	! index of the member m that is exactly x so it can be moved out of x
+	! instead of deep-copied.  Zero if there is no such member, or any other
+	! member could read x or fail (cant_fail())
+
+	type(syntax_node_t), intent(in) :: node
+	integer, intent(in) :: id
+	logical, intent(in) :: is_loc
+	integer :: imove
+
+	integer :: i
+
+	imove = 0
+	if (node%kind /= struct_instance_expr) return
+
+	do i = 1, size(node%members)
+		associate(m => node%members(i))
+			if (m%kind == name_expr .and. m%val%type == struct_type) then
+				if (.not. allocated(m%lsubscripts) .and. &
+				    m%id_index == id .and. (m%is_loc .eqv. is_loc)) then
+					if (imove /= 0) then
+						imove = 0
+						return
+					end if
+					imove = i
+					cycle
+				end if
+			end if
+			if (.not. cant_fail(m, id, is_loc)) then
+				imove = 0
+				return
+			end if
+		end associate
+	end do
+
+end function struct_move_member
+
+!===============================================================================
+
+function same_plain_chain(a, b) result(ok)
+
+	! Whether a and b, each a dot_expr or an assignment to one, are plain dot
+	! chains (no subscripts, no call root) that name the same member of the same
+	! variable
+
+	type(syntax_node_t), intent(in), target :: a, b
+	logical :: ok
+
+	type(syntax_node_t), pointer :: pa, pb
+
+	ok = .false.
+	if (a%root_kind /= 0 .or. b%root_kind /= 0) return
+	if (.not. allocated(a%member) .or. .not. allocated(b%member)) return
+	if (chain_total_nslots(a) /= 0 .or. chain_total_nslots(b) /= 0) return
+	if (a%id_index /= b%id_index) return
+	if (a%is_loc .neqv. b%is_loc) return
+
+	pa => a%member
+	pb => b%member
+	do
+		if (pa%id_index /= pb%id_index) return
+		if ((pa%kind == dot_expr) .neqv. (pb%kind == dot_expr)) return
+		if (pa%kind /= dot_expr) exit
+		pa => pa%member
+		pb => pb%member
+	end do
+	ok = .true.
+
+end function same_plain_chain
+
+!===============================================================================
+
+function struct_move_chain(node, lhs) result(imove)
+
+	! For `x.a.b = S{..., m = x.a.b, ...}` where node is the struct literal and
+	! lhs is the assignment, return the index of the member m that is exactly the
+	! chain being assigned, so it can be moved out of x.a.b instead of deep-copied.
+	! This is `head = Node{val = v, next = head}` inside a method.  Zero if there
+	! is no such member, or any other member could read x or fail (cant_fail())
+
+	type(syntax_node_t), intent(in) :: node, lhs
+	integer :: imove
+
+	integer :: i
+
+	imove = 0
+	if (node%kind /= struct_instance_expr) return
+	if (.not. allocated(lhs%member)) return
+
+	do i = 1, size(node%members)
+		associate(m => node%members(i))
+			if (m%kind == dot_expr .and. any(m%val%type == [struct_type, null_type])) then
+				if (same_plain_chain(m, lhs)) then
+					if (imove /= 0) then
+						imove = 0
+						return
+					end if
+					imove = i
+					cycle
+				end if
+			end if
+			if (.not. cant_fail(m, lhs%id_index, lhs%is_loc)) then
+				imove = 0
+				return
+			end if
+		end associate
+	end do
+
+end function struct_move_chain
+
+!===============================================================================
+
+subroutine compile_null_test(prog, node, negate)
+
+	! Emit OP_IS_NULL/OP_IS_NULL_MEMBER for the operand x of `x == null`
+	! (negate = 0) or `x != null` (negate = 1).  See null_test_operand()
+
+	type(program_t), intent(inout) :: prog
+	type(syntax_node_t), intent(in) :: node
+	integer, intent(in) :: negate
+
+	!*******
+
+	integer :: loc
+
+	if (node%kind == name_expr) then
+		loc = 0
+		if (node%is_loc) loc = 1
+		call emit(prog, OP_IS_NULL, a = node%id_index, b = negate, c = int(loc, 8))
+	else
+		call emit(prog, OP_IS_NULL_MEMBER, a = add_node(prog, node), b = negate)
+	end if
+
+end subroutine compile_null_test
+
+!===============================================================================
+
 recursive subroutine compile_array_expr_slots(prog, cs, node)
 
 	! Compile an array_expr node's sub-expressions to bytecode, in the fixed
@@ -676,7 +912,7 @@ recursive subroutine compile_node_impl(prog, cs, node)
 
 	!*******
 
-	integer :: idx, i, j, const_idx, typed_op
+	integer :: idx, i, j, const_idx, typed_op, move_slot, c_
 	integer :: jf_ip, j_ip, l_top, l_else, l_end, l_pad
 	integer :: nblock_saved
 	logical :: first, entering_ctx
@@ -790,35 +1026,47 @@ recursive subroutine compile_node_impl(prog, cs, node)
 
 	! ---- arithmetic / comparison / logic / bitwise ----------------------------
 	case (binary_expr)
-		call compile_node(prog, cs, node%left )
-		call compile_node(prog, cs, node%right)
-		! Same-type scalar or mixed i32/i64: emit typed opcode.
-		! Same-type numeric arrays: emit OP_ARR_BINOP (a=op_kind, b=elem_type).
-		! Otherwise emit generic OP_BINOP with pre-computed result type in instr%b
-		! so the VM can skip get_binary_op_kind at runtime.
-		typed_op = binop_typed_opcode(node%op%kind, &
-			node%left%val%type, node%right%val%type)
-		if (typed_op /= 0) then
-			call emit(prog, typed_op)
+		i = null_test_operand(node)
+		if (i /= 0) then
+			! Test for null without loading (deep copying) the variable
+			j = 0
+			if (node%op%kind == bang_equals_token) j = 1
+			if (i == 1) then
+				call compile_null_test(prog, node%left, j)
+			else
+				call compile_null_test(prog, node%right, j)
+			end if
 		else
-			! Check for same-type numeric array ⊕ array.  Use nested ifs so the
-			! %array%type access is guarded by the allocated() checks — gfortran
-			! at -O0 does not short-circuit .and. chains in else-if conditions.
-			if (node%left%val%type == array_type .and. &
-			    node%right%val%type == array_type) then
-				if (allocated(node%left%val%array) .and. &
-				    allocated(node%right%val%array)) then
-					if (node%left%val%array%type == node%right%val%array%type) then
-						typed_op = arr_binop_typed_opcode(node%op%kind, &
-							node%left%val%array%type)
-						if (typed_op /= 0) &
-							call emit(prog, typed_op, &
-								a = node%op%kind, b = node%left%val%array%type)
+			call compile_node(prog, cs, node%left )
+			call compile_node(prog, cs, node%right)
+			! Same-type scalar or mixed i32/i64: emit typed opcode.
+			! Same-type numeric arrays: emit OP_ARR_BINOP (a=op_kind, b=elem_type).
+			! Otherwise emit generic OP_BINOP with pre-computed result type in instr%b
+			! so the VM can skip get_binary_op_kind at runtime.
+			typed_op = binop_typed_opcode(node%op%kind, &
+				node%left%val%type, node%right%val%type)
+			if (typed_op /= 0) then
+				call emit(prog, typed_op)
+			else
+				! Check for same-type numeric array ⊕ array.  Use nested ifs so the
+				! %array%type access is guarded by the allocated() checks — gfortran
+				! at -O0 does not short-circuit .and. chains in else-if conditions.
+				if (node%left%val%type == array_type .and. &
+				    node%right%val%type == array_type) then
+					if (allocated(node%left%val%array) .and. &
+					    allocated(node%right%val%array)) then
+						if (node%left%val%array%type == node%right%val%array%type) then
+							typed_op = arr_binop_typed_opcode(node%op%kind, &
+								node%left%val%array%type)
+							if (typed_op /= 0) &
+								call emit(prog, typed_op, &
+									a = node%op%kind, b = node%left%val%array%type)
+						end if
 					end if
 				end if
+				if (typed_op == 0) &
+					call emit(prog, OP_BINOP, a = node%op%kind, b = node%val%type)
 			end if
-			if (typed_op == 0) &
-				call emit(prog, OP_BINOP, a = node%op%kind, b = node%val%type)
 		end if
 
 	case (unary_expr)
@@ -851,24 +1099,40 @@ recursive subroutine compile_node_impl(prog, cs, node)
 			! OP_STORE_IDX's [subscripts...][rhs] layout -- the VM's
 			! vm_pop_copy grabs the RHS, leaving the slot window below it.
 			call compile_member_chain_slots(prog, cs, node)
+			if (node%op%kind == equals_token) &
+				cs%struct_move_slot = struct_move_chain(node%right, node)
 			call compile_node(prog, cs, node%right)
+			cs%struct_move_slot = 0
 			idx = add_node(prog, node)
-			call emit(prog, OP_STORE_MEMBER, a = idx, b = node%op%kind)
+			! c = 1: plain `=` of a struct onto a plain chain, which the VM can
+			! move into place instead of copying (see OP_STORE_MEMBER)
+			c_ = 0
+			if (node%op%kind == equals_token .and. &
+			    any(node%right%val%type == [struct_type, null_type]) .and. &
+			    chain_total_nslots(node) == 0) c_ = 1
+			call emit(prog, OP_STORE_MEMBER, a = idx, b = node%op%kind, c = int(c_, 8))
 
 		else if (.not. allocated(node%lsubscripts) .and. &
 		         node%op%kind == equals_token) then
 			! Simple plain assignment: a = expr
-			call compile_node(prog, cs, node%right)
-			! Scalar type (LHS and RHS agree — parser guarantees): typed store.
-			typed_op = 0
-			if (node%val%type == node%right%val%type) &
-				typed_op = typed_store_op(node%val%type, node%is_loc)
-			if (typed_op /= 0) then
-				call emit(prog, typed_op, a = node%id_index)
-			else if (node%is_loc) then
-				call emit(prog, OP_STORE_LOCAL,  a = node%id_index)
+			if (take_member_assign(node)) then
+				! a = a.b.c, moving the member instead of copying it
+				call emit(prog, OP_TAKE_MEMBER, a = add_node(prog, node%right))
 			else
-				call emit(prog, OP_STORE_GLOBAL, a = node%id_index)
+				cs%struct_move_slot = struct_move_member(node%right, node%id_index, node%is_loc)
+				call compile_node(prog, cs, node%right)
+				cs%struct_move_slot = 0
+				! Scalar type (LHS and RHS agree — parser guarantees): typed store.
+				typed_op = 0
+				if (node%val%type == node%right%val%type) &
+					typed_op = typed_store_op(node%val%type, node%is_loc)
+				if (typed_op /= 0) then
+					call emit(prog, typed_op, a = node%id_index)
+				else if (node%is_loc) then
+					call emit(prog, OP_STORE_LOCAL,  a = node%id_index)
+				else
+					call emit(prog, OP_STORE_GLOBAL, a = node%id_index)
+				end if
 			end if
 
 		else if (.not. allocated(node%lsubscripts) .and. &
@@ -1445,8 +1709,21 @@ recursive subroutine compile_node_impl(prog, cs, node)
 	! value_t carrying just those instead of storing the whole node; nmembers
 	! travels in instr%b since the member expressions are already bytecode.
 	case (struct_instance_expr)
+		move_slot = cs%struct_move_slot
+		cs%struct_move_slot = 0
 		do i = 1, size(node%members)
-			call compile_node(prog, cs, node%members(i))
+			if (i == move_slot) then
+				! Moved out of the variable or member being assigned
+				if (node%members(i)%kind == dot_expr) then
+					call emit(prog, OP_LOAD_REF_MEMBER, a = add_node(prog, node%members(i)))
+				else if (node%members(i)%is_loc) then
+					call emit(prog, OP_LOAD_REF_LOCAL,  a = node%members(i)%id_index)
+				else
+					call emit(prog, OP_LOAD_REF_GLOBAL, a = node%members(i)%id_index)
+				end if
+			else
+				call compile_node(prog, cs, node%members(i))
+			end if
 		end do
 		block
 			type(value_t) :: struct_proto
@@ -1550,7 +1827,11 @@ recursive subroutine compile_node_impl(prog, cs, node)
 				! Pass 2: move by-ref args from their variable slots onto stack.
 				do i = 1, size(node%is_ref)
 					if (node%is_ref(i)) then
-						if (allocated(node%args(i)%lsubscripts) .or. &
+						if (call_recv_moved(node, i)) then
+							! Plain dot chain: move the member out instead of
+							! copying it; OP_RET moves it back
+							call emit(prog, OP_LOAD_REF_MEMBER, a = add_node(prog, node%args(i)))
+						else if (allocated(node%args(i)%lsubscripts) .or. &
 						    node%args(i)%kind == dot_expr .or. &
 						    node%args(i)%kind == fn_call_expr .or. &
 						    node%args(i)%kind == method_call_expr .or. &

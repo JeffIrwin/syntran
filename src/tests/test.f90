@@ -6664,6 +6664,10 @@ subroutine unit_test_struct_long(npass, nfail)
 			interpret_file(path//'test-04.syntran', quiet) == '0'   , &
 			interpret_file(path//'test-methods.syntran', quiet) == 'true', &
 			interpret_file(path//'test-05.syntran', quiet) == 'true', &
+			interpret_file(path//'test-06.syntran', quiet) == 'true', &
+			interpret_file(path//'test-07.syntran', quiet) == 'true', &
+			interpret_file(path//'test-08.syntran', quiet) == 'true', &
+			interpret_file(path//'test-09.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -6698,6 +6702,18 @@ subroutine unit_test_methods(npass, nfail)
 		'fn add(x:i32){n+=x;}' // &
 		'fn add_ref(x:&i32){n+=x; x+=1;}' // &
 		'}'
+
+	! Structs for calls in the middle of a member chain, e.g. `a.b.mk().y`
+	character(len = *), parameter :: CHAIN = &
+		'struct P{y:i32, v:[i32;:]}' // &
+		'fn dbl(x:i32):P{return P{y=2*x, v=[x,x+1]};}' // &
+		'struct B{x:i32, f:fn(i32):P,' // &
+		'const fn mk():P{return P{y=x+1, v=[x,7]};}' // &
+		'const fn mk2():B{return B{x=x*10, f=f};}' // &
+		'const fn get():i32{return x;}' // &
+		'fn inc():B{x+=1; return B{x=x, f=f};}}' // &
+		'struct A{b:B, w:[B;:]}' // &
+		'let a=A{b=B{x=5,f=dbl}, w=[B{x=1,f=dbl},B{x=2,f=dbl}]};'
 
 	write(*,*) 'Unit testing '//label//' ...'
 
@@ -6985,6 +7001,124 @@ subroutine unit_test_methods(npass, nfail)
 				//'let s=S{w=["ab","cd"]};' &
 				//'return s.g()[1];' &
 				, quiet) == 'cd', &
+
+			! --- method calls on a bare member of the implicit self ---
+			eval('struct B{x:i32, fn inc(){x+=1;} const fn get():i32{return x;}}' &   ! 55
+				//'struct A{b:B, fn f(){b.inc();} const fn g():i32{return b.get();}}' &
+				//'let a=A{b=B{x=1}}; a.f(); a.f(); return a.g();' &
+				, quiet) == '3', &
+
+			! two-level member chain
+			eval('struct C{x:i32, fn inc(){x+=1;}}' &                                 ! 56
+				//'struct B{c:C}' &
+				//'struct A{b:B, fn f(){b.c.inc();} const fn g():i32{return b.c.x;}}' &
+				//'let a=A{b=B{c=C{x=5}}}; a.f(); return a.g();' &
+				, quiet) == '6', &
+
+			! subscripted member
+			eval('struct C{x:i32, fn inc(){x+=1;}}' &                                 ! 57
+				//'struct A{v:[C;:], fn f(){v[1].inc();} const fn g():i32{return v[1].x;}}' &
+				//'let a=A{v=[C{x=1},C{x=10}]}; a.f(); return a.g();' &
+				, quiet) == '11', &
+
+			! fn-typed member called inside a method
+			eval('fn dbl(x:i32):i32{return 2*x;}' &                                   ! 58
+				//'struct A{f:fn(i32):i32, const fn g():i32{return f(21);}}' &
+				//'let a=A{f=dbl}; return a.g();' &
+				, quiet) == '42', &
+
+			! a recursive method on an optional member
+			eval('struct N{v:i32, next:?N,' &                                         ! 59
+				//'fn push(x:i32){if next==null{next=N{v=x,next=null};}else{next.push(x);}}' &
+				//'const fn len():i32{if next==null{return 1;}return 1+next.len();}}' &
+				//'let n=N{v=1,next=null}; n.push(2); n.push(3); n.push(4); return n.len();' &
+				, quiet) == '4', &
+
+			! error: const method calling a mutating method on a member
+			diag_has_code(get_diags( &                                               ! 60
+				'struct C{x:i32, fn inc(){x+=1;}}' &
+				//'struct A{c:C, const fn bad(){c.inc();}}'), &
+				EC_CONST_ASSIGN), &
+
+			! a.b.mk().y
+			eval(CHAIN &
+				//'return a.b.mk().y;' &
+				, quiet) == '6', &   ! 61
+
+			! subscript on the result
+			eval(CHAIN &
+				//'return a.b.mk().v[1];' &
+				, quiet) == '7', &   ! 62
+
+			! subscripted receiver member
+			eval(CHAIN &
+				//'return a.w[1].mk().y;' &
+				, quiet) == '3', &   ! 63
+
+			! call chained on a call
+			eval(CHAIN &
+				//'return a.b.mk2().mk().y;' &
+				, quiet) == '51', &   ! 64
+
+			! call at the end of a chain on a call
+			eval(CHAIN &
+				//'return a.b.mk2().get();' &
+				, quiet) == '50', &   ! 65
+
+			! fn-typed member call in the middle
+			eval(CHAIN &
+				//'return a.b.f(3).y;' &
+				, quiet) == '6', &   ! 66
+
+			! mutating method in the middle writes back the receiver
+			eval(CHAIN &
+				//'let r = a.b.inc().x; return r + 10*a.b.x;' &
+				, quiet) == '66', &   ! 67
+
+			! calls in the middle of a chain on a bare member of the implicit self
+			eval('struct R{x:i32}' &
+				//'struct C{x:i32, fn inc():R{x+=1; return R{x=x};} const fn mk():R{return R{x=x+100};}}' &
+				//'struct B{c:C, const fn m():i32{return c.mk().x;} fn ok():i32{return c.inc().x;}}' &
+				//'let b=B{c=C{x=1}}; return b.m()*1000 + b.ok()*10 + b.c.x;' &
+				, quiet) == '101022', &   ! 68
+
+			! error: mutating method in the middle of a chain on a const
+			diag_has_code(get_diags( &                                               ! 69
+				'struct R{x:i32}' &
+				//'struct C{x:i32, fn inc():R{x+=1; return R{x=x};}}' &
+				//'struct B{c:C}' &
+				//'const b=B{c=C{x=1}}; let r=b.c.inc().x;'), &
+				EC_CONST_ASSIGN), &
+
+			! error: const method calling a mutating method in the middle of a chain on a member
+			diag_has_code(get_diags( &                                               ! 70
+				'struct R{x:i32}' &
+				//'struct C{x:i32, fn inc():R{x+=1; return R{x=x};}}' &
+				//'struct B{c:C, const fn bad():i32{return c.inc().x;}}'), &
+				EC_CONST_ASSIGN), &
+
+			! a const that shares a name with a member in the middle of a chain
+			! is not the receiver
+			.not. diag_has_code(get_diags( &                                         ! 71
+				'struct C{x:i32, fn inc(){x+=1;}} struct B{c:C} struct A{b:B}' &
+				//'const b=0; let a=A{b=B{c=C{x=1}}}; a.b.c.inc();'), &
+				EC_CONST_ASSIGN), &
+
+			.not. diag_has_code(get_diags( &                                         ! 72
+				'struct C{x:i32, fn inc(){x+=1;}} struct D{c:C} struct B{d:D}' &
+				//'struct A{b:B} const b=0; const d=0;' &
+				//'let a=A{b=B{d=D{c=C{x=1}}}}; a.b.d.c.inc();'), &
+				EC_CONST_ASSIGN), &
+
+			eval('struct C{x:i32, fn inc(){x+=1;}} struct B{c:C} struct A{b:B}' &    ! 73
+				//'const b=0; let a=A{b=B{c=C{x=1}}}; a.b.c.inc(); return a.b.c.x;' &
+				, quiet) == '2', &
+
+			! error: the root itself is const
+			diag_has_code(get_diags( &                                               ! 74
+				'struct C{x:i32, fn inc(){x+=1;}} struct B{c:C} struct A{b:B}' &
+				//'const a=A{b=B{c=C{x=1}}}; a.b.c.inc();'), &
+				EC_CONST_ASSIGN), &
 
 			.false. &
 		]
@@ -8515,6 +8649,84 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_count_code(get_diags_file(P//'E124-file-array.syntran'), &
 				EC_FILE_ARRAY) == 1, &
 
+			! E125: a type-name array literal like `[Node; 0]` can only be empty
+			diag_has_code(get_diags( &
+				'struct N{v:i32,} let a = [N; 3];'), EC_TYPED_ARRAY_SIZE), &
+			diag_has_code(get_diags('let n = 2; let a = [str; n];'), &
+				EC_TYPED_ARRAY_SIZE), &
+			diag_has_code(get_diags('let a = [i32; 0, 2];'), EC_TYPED_ARRAY_SIZE), &
+			.not. diag_has_code(get_diags('struct N{v:i32,} let a = [N; 0, 0];'), &
+				EC_TYPED_ARRAY_SIZE), &
+			.not. diag_has_code(get_diags('let bool = 1; let a = [bool; 3];'), &
+				EC_TYPED_ARRAY_SIZE), &
+			diag_count_code(get_diags_file(P//'E125-typed-array-size.syntran'), &
+				EC_TYPED_ARRAY_SIZE) == 1, &
+
+			! E126: a struct that holds itself directly (or through other scalar
+			! struct members) has infinite size.  Arrays are fine
+			diag_has_code(get_diags('struct N{v:i32, next:N,}'), EC_INFINITE_STRUCT), &
+			diag_has_code(get_diags('struct A{b:B,} struct B{a:A,}'), EC_INFINITE_STRUCT), &
+			diag_count_code(get_diags('struct A{b:B,} struct B{a:A,}'), &
+				EC_INFINITE_STRUCT) == 2, &
+			.not. diag_has_code(get_diags('struct N{v:i32, next:[N; :],}'), &
+				EC_INFINITE_STRUCT), &
+			.not. diag_has_code(get_diags('struct A{b:[B; :],} struct B{a:A,}'), &
+				EC_INFINITE_STRUCT), &
+			diag_count_code(get_diags_file(P//'E126-infinite-struct.syntran'), &
+				EC_INFINITE_STRUCT) == 1, &
+			! ... except through an optional member
+			.not. diag_has_code(get_diags('struct N{v:i32, next:?N,}'), EC_INFINITE_STRUCT), &
+			.not. diag_has_code(get_diags('struct A{b:?B,} struct B{a:?A,}'), &
+				EC_INFINITE_STRUCT), &
+
+			! E127: only a scalar struct can be optional
+			diag_has_code(get_diags('struct N{v:?i32,}'), EC_BAD_OPTIONAL), &
+			diag_has_code(get_diags('struct N{v:i32,} struct M{v:?[N; :],}'), EC_BAD_OPTIONAL), &
+			diag_has_code(get_diags('fn f(x: ?fn(i32): i32) {}'), EC_BAD_OPTIONAL), &
+			diag_has_code(get_diags('fn f(x: ?str): i32 { return 0; }'), EC_BAD_OPTIONAL), &
+			.not. diag_has_code(get_diags('struct N{v:i32, next:?N,}'), EC_BAD_OPTIONAL), &
+			.not. diag_has_code(get_diags('struct N{v:i32,} fn f(x: ?N): ?N { return x; }'), &
+				EC_BAD_OPTIONAL), &
+			diag_count_code(get_diags_file(P//'E127-bad-optional.syntran'), &
+				EC_BAD_OPTIONAL) == 1, &
+
+			! E128: no arrays of optionals
+			diag_has_code(get_diags('let a = [null, null];'), EC_NULL_ARRAY), &
+			diag_has_code(get_diags('let a = [null];'), EC_NULL_ARRAY), &
+			diag_count_code(get_diags_file(P//'E128-null-array.syntran'), &
+				EC_NULL_ARRAY) == 1, &
+
+			! E129: a variable can't be declared from a bare `null`
+			diag_has_code(get_diags('let x = null;'), EC_UNTYPED_NULL), &
+			diag_has_code(get_diags('const x = null;'), EC_UNTYPED_NULL), &
+			diag_count_code(get_diags_file(P//'E129-untyped-null.syntran'), &
+				EC_UNTYPED_NULL) == 1, &
+			! ... but an optional that holds null is a struct variable
+			.not. diag_has_code(get_diags( &
+				'struct N{v:i32, next:?N,} let n = N{v = 1, next = null}; ' &
+				//'let k = n.next; k = null; println(k == null);'), EC_UNTYPED_NULL), &
+
+			! null is only for optionals
+			diag_has_code(get_diags('struct N{v:i32,} let n = N{v = 1}; n = null;'), &
+				EC_BINARY_TYPES), &
+			diag_has_code(get_diags('struct N{v:i32,} fn f(n: N) {} f(null);'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags('struct N{v:i32,} fn f(): N { return null; }'), &
+				EC_BAD_RET_TYPE), &
+			diag_has_code(get_diags('struct N{v:i32,} struct M{n:N,} let m = M{n = null};'), &
+				EC_BAD_MEMBER_TYPE), &
+			diag_has_code(get_diags('let x = null + 1;'), EC_BINARY_TYPES), &
+			! ... and comparing to it isn't ordinary struct equality
+			diag_has_code(get_diags('struct N{v:i32,} let n = N{v = 1}; println(n == n);'), &
+				EC_BINARY_TYPES), &
+			diag_has_code(get_diags('let x = null < null;'), EC_BINARY_TYPES), &
+			.not. diag_has_code(get_diags( &
+				'struct N{v:i32, next:?N,} let n = N{v = 1, next = null}; ' &
+				//'println(n == null, null == n, n.next != null, null == null);'), &
+				EC_BINARY_TYPES), &
+			.not. diag_has_code(get_diags( &
+				'struct N{v:i32, next:?N,} fn f(n: ?N): ?N { return null; } ' &
+				//'let n = f(null); println(n);'), EC_BAD_ARG_TYPE), &
+
 			! E90 (retired): fn-pointer-typed struct members used to be
 			! rejected here (musl/gfortran segfault in the member dict's
 			! deep-copy/destroy path on struct redeclaration -- every struct
@@ -9817,6 +10029,45 @@ subroutine unit_test_runtime_errors(npass, nfail)
 			.not. diag_has_code(get_diags('println(parse_bool("true"));'), RC_PARSE_BOOL), &
 			.not. diag_has_code(get_diags('println(parse_bool(" false "));'), RC_PARSE_BOOL), &
 
+			! R47: member of an optional which is null
+			rt_code_both_file(P//'R47-null-member.syntran', RC_NULL_MEMBER), &
+			diag_count_code(get_diags_file(P//'R47-null-member.syntran'), RC_NULL_MEMBER) == 1, &
+			diag_has_code(get_diags( &
+				'struct N{v:i32, next:?N,} let n = N{v = 1, next = null}; println(n.next.v);'), &
+				RC_NULL_MEMBER), &
+			diag_has_code(get_diags( &
+				'struct N{v:i32, next:?N,} let n = N{v = 1, next = null}; n.next.v = 2;'), &
+				RC_NULL_MEMBER), &
+			diag_has_code(get_diags( &
+				'struct N{v:i32, next:?N,} fn f(n: N): i32 { return n.v; } ' &
+				//'let n = N{v = 1, next = null}; println(f(n.next));'), RC_NULL_MEMBER), &
+			.not. diag_has_code(get_diags( &
+				'struct N{v:i32, next:?N,} let n = N{v = 1, next = null}; ' &
+				//'n.next = N{v = 2, next = null}; println(n.next.v);'), RC_NULL_MEMBER), &
+
+			! the moving forms of a member read: `x = x.next` and `x.next == null`
+			.not. diag_has_code(get_diags( &
+				'struct N{v:i32, next:?N,} let n = N{v = 1, next = null}; ' &
+				//'n = n.next; println(n == null);'), RC_NULL_MEMBER), &
+			diag_has_code(get_diags( &
+				'struct N{v:i32, next:?N,} let n = N{v = 1, next = null}; ' &
+				//'n = n.next.next;'), RC_NULL_MEMBER), &
+			diag_has_code(get_diags( &
+				'struct N{v:i32, next:?N,} let n = N{v = 1, next = null}; ' &
+				//'println(n.next.next == null);'), RC_NULL_MEMBER), &
+			diag_has_code(get_diags( &
+				'struct N{v:i32, next:?N,} fn f(n: N): bool { return n.next.next != null; } ' &
+				//'println(f(N{v = 1, next = null}));'), RC_NULL_MEMBER), &
+
+			! a null in the middle of a method call receiver chain, which is moved
+			! out of its variable for the call
+			diag_has_code(get_diags( &
+				'struct N{v:i32, next:?N, const fn len():i32{return v;}} ' &
+				//'let n = N{v = 1, next = null}; println(n.next.next.len());'), RC_NULL_MEMBER), &
+			diag_has_code(get_diags( &
+				'struct N{v:i32, next:?N, fn set(x:i32){v = x;}} ' &
+				//'let n = N{v = 1, next = null}; n.next.next.set(2);'), RC_NULL_MEMBER), &
+
 			! R39 again, for the i64 overload of repeat()
 			diag_has_code(get_diags("println(repeat(""ab"", -1'i64));"), RC_REPEAT_NEGATIVE), &
 			.not. diag_has_code(get_diags("println(repeat(""ab"", 2'i64));"), RC_REPEAT_NEGATIVE) &
@@ -10646,7 +10897,17 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E123-mod-import-name.syntran'), &
 				EC_MOD_IMPORT_NAME, P//'E123-mod-import-name.syntran', 6, 12, 6), &
 			diag_loc_ok(get_diags_file(P//'E124-file-array.syntran'), &
-				EC_FILE_ARRAY, P//'E124-file-array.syntran', 6, 14, 2) &
+				EC_FILE_ARRAY, P//'E124-file-array.syntran', 6, 14, 2), &
+			diag_loc_ok(get_diags_file(P//'E125-typed-array-size.syntran'), &
+				EC_TYPED_ARRAY_SIZE, P//'E125-typed-array-size.syntran', 7, 20, 1), &
+			diag_loc_ok(get_diags_file(P//'E126-infinite-struct.syntran'), &
+				EC_INFINITE_STRUCT, P//'E126-infinite-struct.syntran', 8, 2, 4), &
+			diag_loc_ok(get_diags_file(P//'E127-bad-optional.syntran'), &
+				EC_BAD_OPTIONAL, P//'E127-bad-optional.syntran', 7, 7, 4), &
+			diag_loc_ok(get_diags_file(P//'E128-null-array.syntran'), &
+				EC_NULL_ARRAY, P//'E128-null-array.syntran', 6, 14, 4), &
+			diag_loc_ok(get_diags_file(P//'E129-untyped-null.syntran'), &
+				EC_UNTYPED_NULL, P//'E129-untyped-null.syntran', 9, 1, 18) &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
@@ -11200,6 +11461,29 @@ subroutine unit_test_transpile(npass, nfail)
 			diag_has_code(get_diags_transpile( &
 				'let v = ["ab", "cd"]; println(v[:, [1, 0]]);'), &
 				EC_TRANSPILE_UNSUPPORTED), &
+
+			! A recursive struct is unsupported, and must not hang the emitter.  The
+			! type-name empty array `[Name; 0]` is supported for a plain struct,
+			! an enum, and the other element types
+			diag_has_text(get_diags_transpile( &
+				'struct T{v:i32, kids:[T; :],} let t = T{v = 1, kids = [T; 0]};'), &
+				'a recursive struct'), &
+			diag_has_text(get_diags_transpile('struct A{b:[B; :],} struct B{a:[A; :],}'), &
+				'a recursive struct'), &
+			diag_has_text(get_diags_transpile( &
+				'struct T{v:i32, next:?T,} let t = T{v = 1, next = null};'), &
+				'a recursive struct'), &
+			diag_has_text(get_diags_transpile( &
+				'struct P{x:i32,} struct S{p:?P,} let s = S{p = P{x = 1}};'), &
+				'an optional struct member'), &
+			diag_has_text(get_diags_transpile( &
+				'struct P{x:i32,} let p = P{x = 1}; println(p == null);'), &
+				'the `null` literal'), &
+			index(transpile_src('struct P{x:i32,} let a = [P; 0]; println(size(a, 0));'), &
+				' :: ]') > 0, &
+			.not. diag_has_code(get_diags_transpile( &
+				'struct P{x:i32,} enum C{R,G} let a = [P; 0]; let b = [C; 0]; ' &
+				//'let c = [str; 0, 0]; let d = [f64; 0];'), EC_TRANSPILE_UNSUPPORTED), &
 
 			! Unsupported constructs are diagnostics.  Everything else in the
 			! program is still checked, one diagnostic per statement

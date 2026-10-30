@@ -1089,10 +1089,12 @@ recursive module subroutine parse_type(parser, type_text, type)
 	integer :: rank, itype, i
 	integer :: pos0, pos1, pos2
 
+	logical :: is_opt
+
 	character(len = :), allocatable :: cookie, suggest, param_type_text, ret_type_text
 
 	type(syntax_token_t) :: colon, ident, comma, lbracket, rbracket, semi, dummy, &
-		double_colon, fn_kw, lparen, rparen, amp
+		double_colon, fn_kw, lparen, rparen, amp, question
 
 	type(text_span_t) :: span
 
@@ -1100,6 +1102,8 @@ recursive module subroutine parse_type(parser, type_text, type)
 	type(value_vector_t) :: param_types
 
 	pos1 = parser%current_pos()
+
+	is_opt = .false.
 
 	if (parser%current_kind() == amp_token) then
 
@@ -1116,6 +1120,16 @@ recursive module subroutine parse_type(parser, type_text, type)
 
 		! Fall through and parse the type normally so this doesn't cascade
 		! into further bogus diagnostics
+		pos1 = parser%current_pos()
+
+	end if
+
+	if (parser%current_kind() == question_token) then
+
+		! Optional type, `?Struct`, which can also be null.  Checked below
+		! after the type is known
+		call parser%match(question_token, question)
+		is_opt = .true.
 		pos1 = parser%current_pos()
 
 	end if
@@ -1148,6 +1162,12 @@ recursive module subroutine parse_type(parser, type_text, type)
 
 		end do
 		call parser%match(rparen_token, rparen)
+
+		if (is_opt) then
+			span = new_span(pos1 - 1, parser%current_pos() - pos1 + 1)
+			call parser%diagnostics%push(err_bad_optional( &
+				parser%context(), span, trim(parser%text(pos1, parser%current_pos() - 1))))
+		end if
 
 		type%type = fn_type
 		allocate(type%fn_params( param_types%len_ ))
@@ -1242,6 +1262,18 @@ recursive module subroutine parse_type(parser, type_text, type)
 	else if (itype == enum_type) then
 		type%enum_name = type_text
 		type%enum_cookie = cookie
+	end if
+
+	if (is_opt) then
+		! Only a scalar struct can be optional.  An unknown type already has its
+		! own diagnostic
+		if (itype == struct_type .and. rank < 0) then
+			type%is_opt = .true.
+		else if (itype /= unknown_type .or. rank >= 0) then
+			span = new_span(pos1 - 1, pos2 - pos1 + 1)
+			call parser%diagnostics%push(err_bad_optional( &
+				parser%context(), span, trim(parser%text(pos1, pos2 - 1))))
+		end if
 	end if
 
 end subroutine parse_type

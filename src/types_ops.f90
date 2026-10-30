@@ -352,6 +352,9 @@ module integer function get_keyword_kind(text) result(kind)
 		case ("when")
 			kind = when_keyword
 
+		case ("null")
+			kind = null_keyword
+
 		case default
 			kind = identifier_token
 
@@ -391,7 +394,7 @@ module logical function is_identifier_or_keyword(kind)
 		let_keyword, if_keyword, else_keyword, for_keyword, in_keyword, &
 		while_keyword, fn_keyword, struct_keyword, enum_keyword, include_keyword, &
 		return_keyword, break_keyword, continue_keyword, use_keyword, &
-		switch_keyword, case_keyword, default_keyword, when_keyword &
+		switch_keyword, case_keyword, default_keyword, when_keyword, null_keyword &
 	])
 
 end function is_identifier_or_keyword
@@ -564,7 +567,12 @@ module logical function is_binary_op_allowed(left, op, right, left_arr, right_ar
 
 			! `array = scalar` is allowed but `scalar = array` is not
 
-			if (left == array_type) then
+			if (left == struct_type .and. right == null_type) then
+				! Only an optional can hold null, which is checked when the types
+				! of the whole values are matched
+				allowed = .true.
+
+			else if (left == array_type) then
 				allowed = &
 					(is_float_type(left_arr) .and. is_float_type(right)) .or. &
 					(is_int_type  (left_arr) .and. is_int_type  (right)) .or. &
@@ -582,6 +590,14 @@ module logical function is_binary_op_allowed(left, op, right, left_arr, right_ar
 
 			if (left == file_type .or. right == file_type) then
 				allowed = .false.
+				return
+			end if
+
+			! `x == null` and `x != null` are the only equality on a struct
+			if (left == null_type .or. right == null_type) then
+				allowed = &
+					(left  == null_type .or. left  == struct_type) .and. &
+					(right == null_type .or. right == struct_type)
 				return
 			end if
 
@@ -660,7 +676,15 @@ module logical function is_binary_op_allowed_val(left, op, right) &
 	allowed = is_binary_op_allowed(left%type, op, right%type, larrtype, rarrtype)
 	if (.not. allowed) return
 
-	if (left%type == struct_type) then
+	! Only an optional (`?Struct`) can be assigned null.  `x == null` is fine for
+	! any struct, though
+	if (op == equals_token .and. right%type == null_type .and. &
+		left%type == struct_type .and. .not. left%is_opt) then
+		allowed = .false.
+		return
+	end if
+
+	if (left%type == struct_type .and. right%type == struct_type) then
 		! Prefer the alias-independent struct_cookie (set at struct
 		! declaration time) so the same struct reached via two different
 		! module aliases/import paths is still recognized as the same type.
@@ -1115,6 +1139,11 @@ recursive module integer function types_match(a, b) result(io)
 	integer :: i, na, nb
 
 	io = TYPE_MATCH
+
+	! Only an optional (`?Struct`) can be null.  A `?Struct` value is accepted
+	! where a plain struct is expected, and a null then fails at the first member
+	! access (R47), like an unallocated component in Fortran
+	if (a%is_opt .and. b%type == null_type) return
 
 	! Note that is_binary_op_allowed() specifically allows operations on unknown
 	! types.  Maybe we should allow unknowns here too.  Test cases such as

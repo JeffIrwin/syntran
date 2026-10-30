@@ -807,6 +807,47 @@ storage has no case for `file`-typed values.
 
 [Example](../src/tests/test-src/errors/E124-file-array.syntran)
 
+### E125 -- typed-array-size
+
+An array literal with a type name instead of a fill value, like `[Node; 0]` or
+`[str; 0, 0]`, can only be empty.  A type name has no value to fill elements with, so every
+size must be the literal `0`.  This is how to make the empty base case of a recursive
+struct like `struct Tree { kids: [Tree; :] }`.
+
+[Example](../src/tests/test-src/errors/E125-typed-array-size.syntran)
+
+### E126 -- infinite-struct
+
+A struct holds itself in a scalar member, either directly (`next: Node`) or through other
+scalar struct members (`A { b: B }`, `B { a: A }`), so it would have infinite size.  Make
+one of the members optional like `?Node`, or an array like `[Node; :]`, which can be
+empty, to recurse.
+
+[Example](../src/tests/test-src/errors/E126-infinite-struct.syntran)
+
+### E127 -- bad-optional
+
+Only a struct can be optional, like `?Node`.  Primitive types, arrays, and fn pointers
+can't, so `?i32`, `?[Node; :]`, and `?fn(i32): i32` are errors.
+
+[Example](../src/tests/test-src/errors/E127-bad-optional.syntran)
+
+### E128 -- null-array
+
+`null` can't be an element of an array literal like `[null, null]`, because arrays of
+optionals aren't supported.
+
+[Example](../src/tests/test-src/errors/E128-null-array.syntran)
+
+### E129 -- untyped-null
+
+A variable is declared directly from `null`, like `let x = null;`.  A variable's type is
+inferred from its initializer and `null` has no struct type, so `x` could never be
+assigned a struct afterwards.  Only a `?Struct` member, fn parameter, or fn return value
+can be null.
+
+[Example](../src/tests/test-src/errors/E129-untyped-null.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type
@@ -1294,6 +1335,13 @@ arrays of strings.
 `"false"` are accepted, optionally with surrounding spaces.
 
 [Example](../src/tests/test-src/errors/R46-parse-bool.syntran)
+
+### R47 -- null-member
+
+A member was read or assigned through an optional struct (`?Node`) that is `null`, like
+`tail.next.val` when `tail.next` is `null`.  Compare with `x == null` first.
+
+[Example](../src/tests/test-src/errors/R47-null-member.syntran)
 
 ## Warnings
 
