@@ -60,6 +60,7 @@ void sy_llvm_init_native(void)
  * are stable.  A LLVMContextRef that the emitter made is handed over to the JIT
  * along with its module */
 
+#include <dlfcn.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -102,7 +103,7 @@ LLVMErrorRef LLVMOrcJITDylibDefine(LLVMOrcJITDylibRef JD, LLVMOrcMaterialization
 LLVMErrorRef LLVMOrcCreateDynamicLibrarySearchGeneratorForProcess(
     LLVMOrcDefinitionGeneratorRef *Result, char GlobalPrefx, void *Filter, void *FilterCtx);
 void LLVMOrcJITDylibAddGenerator(LLVMOrcJITDylibRef JD, LLVMOrcDefinitionGeneratorRef DG);
-LLVMOrcThreadSafeContextRef LLVMOrcCreateNewThreadSafeContextFromLLVMContext(void *Ctx);
+LLVMOrcThreadSafeContextRef LLVMOrcCreateNewThreadSafeContext(void);
 void LLVMOrcDisposeThreadSafeContext(LLVMOrcThreadSafeContextRef TSCtx);
 LLVMOrcThreadSafeModuleRef LLVMOrcCreateNewThreadSafeModule(void *M,
     LLVMOrcThreadSafeContextRef TSCtx);
@@ -110,6 +111,11 @@ void LLVMOrcDisposeThreadSafeModule(LLVMOrcThreadSafeModuleRef TSM);
 LLVMErrorRef LLVMOrcLLJITAddLLVMIRModule(LLVMOrcLLJITRef J, LLVMOrcJITDylibRef JD,
     LLVMOrcThreadSafeModuleRef TSM);
 LLVMErrorRef LLVMOrcLLJITLookup(LLVMOrcLLJITRef J, uint64_t *Result, const char *Name);
+void *LLVMWriteBitcodeToMemoryBuffer(void *M);
+int LLVMParseBitcodeInContext2(void *ContextRef, void *MemBuf, void **OutModule);
+void LLVMDisposeMemoryBuffer(void *MemBuf);
+void LLVMDisposeModule(void *M);
+void LLVMContextDispose(void *C);
 char *LLVMGetErrorMessage(LLVMErrorRef Err);
 void LLVMDisposeErrorMessage(char *ErrMsg);
 
@@ -141,6 +147,53 @@ static int sy_jit_fail(LLVMErrorRef e, const char *what)
     return -1;
 }
 
+/* Hand a module to the JIT, as a thread safe module.  Which fns there are for it depends
+ * on the version of LLVM, so they are looked up by name rather than linked.  A newer one
+ * (21 or so) can wrap the context that the module is already in.  An older one can only
+ * make a context of its own and ask what it is, so the module is moved into it through
+ * bitcode.  Either way, this takes ownership of the module and the context */
+static LLVMOrcThreadSafeModuleRef sy_jit_wrap(void *module, void *ctx)
+{
+    LLVMOrcThreadSafeContextRef (*from_ctx)(void *);
+    void *(*get_ctx)(LLVMOrcThreadSafeContextRef);
+    LLVMOrcThreadSafeContextRef tsc;
+    LLVMOrcThreadSafeModuleRef tsm;
+    void *ctx2, *buf, *module2 = NULL;
+
+    *(void **)&from_ctx = dlsym(RTLD_DEFAULT, "LLVMOrcCreateNewThreadSafeContextFromLLVMContext");
+    if (from_ctx != NULL) {
+        /* Disposing of this reference after the module is handed over keeps the
+         * context alive until the JIT is done */
+        tsc = from_ctx(ctx);
+        tsm = LLVMOrcCreateNewThreadSafeModule(module, tsc);
+        LLVMOrcDisposeThreadSafeContext(tsc);
+        return tsm;
+    }
+
+    *(void **)&get_ctx = dlsym(RTLD_DEFAULT, "LLVMOrcThreadSafeContextGetContext");
+    if (get_ctx == NULL) {
+        snprintf(sy_jit_err, sizeof(sy_jit_err),
+            "this LLVM has no way to run a module in its own context");
+        return NULL;
+    }
+    tsc = LLVMOrcCreateNewThreadSafeContext();
+    ctx2 = get_ctx(tsc);
+    buf = LLVMWriteBitcodeToMemoryBuffer(module);
+    /* The buffer is taken by the parser */
+    if (LLVMParseBitcodeInContext2(ctx2, buf, &module2) != 0) {
+        snprintf(sy_jit_err, sizeof(sy_jit_err), "cannot move the module to the JIT context");
+        LLVMDisposeMemoryBuffer(buf);
+        LLVMOrcDisposeThreadSafeContext(tsc);
+        return NULL;
+    }
+    LLVMDisposeMemoryBuffer(buf);
+    LLVMDisposeModule(module);
+    LLVMContextDispose(ctx);
+    tsm = LLVMOrcCreateNewThreadSafeModule(module2, tsc);
+    LLVMOrcDisposeThreadSafeContext(tsc);
+    return tsm;
+}
+
 /* Compile `module` and run its main().  This takes ownership of the module, and of
  * the context that it is in.  The result is what sy_jit_call() says, or -1 if LLVM
  * couldn't compile it, in which case sy_llvm_jit_error() says why */
@@ -149,7 +202,6 @@ int sy_llvm_jit_run(void *module, void *ctx)
     LLVMOrcLLJITRef jit = NULL;
     LLVMOrcJITDylibRef jd;
     LLVMOrcDefinitionGeneratorRef gen = NULL;
-    LLVMOrcThreadSafeContextRef tsc;
     LLVMOrcThreadSafeModuleRef tsm;
     LLVMErrorRef e;
     LLVMOrcCSymbolMapPair *pairs;
@@ -159,11 +211,8 @@ int sy_llvm_jit_run(void *module, void *ctx)
 
     sy_jit_err[0] = '\0';
 
-    /* The module's context is shared with the JIT.  Disposing of this reference
-     * after the module is handed over keeps the context alive until the JIT is done */
-    tsc = LLVMOrcCreateNewThreadSafeContextFromLLVMContext(ctx);
-    tsm = LLVMOrcCreateNewThreadSafeModule(module, tsc);
-    LLVMOrcDisposeThreadSafeContext(tsc);
+    tsm = sy_jit_wrap(module, ctx);
+    if (tsm == NULL) return -1;
 
     e = LLVMOrcCreateLLJIT(&jit, NULL);
     if (e != NULL) {
