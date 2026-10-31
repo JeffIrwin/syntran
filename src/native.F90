@@ -31,6 +31,7 @@ module syntran__native_m
 	use syntran__llvm_c_m
 	use syntran__native_rt_m
 	use syntran__runtime_m
+	use syntran_rt, only: rt_str_t, rt_fmt_split, rt_fmt_parse, rt_fmt_spec_t
 	use syntran__transpile_m, only: elem_type, intr_display_name, is_arr, &
 		enums_slot_of, is_name_char, is_numeric_type, structs_member, structs_slot_of, wider_type
 	use syntran__types_m
@@ -4156,6 +4157,9 @@ recursive function emit_intr_call(em, node) result(r)
 		end if
 		r = acc
 
+	case ('format')
+		r = emit_format(em, node, 1)
+
 	case ('len')
 		! The length is the first field of a string
 		a = emit_expr(em, node%args(1))
@@ -4930,7 +4934,7 @@ recursive subroutine emit_call_stmt(em, node)
 	type(c_ptr) :: parts, slot, ignored
 	type(c_ptr), allocatable :: args(:)
 
-	type(nval_t) :: v
+	type(nval_t) :: v, fs
 	type(nval_t), allocatable :: pieces(:)
 
 	select case (node%identifier%text)
@@ -4963,6 +4967,23 @@ recursive subroutine emit_call_stmt(em, node)
 			call dispose(em, pieces(i))
 		end do
 
+	case ('printf')
+		! print(format(...))
+		fs = emit_format(em, node, 1)
+		parts = entry_alloca(em, LLVMArrayType2(em%t_ptr, 1_c_int64_t), 'parts')
+		ignored = LLVMBuildStore(em%bld, fs%v, parts)
+		call rt_void(em, 'sy_print', [parts, ci32(em, 1)])
+		call dispose(em, fs)
+
+	case ('writef')
+		! write(f, format(...))
+		v = emit_expr(em, node%args(1))
+		fs = emit_format(em, node, 2)
+		call rt_void(em, 'sy_file_wcheck', [v%v, ci32(em, 0)])
+		call rt_void(em, 'sy_file_wstr', [v%v, fs%v])
+		call dispose(em, fs)
+		call dispose(em, v)
+
 	case ('exit')
 		v = convert(em, emit_expr(em, node%args(1)), i32_type)
 		call rt_void(em, 'sy_exit', [v%v])
@@ -4985,6 +5006,131 @@ recursive subroutine emit_call_stmt(em, node)
 	end select
 
 end subroutine emit_call_stmt
+
+!===============================================================================
+
+function fspec_global(em, spec) result(g)
+
+	! The parsed spec of a placeholder of a format string, as a constant of the
+	! program, which has the layout of `sy_fspec` in the runtime
+
+	type(nemitter_t), intent(inout) :: em
+	character(len = *), intent(in) :: spec
+	type(c_ptr) :: g
+
+	!********
+
+	integer :: ierr
+
+	type(c_ptr) :: vals(8)
+
+	type(rt_fmt_spec_t) :: sp
+
+	call rt_fmt_parse(spec, sp, ierr)
+
+	vals(1) = ci32(em, iachar(sp%fill))
+	vals(2) = ci32(em, iachar(sp%align))
+	vals(3) = ci32(em, iachar(sp%ty))
+	vals(4) = ci32(em, merge(1, 0, sp%plus))
+	vals(5) = ci32(em, merge(1, 0, sp%alt))
+	vals(6) = ci32(em, merge(1, 0, sp%zero))
+	vals(7) = ci32(em, sp%width)
+	vals(8) = ci32(em, sp%prec)
+
+	g = LLVMAddGlobal(em%llmod, LLVMArrayType2(em%t_i32, 8_c_int64_t), cs('.fs.'//str(em%nstr)))
+	em%nstr = em%nstr + 1
+	call LLVMSetInitializer(g, LLVMConstArray(em%t_i32, vals, 8))
+	call LLVMSetGlobalConstant(g, 1)
+	call LLVMSetLinkage(g, LLVM_PRIVATE_LINKAGE)
+
+end function fspec_global
+
+!===============================================================================
+
+recursive function emit_format(em, node, k) result(r)
+
+	! format() of the call `node`, where the argument `k` is the literal format
+	! string and the values are the arguments after it.  The text between the
+	! placeholders is split off here, and each value is formatted by the runtime
+	! with the parsed spec of its placeholder.  This is a new string
+
+	type(nemitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	integer, intent(in) :: k
+	type(nval_t) :: r
+
+	!********
+
+	integer :: i, n, ierr
+
+	type(c_ptr) :: pieces, vals, slot, spec, ignored
+
+	type(nval_t) :: v, f, g
+
+	type(rt_str_t), allocatable :: fpieces(:), fspecs(:)
+
+	r = dummy_val(em, str_type)
+
+	call rt_fmt_split(node%args(k)%val%str%s, fpieces, fspecs, ierr)
+	n = size(fspecs)
+
+	pieces = entry_alloca(em, LLVMArrayType2(em%t_ptr, int(n + 1, c_int64_t)), 'pieces')
+	vals   = entry_alloca(em, LLVMArrayType2(em%t_ptr, int(max(n, 1), c_int64_t)), 'fvals')
+
+	do i = 1, n
+		slot = LLVMBuildGEP2(em%bld, em%t_ptr, pieces, [ci32(em, i - 1)], 1, cs(''))
+		ignored = LLVMBuildStore(em%bld, str_literal(em, fpieces(i)%s), slot)
+	end do
+	slot = LLVMBuildGEP2(em%bld, em%t_ptr, pieces, [ci32(em, n)], 1, cs(''))
+	ignored = LLVMBuildStore(em%bld, str_literal(em, fpieces(n + 1)%s), slot)
+
+	do i = 1, n
+		v = emit_expr(em, node%args(k + i))
+		spec = fspec_global(em, fspecs(i)%s)
+
+		select case (v%ty)
+		case (i32_type)
+			f%v = rt_call(em, 'sy_format_i32', em%t_ptr, [v%v, spec])
+		case (i64_type)
+			f%v = rt_call(em, 'sy_format_i64', em%t_ptr, [v%v, spec])
+		case (f32_type)
+			f%v = rt_call(em, 'sy_format_f32', em%t_ptr, [v%v, spec])
+		case (f64_type)
+			f%v = rt_call(em, 'sy_format_f64', em%t_ptr, [v%v, spec])
+		case (bool_type)
+			f%v = rt_call(em, 'sy_format_bool', em%t_ptr, &
+				[LLVMBuildZExt(em%bld, v%v, em%t_i8, cs('')), spec])
+		case (str_type)
+			f%v = rt_call(em, 'sy_format_str', em%t_ptr, [v%v, spec])
+		case (array_type)
+			if (v%elem == i32_type .or. v%elem == i64_type .or. v%elem == f32_type .or. &
+					v%elem == f64_type .or. v%elem == bool_type .or. v%elem == str_type) then
+				f%v = rt_call(em, 'sy_format_arr', em%t_ptr, [v%v, spec])
+			else
+				call unsupported(em, 'formatting an array of type `'//kind_name(v%elem)//'`', &
+					node%identifier%pos)
+			end if
+		case (struct_type, enum_type)
+			! The string that str() makes of it
+			g = str_of(em, v)
+			v%owned = .false.
+			f%v = rt_call(em, 'sy_format_str', em%t_ptr, [g%v, spec])
+			call dispose(em, g)
+		case default
+			call unsupported(em, 'formatting a value of type `'//kind_name(v%ty)//'`', &
+				node%identifier%pos)
+		end select
+
+		slot = LLVMBuildGEP2(em%bld, em%t_ptr, vals, [ci32(em, i - 1)], 1, cs(''))
+		ignored = LLVMBuildStore(em%bld, f%v, slot)
+		call dispose(em, v)
+	end do
+
+	r%ty = str_type
+	r%owned = .true.
+	r%v = rt_call(em, 'sy_format_join', em%t_ptr, [ci32(em, n), pieces, vals])
+
+end function emit_format
 
 !===============================================================================
 

@@ -11464,6 +11464,7 @@ subroutine unit_test_transpile(npass, nfail)
 			interpret_file(T//'transpile/test-12.syntran', .true.) == '0', &
 			interpret_file(T//'transpile/test-15.syntran', .true.) == '0', &
 			interpret_file(T//'transpile/test-16.syntran', .true.) == '0', &
+			interpret_file(T//'transpile/test-17.syntran', .true.) == '0', &
 			transpiles_ok(T//'transpile/test-01.syntran'), &
 			transpiles_ok(T//'transpile/test-02.syntran'), &
 			transpiles_ok(T//'transpile/test-03.syntran'), &
@@ -11478,6 +11479,7 @@ subroutine unit_test_transpile(npass, nfail)
 			transpiles_ok(T//'transpile/test-12.syntran'), &
 			transpiles_ok(T//'transpile/test-15.syntran'), &
 			transpiles_ok(T//'transpile/test-16.syntran'), &
+			transpiles_ok(T//'transpile/test-17.syntran'), &
 
 			! Most of the tests programs are supported
 			transpiles_ok(T//'fns/test-01.syntran'), &
@@ -11886,6 +11888,127 @@ end subroutine unit_test_native_rt
 
 !===============================================================================
 
+subroutine unit_test_native_rt_format(npass, nfail)
+
+	! format() in the C runtime of the native backend has to give the same
+	! strings as rt_fmt_val() of the Fortran runtime, for every kind of value and
+	! spec.  The arrays and joining are covered by utils/test-transpile.sh
+
+	use, intrinsic :: iso_c_binding
+	use, intrinsic :: ieee_arithmetic
+	use syntran_rt, only: rt_fmt_val, rt_fmt_spec, rt_fmt_spec_t
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	interface
+		function sy_format_test(kind, ival, bits, rval, sval, spec, out) &
+				bind(c, name = "sy_format_test")
+			import :: c_int32_t, c_int64_t, c_double, c_char
+			integer(c_int32_t), value :: kind, bits
+			integer(c_int64_t), value :: ival
+			real(c_double), value :: rval
+			character(kind = c_char) :: sval(*), out(*)
+			integer(c_int32_t) :: spec(*)
+			integer(c_int32_t) :: sy_format_test
+		end function sy_format_test
+	end interface
+
+	character(len = *), parameter :: label = 'native C runtime format()'
+
+	character(len = 12), parameter :: int_specs(*) = [character(len = 12) :: &
+		'', '5', '<5', '^7', '*^9', '+', '05', '+06', 'x', 'X', '#x', '#010b', 'o', '#o', &
+		'b', '08b', '#X', '>8x', '+x', '-<6', '3']
+	character(len = 12), parameter :: real_specs(*) = [character(len = 12) :: &
+		'', '.2', '.0', '10.3', '<10.1', '^12.2', '+.3', '010.2', '+08.1', 'e', 'E', '.3e', &
+		'.0e', '12.2e', '+e', '015e', '.12', '8']
+	character(len = 12), parameter :: text_specs(*) = [character(len = 12) :: &
+		'', '8', '<8', '^9', '-^9', '.3', '*>8.2', '2']
+
+	integer :: i, j
+	integer(kind = 8), parameter :: ints(*) = [0_8, 1_8, -1_8, 255_8, -255_8, 2147483647_8, &
+		-2147483647_8 - 1_8, 1234567890123_8, huge(1_8), -huge(1_8) - 1_8]
+	logical, allocatable :: tests(:)
+	real(kind = 8) :: reals(18)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = [logical ::]
+
+	do i = 1, size(ints)
+		do j = 1, size(int_specs)
+			call check('i', ints(i), 64, 0.d0, '', trim(int_specs(j)))
+			if (abs(ints(i)) <= 2147483648_8) &
+				call check('i', ints(i), 32, 0.d0, '', trim(int_specs(j)))
+		end do
+	end do
+
+	reals = [0.d0, sign(0.d0, -1.d0), 1.5d0, -1.5d0, 0.1d0, 1.d0 / 3.d0, 1.d20, 1.d-20, &
+		123456.789d0, 5.d-324, huge(1.d0), 2.5d0, 0.5d0, 0.125d0, 9.995d0, 1.d-5, &
+		ieee_value(1.d0, ieee_quiet_nan), ieee_value(1.d0, ieee_positive_inf)]
+	do i = 1, size(reals)
+		do j = 1, size(real_specs)
+			call check('r', 0_8, 64, reals(i), '', trim(real_specs(j)))
+			call check('r', 0_8, 64, -reals(i), '', trim(real_specs(j)))
+			if (abs(reals(i)) < 1.d30 .or. .not. ieee_is_finite(reals(i))) &
+				call check('r', 0_8, 32, real(real(reals(i), 4), 8), '', trim(real_specs(j)))
+		end do
+	end do
+
+	do j = 1, size(text_specs)
+		call check('b', 1_8, 32, 0.d0, '', trim(text_specs(j)))
+		call check('b', 0_8, 32, 0.d0, '', trim(text_specs(j)))
+		call check('s', 0_8, 64, 0.d0, 'hello', trim(text_specs(j)))
+		call check('s', 0_8, 64, 0.d0, '', trim(text_specs(j)))
+		call check('s', 0_8, 64, 0.d0, 'a', trim(text_specs(j)))
+	end do
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+contains
+
+	subroutine check(kind, ival, bits, rval, sval, spec)
+		character(len = 1), intent(in) :: kind
+		integer(kind = 8), intent(in) :: ival
+		integer, intent(in) :: bits
+		real(kind = 8), intent(in) :: rval
+		character(len = *), intent(in) :: sval, spec
+
+		character(kind = c_char) :: out(1024)
+		character(len = :), allocatable :: c_str, f_str
+		integer :: k, n
+		integer(c_int32_t) :: sp_c(8)
+		type(rt_fmt_spec_t) :: sp
+
+		sp = rt_fmt_spec(spec)
+		sp_c = [iachar(sp%fill), iachar(sp%align), iachar(sp%ty), &
+			merge(1, 0, sp%plus), merge(1, 0, sp%alt), merge(1, 0, sp%zero), &
+			sp%width, sp%prec]
+
+		n = sy_format_test(int(iachar(kind), c_int32_t), int(ival, c_int64_t), &
+			int(bits, c_int32_t), real(rval, c_double), sval//c_null_char, sp_c, out)
+		allocate(character(len = n) :: c_str)
+		do k = 1, n
+			c_str(k:k) = out(k)
+		end do
+
+		f_str = rt_fmt_val(kind, ival, bits, rval, sval, sp)
+		tests = [tests, c_str == f_str]
+		if (c_str /= f_str) then
+			write(*,*) 'format mismatch, kind ', kind, ', bits ', bits, ', spec "'//spec//'":'
+			write(*,*) '  ival = ', ival, ', rval = ', rval, ', sval = "'//sval//'"'
+			write(*,*) '  C       "'//c_str//'"'
+			write(*,*) '  Fortran "'//f_str//'"'
+		end if
+	end subroutine check
+
+end subroutine unit_test_native_rt_format
+
+!===============================================================================
+
 subroutine unit_test_native(npass, nfail)
 
 	! The native backend.  These only check the diagnostics and the LLVM IR,
@@ -12157,6 +12280,7 @@ subroutine unit_tests(iostat)
 	if (run_group('error_codes')) call unit_test_error_codes(npass, nfail)
 	if (run_group('transpile')) call unit_test_transpile(npass, nfail)
 	if (run_group('native_rt')) call unit_test_native_rt(npass, nfail)
+	if (run_group('native_rt_format')) call unit_test_native_rt_format(npass, nfail)
 	if (run_group('native')) call unit_test_native(npass, nfail)
 	if (run_group('runtime_errors')) call unit_test_runtime_errors(npass, nfail)
 	if (run_group('bounds_check')) call unit_test_bounds_check(npass, nfail)
