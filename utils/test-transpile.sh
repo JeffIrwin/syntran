@@ -33,6 +33,11 @@
 #   -v, --verbose        print a diff for each FAIL
 #   -k, --keep           keep the temporary directory of generated programs
 #   --only <regex>       only test files whose path matches this extended regex
+#   --long               test the programs that the long tests (src/tests/long.f90)
+#                        run, instead of samples and unit tests.  They run from their
+#                        own directories, and have their own pass list, e.g.
+#                        utils/native-pass-long.txt.  Set $TIMEOUT (seconds, 60 by
+#                        default) for slow ones; a timeout is a SKIP
 #   --backend <name>     fortran (the default) tests `--transpile`.  native tests
 #                        `--native`, which needs a syntran built with LLVM, a C
 #                        compiler instead of a Fortran one, and has its own pass
@@ -62,11 +67,11 @@ cd "$ROOT"
 # `timeout`, but Homebrew coreutils installs `gtimeout`, and perl is always there
 with_timeout() {
 	if command -v timeout > /dev/null 2>&1; then
-		timeout 60 "$@"
+		timeout "${TIMEOUT:-60}" "$@"
 	elif command -v gtimeout > /dev/null 2>&1; then
-		gtimeout 60 "$@"
+		gtimeout "${TIMEOUT:-60}" "$@"
 	elif command -v perl > /dev/null 2>&1; then
-		perl -e 'alarm 60; exec @ARGV' -- "$@"
+		perl -e 'alarm shift; exec @ARGV' -- "${TIMEOUT:-60}" "$@"
 	else
 		"$@"
 	fi
@@ -121,10 +126,17 @@ run_one() {
 	# write to paths like build/test-01.txt.  One that can't open a path from
 	# there is run again from its own directory with `--cd`, for those that read
 	# files next to themselves
+	#
+	# The long tests always run from their own directory, where their input.txt is
 	rundir="$ROOT"
-	with_timeout "$REF" --color off "$f" > "$base.exp.raw" 2> "$base.exp.err" < /dev/null
+	if [ "$LONG" -eq 1 ]; then
+		rundir="$dir"
+		with_timeout "$REF" --color off --cd "$f" > "$base.exp.raw" 2> "$base.exp.err" < /dev/null
+	else
+		with_timeout "$REF" --color off "$f" > "$base.exp.raw" 2> "$base.exp.err" < /dev/null
+	fi
 	exp_status=$?
-	if grep -q 'Runtime error\[R8\]' "$base.exp.raw" "$base.exp.err" 2> /dev/null; then
+	if [ "$LONG" -eq 0 ] && grep -q 'Runtime error\[R8\]' "$base.exp.raw" "$base.exp.err" 2> /dev/null; then
 		rundir="$dir"
 		with_timeout "$REF" --color off --cd "$f" > "$base.exp.raw" 2> "$base.exp.err" < /dev/null
 		exp_status=$?
@@ -182,6 +194,7 @@ only=""
 ref=""
 jobs=""
 BACKEND=fortran
+LONG=0
 positional=()
 while [ $# -gt 0 ]; do
 	case "$1" in
@@ -191,6 +204,7 @@ while [ $# -gt 0 ]; do
 		--only) shift; only="$1" ;;
 		--ref) shift; ref="$1" ;;
 		--backend) shift; BACKEND="$1" ;;
+		--long) LONG=1 ;;
 		-j) shift; jobs="$1" ;;
 		*) positional+=("$1") ;;
 	esac
@@ -213,6 +227,7 @@ case "$BACKEND" in
 		exit 1
 		;;
 esac
+[ "$LONG" -eq 1 ] && PASS_LIST="${PASS_LIST%.txt}-long.txt"
 REF="${ref:-$CUR}"
 
 if [ ! -x "$CUR" ]; then
@@ -252,21 +267,32 @@ excluded=(
 
 # Error repro files are designed to be invalid, and the stack trace tests depend
 # on the interpreter's own runtime error output
-files=$(
-	{
-		find samples -name '*.syntran'
-		find src/tests/test-src -name '*.syntran' \
-			-not -path 'src/tests/test-src/errors/*' \
-			-not -path 'src/tests/test-src/stacktrace/*'
-	} | grep -vxF "$(printf '%s\n' "${excluded[@]}")" | sort
-)
+if [ "$LONG" -eq 1 ]; then
+	# The programs that src/tests/long.f90 runs: each call of chk() has a path
+	# relative to the most recent `path = '...'`
+	files=$(
+		awk '
+			/^[ \t]*path *= *\x27/ { split($0, q, "\x27"); base = q[2] }
+			/call chk\(path\/\/"/ { split($0, q, "\""); print base q[2] }
+		' src/tests/long.f90 | sort
+	)
+else
+	files=$(
+		{
+			find samples -name '*.syntran'
+			find src/tests/test-src -name '*.syntran' \
+				-not -path 'src/tests/test-src/errors/*' \
+				-not -path 'src/tests/test-src/stacktrace/*'
+		} | grep -vxF "$(printf '%s\n' "${excluded[@]}")" | sort
+	)
+fi
 if [ -n "$only" ]; then
 	files=$(echo "$files" | grep -E "$only")
 fi
 
 # Test each file in a subprocess, `jobs` at a time.  A file's working files are
 # all named "$TMP/t<index>.*"
-export CUR REF FC FFLAGS ROOT VERBOSE BACKEND
+export CUR REF FC FFLAGS ROOT VERBOSE BACKEND LONG TIMEOUT
 # (No path in the repo has a space in it)
 echo "$files" | awk -v tmp="$TMP" 'NF { print $0; print tmp "/t" NR }' \
 	| xargs -n 2 -P "$jobs" bash "${BASH_SOURCE[0]}" --worker

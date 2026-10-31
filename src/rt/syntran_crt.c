@@ -582,6 +582,22 @@ sy_arr *sy_arr_fill(int32_t elem, int32_t rank, const int64_t *sizes, const void
     return a;
 }
 
+/* a = v: every element becomes the value that `val` points to, and the shape is kept */
+void sy_arr_set_all(sy_arr *a, const void *val)
+{
+    size_t es = sy_esize(a->elem);
+    int64_t i;
+
+    for (i = 0; i < a->len; i++) {
+        if (sy_eptr(a->elem)) {
+            sy_eptr_free(a->elem, ((void **)a->data)[i]);
+            ((void **)a->data)[i] = sy_eptr_dup(a->elem, *(void *const *)val);
+        } else {
+            memcpy(a->data + (size_t)i * es, val, es);
+        }
+    }
+}
+
 /* Copy all of `src` into `dst`, starting at the element `at` */
 void sy_arr_copy_into(sy_arr *dst, int64_t at, const sy_arr *src)
 {

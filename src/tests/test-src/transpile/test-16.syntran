@@ -1,0 +1,76 @@
+// Assigning one value to a whole array, and an array of one integer type to a
+// variable of another.  These programs are run by both the interpreter and the
+// compiling backends (utils/test-transpile.sh), which must print the same thing.
+// The return value is the number of failed checks
+
+let status = 0;
+
+fn check(ok: bool): i32
+{
+	if (ok) return 0;
+	return 1;
+}
+
+//==============================================================================
+// `a = x` sets every element, and keeps the shape
+
+let a = [1, 2, 3, 4; 2, 2];
+a = 7;
+println(a);
+status += check(sum(a) == 28);
+status += check(size(a, 0) == 2);
+status += check(size(a, 1) == 2);
+
+a += 1;
+status += check(sum(a) == 32);
+
+let b = [true; 3];
+b = false;
+println(b);
+status += check(count(b) == 0);
+
+let f = [1.5; 2];
+f = 2.5;
+status += check(sum(f) == 5.0);
+
+let s = ["x", "y"];
+s = "zz";
+println(s);
+status += check(s[0] == "zz" and s[1] == "zz");
+
+// ... through a `&` parameter, and in a loop
+fn clear(v: &[i32; :])
+{
+	v = 9;
+}
+
+let w = [1, 2, 3];
+clear(&w);
+println(w);
+status += check(sum(w) == 27);
+
+let seen = [false; 3, 3];
+for i in [0: 2]
+{
+	seen = false;
+	seen[i, i] = true;
+}
+status += check(count(seen) == 1);
+
+//==============================================================================
+// An array that is assigned one of another integer type keeps its own
+
+fn find(n: i64): i32
+{
+	let found = [0];
+	for x in [0: n]
+		if (x == 1) found = [x, x + 1];
+	let both = [[0], found];
+	println(both);
+	return both[2];
+}
+
+status += check(find(3'i64) == 2);
+
+println(status);
+return status;
