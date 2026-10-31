@@ -57,16 +57,22 @@ This is a subset of the language so far:
   and return numbers, bools, strings, and arrays
 - `use` of other modules
 - Array literals of every kind: `[a, b, c]`, `[a: b]`, `[a: step: b]`,
-  `[a: b; n]`, `[v; n, m]`, and `[a, b, c; n, m]`.  Elements and slices
-  (including steps, omitted bounds, and vectors of indices) can be read and
-  assigned, and so can characters and substrings of a string
+  `[a: b; n]`, `[v; n, m]`, and `[a, b, c; n, m]`, and the empty `[Node; 0]`.
+  Elements and slices (including steps, omitted bounds, and vectors of indices)
+  can be read and assigned, also with a compound assignment like
+  `a[1, :] += 100`, and so can characters and substrings of a string, and of
+  each element of a slice of an array of strings.  These work on the members of
+  a struct too.  The subscripts of the result of a call, like `f()[i]`, work as
+  well
 - These intrinsic functions: `println`, `std::print`, `str`, `exit`, `len`,
   `repeat`, `char`, `i32`, `i64`, `f32`, `f64`, `abs`, `min`, `max`, `sqrt`,
   `exp`, `log`, `log2`, `log10`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`,
   `parse_i32`, `parse_i64`, `parse_f32`, `parse_f64`, `parse_bool`, `size`,
   `reshape`, and `sum`, `product`, `minval`, `maxval`, `all`, `any`, and `count`
-  of a whole array.  The math functions and conversions also apply to each
-  element of an array
+  of an array, with a `dim` or a `mask` or both.  The math functions and
+  conversions also apply to each element of an array
+- `std::args()`, which is the arguments that the compiled program is run with,
+  `std::getenv()`, and `std::hasenv()`
 - Structs, including methods, members that are arrays or other structs, arrays
   of structs, and optional structs (`?Node`) that can be `null`.  A struct is a
   value, so assigning or passing one copies it
@@ -86,9 +92,10 @@ This is a subset of the language so far:
 Programs which use anything else are rejected with
 [E130](errors.md#e130----native-unsupported), pointing at each statement which
 isn't supported.  Run them with the interpreter instead.  So far, that includes
-`format()` and `std::writef()`, `getenv()` and `args()`, the matrix product `@`, a `dim` or `mask` argument
-of the reductions above, slices or substrings of a member of a struct, and a
-member or subscript of the result of a call through a function pointer.
+`format()` and `std::writef()`, the matrix product `@` and the linear algebra
+fns that go with it (`transpose`, `solve`, `lu_factor`, `lu_solve`, `dot`, and
+`norm2`), and `sind()` and the other trig fns in degrees, and a subscript of the
+result of a call through a function pointer that is in a variable.
 
 ## Differences from the interpreter
 
@@ -102,6 +109,8 @@ The output of a compiled program is the same as the interpreter's, but:
   writes them to stdout, with the line of the source and a stack trace.
 - Overflow of integers wraps around, like in the interpreter.  Division of an
   integer by zero is 0, and `%` by zero is the dividend, like it is there.
+- `std::args()` is all of the arguments after the name of the program.  There
+  is no `--`, because there are no options of syntran to tell them apart from.
 - Opening a file with mode `"w"` empties it right away.  The interpreter only
   does when it first writes to it.
 

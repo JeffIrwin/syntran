@@ -503,9 +503,19 @@ int8_t sy_arr_eq(const sy_arr *a, const sy_arr *b)
     int64_t i;
 
     if (a == NULL || b == NULL) return a == b;
-    if (a->rank != b->rank || a->elem != b->elem || a->len != b->len) return 0;
+    if (a->rank != b->rank || a->len != b->len) return 0;
     for (k = 0; k < a->rank; k++) {
         if (a->size[k] != b->size[k]) return 0;
+    }
+    if (a->elem != b->elem) {
+        /* An i32 array can be equal to an i64 one */
+        for (i = 0; i < a->len; i++) {
+            int64_t x = a->elem == SY_I64 ? ((int64_t *)a->data)[i] : ((int32_t *)a->data)[i];
+            int64_t y = b->elem == SY_I64 ? ((int64_t *)b->data)[i] : ((int32_t *)b->data)[i];
+
+            if (x != y) return 0;
+        }
+        return 1;
     }
     for (i = 0; i < a->len; i++) {
         switch (a->elem) {
@@ -929,6 +939,44 @@ void sy_str_set(sy_str **slot, const sy_sub *sub, const sy_str *rhs)
     free(idx);
 }
 
+/* a[subs], where a is an array of strs, and the last of the rank + 1 subscripts is
+ * a substring of each of the elements that the others select.  The result has
+ * the shape of a slice, which is a single element if they are all scalars */
+sy_arr *sy_arr_str_sub(const sy_arr *a, const sy_sub *subs)
+{
+    sy_walk w;
+    int64_t sizes[SY_MAX_RANK], t, lin;
+    int32_t k, rr = 0;
+    sy_arr *out;
+
+    sy_walk_init(&w, a, subs);
+    for (k = 0; k < a->rank; k++) {
+        if (subs[k].kind != SUB_SCALAR) sizes[rr++] = w.cnt[k];
+    }
+    out = sy_arr_new(SY_STR, rr, sizes);
+
+    for (t = 0; t < out->len; t++) {
+        lin = sy_walk_next(&w);
+        sy_str_free(((sy_str **)out->data)[t]);
+        ((sy_str **)out->data)[t] = sy_str_sub(((sy_str **)a->data)[lin], &subs[a->rank]);
+    }
+    sy_walk_free(&w);
+    return out;
+}
+
+/* a[subs] = rhs, for the same subscripts */
+void sy_arr_str_set(sy_arr *a, const sy_sub *subs, const sy_str *rhs)
+{
+    sy_walk w;
+    int64_t t;
+
+    sy_walk_init(&w, a, subs);
+    for (t = 0; t < w.total; t++) {
+        sy_str_set(&((sy_str **)a->data)[sy_walk_next(&w)], &subs[a->rank], rhs);
+    }
+    sy_walk_free(&w);
+}
+
 /*============================================================================*/
 
 typedef struct {
@@ -1203,10 +1251,16 @@ sy_str *sy_struct_str(const sy_struct *s)
 
 /* Files.  A file handle is a value, like in the interpreter: copying one copies
  * its flags, so that reading from a handle, or closing it, does not change the
- * flags of a copy.  The FILE itself is shared.  The variable that holds a
+ * flags of a copy.  The FILE itself is shared, and closing it through one handle
+ * closes it for all of them, but not their flags.  The variable that holds a
  * handle owns it, and readln(), eof(), and close() change that one in place */
 typedef struct {
     FILE *fp;
+    int refs;
+} sy_unit;
+
+typedef struct {
+    sy_unit *u;
     sy_str *name;
     int8_t rd, wr, app, bin, is_open, eof, is_std;
 } sy_file;
@@ -1229,11 +1283,157 @@ static void sy_rt_error(const char *code, const char *fmt, ...)
     exit(1);
 }
 
+/* The arguments of the program, which main() hands over.  std::args() is all of
+ * them, after the name of the program */
+static int sy_argc = 0;
+static char **sy_argv = NULL;
+
+void sy_set_args(int32_t argc, char **argv)
+{
+    sy_argc = argc;
+    sy_argv = argv;
+}
+
+sy_arr *sy_args(void)
+{
+    int64_t n = sy_argc > 1 ? sy_argc - 1 : 0, i;
+    sy_arr *a = sy_arr_new1(SY_STR, n);
+
+    for (i = 0; i < n; i++) {
+        ((sy_str **)a->data)[i] = sy_str_from(sy_argv[i + 1], (int64_t)strlen(sy_argv[i + 1]));
+    }
+    return a;
+}
+
+/* std::getenv() is an error if the variable is not set, but std::hasenv() isn't */
+sy_str *sy_getenv(const sy_str *name)
+{
+    const char *v = getenv(name->data);
+
+    if (v == NULL)
+        sy_rt_error("R29", "getenv() environment variable \"%s\" is not set", name->data);
+    return sy_str_from(v, (int64_t)strlen(v));
+}
+
+int8_t sy_hasenv(const sy_str *name)
+{
+    return getenv(name->data) != NULL;
+}
+
+/* Reductions: sum, product, minval, maxval, count, all, and any of an array along
+ * the zero-based dimension `dim`, or of all of it if `dim` is negative, and only of
+ * the elements where `mask` is true, if there is one.  The result has the other
+ * dimensions, so it has rank 0, which is a single element, for the whole array.
+ * The elements of a lane are reduced in order, as Fortran does */
+enum { SY_RED_SUM, SY_RED_PRODUCT, SY_RED_MIN, SY_RED_MAX, SY_RED_COUNT, SY_RED_ALL,
+       SY_RED_ANY };
+
+static const char *sy_red_name(int32_t op)
+{
+    switch (op) {
+    case SY_RED_SUM: return "sum";
+    case SY_RED_PRODUCT: return "product";
+    case SY_RED_MIN: return "minval";
+    default: return "maxval";
+    }
+}
+
+#define SY_RED_CASE(ID, T, U) \
+    case ID: { \
+        const T *src = (const T *)a->data; \
+        T *dst = (T *)r->data; \
+        for (o = 0; o < outer; o++) { \
+            for (i = 0; i < inner; i++) { \
+                T acc = (T)(op == SY_RED_PRODUCT); \
+                int64_t cnt = 0; \
+                for (j = 0; j < n; j++) { \
+                    int64_t q = i + inner * (j + n * o); \
+                    T x = src[q]; \
+                    if (m != NULL && !m[q]) continue; \
+                    if (op == SY_RED_SUM) acc = (T)((U)acc + (U)x); \
+                    else if (op == SY_RED_PRODUCT) acc = (T)((U)acc * (U)x); \
+                    else if (cnt == 0) acc = x; \
+                    else if (op == SY_RED_MIN) acc = x < acc ? x : acc; \
+                    else acc = x > acc ? x : acc; \
+                    cnt++; \
+                } \
+                if (cnt == 0 && (op == SY_RED_MIN || op == SY_RED_MAX)) \
+                    sy_rt_error("R36", "%s() of an empty array or mask selection", \
+                                sy_red_name(op)); \
+                dst[i + inner * o] = acc; \
+            } \
+        } \
+        break; \
+    }
+
+sy_arr *sy_arr_reduce(const sy_arr *a, int64_t dim, int32_t op, const sy_arr *mask)
+{
+    int64_t inner = 1, n, outer = 1, i, j, o, k;
+    int32_t rr = 0, relem;
+    int64_t sizes[16];
+    const int8_t *m = NULL;
+    sy_arr *r;
+
+    if (dim >= a->rank)
+        sy_rt_error("R34", "dim %d is out of range for a rank-%d array in reduction call",
+                    (int)dim, (int)a->rank);
+
+    if (mask != NULL) {
+        int same = mask->rank == a->rank;
+        for (k = 0; same && k < a->rank; k++) same = mask->size[k] == a->size[k];
+        if (!same)
+            sy_rt_error("R35", "mask shape does not match array shape in %s() call",
+                        sy_red_name(op));
+        m = (const int8_t *)mask->data;
+    }
+
+    if (dim < 0) {
+        n = a->len;
+    } else {
+        for (k = 0; k < dim; k++) inner *= a->size[k];
+        n = a->size[dim];
+        for (k = dim + 1; k < a->rank; k++) outer *= a->size[k];
+        for (k = 0; k < a->rank; k++) {
+            if (k != dim) sizes[rr++] = a->size[k];
+        }
+    }
+
+    relem = op == SY_RED_COUNT ? SY_I64 : a->elem;
+    r = sy_arr_new(relem, rr, sizes);
+
+    if (op == SY_RED_COUNT || op == SY_RED_ALL || op == SY_RED_ANY) {
+        const int8_t *src = (const int8_t *)a->data;
+        for (o = 0; o < outer; o++) {
+            for (i = 0; i < inner; i++) {
+                int64_t cnt = 0;
+                for (j = 0; j < n; j++) cnt += src[i + inner * (j + n * o)] != 0;
+                if (op == SY_RED_COUNT) ((int64_t *)r->data)[i + inner * o] = cnt;
+                else ((int8_t *)r->data)[i + inner * o] =
+                         op == SY_RED_ALL ? cnt == n : cnt > 0;
+            }
+        }
+        return r;
+    }
+
+    switch (a->elem) {
+    SY_RED_CASE(SY_I32, int32_t, uint32_t)
+    SY_RED_CASE(SY_I64, int64_t, uint64_t)
+    SY_RED_CASE(SY_F32, float, float)
+    SY_RED_CASE(SY_F64, double, double)
+    default:
+        sy_fatal("reduction of an array that is not numeric");
+    }
+    return r;
+}
+
 static sy_file *sy_file_blank(const char *name, int64_t len)
 {
     sy_file *f = (sy_file *)calloc(1, sizeof(sy_file));
 
     if (f == NULL) sy_fatal("out of memory");
+    f->u = (sy_unit *)calloc(1, sizeof(sy_unit));
+    if (f->u == NULL) sy_fatal("out of memory");
+    f->u->refs = 1;
     f->name = sy_str_from(name, len);
     return f;
 }
@@ -1241,6 +1441,7 @@ static sy_file *sy_file_blank(const char *name, int64_t len)
 void sy_file_free(sy_file *f)
 {
     if (f == NULL) return;
+    if (--f->u->refs == 0) free(f->u);
     sy_str_free(f->name);
     free(f);
 }
@@ -1251,7 +1452,9 @@ sy_file *sy_file_dup(const sy_file *f)
 
     if (f == NULL) return NULL;
     r = sy_file_blank(f->name->data, f->name->len);
-    r->fp = f->fp;
+    free(r->u);
+    r->u = f->u;
+    r->u->refs++;
     r->rd = f->rd;
     r->wr = f->wr;
     r->app = f->app;
@@ -1268,7 +1471,7 @@ sy_file *sy_file_std(int32_t k)
     static const char *const names[] = {"stdin", "stdout", "stderr"};
     sy_file *f = sy_file_blank(names[k], (int64_t)strlen(names[k]));
 
-    f->fp = k == 0 ? stdin : k == 1 ? stdout : stderr;
+    f->u->fp = k == 0 ? stdin : k == 1 ? stdout : stderr;
     f->rd = k == 0;
     f->wr = k != 0;
     f->is_open = 1;
@@ -1312,8 +1515,8 @@ sy_file *sy_file_open(const sy_str *name, const sy_str *mode, int32_t must)
 
     strcpy(fm, f->rd ? "r" : f->app ? "a" : f->wr ? "w" : "a+");
     if (f->bin) strcat(fm, "b");
-    f->fp = fopen(name->data, fm);
-    if (f->fp == NULL) {
+    f->u->fp = fopen(name->data, fm);
+    if (f->u->fp == NULL) {
         if (must) sy_rt_error("R8", "cannot open file \"%s\" (iostat = %d)", name->data, errno);
         return f;
     }
@@ -1340,10 +1543,11 @@ void sy_file_close(sy_file *f)
             f->name->data);
     }
     f->is_open = 0;
-    if (fclose(f->fp) != 0) {
+    /* Another handle of the file may have closed it already */
+    if (f->u->fp != NULL && fclose(f->u->fp) != 0) {
         sy_rt_error("R31", "cannot close() file \"%s\" (iostat = %d)", f->name->data, errno);
     }
-    f->fp = NULL;
+    f->u->fp = NULL;
 }
 
 /* The members f.is_open, f.eof, and f.name */
@@ -1354,7 +1558,7 @@ int8_t sy_file_is_open(const sy_file *f)
 
 static int sy_file_at_eof(const sy_file *f)
 {
-    return f->fp == stdin ? sy_stdin_eof : f->eof;
+    return f->u->fp == stdin ? sy_stdin_eof : f->eof;
 }
 
 int8_t sy_file_eof_member(const sy_file *f)
@@ -1403,7 +1607,7 @@ static sy_str *sy_read_line(FILE *fp, int *hit_eof)
 static void sy_file_rcheck(const sy_file *f, const char *fn, const char *c_open,
     const char *c_mode, const char *binary_hint)
 {
-    if (!f->is_open) {
+    if (!f->is_open || f->u->fp == NULL) {
         sy_rt_error(c_open, "%s() was called for file \"%s\" which is not open", fn,
             f->name->data);
     }
@@ -1428,9 +1632,9 @@ sy_str *sy_file_readln(sy_file *f)
         sy_rt_error("R11", "cannot readln() from file \"%s\" past end of file",
             f->name->data);
     }
-    s = sy_read_line(f->fp, &hit);
+    s = sy_read_line(f->u->fp, &hit);
     if (hit) {
-        if (f->fp == stdin) sy_stdin_eof = 1;
+        if (f->u->fp == stdin) sy_stdin_eof = 1;
         else f->eof = 1;
     }
     return s;
@@ -1469,7 +1673,7 @@ void sy_file_wcheck(const sy_file *f, int32_t is_writeln)
 {
     const char *fn = is_writeln ? "writeln" : "write";
 
-    if (!f->is_open) {
+    if (!f->is_open || f->u->fp == NULL) {
         sy_rt_error("R12", "%s() was called for file \"%s\" which is not open", fn,
             f->name->data);
     }
@@ -1485,7 +1689,7 @@ void sy_file_wcheck(const sy_file *f, int32_t is_writeln)
 
 static void sy_file_put(sy_file *f, const void *p, size_t n)
 {
-    if (n > 0 && fwrite(p, 1, n, f->fp) != n) {
+    if (n > 0 && fwrite(p, 1, n, f->u->fp) != n) {
         sy_rt_error("R30", "cannot write() to file \"%s\" (iostat = %d)", f->name->data, errno);
     }
 }
@@ -1638,14 +1842,14 @@ static void sy_read_values(sy_file *f, int32_t elem, int64_t n, void *out)
     if (sy_file_at_eof(f)) sy_read_fail(f, fn, "past the end of the file");
 
     if (f->bin) {
-        if (n > 0 && fread(out, es, (size_t)n, f->fp) != (size_t)n) {
+        if (n > 0 && fread(out, es, (size_t)n, f->u->fp) != (size_t)n) {
             sy_read_fail(f, fn, "past the end of the file");
         }
         return;
     }
 
     while (k < n) {
-        line = sy_read_line(f->fp, &hit);
+        line = sy_read_line(f->u->fp, &hit);
         if (hit && line->len == 0) sy_read_fail(f, fn, "past the end of the file");
         i = 0;
         while (i < line->len && k < n) {
