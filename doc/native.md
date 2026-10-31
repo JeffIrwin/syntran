@@ -68,12 +68,18 @@ This is a subset of the language so far:
   `repeat`, `char`, `i32`, `i64`, `f32`, `f64`, `abs`, `min`, `max`, `sqrt`,
   `exp`, `log`, `log2`, `log10`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`,
   `parse_i32`, `parse_i64`, `parse_f32`, `parse_f64`, `parse_bool`, `size`,
-  `reshape`, and `sum`, `product`, `minval`, `maxval`, `all`, `any`, and `count`
-  of an array, with a `dim` or a `mask` or both.  The math functions and
+  `reshape`, `shape`, and `sum`, `product`, `minval`, `maxval`, `all`, `any`, and
+  `count` of an array, with a `dim` or a `mask` or both.  The math functions and
   conversions also apply to each element of an array
 - `std::format()`, `std::printf()`, and `std::writef()`, of numbers, bools,
   strings, arrays of those, structs, and enums, with every spec of the
   interpreter's
+- Linear algebra: the matrix product `@`, and `std::transpose()`, `std::dot()`,
+  `std::norm2()`, `std::solve()`, `std::lu_factor()`, and `std::lu_solve()`.
+  If syntran was built with BLAS and LAPACK, a program which multiplies
+  matrices of floats or solves is linked with them (`-llapack -lblas`), so that
+  the results are the same as the interpreter's.  Otherwise, and for integers,
+  the runtime does the same operations in the same order itself
 - `std::args()`, which is the arguments that the compiled program is run with,
   `std::getenv()`, and `std::hasenv()`
 - Structs, including methods, members that are arrays or other structs, arrays
@@ -95,10 +101,8 @@ This is a subset of the language so far:
 Programs which use anything else are rejected with
 [E130](errors.md#e130----native-unsupported), pointing at each statement which
 isn't supported.  Run them with the interpreter instead.  So far, that includes
-the matrix product `@` and the linear algebra fns that go with it (`transpose`,
-`solve`, `lu_factor`, `lu_solve`, `dot`, and `norm2`), and `sind()` and the other
-trig fns in degrees, and a subscript of the result of a call through a function
-pointer that is in a variable.
+`sind()` and the other trig fns in degrees, and a subscript of the result of a
+call through a function pointer that is in a variable.
 
 ## Differences from the interpreter
 
