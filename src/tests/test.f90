@@ -12305,7 +12305,7 @@ subroutine unit_test_native(npass, nfail)
 			index(native_ir('1 + 2;'), '@sy_result') > 0, &
 
 			! No program is compiled when there is an unsupported construct
-			native_ir_is_empty('let c = std::caller();'), &
+			native_ir_is_empty('let a = [1, 2]; for x in a[0] { }'), &
 
 			! A runtime error says where it is: the table of the locations of the
 			! statements and the stack of the calls are handed to the runtime
@@ -12332,9 +12332,9 @@ subroutine unit_test_native(npass, nfail)
 				'@sy_str_i32(i32 6)') > 0, &
 
 			! Unsupported constructs are diagnosed once per statement
-			diag_count_code(get_diags_native('let c = std::caller(); let d = std::caller();'), &
-				EC_NATIVE_UNSUPPORTED) == 2, &
-			diag_has_text(get_diags_native('let c = std::caller();'), &
+			diag_count_code(get_diags_native('let a = [1, 2]; for x in a[0] { } ' &
+				//'for y in a[1] { }'), EC_NATIVE_UNSUPPORTED) == 2, &
+			diag_has_text(get_diags_native('let a = [1, 2]; for x in a[0] { }'), &
 				'not supported by the native backend'), &
 
 			! An invalid program is not a native diagnostic
@@ -12402,9 +12402,13 @@ subroutine unit_test_native(npass, nfail)
 				'E.B') > 0, &
 			.not. native_ir_is_empty('enum E { A, B, } let a = [E.A, E.B]; println(a);'), &
 
-			! A struct with a member that can't be compiled is diagnosed
-			diag_has_code(get_diags_native('struct S { c: str, } ' &
-				//'let s = S{c = std::caller()};'), EC_NATIVE_UNSUPPORTED), &
+			! The fns that look at the stack of calls are compiled
+			.not. native_ir_is_empty('fn f(): str { return std::caller(); } println(f()); ' &
+				//'std::print_trace("x"); println(std::stack_trace(1));'), &
+
+			! A subscript of the result of a call through a fn pointer variable
+			.not. native_ir_is_empty('fn mk(n: i32): [i32; :] { return [n, n + 1]; } ' &
+				//'let f = mk; println(f(3)[1]);'), &
 
 			! std::PI is a constant.  LLVM 18 prints it as 0x400921FB54442D18, and
 			! newer LLVMs as f0x400921FB54442D18
