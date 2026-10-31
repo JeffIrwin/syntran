@@ -31,6 +31,14 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - llvm compiled backend
+	!    * windows ci/cd
+	!    * parity with vm, not with transpiler
+	!  - massive old readme bug:
+	!    * "recursive functions are not possible currently"
+	!    * of course the sentence before is wrong too, which says fns need to be
+	!      declared above their call site
+	!    * i did that pre-ai :/
 	!  - transpiler improvements:
 	!    * cover more OS's and intel in addition to gnu in testing. currently
 	!      only gnu on ubuntu
@@ -57,12 +65,6 @@ module syntran__core_m
 	!      not worth the overhead or the complications of re-formating without
 	!      introducing edge cases like unterminated pre-processor breaking
 	!      comments
-	!    * eventually (long away) shoot for a full syntran compiler using LLVM
-	!      + maybe a good fable task
-	!      + claude estimates compiler would be 3x more code than transpiler
-	!      + initial transpiler pr is about 15 kloc code
-	!      + considering claude did the transpiler in one day, a full compiler
-	!        could still be very achievable
 	!  - split or streamline ci/cd:
 	!    * "build on ubuntu-24" stage is now the slowest. i believe this just
 	!      changed after ast removal. previously, windows and intel-compiler

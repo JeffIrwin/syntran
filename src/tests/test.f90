@@ -216,6 +216,21 @@ end function native_ir
 
 !===============================================================================
 
+function native_ir_is_empty(str_) result(empty)
+
+	! Does compiling a program natively generate nothing?  A fn rather than
+	! `len()` of native_ir() in the list of tests, which Intel Fortran takes for
+	! a constant expression
+
+	character(len = *), intent(in) :: str_
+	logical :: empty
+
+	empty = len(native_ir(str_)) == 0
+
+end function native_ir_is_empty
+
+!===============================================================================
+
 function get_diags_native_to(str_, filename) result(diag_)
 	character(len = *), intent(in) :: str_, filename
 	type(string_vector_t) :: diag_
@@ -11675,8 +11690,12 @@ end subroutine unit_test_transpile
 subroutine unit_test_native_rt(npass, nfail)
 
 	! The C runtime of the native backend (src/rt/syntran_crt.c) has to write
-	! numbers just like the Fortran runtime does, since the interpreter's output
-	! is the reference.  This doesn't need LLVM, because the runtime is
+	! the same numbers as the Fortran runtime, since the interpreter's output is
+	! the reference.  This compares the values that the two strings read back
+	! as, not the text, so it doesn't depend on how a particular Fortran
+	! compiler spells a number (the sign of zero, the width of an exponent,
+	! etc.).  Byte-for-byte parity is checked by `utils/test-transpile.sh
+	! --backend native`.  This doesn't need LLVM, because the runtime is
 	! compiled into the library either way
 
 	use, intrinsic :: iso_c_binding
@@ -11729,23 +11748,25 @@ subroutine unit_test_native_rt(npass, nfail)
 	tests = [logical ::]
 
 	do i = 1, size(specials64)
-		tests = [tests, c_f64(specials64(i)) == rt_str_f64(specials64(i)), &
-			c_f64(-specials64(i)) == rt_str_f64(-specials64(i))]
+		tests = [tests, same_f64(c_f64(specials64(i)), rt_str_f64(specials64(i))), &
+			same_f64(c_f64(-specials64(i)), rt_str_f64(-specials64(i)))]
 	end do
 	do i = 1, size(specials32)
-		tests = [tests, c_f32(specials32(i)) == rt_str_f32(specials32(i)), &
-			c_f32(-specials32(i)) == rt_str_f32(-specials32(i))]
+		tests = [tests, same_f32(c_f32(specials32(i)), rt_str_f32(specials32(i))), &
+			same_f32(c_f32(-specials32(i)), rt_str_f32(-specials32(i)))]
 	end do
 
 	! Not a number, and infinity
 	x64 = ieee_value(x64, ieee_quiet_nan)
-	tests = [tests, c_f64(x64) == rt_str_f64(x64)]
+	tests = [tests, same_f64(c_f64(x64), rt_str_f64(x64))]
 	x64 = ieee_value(x64, ieee_positive_inf)
-	tests = [tests, c_f64(x64) == rt_str_f64(x64), c_f64(-x64) == rt_str_f64(-x64)]
+	tests = [tests, same_f64(c_f64(x64), rt_str_f64(x64)), &
+		same_f64(c_f64(-x64), rt_str_f64(-x64))]
 	x32 = ieee_value(x32, ieee_quiet_nan)
-	tests = [tests, c_f32(x32) == rt_str_f32(x32)]
+	tests = [tests, same_f32(c_f32(x32), rt_str_f32(x32))]
 	x32 = ieee_value(x32, ieee_positive_inf)
-	tests = [tests, c_f32(x32) == rt_str_f32(x32), c_f32(-x32) == rt_str_f32(-x32)]
+	tests = [tests, same_f32(c_f32(x32), rt_str_f32(x32)), &
+		same_f32(c_f32(-x32), rt_str_f32(-x32))]
 
 	! Every kind of exponent, from random bit patterns (xorshift, so that they
 	! are the same on every run).  Not numbers are left to the cases above
@@ -11756,11 +11777,11 @@ subroutine unit_test_native_rt(npass, nfail)
 		bits = ieor(bits, ishft(bits, 17))
 		x64 = transfer(bits, x64)
 		if (ieee_is_nan(x64)) cycle
-		tests = [tests, c_f64(x64) == rt_str_f64(x64)]
+		tests = [tests, same_f64(c_f64(x64), rt_str_f64(x64))]
 
 		x32 = transfer(int(ishft(bits, -32), 4), x32)
 		if (ieee_is_nan(x32)) cycle
-		tests = [tests, c_f32(x32) == rt_str_f32(x32)]
+		tests = [tests, same_f32(c_f32(x32), rt_str_f32(x32))]
 	end do
 
 	call unit_test_coda(tests, label, npass, nfail)
@@ -11790,6 +11811,32 @@ contains
 			s(j:j) = buf(j)
 		end do
 	end function c_f32
+
+	function same_f64(a, b) result(same)
+		! Do two strings read back as the same f64?  Zeros of either sign are the
+		! same, and so are two NaNs
+		character(len = *), intent(in) :: a, b
+		logical :: same
+		integer :: ios_a, ios_b
+		real(kind = 8) :: x, y
+		read(a, *, iostat = ios_a) x
+		read(b, *, iostat = ios_b) y
+		same = ios_a == 0 .and. ios_b == 0
+		if (.not. same) return
+		same = x == y .or. (ieee_is_nan(x) .and. ieee_is_nan(y))
+	end function same_f64
+
+	function same_f32(a, b) result(same)
+		character(len = *), intent(in) :: a, b
+		logical :: same
+		integer :: ios_a, ios_b
+		real(kind = 4) :: x, y
+		read(a, *, iostat = ios_a) x
+		read(b, *, iostat = ios_b) y
+		same = ios_a == 0 .and. ios_b == 0
+		if (.not. same) return
+		same = x == y .or. (ieee_is_nan(x) .and. ieee_is_nan(y))
+	end function same_f32
 
 end subroutine unit_test_native_rt
 
@@ -11837,7 +11884,7 @@ subroutine unit_test_native(npass, nfail)
 			index(native_ir('1 + 2;'), '@sy_result') > 0, &
 
 			! No program is compiled when there is an unsupported construct
-			len(native_ir('let c = std::caller();')) == 0, &
+			native_ir_is_empty('let c = std::caller();'), &
 
 			! A fn is compiled, and the optimizer sees through a call of it
 			index(native_ir('fn f(n: i32): i32 { return n + 1; } println(f(2));'), &
