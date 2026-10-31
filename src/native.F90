@@ -516,7 +516,7 @@ function str_literal(em, s) result(p)
 
 	vals(1) = ci64(em, int(len(s), 8))
 	vals(2) = ci64(em, 1_8)
-	vals(3) = LLVMConstStringInContext2(em%ctx, s, int(len(s), c_size_t), 0)
+	vals(3) = LLVMConstStringInContext(em%ctx, s, int(len(s), c_int), 0)
 
 	g = LLVMAddGlobal(em%llmod, sty, cs('.str.'//str(em%nstr)))
 	em%nstr = em%nstr + 1

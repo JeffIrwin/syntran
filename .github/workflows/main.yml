@@ -549,6 +549,104 @@
 			}
 		]
 	},
+	# The native backend (`syntran --native`) is opt-in, because it needs LLVM, so
+	# the jobs above never build it.  This one does, and checks it against the
+	# interpreter.  Ubuntu's llvm-dev is LLVM 18, and Homebrew's is the latest, so
+	# together they bracket the versions that src/llvm_c.f90 has to work with
+	"test-llvm": {
+		"name": "Test native backend on ${{ matrix.os }}",
+		"runs-on": "${{ matrix.os }}",
+		"strategy": {
+			"matrix": {
+				"os": [
+					"ubuntu-24.04",
+					"macOS-latest"
+				]
+			}
+		},
+		"steps": [
+			{
+				"uses": "actions/checkout@v7",
+				"with": {
+					"submodules": true
+				}
+			},
+			{
+				"uses": "fortran-lang/setup-fpm@v10",
+				"with": {
+					"github-token": "${{ secrets.GITHUB_TOKEN }}"
+				}
+			},
+			{
+				"if": "matrix.os == 'ubuntu-24.04'",
+				"name": "Install LLVM ubuntu",
+				"run": "sudo apt-get install gfortran-14 libopenblas-dev llvm-dev cmake"
+			},
+			{
+				"if": "matrix.os == 'macOS-latest'",
+				"name": "Install LLVM macOS",
+				"run": "brew install gcc@14 llvm"
+			},
+			{
+				"name": "Test fpm with LLVM",
+				"shell": "bash",
+				"env": {
+					"FPM_FC": "gfortran-14"
+				},
+				"run":
+				"
+					set -exu \n
+					# Homebrew's llvm is keg-only, so it's not on the PATH \n
+					llvm_config=\"$(command -v llvm-config || echo $(brew --prefix llvm)/bin/llvm-config)\" \n
+					$llvm_config --version \n
+
+					# fpm can't find the libraries by itself \n
+					export LIBRARY_PATH=\"$($llvm_config --libdir)\" \n
+
+					# Not just the short tests: the groups that need LLVM check the \n
+					# diagnostics and the IR of the native backend \n
+					fpm test test --features debug,llvm-blas --flag -Wno-tabs \n
+
+					# A stable path to the binary, which would otherwise be in a \n
+					# directory named by a hash of the flags \n
+					fpm install --features debug,llvm-blas --flag -Wno-tabs --prefix ./build/native/ \n
+
+					# End to end, with the C compiler that links the program \n
+					./build/native/bin/syntran --native hello -c 'println(\"hello \", 6 * 7);' \n
+					[[ \"$(./hello)\" == \"hello 42\" ]] \n
+				"
+			},
+			{
+				# Only on x86, where the interpreter doesn't fuse multiply-adds.  On
+				# an arm64 mac it does, and a compiled program doesn't, so the last
+				# digits of some samples would differ for no reason
+				"if": "matrix.os == 'ubuntu-24.04'",
+				"name": "Test native backend",
+				"shell": "bash",
+				"run":
+				"
+					set -exu \n
+					# Compile every test program and sample, run it, and compare \n
+					# its output with the interpreter's \n
+					bash ./utils/test-transpile.sh --backend native ./build/native/bin/syntran \n
+				"
+			},
+			{
+				"if": "matrix.os == 'ubuntu-24.04'",
+				"name": "Test cmake with LLVM",
+				"shell": "bash",
+				"run":
+				"
+					set -exu \n
+					cmake -S . -B build/llvm -DCMAKE_BUILD_TYPE=Debug -DSYNTRAN_LLVM=ON -DCMAKE_Fortran_COMPILER=gfortran-14 -DCMAKE_PREFIX_PATH=\"$(llvm-config --prefix)\" \n
+					cmake --build build/llvm -j 4 \n
+					./build/llvm/syntran --native hello-cmake -c 'println(\"hello \", 6 * 7);' \n
+					[[ \"$(./hello-cmake)\" == \"hello 42\" ]] \n
+					./build/llvm/test \n
+				"
+			}
+		]
+	},
 	"test-compilers": {
 		"name": "Test with ${{ matrix.toolchain.compiler }}-${{ matrix.toolchain.version }}",
 		"timeout-minutes": 120,
