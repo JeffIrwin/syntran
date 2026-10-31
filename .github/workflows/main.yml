@@ -600,8 +600,8 @@
 					# setup-fpm's macOS fpm is linked against gcc@12's \n
 					# libgfortran, but only gcc@14 is installed.  The \n
 					# libgfortran.5 ABI is the same \n
-					if [[ \"$(uname)\" == Darwin ]]; then
-						export DYLD_FALLBACK_LIBRARY_PATH=\"$(brew --prefix gcc@14)/lib/gcc/14\"
+					if [[ \"$(uname)\" == Darwin ]]; then \n
+						export DYLD_FALLBACK_LIBRARY_PATH=\"$(brew --prefix gcc@14)/lib/gcc/14\" \n
 					fi \n
 
 					# Homebrew's llvm is keg-only, so it's not on the PATH \n
