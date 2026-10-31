@@ -8820,14 +8820,11 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_count_code(get_diags_file(P//'E129-untyped-null.syntran'), &
 				EC_UNTYPED_NULL) == 1, &
 
-			! E130: the native backend can't compile everything.  A syntran without
-			! LLVM has no backend to say so
+			! E130: no valid program is known that the native backend can't compile any
+			! more, so there is no example of it (a `for` over a scalar is reported,
+			! but the interpreter crashes on it).  std::caller() used to be one
 			.not. native_available .or. &
-				diag_has_code(get_diags_native('let c = std::caller();'), &
-					EC_NATIVE_UNSUPPORTED), &
-			.not. native_available .or. &
-				diag_count_code(get_diags_native_file(P//'E130-native-unsupported.syntran'), &
-					EC_NATIVE_UNSUPPORTED) == 1, &
+				native_ndiags('let c = std::caller();') == 0, &
 			! ... but a program it supports has no diagnostics
 			.not. native_available .or. &
 				native_ndiags('let x = 1 + 2; println(x);') == 0, &
@@ -11041,10 +11038,7 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E128-null-array.syntran'), &
 				EC_NULL_ARRAY, P//'E128-null-array.syntran', 6, 14, 4), &
 			diag_loc_ok(get_diags_file(P//'E129-untyped-null.syntran'), &
-				EC_UNTYPED_NULL, P//'E129-untyped-null.syntran', 9, 1, 18), &
-			.not. native_available .or. &
-				diag_loc_ok(get_diags_native_file(P//'E130-native-unsupported.syntran'), &
-					EC_NATIVE_UNSUPPORTED, P//'E130-native-unsupported.syntran', 8, 23, 6) &
+				EC_UNTYPED_NULL, P//'E129-untyped-null.syntran', 9, 1, 18) &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

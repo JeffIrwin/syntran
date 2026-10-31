@@ -855,9 +855,8 @@ e.g. a function declaration or a loop.  The program is still valid.  Run it with
 the interpreter instead, i.e. without `--native`.  This is only ever reported when
 compiling natively.  There is at most one diagnostic for each statement.
 
-See [native.md](native.md) for what is supported.
-
-[Example](../src/tests/test-src/errors/E130-native-unsupported.syntran)
+See [native.md](native.md) for what is supported.  At the moment no valid program is
+known that it can't compile, so there is no example.
 
 ## Internal errors
 
