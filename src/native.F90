@@ -115,6 +115,13 @@ module syntran__native_m
 
 	!********
 
+	type fnret_t
+		! What a fn pointer variable returns, for the subscripts of a call of it
+		type(value_t), allocatable :: v
+	end type fnret_t
+
+	!********
+
 	type slots_t
 
 		! The variables of one scope, by slot id (node%id_index): the globals, or
@@ -133,6 +140,9 @@ module syntran__native_m
 		! The position in the struct table of the struct that a slot holds, or
 		! that an array in it has for elements
 		integer, allocatable :: sk(:)
+
+		! What each slot that holds a fn pointer returns
+		type(fnret_t), allocatable :: fnret(:)
 
 	end type slots_t
 
@@ -1298,6 +1308,9 @@ function str_of(em, v) result(s)
 	case (struct_type)
 		s%v = rt_call(em, 'sy_struct_str', em%t_ptr, [v%v])
 		call dispose(em, v)
+	case (file_type)
+		s%v = rt_call(em, 'sy_file_str', em%t_ptr, [v%v])
+		call dispose(em, v)
 	case (null_type)
 		s%v = str_literal(em, 'null')
 	case (fn_type)
@@ -1386,14 +1399,15 @@ subroutine slots_ensure(s, id)
 	type(slots_t), intent(inout) :: s
 	integer, intent(in) :: id
 
-	integer :: n
+	integer :: n, i
 	integer, allocatable :: itmp(:)
 	logical, allocatable :: ltmp(:)
 	type(c_ptr), allocatable :: ptmp(:)
+	type(fnret_t), allocatable :: ftmp(:)
 
 	if (.not. allocated(s%p)) then
 		n = max(id, 16)
-		allocate(s%p(n), s%ty(n), s%own(n), s%elem(n), s%rank(n), s%sk(n))
+		allocate(s%p(n), s%ty(n), s%own(n), s%elem(n), s%rank(n), s%sk(n), s%fnret(n))
 		s%p    = c_null_ptr
 		s%ty   = unknown_type
 		s%own  = .false.
@@ -1429,6 +1443,12 @@ subroutine slots_ensure(s, id)
 	itmp = 0
 	itmp(1: size(s%sk)) = s%sk
 	call move_alloc(itmp, s%sk)
+
+	allocate(ftmp(n))
+	do i = 1, size(s%fnret)
+		if (allocated(s%fnret(i)%v)) call move_alloc(s%fnret(i)%v, ftmp(i)%v)
+	end do
+	call move_alloc(ftmp, s%fnret)
 
 end subroutine slots_ensure
 
@@ -1504,6 +1524,12 @@ subroutine slot_array_info(em, s, id, val)
 			! For a fn pointer, the struct that it returns
 			if (val%fn_ret%type == struct_type) s%sk(id) = structs_slot_of(em%structs, val%fn_ret)
 		end if
+	end if
+
+	if (val%type == fn_type .and. allocated(val%fn_ret)) then
+		! The copy of a value is a defined assignment, which needs the target to exist
+		if (.not. allocated(s%fnret(id)%v)) allocate(s%fnret(id)%v)
+		s%fnret(id)%v = val%fn_ret
 	end if
 
 	if (val%type /= array_type) return
@@ -2264,6 +2290,26 @@ end function emit_subscript
 
 !===============================================================================
 
+function fnret_of(s, id, val) result(ok)
+
+	! What the fn pointer in a slot returns, if it's known
+
+	type(slots_t), intent(in) :: s
+	integer, intent(in) :: id
+	type(value_t), intent(out) :: val
+	logical :: ok
+
+	ok = .false.
+	if (.not. allocated(s%fnret)) return
+	if (id < 1 .or. id > size(s%fnret)) return
+	if (.not. allocated(s%fnret(id)%v)) return
+	val = s%fnret(id)%v
+	ok = .true.
+
+end function fnret_of
+
+!===============================================================================
+
 recursive function emit_subscripted_call(em, node) result(r)
 
 	! `f(x)[i]` or `sum(a, 0)[i]`: the subscripts of a call.  The call is made
@@ -2275,6 +2321,8 @@ recursive function emit_subscripted_call(em, node) result(r)
 	type(nval_t) :: r
 
 	!********
+
+	logical :: ok
 
 	type(nval_t) :: whole
 
@@ -2290,15 +2338,24 @@ recursive function emit_subscripted_call(em, node) result(r)
 	if (node%kind == fn_call_ptr_expr) then
 		! The type of the call is part of the type of the pointer, and the type of
 		! the node is that of what the subscripts select from it
-		if (.not. allocated(node%left)) then
-			call unsupported(em, 'a subscript of the result of a call of a fn pointer variable')
-			return
+		if (allocated(node%left)) then
+			if (.not. allocated(node%left%val%fn_ret)) then
+				call unsupported(em, 'a subscript of the result of a call of unknown type')
+				return
+			end if
+			call_node%val = node%left%val%fn_ret
+		else
+			! A variable, which remembers what its fn returns
+			if (node%is_loc) then
+				ok = fnret_of(em%l, node%id_index, call_node%val)
+			else
+				ok = fnret_of(em%g, node%id_index, call_node%val)
+			end if
+			if (.not. ok) then
+				call unsupported(em, 'a subscript of the result of a call of unknown type')
+				return
+			end if
 		end if
-		if (.not. allocated(node%left%val%fn_ret)) then
-			call unsupported(em, 'a subscript of the result of a call of unknown type')
-			return
-		end if
-		call_node%val = node%left%val%fn_ret
 	end if
 
 	whole = emit_expr(em, call_node)
@@ -4821,6 +4878,20 @@ recursive function emit_intr_call(em, node) result(r)
 			r = intr_scalar(em, base, a, node%val%type, node%identifier%pos)
 		end if
 
+	case ('stack_trace', 'caller')
+		! The calls that led here, as a text.  The argument is the number of frames to
+		! leave out, or the depth: 1 by default for std::caller(), the fn that called
+		! this one
+		if (n >= 1) then
+			a = convert(em, emit_expr(em, node%args(1)), i32_type)
+			valp = a%v
+		else
+			valp = ci32(em, merge(1, 0, base == 'caller'))
+		end if
+		r%ty = str_type
+		r%owned = .true.
+		r%v = rt_call(em, 'sy_'//base, em%t_ptr, [valp])
+
 	case ('min', 'max')
 		! Of any number of arguments, as a chain.  A NaN loses to a number, like
 		! it does in Fortran
@@ -5483,6 +5554,18 @@ recursive subroutine emit_call_stmt(em, node)
 		v = convert(em, emit_expr(em, node%args(1)), i32_type)
 		call rt_void(em, 'sy_exit', [v%v])
 
+	case ('print_trace')
+		! The label is optional
+		if (allocated(node%args)) then
+			if (size(node%args) >= 1) then
+				v = emit_expr(em, node%args(1))
+				call rt_void(em, 'sy_print_trace', [v%v])
+				call dispose(em, v)
+				return
+			end if
+		end if
+		call rt_void(em, 'sy_print_trace', [LLVMConstNull(em%t_ptr)])
+
 	case ('writeln')
 		call emit_file_write(em, node, .true.)
 
@@ -5870,7 +5953,7 @@ subroutine begin_fn(em, name, ret_ll, ret_ty, is_main, fn, fn_id)
 	em%ntemps = 0
 	em%block_exit = c_null_ptr
 
-	if (allocated(em%l%p)) deallocate(em%l%p, em%l%ty, em%l%own, em%l%elem, em%l%rank, em%l%sk)
+	if (allocated(em%l%p)) deallocate(em%l%p, em%l%ty, em%l%own, em%l%elem, em%l%rank, em%l%sk, em%l%fnret)
 
 	em%ablk = LLVMAppendBasicBlockInContext(em%ctx, em%fn, cs('alloca'))
 	em%body = LLVMAppendBasicBlockInContext(em%ctx, em%fn, cs('body'))

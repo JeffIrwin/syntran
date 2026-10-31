@@ -305,6 +305,69 @@ static sy_str *sy_str_from(const char *p, int64_t len)
     return s;
 }
 
+/* The std::stack_trace(), std::print_trace(), and std::caller() fns look at the stack
+ * of calls, like a runtime error does.  `skip` frames of the innermost are left out,
+ * which is as if the program were paused that many calls up.  The result is the number
+ * of frames that are left, and where the innermost of them is, or -1 if skip went past
+ * even <main> */
+static int32_t sy_skip_frames(int32_t skip, int32_t *loc)
+{
+    int32_t left;
+
+    if (skip < 0) skip = 0;
+    if (skip > sy_depth) {
+        *loc = 0;
+        return -1;
+    }
+    left = sy_depth - skip;
+    *loc = left == sy_depth ? sy_loc : sy_frames[left].call_loc;
+    return left;
+}
+
+static sy_str *sy_trace_text(const sy_str *label, int32_t skip)
+{
+    sy_buf b = {NULL, 0, 0};
+    sy_str *r;
+    int32_t loc, left = sy_skip_frames(skip, &loc);
+
+    sy_buf_add(&b, "Stack trace:");
+    if (label != NULL) sy_buf_add(&b, " %s", label->data);
+    if (left >= 0) sy_frames_str(&b, loc, left);
+    r = sy_str_from(b.p != NULL ? b.p : "", (int64_t)b.n);
+    free(b.p);
+    return r;
+}
+
+/* std::print_trace([label]) */
+void sy_print_trace(const sy_str *label)
+{
+    sy_str *t = sy_trace_text(label, 0);
+
+    fwrite(t->data, 1, (size_t)t->len, stdout);
+    fputc('\n', stdout);
+    free(t);
+}
+
+/* std::stack_trace([skip]) */
+sy_str *sy_stack_trace(int32_t skip)
+{
+    return sy_trace_text(NULL, skip);
+}
+
+/* std::caller([depth]), the one "<fn> (file:line)" that is `depth` calls up, or "" */
+sy_str *sy_caller(int32_t depth)
+{
+    sy_buf b = {NULL, 0, 0};
+    sy_str *r;
+    int32_t loc, left = sy_skip_frames(depth, &loc);
+
+    if (left >= 0)
+        sy_label(&b, left == 0 ? "<main>" : sy_fn_name(sy_frames[left - 1].fn), loc);
+    r = sy_str_from(b.p != NULL ? b.p : "", (int64_t)b.n);
+    free(b.p);
+    return r;
+}
+
 void sy_str_free(sy_str *s)
 {
     if (s != NULL && !s->imm) free(s);
@@ -1824,7 +1887,35 @@ typedef struct {
     sy_unit *u;
     sy_str *name;
     int8_t rd, wr, app, bin, is_open, eof, is_std;
+    int32_t unit;
 } sy_file;
+
+/* The unit number that a handle prints with.  The interpreter's are Fortran's: 5, 6, and
+ * 0 for the standard files, -1 for a file that did not open, and the others count down
+ * from -10, where a closed file gives its number back to the next one that is opened */
+#define SY_MAX_UNITS 1024
+static char sy_unit_used[SY_MAX_UNITS];
+static int32_t sy_unit_next = 0;
+
+static int32_t sy_unit_alloc(void)
+{
+    int32_t k;
+
+    for (k = 0; k < SY_MAX_UNITS; k++) {
+        if (!sy_unit_used[k]) {
+            sy_unit_used[k] = 1;
+            return -10 - k;
+        }
+    }
+    return -10 - SY_MAX_UNITS - sy_unit_next++;
+}
+
+static void sy_unit_release(int32_t unit)
+{
+    int32_t k = -10 - unit;
+
+    if (k >= 0 && k < SY_MAX_UNITS) sy_unit_used[k] = 0;
+}
 
 /* Did readln() or eof() hit the end of stdin?  It is not on the handle */
 static int8_t sy_stdin_eof = 0;
@@ -2008,6 +2099,7 @@ sy_file *sy_file_dup(const sy_file *f)
     r->is_open = f->is_open;
     r->eof = f->eof;
     r->is_std = f->is_std;
+    r->unit = f->unit;
     return r;
 }
 
@@ -2022,6 +2114,7 @@ sy_file *sy_file_std(int32_t k)
     f->wr = k != 0;
     f->is_open = 1;
     f->is_std = 1;
+    f->unit = k == 0 ? 5 : k == 1 ? 6 : 0;
     return f;
 }
 
@@ -2064,9 +2157,11 @@ sy_file *sy_file_open(const sy_str *name, const sy_str *mode, int32_t must)
     f->u->fp = fopen(name->data, fm);
     if (f->u->fp == NULL) {
         if (must) sy_rt_error("R8", "cannot open file \"%s\" (iostat = %d)", name->data, errno);
+        f->unit = -1;
         return f;
     }
     f->is_open = 1;
+    f->unit = sy_unit_alloc();
     return f;
 }
 
@@ -2094,6 +2189,21 @@ void sy_file_close(sy_file *f)
         sy_rt_error("R31", "cannot close() file \"%s\" (iostat = %d)", f->name->data, errno);
     }
     f->u->fp = NULL;
+    sy_unit_release(f->unit);
+}
+
+/* str(f) is the unit and the name, like the interpreter prints a file */
+sy_str *sy_file_str(const sy_file *f)
+{
+    char buf[64];
+    sy_buf b = {NULL, 0, 0};
+    sy_str *r;
+
+    snprintf(buf, sizeof buf, "{file_unit: %d, filename: \"", (int)f->unit);
+    sy_buf_add(&b, "%s%s\"}", buf, f->name->data);
+    r = sy_str_from(b.p, (int64_t)b.n);
+    free(b.p);
+    return r;
 }
 
 /* The members f.is_open, f.eof, and f.name */

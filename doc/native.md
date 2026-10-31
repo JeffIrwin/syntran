@@ -81,6 +81,8 @@ This is a subset of the language so far:
   matrices of floats or solves is linked with them (`-llapack -lblas`), so that
   the results are the same as the interpreter's.  Otherwise, and for integers,
   the runtime does the same operations in the same order itself
+- `std::print_trace()`, `std::stack_trace()`, and `std::caller()`, which look at the
+  stack of calls, as a runtime error does
 - `std::args()`, which is the arguments that the compiled program is run with,
   `std::getenv()`, and `std::hasenv()`
 - Structs, including methods, members that are arrays or other structs, arrays
@@ -92,8 +94,8 @@ This is a subset of the language so far:
   `f.eof`, and `f.name`.  A file handle is a value, so assigning or passing one
   copies it
 - Function pointers: `fn(i32): i32` variables, parameters, return values, and
-  members of structs.  They compare with `==` and print as their type, as in the
-  interpreter
+  members of structs, including the subscripts of the result of a call.  They
+  compare with `==` and print as their type, as in the interpreter
 - Enums, including arrays of them and enums as members of structs.  They compare
   and print like the interpreter's, and `i32(e)` and `Suit(2)` convert
 
@@ -101,20 +103,23 @@ This is a subset of the language so far:
 
 Programs which use anything else are rejected with
 [E130](errors.md#e130----native-unsupported), pointing at each statement which
-isn't supported.  Run them with the interpreter instead.  So far, that is a
-subscript of the result of a call through a function pointer that is in a
-variable, and `std::caller()` and the other fns that look at the call stack.
+isn't supported.  Run them with the interpreter instead.  Everything that the
+test programs and samples use is supported, so a program which isn't is rare.
 
 ## Differences from the interpreter
 
 The output of a compiled program is the same as the interpreter's, but:
 
-- Most syntran runtime errors are not checked yet.  In particular, a subscript
-  which is out of bounds is undefined behavior, as it is in the interpreter
-  unless it is built with `SYNTRAN_BOUNDS_CHECK`.  The ones that are, like
-  reading a file that isn't open, are written to stderr as
-  `Runtime error[R9]: ...` and the program exits with status 1.  The interpreter
-  writes them to stdout, with the line of the source and a stack trace.
+- Runtime errors are reported like the interpreter does, to stdout, with the
+  code and message, the line of the source, and the stack of calls, and the
+  program exits with status 1.  The only exception is a subscript which is out
+  of bounds (R33).  It is undefined behavior, as it is in the interpreter, unless
+  syntran was built with `SYNTRAN_BOUNDS_CHECK`, in which case the programs that
+  it compiles check too.  The source line is the statement that failed, and not
+  the expression, as in the interpreter.
+- Keeping the stack of calls for that report costs a compiled program a little
+  for each call of a fn, about a nanosecond on a recent machine.  It makes a
+  recursive `fib()` which does nothing else about 50% slower.
 - `sind()`, `cosd()`, and `tand()` are the runtime's own, rather than
   libgfortran's.  An angle with a simple result, like `sind(30.0)` or
   `tand(45.0)`, has exactly that, as in the interpreter, but others can differ
@@ -155,6 +160,14 @@ that describes the struct, so the runtime can copy, free, and print it.  An
 enum is the index of its variant, with constant tables of the variants' names
 and backing values.  The runtime writes floats exactly as the Fortran runtime
 does, which a unit test checks against it.
+
+A runtime error is reported from the runtime, with the source line of the
+statement that failed and the calls that led to it.  Each statement stores its
+number in a global of the runtime when it starts, and a table of the source
+lines, and one of the names of the fns, are handed to the runtime when the
+program starts.  A fn pushes a frame, with its own id and the number of the
+statement that called it, in its first block, and pops it in its last.  Both are
+inline, so a call costs a few loads and stores.
 
 To check a change to the native backend, run
 

@@ -140,6 +140,9 @@ src/tests/test-src/errors/R45-binary-write-type.syntran
 src/tests/test-src/errors/R46-parse-bool.syntran
 src/tests/test-src/errors/R47-null-member.syntran
 src/tests/test-src/errors/R5-parse-f64.syntran
+src/tests/test-src/errors/R6-bad-file-mode.syntran
+src/tests/test-src/errors/R7-file-rw-mode.syntran
+src/tests/test-src/errors/R8-open-file.syntran
 src/tests/test-src/errors/R9-readln-not-open.syntran
 src/tests/test-src/explorer/arrays.syntran
 src/tests/test-src/explorer/fn.syntran
@@ -341,11 +344,13 @@ src/tests/test-src/ref/test-06.syntran
 src/tests/test-src/ref/test-07.syntran
 src/tests/test-src/ref/test-08.syntran
 src/tests/test-src/ref/test-09.syntran
+src/tests/test-src/stacktrace/caller.syntran
 src/tests/test-src/stacktrace/fnptr.syntran
 src/tests/test-src/stacktrace/include.syntran
 src/tests/test-src/stacktrace/loop.syntran
 src/tests/test-src/stacktrace/module.syntran
 src/tests/test-src/stacktrace/nested.syntran
+src/tests/test-src/stacktrace/on-demand.syntran
 src/tests/test-src/stacktrace/stacktrace_inc.syntran
 src/tests/test-src/stacktrace/stacktrace_mod.syntran
 src/tests/test-src/str/test-01.syntran
