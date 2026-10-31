@@ -25,6 +25,14 @@
 #include <string.h>
 #include <sys/stat.h>
 
+#ifdef _WIN32
+#include <io.h>
+#define sy_isatty(f) _isatty(_fileno(f))
+#else
+#include <unistd.h>
+#define sy_isatty(f) isatty(fileno(f))
+#endif
+
 typedef struct {
     int64_t len;
     int64_t imm;    /* nonzero for a literal, which is never freed */
@@ -92,6 +100,194 @@ void sy_fatal(const char *msg)
     exit(1);
 }
 
+/*============================================================================*/
+
+/* Runtime errors.  Like the interpreter's, the report says where the statement
+ * that failed is, and the stack of calls that led to it.  The compiled program
+ * hands over a table of the locations of its statements, and of the names of
+ * its fns, with sy_set_trace().  It stores the location of the statement that
+ * it runs in `sy_loc`, which is an index into the table, from 1.  0 is none.
+ * Each call pushes a frame with the location of the call, and pops it when the
+ * fn returns.  The generated code does both inline, so that a call is cheap */
+
+typedef struct {
+    const char *file;
+    int32_t line, col;
+    const char *text;
+} sy_loc_t;
+
+typedef struct {
+    int32_t fn, call_loc;
+} sy_frame;
+
+int32_t sy_loc = 0;
+sy_frame *sy_frames = NULL;
+int32_t sy_depth = 0, sy_fcap = 0;
+
+static const sy_loc_t *sy_loc_tab = NULL;
+static int32_t sy_nloc = 0;
+static const char *const *sy_fn_tab = NULL;
+static int32_t sy_nfn = 0;
+
+void sy_set_trace(const sy_loc_t *locs, int32_t nloc, const char *const *fns, int32_t nfn)
+{
+    sy_loc_tab = locs;
+    sy_nloc = nloc;
+    sy_fn_tab = fns;
+    sy_nfn = nfn;
+}
+
+/* Called when the stack of frames is full, which is also the first call */
+void sy_frames_grow(void)
+{
+    int32_t cap = sy_fcap > 0 ? 2 * sy_fcap : 256;
+    sy_frame *f = (sy_frame *)realloc(sy_frames, (size_t)cap * sizeof(sy_frame));
+
+    if (f == NULL) sy_fatal("out of memory");
+    sy_frames = f;
+    sy_fcap = cap;
+}
+
+/* A text that is built up, for the report, for std::stack_trace(), and for str() of
+ * an aggregate */
+typedef struct {
+    char *p;
+    size_t n, cap;
+} sy_buf;
+
+static void sy_buf_put(sy_buf *b, const char *s, size_t n)
+{
+    if (b->n + n + 1 > b->cap) {
+        b->cap = 2 * (b->n + n + 1);
+        b->p = (char *)realloc(b->p, b->cap);
+        if (b->p == NULL) sy_fatal("out of memory");
+    }
+    memcpy(b->p + b->n, s, n);
+    b->n += n;
+}
+
+static void sy_buf_add(sy_buf *b, const char *fmt, ...)
+{
+    va_list ap, ap2;
+    int n;
+
+    va_start(ap, fmt);
+    va_copy(ap2, ap);
+    n = vsnprintf(NULL, 0, fmt, ap);
+    va_end(ap);
+    if (n < 0) n = 0;
+    if (b->n + (size_t)n + 1 > b->cap) {
+        b->cap = 2 * (b->n + (size_t)n + 1);
+        b->p = (char *)realloc(b->p, b->cap);
+        if (b->p == NULL) sy_fatal("out of memory");
+    }
+    vsnprintf(b->p + b->n, (size_t)n + 1, fmt, ap2);
+    va_end(ap2);
+    b->n += (size_t)n;
+}
+
+static const sy_loc_t *sy_loc_at(int32_t loc)
+{
+    if (sy_loc_tab == NULL || loc < 1 || loc > sy_nloc) return NULL;
+    return &sy_loc_tab[loc - 1];
+}
+
+/* "<fn> (file:line)", with no location if the call has none */
+static void sy_label(sy_buf *b, const char *name, int32_t loc)
+{
+    const sy_loc_t *l = sy_loc_at(loc);
+
+    sy_buf_add(b, "%s", name);
+    if (l != NULL) sy_buf_add(b, " (%s:%d)", l->file, (int)l->line);
+}
+
+static const char *sy_fn_name(int32_t fn)
+{
+    if (fn >= 0 && fn < sy_nfn && sy_fn_tab[fn] != NULL) return sy_fn_tab[fn];
+    return "<fn>";
+}
+
+/* The "at <fn> (file:line)" lines of the first `nframes` frames, innermost
+ * first and ending with <main>, each after a newline.  `loc` is where the
+ * innermost one is.  Like rt_frames_str() of the interpreter, a trace of more
+ * than 20 frames leaves out the ones in the middle */
+static void sy_frames_str(sy_buf *b, int32_t loc, int32_t nframes)
+{
+    const int32_t each_end = 10;
+    int32_t k, call_loc;
+
+    for (k = nframes; k >= 1; k--) {
+        if (nframes > 2 * each_end && k == nframes - each_end)
+            sy_buf_add(b, "\n  ... %d frames omitted ...", (int)(nframes - 2 * each_end));
+        if (nframes > 2 * each_end && k <= nframes - each_end && k > each_end) continue;
+
+        call_loc = k == nframes ? loc : sy_frames[k].call_loc;
+        sy_buf_add(b, "\n  at ");
+        sy_label(b, sy_fn_name(sy_frames[k - 1].fn), call_loc);
+    }
+    sy_buf_add(b, "\n  at ");
+    sy_label(b, "<main>", nframes == 0 ? loc : sy_frames[0].call_loc);
+}
+
+/* The source line of a location, like rt_trace_snippet() of the interpreter */
+static void sy_snippet(sy_buf *b, const sy_loc_t *l, int color)
+{
+    const char *cy = color ? "\033[96m" : "", *rst = color ? "\033[0m" : "";
+    int w = snprintf(NULL, 0, "%d", (int)l->line);
+
+    sy_buf_add(b, "\n%s%*s--> %s%s:%d:%d", cy, w + 1, "", rst, l->file, (int)l->line,
+        (int)l->col);
+    sy_buf_add(b, "\n%s%*s| ", cy, w + 2, "");
+    sy_buf_add(b, "\n%s %d | %s%s", cy, (int)l->line, rst, l->text);
+    sy_buf_add(b, "\n%s%*s| %s", cy, w + 2, "", rst);
+}
+
+/* The runtime error of the interpreter, which goes to stdout, then the program
+ * exits.  Its message is "Runtime error[R23]: ..." and, if the statement is
+ * known, its source line and the stack of calls.  The interpreter prints it
+ * with a list-directed write, which puts a blank in front of the first line */
+static void sy_rt_error(const char *code, const char *fmt, ...)
+{
+    va_list ap;
+    sy_buf b = {NULL, 0, 0};
+    const sy_loc_t *l = sy_loc_at(sy_loc);
+    int color = sy_isatty(stdout);
+
+    sy_buf_add(&b, " %sRuntime error[%s]%s: ", color ? "\033[91;1m" : "", code,
+        color ? "\033[;1m" : "");
+    va_start(ap, fmt);
+    {
+        char *msg = NULL;
+        int n = vsnprintf(NULL, 0, fmt, ap);
+
+        va_end(ap);
+        va_start(ap, fmt);
+        msg = (char *)malloc((size_t)(n < 0 ? 0 : n) + 1);
+        if (msg == NULL) sy_fatal("out of memory");
+        vsnprintf(msg, (size_t)(n < 0 ? 0 : n) + 1, fmt, ap);
+        sy_buf_add(&b, "%s", msg);
+        free(msg);
+    }
+    va_end(ap);
+    if (color) sy_buf_add(&b, "\033[0m");
+
+    if (l != NULL) {
+        sy_snippet(&b, l, color);
+        sy_frames_str(&b, sy_loc, sy_depth);
+    }
+
+    fflush(stdout);
+    fprintf(stdout, "%s\n", b.p);
+    fflush(stdout);
+    exit(1);
+}
+
+/* The generated code reports an error whose text it knows already */
+void sy_error(const char *code, const char *msg)
+{
+    sy_rt_error(code, "%s", msg);
+}
+
 static sy_str *sy_str_alloc(int64_t len)
 {
     sy_str *s = (sy_str *)malloc(sizeof(sy_str) + (size_t)len + 1);
@@ -153,7 +349,7 @@ sy_str *sy_str_repeat(const sy_str *s, int64_t n)
     sy_str *r;
     int64_t i;
 
-    if (n < 0) n = 0;
+    if (n < 0) sy_rt_error("R39", "ncopies argument of repeat() is negative: %lld", (long long)n);
     r = sy_str_alloc(s->len * n);
     for (i = 0; i < n; i++) memcpy(r->data + i * s->len, s->data, (size_t)s->len);
     return r;
@@ -273,10 +469,11 @@ static int sy_end_ok(const char *p)
 
 static void sy_parse_fail(const char *fn, const sy_str *s)
 {
-    char msg[512];
+    /* parse_i32 is R2, then parse_i64, parse_f32, and parse_f64.  parse_bool is R46 */
+    const char *code = strcmp(fn, "parse_i32") == 0 ? "R2" : strcmp(fn, "parse_i64") == 0 ? "R3" :
+        strcmp(fn, "parse_f32") == 0 ? "R4" : strcmp(fn, "parse_f64") == 0 ? "R5" : "R46";
 
-    snprintf(msg, sizeof msg, " cannot %s() for argument `%.400s`", fn, s->data);
-    sy_fatal(msg);
+    sy_rt_error(code, " cannot %s() for argument `%s`", fn, s->data);
 }
 
 static int64_t sy_parse_int(const char *fn, const sy_str *s, int64_t lo, int64_t hi)
@@ -548,6 +745,62 @@ sy_arr *sy_arr_like(const sy_arr *a, int32_t elem)
     return sy_arr_new(elem, a->rank, a->size);
 }
 
+/* The extents of an array as "3 x 2", for the messages */
+static void sy_dims_str(char *buf, size_t cap, int32_t rank, const int64_t *size)
+{
+    int32_t k;
+    size_t n = 0;
+
+    buf[0] = '\0';
+    for (k = 0; k < rank && n < cap; k++)
+        n += (size_t)snprintf(buf + n, cap - n, k > 0 ? " x %lld" : "%lld", (long long)size[k]);
+}
+
+/* std::reshape() needs as many elements in the new shape as there are */
+void sy_reshape_check(const sy_arr *a, int32_t rank, const int64_t *sizes)
+{
+    int64_t total = 1;
+    int32_t k;
+
+    for (k = 0; k < rank; k++) total *= sizes[k];
+    if (total != a->len) sy_rt_error("R19", "reshape size mismatch");
+}
+
+/* An explicit array like [1, 2, 3, 4; 2, 2] has to have as many elements as its size */
+void sy_expl_check(int64_t nelems, int32_t rank, const int64_t *sizes)
+{
+    char dims[256];
+    int64_t total = 1;
+    int32_t k;
+
+    for (k = 0; k < rank; k++) total *= sizes[k];
+    if (total == nelems) return;
+    sy_dims_str(dims, sizeof dims, rank, sizes);
+    sy_rt_error("R21", "explicit array has %lld elements but declared size is %s = %lld",
+        (long long)nelems, dims, (long long)total);
+}
+
+/* size(a, dim) is the extent along a dimension, which is zero-based */
+int64_t sy_size_dim(const sy_arr *a, int64_t dim)
+{
+    if (dim < 0 || dim >= a->rank) sy_rt_error("R17", "rank mismatch in size() call");
+    return a->size[dim];
+}
+
+/* The operands of an element-wise operator have to be the same shape */
+void sy_binop_shape(const sy_arr *a, const sy_arr *b, const char *op)
+{
+    char l[256], r[256];
+    int32_t k;
+    int same = a->rank == b->rank;
+
+    for (k = 0; same && k < a->rank; k++) same = a->size[k] == b->size[k];
+    if (same) return;
+    sy_dims_str(l, sizeof l, a->rank, a->size);
+    sy_dims_str(r, sizeof r, b->rank, b->size);
+    sy_rt_error("R37", "array shape mismatch for binary operator `%s`: %s and %s", op, l, r);
+}
+
 /* The same elements in another shape.  This takes `a` and gives it a new header */
 sy_arr *sy_arr_reshape(sy_arr *a, int32_t rank, const int64_t *sizes)
 {
@@ -646,7 +899,7 @@ sy_arr *sy_arr_step_i32(int32_t lb, int32_t step, int32_t ub)
     int32_t i;
     sy_arr *a;
 
-    if (step == 0) sy_fatal("array step is 0");
+    if (step == 0) sy_rt_error("R25", "array step is 0");
     cap = ((int64_t)ub - lb + step - (step < 0 ? -1 : 1)) / step;
     a = sy_arr_new1(SY_I32, cap > 0 ? cap : 0);
     i = lb;
@@ -664,7 +917,7 @@ sy_arr *sy_arr_step_i64(int64_t lb, int64_t step, int64_t ub)
     int64_t cap, j = 0, i;
     sy_arr *a;
 
-    if (step == 0) sy_fatal("array step is 0");
+    if (step == 0) sy_rt_error("R25", "array step is 0");
     cap = (ub - lb + step - (step < 0 ? -1 : 1)) / step;
     a = sy_arr_new1(SY_I64, cap > 0 ? cap : 0);
     i = lb;
@@ -685,7 +938,7 @@ sy_arr *sy_arr_step_f32(float lb, float step, float ub)
     float f;
     sy_arr *a;
 
-    if (!(step > 0.0f || step < 0.0f)) sy_fatal("array step is 0.0");
+    if (!(step > 0.0f || step < 0.0f)) sy_rt_error("R26", "array step is 0.0");
     cap = (int64_t)ceilf((ub - lb) / step);
     a = sy_arr_new1(SY_F32, cap > 0 ? cap : 0);
     f = lb;
@@ -705,7 +958,7 @@ sy_arr *sy_arr_step_f64(double lb, double step, double ub)
     double f;
     sy_arr *a;
 
-    if (!(step > 0.0 || step < 0.0)) sy_fatal("array step is 0.0");
+    if (!(step > 0.0 || step < 0.0)) sy_rt_error("R26", "array step is 0.0");
     cap = (int64_t)ceil((ub - lb) / step);
     a = sy_arr_new1(SY_F64, cap > 0 ? cap : 0);
     f = lb;
@@ -782,7 +1035,7 @@ static int64_t *sy_sub_idx(const sy_sub *s, int64_t n, int64_t *count)
 
     case SUB_STEP:
         st = s->st;
-        if (st == 0) sy_fatal("subscript step is 0");
+        if (st == 0) sy_rt_error("R27", "subscript step is 0");
         lo = (s->omit & 1) ? (st < 0 ? n - 1 : 0) : s->lo;
         hi = (s->omit & 2) ? (st < 0 ? -1 : n) : s->hi;
         cnt = (hi - lo + st - (st < 0 ? -1 : 1)) / st;
@@ -896,7 +1149,7 @@ void sy_arr_slice_set(sy_arr *a, const sy_sub *subs, const sy_arr *rhs, const vo
     sy_walk_init(&w, a, subs);
     if (rhs != NULL && rhs->len != w.total) {
         sy_walk_free(&w);
-        sy_fatal("size of RHS does not match size of LHS slice");
+        sy_rt_error("R21", "size of RHS does not match size of LHS slice");
     }
     if (rhs == a) rhs = tmp = sy_arr_dup(a);
 
@@ -948,7 +1201,7 @@ void sy_str_set(sy_str **slot, const sy_sub *sub, const sy_str *rhs)
 
     if (!fill && rhs->len != cnt) {
         free(idx);
-        sy_fatal("size of RHS does not match size of LHS slice");
+        sy_rt_error("R21", "size of RHS does not match size of LHS slice");
     }
     if (s->imm) s = *slot = sy_str_from(s->data, s->len);
     /* `s[:-1:] = s` reads the characters that it writes */
@@ -1000,22 +1253,6 @@ void sy_arr_str_set(sy_arr *a, const sy_sub *subs, const sy_str *rhs)
 }
 
 /*============================================================================*/
-
-typedef struct {
-    char *p;
-    size_t n, cap;
-} sy_buf;
-
-static void sy_buf_put(sy_buf *b, const char *s, size_t n)
-{
-    if (b->n + n + 1 > b->cap) {
-        b->cap = 2 * (b->n + n + 1);
-        b->p = (char *)realloc(b->p, b->cap);
-        if (b->p == NULL) sy_fatal("out of memory");
-    }
-    memcpy(b->p + b->n, s, n);
-    b->n += n;
-}
 
 static void sy_arr_put(sy_buf *b, const sy_arr *a, int rt, const void *aux);
 static void sy_struct_put(sy_buf *b, const sy_struct *s);
@@ -1394,14 +1631,14 @@ int32_t sy_format_test(int32_t kind, int64_t ival, int32_t bits, double rval, co
 
 /* The index of the first variant of an enum that has the backing value v, from
  * the values of all of the `n` variants, for a cast like `Suit(2)` */
-int32_t sy_enum_of(const int32_t *vals, int32_t n, int32_t v)
+int32_t sy_enum_of(const int32_t *vals, int32_t n, int32_t v, const char *name)
 {
     int32_t i;
 
     for (i = 0; i < n; i++) {
         if (vals[i] == v) return i;
     }
-    sy_fatal("enum has no variant with this value");
+    sy_rt_error("R32", "no variant with value %d in enum `%s`", (int)v, name);
     return 0;
 }
 
@@ -1544,21 +1781,6 @@ typedef struct {
 
 /* Did readln() or eof() hit the end of stdin?  It is not on the handle */
 static int8_t sy_stdin_eof = 0;
-
-/* The runtime error of the interpreter.  Unlike its message, which goes to
- * stdout with the source line and a stack trace, this goes to stderr */
-static void sy_rt_error(const char *code, const char *fmt, ...)
-{
-    va_list ap;
-
-    fflush(stdout);
-    fprintf(stderr, "Runtime error[%s]: ", code);
-    va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
-    va_end(ap);
-    fputc('\n', stderr);
-    exit(1);
-}
 
 /* The arguments of the program, which main() hands over.  std::args() is all of
  * them, after the name of the program */

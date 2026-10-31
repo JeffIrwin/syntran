@@ -231,6 +231,26 @@ module syntran__native_m
 		! of the first
 		integer :: diag_src_id = -1, diag_src_pos = -1
 
+		! The locations of the statements, for the report of a runtime error.  A
+		! location is numbered by its first use, from 1, and the table is made of
+		! the source id and position of each.  `cur_loc` is the one of the
+		! statement being emitted, and `last_loc` is what was last stored in the
+		! runtime, in the block `last_bb`, so that it isn't stored again
+		integer, allocatable :: loc_src(:), loc_pos(:)
+		integer :: nloc = 0, cur_loc = 0, last_loc = -1
+		type(c_ptr) :: last_bb = c_null_ptr
+
+		! The name of each user fn, by id, for the trace of the calls
+		type(string_t), allocatable :: fnames(:)
+
+		! Does the fn being built push a frame of the call stack?
+		logical :: pushes = .false.
+
+		! Is the range being emitted the header of a `for` loop, so that a step of
+		! zero is an error of the loop, and not of the array?  Is the place being
+		! emitted the target of an assignment?  They are for the text of an error
+		logical :: for_hdr = .false., assigning = .false.
+
 		type(string_vector_t) :: diags
 
 	end type nemitter_t
@@ -368,6 +388,7 @@ subroutine native_tree(tree, state, n, diags)
 	end if
 	if (last == 0) call emit_result_text(em, 'Error: <invalid_value>')
 
+	call trace_tables(em)
 	call end_fn(em)
 
 	diags = em%diags
@@ -604,6 +625,278 @@ subroutine unsupported(em, what, pos)
 	end associate
 
 end subroutine unsupported
+
+!===============================================================================
+! Locations, for the report of a runtime error
+
+function loc_id(em) result(k)
+
+	! The number of the location of the statement that is being emitted, which is
+	! made at its first use.  It's 0 if the statement has no location
+
+	type(nemitter_t), intent(inout) :: em
+	integer :: k
+
+	integer :: j
+	integer, allocatable :: tmp(:)
+
+	k = 0
+	if (em%cur_src_id < 1 .or. em%cur_src_pos < 1) return
+
+	! The latest are the most likely to be wanted again
+	do j = em%nloc, 1, -1
+		if (em%loc_src(j) == em%cur_src_id .and. em%loc_pos(j) == em%cur_src_pos) then
+			k = j
+			return
+		end if
+	end do
+
+	if (.not. allocated(em%loc_src)) allocate(em%loc_src(64), em%loc_pos(64))
+	if (em%nloc == size(em%loc_src)) then
+		allocate(tmp(2 * em%nloc))
+		tmp(1: em%nloc) = em%loc_src
+		call move_alloc(tmp, em%loc_src)
+		allocate(tmp(2 * em%nloc))
+		tmp(1: em%nloc) = em%loc_pos
+		call move_alloc(tmp, em%loc_pos)
+	end if
+
+	em%nloc = em%nloc + 1
+	em%loc_src(em%nloc) = em%cur_src_id
+	em%loc_pos(em%nloc) = em%cur_src_pos
+	k = em%nloc
+
+end function loc_id
+
+!===============================================================================
+
+function rt_global(em, name, ty) result(g)
+
+	! A global variable of the runtime, which is declared at its first use
+
+	type(nemitter_t), intent(inout) :: em
+	character(len = *), intent(in) :: name
+	type(c_ptr), intent(in) :: ty
+	type(c_ptr) :: g
+
+	g = LLVMGetNamedGlobal(em%llmod, cs(name))
+	if (.not. c_associated(g)) g = LLVMAddGlobal(em%llmod, ty, cs(name))
+
+end function rt_global
+
+!===============================================================================
+
+subroutine set_loc(em, force)
+
+	! Tell the runtime that the statement being emitted is the one that runs, in
+	! case it fails.  This is skipped if the runtime was already told in this
+	! block, unless `force` says that a call has changed it since
+
+	type(nemitter_t), intent(inout) :: em
+	logical, intent(in), optional :: force
+
+	type(c_ptr) :: bb, ignored
+
+	if (em%cur_loc < 1) return
+
+	bb = LLVMGetInsertBlock(em%bld)
+	if (.not. present(force)) then
+		if (em%last_loc == em%cur_loc .and. c_associated(em%last_bb, bb)) return
+	end if
+
+	ignored = LLVMBuildStore(em%bld, ci32(em, em%cur_loc), rt_global(em, 'sy_loc', em%t_i32))
+	em%last_loc = em%cur_loc
+	em%last_bb = bb
+
+end subroutine set_loc
+
+!===============================================================================
+
+subroutine push_frame(em, id)
+
+	! Push a frame of the call stack for the fn that is being built, with the
+	! location of the call, which the caller stored.  This is inline, because
+	! calls are common.  Only a full stack calls the runtime, to grow it
+
+	type(nemitter_t), intent(inout) :: em
+	integer, intent(in) :: id
+
+	type(c_ptr) :: gdepth, d, full, grow_bb, push_bb, base, slot, ignored
+	type(c_ptr) :: no_args(0)
+
+	gdepth = rt_global(em, 'sy_depth', em%t_i32)
+	d = LLVMBuildLoad2(em%bld, em%t_i32, gdepth, cs(''))
+	full = LLVMBuildICmp(em%bld, LLVM_INT_SGE, d, LLVMBuildLoad2(em%bld, em%t_i32, &
+		rt_global(em, 'sy_fcap', em%t_i32), cs('')), cs(''))
+
+	grow_bb = new_block(em, 'grow')
+	push_bb = new_block(em, 'push')
+	ignored = LLVMBuildCondBr(em%bld, full, grow_bb, push_bb)
+
+	call LLVMPositionBuilderAtEnd(em%bld, grow_bb)
+	call rt_void(em, 'sy_frames_grow', no_args)
+	ignored = LLVMBuildBr(em%bld, push_bb)
+
+	! A frame is two i32s: the fn and the location of the call
+	call LLVMPositionBuilderAtEnd(em%bld, push_bb)
+	base = LLVMBuildLoad2(em%bld, em%t_ptr, rt_global(em, 'sy_frames', em%t_ptr), cs(''))
+	slot = LLVMBuildGEP2(em%bld, em%t_i32, base, &
+		[LLVMBuildMul(em%bld, d, ci32(em, 2), cs(''))], 1, cs(''))
+	ignored = LLVMBuildStore(em%bld, ci32(em, id), slot)
+	slot = LLVMBuildGEP2(em%bld, em%t_i32, slot, [ci32(em, 1)], 1, cs(''))
+	ignored = LLVMBuildStore(em%bld, LLVMBuildLoad2(em%bld, em%t_i32, &
+		rt_global(em, 'sy_loc', em%t_i32), cs('')), slot)
+	ignored = LLVMBuildStore(em%bld, LLVMBuildAdd(em%bld, d, ci32(em, 1), cs('')), gdepth)
+
+	em%last_loc = -1
+
+end subroutine push_frame
+
+!===============================================================================
+
+subroutine pop_frame(em)
+
+	type(nemitter_t), intent(inout) :: em
+
+	type(c_ptr) :: gdepth, ignored
+
+	gdepth = rt_global(em, 'sy_depth', em%t_i32)
+	ignored = LLVMBuildStore(em%bld, LLVMBuildSub(em%bld, &
+		LLVMBuildLoad2(em%bld, em%t_i32, gdepth, cs('')), ci32(em, 1), cs('')), gdepth)
+
+end subroutine pop_frame
+
+!===============================================================================
+
+subroutine err_if(em, bad, code, msg)
+
+	! If the i1 `bad` is true, report a runtime error whose text is known and end
+	! the program.  This is a branch to a block of its own, which isn't taken
+
+	type(nemitter_t), intent(inout) :: em
+	type(c_ptr), intent(in) :: bad
+	character(len = *), intent(in) :: code, msg
+
+	type(c_ptr) :: bad_bb, good_bb, ignored
+
+	bad_bb  = new_block(em, 'fail')
+	good_bb = new_block(em, 'ok')
+	ignored = LLVMBuildCondBr(em%bld, bad, bad_bb, good_bb)
+
+	call LLVMPositionBuilderAtEnd(em%bld, bad_bb)
+	call rt_void(em, 'sy_error', [c_string(em, code), c_string(em, msg)])
+	ignored = LLVMBuildBr(em%bld, good_bb)
+
+	call LLVMPositionBuilderAtEnd(em%bld, good_bb)
+
+end subroutine err_if
+
+!===============================================================================
+
+subroutine step_check(em, st, what, code_i, code_f)
+
+	! A step of a range can't be zero.  `what` is "for loop" or "array".  A float
+	! step has a code of its own, and its text says 0.0
+
+	type(nemitter_t), intent(inout) :: em
+	type(nval_t), intent(in) :: st
+	character(len = *), intent(in) :: what, code_i, code_f
+
+	if (st%ty == f32_type .or. st%ty == f64_type) then
+		call err_if(em, LLVMBuildFCmp(em%bld, LLVM_REAL_OEQ, st%v, &
+			LLVMConstNull(LLVMTypeOf(st%v)), cs('')), code_f, what//' step is 0.0')
+	else
+		call err_if(em, LLVMBuildICmp(em%bld, LLVM_INT_EQ, st%v, &
+			LLVMConstNull(LLVMTypeOf(st%v)), cs('')), code_i, what//' step is 0')
+	end if
+
+end subroutine step_check
+
+!===============================================================================
+
+subroutine trace_tables(em)
+
+	! Hand the runtime the table of the locations of the statements, and the one
+	! of the names of the fns, for the report of a runtime error.  This is called
+	! at the start of `main()`, which is in its block of the allocas, since the
+	! tables are only complete once the whole program is built
+
+	type(nemitter_t), intent(inout) :: em
+
+	character(len = :), allocatable :: text
+
+	integer :: i, k, last, nfn
+	integer :: i1(1)
+
+	type(c_ptr) :: tys(4), vals(4), lty, gl, gn, saved
+	type(c_ptr), allocatable :: ents(:), names(:), files(:)
+
+	if (em%nloc < 1) return
+
+	tys = [em%t_ptr, em%t_i32, em%t_i32, em%t_ptr]
+	lty = LLVMStructTypeInContext(em%ctx, tys, 4, 0)
+
+	allocate(ents(em%nloc), files(max(src_registry%len_, 1)))
+	files = c_null_ptr
+
+	do k = 1, em%nloc
+		associate (src => em%loc_src(k), pos => em%loc_pos(k))
+
+			if (src < 1 .or. src > src_registry%len_) then
+				vals = [LLVMConstNull(em%t_ptr), ci32(em, 0), ci32(em, 0), LLVMConstNull(em%t_ptr)]
+				ents(k) = LLVMConstStructInContext(em%ctx, vals, 4, 0)
+				cycle
+			end if
+
+			associate (context => src_registry%v(src))
+
+				! The same line lookup as rt_trace_snippet() makes
+				i1 = maxloc(context%lines, context%lines <= pos)
+				i = min(size(context%lines) - 1, max(1, i1(1)))
+
+				last = context%lines(i+1) - 1
+				do while (last > context%lines(i) .and. (context%text(last:last) == line_feed &
+						.or. context%text(last:last) == carriage_return))
+					last = last - 1
+				end do
+				text = tabs2spaces(context%text(context%lines(i): last))
+
+				if (.not. c_associated(files(src))) files(src) = c_string(em, context%src_file)
+
+				vals = [files(src), ci32(em, i), ci32(em, pos - context%lines(i) + 1), &
+					c_string(em, text)]
+				ents(k) = LLVMConstStructInContext(em%ctx, vals, 4, 0)
+
+			end associate
+		end associate
+	end do
+
+	gl = LLVMAddGlobal(em%llmod, LLVMArrayType2(lty, int(em%nloc, c_int64_t)), cs('.locs'))
+	call LLVMSetInitializer(gl, LLVMConstArray(lty, ents, em%nloc))
+	call LLVMSetGlobalConstant(gl, 1)
+	call LLVMSetLinkage(gl, LLVM_PRIVATE_LINKAGE)
+
+	nfn = 0
+	if (allocated(em%fnames)) nfn = size(em%fnames)
+	! A fn id is one-based, so the table has an empty entry first
+	allocate(names(nfn + 1))
+	names = LLVMConstNull(em%t_ptr)
+	do i = 1, nfn
+		if (allocated(em%fnames(i)%s)) names(i + 1) = c_string(em, em%fnames(i)%s)
+	end do
+	gn = LLVMAddGlobal(em%llmod, LLVMArrayType2(em%t_ptr, int(nfn + 1, c_int64_t)), &
+		cs('.fnames'))
+	call LLVMSetInitializer(gn, LLVMConstArray(em%t_ptr, names, nfn + 1))
+	call LLVMSetGlobalConstant(gn, 1)
+	call LLVMSetLinkage(gn, LLVM_PRIVATE_LINKAGE)
+
+	! The call goes in the block of the allocas, which runs first
+	saved = LLVMGetInsertBlock(em%bld)
+	call LLVMPositionBuilderAtEnd(em%bld, em%ablk)
+	call rt_void(em, 'sy_set_trace', [gl, ci32(em, em%nloc), gn, ci32(em, nfn + 1)])
+	call LLVMPositionBuilderAtEnd(em%bld, saved)
+
+end subroutine trace_tables
 
 !===============================================================================
 ! Building blocks
@@ -2111,6 +2404,8 @@ recursive function emit_array_expr(em, node) result(r)
 
 	integer :: t, kind_, i, n
 
+	logical :: in_for
+
 	type(c_ptr) :: sizes, valp, ignored, total, off, a, d, p
 	type(c_ptr), allocatable :: dims(:)
 
@@ -2118,6 +2413,9 @@ recursive function emit_array_expr(em, node) result(r)
 	type(nval_t), allocatable :: vals(:)
 
 	r = arr_val(LLVMConstNull(em%t_ptr), .false., node%val)
+
+	in_for = em%for_hdr
+	em%for_hdr = .false.
 
 	if (.not. allocated(node%val%array)) then
 		call unsupported(em, 'an array of unknown type')
@@ -2164,6 +2462,11 @@ recursive function emit_array_expr(em, node) result(r)
 		lb = convert(em, emit_expr(em, node%lbound_), t)
 		st = convert(em, emit_expr(em, node%step), t)
 		ub = convert(em, emit_expr(em, node%ubound_), t)
+		if (in_for) then
+			call step_check(em, st, 'for loop', 'R23', 'R24')
+		else
+			call step_check(em, st, 'array', 'R25', 'R26')
+		end if
 		r%v = rt_call(em, 'sy_arr_step_'//sfx, em%t_ptr, [lb%v, st%v, ub%v])
 
 	case (len_array)
@@ -2254,6 +2557,7 @@ recursive function emit_array_expr(em, node) result(r)
 				dims(i) = scalar_index(em, node%size_(i))
 			end do
 			sizes = store_sizes(em, dims)
+			call rt_void(em, 'sy_expl_check', [total, ci32(em, n), sizes])
 			r%v = rt_call(em, 'sy_arr_reshape', em%t_ptr, [a, ci32(em, n), sizes])
 		end if
 
@@ -2724,7 +3028,7 @@ recursive function emit_enum_cast(em, node) result(r)
 
 	call enum_tables(em, k)
 	r%v = rt_call(em, 'sy_enum_of', em%t_i32, [em%evals(k), &
-		ci32(em, em%enums%table(k)%val%num_vars), v%v])
+		ci32(em, em%enums%table(k)%val%num_vars), v%v, c_string(em, em%enums%table(k)%key)])
 	r%ty = enum_type
 	r%sk = k
 
@@ -2748,7 +3052,8 @@ subroutine check_not_null(em, sp)
 		LLVMConstNull(em%t_ptr), cs('')), bad, good)
 
 	call LLVMPositionBuilderAtEnd(em%bld, bad)
-	call rt_void(em, 'sy_fatal', [c_string(em, 'member of a null struct')])
+	call rt_void(em, 'sy_error', [c_string(em, 'R47'), c_string(em, 'cannot '// &
+		merge('assign', 'access', em%assigning)//' a member of null')])
 	ignored = LLVMBuildBr(em%bld, good)
 
 	call LLVMPositionBuilderAtEnd(em%bld, good)
@@ -3912,6 +4217,9 @@ function arr_binop_vals(em, op, op_text, l, rr, res_val) result(r)
 		shape_src = rr%v
 	end if
 
+	if (l%ty == array_type .and. rr%ty == array_type) &
+		call rt_void(em, 'sy_binop_shape', [l%v, rr%v, c_string(em, op_text)])
+
 	out = rt_call(em, 'sy_arr_like', em%t_ptr, [shape_src, ci32(em, elem_code(ety))])
 
 	call loop_begin(em, arr_len(em, shape_src), lp, q)
@@ -4186,7 +4494,7 @@ recursive function emit_intr_call(em, node) result(r)
 
 	integer :: i, n, iu
 
-	type(c_ptr) :: zero, valp
+	type(c_ptr) :: zero, valp, sizes
 	type(c_ptr) :: none(0)
 	type(c_ptr), allocatable :: dims(:)
 
@@ -4312,7 +4620,7 @@ recursive function emit_intr_call(em, node) result(r)
 			r%v = arr_len(em, a%v)
 		else
 			b = convert(em, emit_expr(em, node%args(2)), i64_type)
-			r%v = arr_dim(em, a%v, b%v)
+			r%v = rt_call(em, 'sy_size_dim', em%t_i64, [a%v, b%v])
 		end if
 		call dispose(em, a)
 		r = convert(em, r, node%val%type)
@@ -4376,8 +4684,10 @@ recursive function emit_intr_call(em, node) result(r)
 					ci64(em, int(i - 1, 8)))), i64_type)
 				dims(i) = piece%v
 			end do
+			sizes = store_sizes(em, dims(1: iu))
+			call rt_void(em, 'sy_reshape_check', [a%v, ci32(em, iu), sizes])
 			r = arr_val(rt_call(em, 'sy_arr_reshape', em%t_ptr, [a%v, ci32(em, iu), &
-				store_sizes(em, dims(1: iu))]), .true., node%val)
+				sizes]), .true., node%val)
 		end if
 		call dispose(em, b)
 
@@ -4777,14 +5087,25 @@ recursive subroutine emit_stmt(em, node)
 
 	integer :: i
 
+	integer :: prev_loc
+
 	type(nval_t) :: v
 
+	! A statement that fails reports where it is.  Like the interpreter, the
+	! statement that contains this one is the location again after it
+	prev_loc = em%cur_loc
 	if (node%src_id > 0) then
 		em%cur_src_id  = node%src_id
 		em%cur_src_pos = node%src_pos
+		em%cur_loc = loc_id(em)
 	end if
 
-	if (node%is_empty) return
+	if (node%is_empty) then
+		em%cur_loc = prev_loc
+		return
+	end if
+
+	if (node%src_id > 0) call set_loc(em)
 
 	select case (node%kind)
 
@@ -4838,6 +5159,8 @@ recursive subroutine emit_stmt(em, node)
 		call dispose(em, v)
 
 	end select
+
+	em%cur_loc = prev_loc
 
 end subroutine emit_stmt
 
@@ -4927,10 +5250,13 @@ recursive function emit_assign_val(em, node, as_stmt) result(res)
 		! A member of a struct, or an element of one.  The value is made first,
 		! because it might change what the struct is
 		v = emit_expr(em, node%right)
+		em%assigning = .true.
 		if (.not. place_of(em, node, pl)) then
+			em%assigning = .false.
 			call dispose(em, v)
 			return
 		end if
+		em%assigning = .false.
 		if (node%op%kind /= equals_token) then
 			cur = place_load(em, pl)
 			if (cur%ty == array_type) then
@@ -5375,6 +5701,8 @@ recursive subroutine emit_result_stmt(em, node)
 	if (node%src_id > 0) then
 		em%cur_src_id  = node%src_id
 		em%cur_src_pos = node%src_pos
+		em%cur_loc = loc_id(em)
+		call set_loc(em)
 	end if
 
 	select case (node%kind)
@@ -5484,7 +5812,7 @@ end subroutine emit_result_text
 !===============================================================================
 ! Functions
 
-subroutine begin_fn(em, name, ret_ll, ret_ty, is_main, fn)
+subroutine begin_fn(em, name, ret_ll, ret_ty, is_main, fn, fn_id)
 
 	! Start building a fn.  There's a block for the allocas, which is first, one
 	! for the code, and one that every `return` goes to.  `fn` is an LLVM fn that
@@ -5497,6 +5825,7 @@ subroutine begin_fn(em, name, ret_ll, ret_ty, is_main, fn)
 	integer, intent(in) :: ret_ty
 	logical, intent(in) :: is_main
 	type(c_ptr), intent(in), optional :: fn
+	integer, intent(in), optional :: fn_id
 
 	!********
 
@@ -5536,6 +5865,11 @@ subroutine begin_fn(em, name, ret_ll, ret_ty, is_main, fn)
 		ignored = LLVMBuildStore(em%abld, LLVMConstNull(ll_type(em, ret_ty)), em%retslot)
 	end if
 
+	! The call stack, for the trace of a runtime error
+	em%last_loc = -1
+	em%pushes = present(fn_id)
+	if (present(fn_id)) call push_frame(em, fn_id)
+
 end subroutine begin_fn
 
 !===============================================================================
@@ -5567,6 +5901,8 @@ subroutine end_fn(em)
 		old = LLVMBuildLoad2(em%bld, em%t_ptr, em%temps(i), cs(''))
 		call rt_void(em, merge('sy_str_free', 'sy_arr_free', em%temp_is_str(i)), [old])
 	end do
+
+	if (em%pushes) call pop_frame(em)
 
 	if (em%in_main) then
 		ignored = LLVMBuildRet(em%bld, ci32(em, 0))
@@ -5856,14 +6192,17 @@ recursive subroutine emit_fn(em, decl, self_sk)
 	if (decl%src_id > 0) then
 		em%cur_src_id  = decl%src_id
 		em%cur_src_pos = decl%src_pos
+		em%cur_loc = loc_id(em)
 	end if
 
 	fn = fn_llvm(em, decl%id_index)
 	if (.not. c_associated(fn)) return
 
+	call fn_name_set(em, decl%id_index, decl%identifier%text)
+
 	associate (f => em%fns%fns(decl%id_index))
 
-		call begin_fn(em, '', em%t_void, f%type%type, .false., fn)
+		call begin_fn(em, '', em%t_void, f%type%type, .false., fn, decl%id_index)
 
 		off = merge(1, 0, present(self_sk))
 
@@ -5910,6 +6249,28 @@ recursive subroutine emit_fn(em, decl, self_sk)
 	end associate
 
 end subroutine emit_fn
+
+!===============================================================================
+
+subroutine fn_name_set(em, id, name)
+
+	! Remember the name of a fn, for the trace of the calls
+
+	type(nemitter_t), intent(inout) :: em
+	integer, intent(in) :: id
+	character(len = *), intent(in) :: name
+
+	type(string_t), allocatable :: tmp(:)
+
+	if (.not. allocated(em%fnames)) allocate(em%fnames(max(id, 16)))
+	if (id > size(em%fnames)) then
+		allocate(tmp(max(id, 2 * size(em%fnames))))
+		tmp(1: size(em%fnames)) = em%fnames
+		call move_alloc(tmp, em%fnames)
+	end if
+	em%fnames(id)%s = name
+
+end subroutine fn_name_set
 
 !===============================================================================
 
@@ -6003,6 +6364,9 @@ recursive function emit_user_call(em, node) result(r)
 		r%v = LLVMBuildCall2(em%bld, em%fnt(id), fn, args, n, cs(''))
 	end if
 
+	! The fn changed the location that the runtime has
+	call set_loc(em, force = .true.)
+
 	do i = 1, n
 		call dispose(em, pending(i))
 	end do
@@ -6073,6 +6437,9 @@ recursive function emit_ptr_call(em, node) result(r)
 	r%owned = ptr_type(r%ty)
 	if (r%ty == array_type) r = arr_val(c_null_ptr, .true., node%val)
 	r%v = LLVMBuildCall2(em%bld, fty, callee%v, args, n, cs(''))
+
+	! The fn changed the location that the runtime has
+	call set_loc(em, force = .true.)
 
 	do i = 1, n
 		call dispose(em, pending(i))
@@ -6371,6 +6738,7 @@ recursive subroutine emit_while(em, node)
 
 	ignored = LLVMBuildBr(em%bld, cond_bb)
 	call LLVMPositionBuilderAtEnd(em%bld, cond_bb)
+	call set_loc(em)
 	ignored = LLVMBuildCondBr(em%bld, emit_cond(em, node%condition), body_bb, end_bb)
 
 	call LLVMPositionBuilderAtEnd(em%bld, body_bb)
@@ -6439,7 +6807,9 @@ recursive subroutine emit_for_array(em, node)
 		end if
 	end if
 
+	em%for_hdr = node%array%kind == array_expr
 	a = emit_expr(em, node%array)
+	em%for_hdr = .false.
 	if (.not. a%owned) then
 		a%v = rt_call(em, dup_fn(a%ty), em%t_ptr, [a%v])
 		a%owned = .true.
@@ -6572,6 +6942,7 @@ recursive subroutine emit_for(em, node)
 	ub = convert(em, emit_expr(em, node%array%ubound_), i64_type)
 	if (stepped) then
 		st = convert(em, emit_expr(em, node%array%step), i64_type)
+		call step_check(em, st, 'for loop', 'R23', 'R24')
 	else
 		st%v = ci64(em, 1_8)
 	end if

@@ -12307,6 +12307,19 @@ subroutine unit_test_native(npass, nfail)
 			! No program is compiled when there is an unsupported construct
 			native_ir_is_empty('let c = std::caller();'), &
 
+			! A runtime error says where it is: the table of the locations of the
+			! statements and the stack of the calls are handed to the runtime
+			index(native_ir('fn f(n: i32): i32 { if (n == 0) { return 0; } return f(n - 1) + 1; } ' &
+				//'println(f(3));'), '@sy_frames_grow') > 0, &
+			index(native_ir('println(std::args());'), '@sy_set_trace') > 0, &
+
+			! A step of zero is an error of the loop or the array, which the code checks for
+			index(native_ir('let s = 0; for i in [0: s: 5] { println(i); }'), &
+				'for loop step is 0') > 0, &
+			index(native_ir('let s = 0; let a = [0: s: 5]; println(a);'), 'array step is 0') > 0, &
+			index(native_ir('let s = 0.0; for i in [0.0: s: 5.0] { println(i); }'), &
+				'for loop step is 0.0') > 0, &
+
 			! A fn is compiled, and the optimizer sees through a call of it
 			index(native_ir('fn f(n: i32): i32 { return n + 1; } println(f(2));'), &
 				'@sy_str_i32(i32 3)') > 0, &
@@ -12377,7 +12390,7 @@ subroutine unit_test_native(npass, nfail)
 
 			! An optional struct can be `null`, which a member access checks for
 			index(native_ir('struct N { v: i32, next: ?N, } let n = N{v = 1, next = null}; ' &
-				//'println(n.v);'), 'member of a null struct') > 0, &
+				//'println(n.v);'), 'cannot access a member of null') > 0, &
 
 			! An enum is the index of its variant, and its names are a table
 			index(native_ir('enum E { A, B = 5, } let e = E.B; println(i32(e), e);'), &

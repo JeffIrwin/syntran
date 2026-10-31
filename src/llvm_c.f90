@@ -197,6 +197,13 @@ module syntran__llvm_c_m
 			type(c_ptr) :: LLVMGetNamedFunction
 		end function LLVMGetNamedFunction
 
+		function LLVMGetNamedGlobal(m, nm) bind(c, name = "LLVMGetNamedGlobal")
+			import :: c_ptr, c_char
+			type(c_ptr), value :: m
+			character(kind = c_char), intent(in) :: nm(*)
+			type(c_ptr) :: LLVMGetNamedGlobal
+		end function LLVMGetNamedGlobal
+
 		function LLVMGetParam(f, i) bind(c, name = "LLVMGetParam")
 			import :: c_ptr, c_int
 			type(c_ptr), value :: f

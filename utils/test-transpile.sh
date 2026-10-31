@@ -143,8 +143,22 @@ run_one() {
 	fi
 	tail -n +6 "$base.exp.raw" > "$base.exp"
 
-	if grep -q 'Runtime error' "$base.exp.raw" "$base.exp.err" 2> /dev/null \
-			|| [ "$exp_status" -eq 124 ] || [ "$exp_status" -eq 142 ]; then
+	if [ "$exp_status" -eq 124 ] || [ "$exp_status" -eq 142 ]; then
+		echo "SKIP timeout $f" > "$base.result"
+		return
+	fi
+	# A file that can't be opened depends on the machine, and the interpreter's
+	# message has the path it resolved when it is run with `--cd`.  Only the
+	# repro of the error itself is compared
+	if [ "$BACKEND" = native ] && grep -q 'Runtime error\[R8\]' "$base.exp.raw" 2> /dev/null \
+			&& [[ "$f" != */errors/* ]]; then
+		echo "SKIP runtime-error $f" > "$base.result"
+		return
+	fi
+	# A compiled native program reports a runtime error like the interpreter, with
+	# the same message, source line, and trace, so those are compared too.  The
+	# Fortran backend does not
+	if [ "$BACKEND" != native ] && grep -q 'Runtime error' "$base.exp.raw" "$base.exp.err" 2> /dev/null; then
 		echo "SKIP runtime-error $f" > "$base.result"
 		return
 	fi
@@ -266,7 +280,9 @@ excluded=(
 )
 
 # Error repro files are designed to be invalid, and the stack trace tests depend
-# on the interpreter's own runtime error output
+# on the interpreter's own runtime error output.  The native backend reports
+# runtime errors the same way, so it tests the runtime ones (R*) and the stack
+# traces too
 if [ "$LONG" -eq 1 ]; then
 	# The programs that src/tests/long.f90 runs: each call of chk() has a path
 	# relative to the most recent `path = '...'`
@@ -280,9 +296,19 @@ else
 	files=$(
 		{
 			find samples -name '*.syntran'
-			find src/tests/test-src -name '*.syntran' \
-				-not -path 'src/tests/test-src/errors/*' \
-				-not -path 'src/tests/test-src/stacktrace/*'
+			if [ "$BACKEND" = native ]; then
+				# implicit-ret.syntran needs a build with SYNTRAN_BOUNDS_CHECK, and
+				# is about an alias of the interpreter's that a compiled program
+				# doesn't have
+				find src/tests/test-src -name '*.syntran' \
+					-not -path 'src/tests/test-src/errors/*' \
+					-not -name 'implicit-ret.syntran'
+				find src/tests/test-src/errors -name 'R*.syntran'
+			else
+				find src/tests/test-src -name '*.syntran' \
+					-not -path 'src/tests/test-src/errors/*' \
+					-not -path 'src/tests/test-src/stacktrace/*'
+			fi
 		} | grep -vxF "$(printf '%s\n' "${excluded[@]}")" | sort
 	)
 fi
