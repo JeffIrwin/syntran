@@ -32,6 +32,10 @@ module syntran__core_m
 
 	! TODO:
 	!  - llvm compiled backend
+	!    * do unit tests run with llvm? might need a jit eval at least for
+	!      testing
+	!    * stack trace and related parity with vm. transpiler is behind on this
+	!      feature
 	!    * windows ci/cd
 	!    * binary packaging? any llvm dll's?
 	!    * parity with vm, not with transpiler

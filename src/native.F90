@@ -144,6 +144,16 @@ module syntran__native_m
 		type(c_ptr) :: p = c_null_ptr
 		integer :: ty = unknown_type, elem = unknown_type, rank = 0, sk = 0
 
+		! A last subscript of the chain that is not an element: a slice of the
+		! array, or a substring of the string, that `p` is the address of.  `subs`
+		! is the stack array of `sy_sub` records that build_subs made, `nsub` of
+		! them, and `pend` is what is disposed of by place_done().  The rank of
+		! a slice is `out_rank`
+		logical :: has_subs = .false.
+		type(c_ptr) :: subs = c_null_ptr
+		integer :: nsub = 0, out_rank = 0
+		type(nval_t), allocatable :: pend(:)
+
 	end type place_t
 
 	!********
@@ -339,6 +349,7 @@ subroutine native_tree(tree, state, n, diags)
 	end if
 
 	call begin_fn(em, 'main', em%t_i32, void_type, .true.)
+	call rt_void(em, 'sy_set_args', [LLVMGetParam(em%fn, 0_c_int), LLVMGetParam(em%fn, 1_c_int)])
 
 	if (allocated(tree%members)) then
 		do i = 1, size(tree%members)
@@ -1189,6 +1200,9 @@ subroutine slot_array_info(em, s, id, val)
 			s%sk(id) = structs_slot_of(em%structs, val)
 		else if (val%type == array_type .and. allocated(val%array)) then
 			if (val%array%type == struct_type) s%sk(id) = structs_slot_of(em%structs, val)
+		else if (val%type == fn_type .and. allocated(val%fn_ret)) then
+			! For a fn pointer, the struct that it returns
+			if (val%fn_ret%type == struct_type) s%sk(id) = structs_slot_of(em%structs, val%fn_ret)
 		end if
 	end if
 
@@ -1405,6 +1419,12 @@ recursive function emit_expr(em, node) result(r)
 	case (assignment_expr)
 		r = emit_assign_val(em, node)
 
+	case (let_expr)
+		! A `let` used as a value, like `(let a = 1) + (let b = a)`.  Its value is
+		! the variable it made
+		call emit_let(em, node)
+		r = load_var(em, node)
+
 	case (binary_expr)
 		r = emit_binary(em, node)
 
@@ -1412,10 +1432,18 @@ recursive function emit_expr(em, node) result(r)
 		r = emit_unary(em, node)
 
 	case (fn_call_intr_expr)
-		r = emit_intr_call(em, node)
+		if (allocated(node%lsubscripts)) then
+			r = emit_subscripted_call(em, node)
+		else
+			r = emit_intr_call(em, node)
+		end if
 
 	case (fn_call_expr, method_call_expr)
-		r = emit_user_call(em, node)
+		if (allocated(node%lsubscripts)) then
+			r = emit_subscripted_call(em, node)
+		else
+			r = emit_user_call(em, node)
+		end if
 
 	case (fn_ref_expr)
 		! The address of a user fn, which is declared here if this is its first
@@ -1426,7 +1454,11 @@ recursive function emit_expr(em, node) result(r)
 		if (.not. c_associated(r%v)) r = dummy_val(em, fn_type)
 
 	case (fn_call_ptr_expr)
-		r = emit_ptr_call(em, node)
+		if (allocated(node%lsubscripts)) then
+			r = emit_subscripted_call(em, node)
+		else
+			r = emit_ptr_call(em, node)
+		end if
 
 	case (struct_instance_expr)
 		r = emit_struct_instance(em, node)
@@ -1678,6 +1710,16 @@ end function scalar_index
 
 !===============================================================================
 
+function all_scalar_lead(node, n) result(yes)
+	! Are the first n subscripts of a reference single elements?
+	type(syntax_node_t), intent(in) :: node
+	integer, intent(in) :: n
+	logical :: yes
+	yes = all(node%lsubscripts(1: n)%sub_kind == scalar_sub)
+end function all_scalar_lead
+
+!===============================================================================
+
 recursive function all_scalar(node) result(yes)
 	! Are all the subscripts of a reference single elements?
 	type(syntax_node_t), intent(in) :: node
@@ -1890,19 +1932,110 @@ recursive function emit_subscript(em, node) result(r)
 
 	!********
 
-	integer :: i, vty, ety, rank_, nsub
+	integer :: vty, ety, rank_
 
-	type(c_ptr) :: ps, a, p, subs, last
+	type(c_ptr) :: ps, a
+
+	r = dummy_val(em, node%val%type)
+	if (.not. ref_info(em, node, ps, vty, ety, rank_)) return
+
+	a = LLVMBuildLoad2(em%bld, em%t_ptr, ps, cs(''))
+	r = subscript_val(em, a, vty, ety, rank_, node)
+
+end function emit_subscript
+
+!===============================================================================
+
+recursive function emit_subscripted_call(em, node) result(r)
+
+	! `f(x)[i]` or `sum(a, 0)[i]`: the subscripts of a call.  The call is made
+	! without them, and then they select from its result, which is freed after
+	! what they select is copied out of it
+
+	type(nemitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	type(nval_t) :: r
+
+	!********
+
+	type(nval_t) :: whole
+
+	type(syntax_node_t) :: call_node
+
+	call_node = node
+	deallocate(call_node%lsubscripts)
+	if (allocated(call_node%usubscripts)) deallocate(call_node%usubscripts)
+	if (allocated(call_node%ssubscripts)) deallocate(call_node%ssubscripts)
+
+	r = dummy_val(em, node%val%type)
+
+	if (node%kind == fn_call_ptr_expr) then
+		! The type of the call is part of the type of the pointer, and the type of
+		! the node is that of what the subscripts select from it
+		if (.not. allocated(node%left)) then
+			call unsupported(em, 'a subscript of the result of a call of a fn pointer variable')
+			return
+		end if
+		if (.not. allocated(node%left%val%fn_ret)) then
+			call unsupported(em, 'a subscript of the result of a call of unknown type')
+			return
+		end if
+		call_node%val = node%left%val%fn_ret
+	end if
+
+	whole = emit_expr(em, call_node)
+	if (whole%ty /= array_type .and. whole%ty /= str_type) then
+		call unsupported(em, 'a subscript of a fn result of type `'//kind_name(whole%ty)//'`')
+		call dispose(em, whole)
+		return
+	end if
+
+	if (whole%ty == array_type .and. whole%elem == unknown_type .and. all_scalar(node)) then
+		! An intrinsic that makes an array: the parser typed the call as the
+		! element that the subscripts select, which has one subscript per dimension
+		whole%elem = node%val%type
+		whole%rank = size(node%lsubscripts)
+	end if
+
+	r = subscript_val(em, whole%v, whole%ty, whole%elem, whole%rank, node)
+
+	! What is selected may be a string or a struct that the array owns, or a
+	! slice that is made of them, so it has to be copied before the array is freed
+	if (whole%owned .and. .not. r%owned .and. ptr_type(r%ty)) then
+		r%v = rt_call(em, dup_fn(r%ty), em%t_ptr, [r%v])
+		r%owned = .true.
+	end if
+	call dispose(em, whole)
+
+end function emit_subscripted_call
+
+!===============================================================================
+
+recursive function subscript_val(em, a, vty, ety, rank_, node) result(r)
+
+	! The subscripts of `node` applied to the array or string `a`, which is
+	! lent.  `vty`, `ety`, and `rank_` are the type of `a`, and the type and rank
+	! of its elements.  An element that is a str or struct is lent as well
+
+	type(nemitter_t), intent(inout) :: em
+	type(c_ptr), intent(in) :: a
+	integer, intent(in) :: vty, ety, rank_
+	type(syntax_node_t), intent(in) :: node
+	type(nval_t) :: r
+
+	!********
+
+	integer :: i, nsub
+
+	type(c_ptr) :: p, subs, last
 	type(c_ptr), allocatable :: idx(:)
 
 	type(nval_t) :: el
 	type(nval_t), allocatable :: pending(:)
 
 	r = dummy_val(em, node%val%type)
-	if (.not. ref_info(em, node, ps, vty, ety, rank_)) return
 
 	nsub = size(node%lsubscripts)
-	a = LLVMBuildLoad2(em%bld, em%t_ptr, ps, cs(''))
 
 	if (vty == str_type) then
 		if (nsub /= 1) then
@@ -1916,22 +2049,28 @@ recursive function emit_subscript(em, node) result(r)
 		call dispose_all(em, pending)
 
 	else if (nsub == rank_ .and. all_scalar(node)) then
-		p = elem_target(em, node, ety)
-		if (c_associated(p)) r = elem_load(em, ety, p)
+		allocate(idx(rank_))
+		do i = 1, rank_
+			idx(i) = scalar_index(em, node%lsubscripts(i))
+		end do
+		p = elem_ptr(em, a, ety, lin_index(em, a, idx))
+		r = elem_load(em, ety, p)
 
 	else if (nsub == rank_) then
 		subs = build_subs(em, node, pending)
 		r = arr_val(rt_call(em, 'sy_arr_slice', em%t_ptr, [a, subs]), .true., node%val)
 		call dispose_all(em, pending)
 
+	else if (nsub == rank_ + 1 .and. ety == str_type .and. .not. all_scalar_lead(node, rank_)) then
+		! A substring of each of the elements of a slice of an array of strings
+		subs = build_subs(em, node, pending)
+		r = arr_val(rt_call(em, 'sy_arr_str_sub', em%t_ptr, [a, subs]), .true., node%val)
+		r%elem = str_type
+		r%rank = count(node%lsubscripts(1: rank_)%sub_kind /= scalar_sub)
+		call dispose_all(em, pending)
+
 	else if (nsub == rank_ + 1 .and. ety == str_type) then
 		! A character, or substring, of an element of an array of strings
-		do i = 1, rank_
-			if (node%lsubscripts(i)%sub_kind /= scalar_sub) then
-				call unsupported(em, 'a substring of a slice of strings')
-				return
-			end if
-		end do
 		allocate(idx(rank_))
 		do i = 1, rank_
 			idx(i) = scalar_index(em, node%lsubscripts(i))
@@ -1949,7 +2088,7 @@ recursive function emit_subscript(em, node) result(r)
 		call unsupported(em, 'a subscript with the wrong number of dimensions')
 	end if
 
-end function emit_subscript
+end function subscript_val
 
 !===============================================================================
 
@@ -2036,7 +2175,14 @@ recursive function emit_array_expr(em, node) result(r)
 
 	case (unif_array)
 		! [v; n, m] is v repeated n * m times, in the shape [n, m]
-		v = emit_expr(em, node%lbound_)
+		if (node%lbound_%kind == literal_expr .and. (node%lbound_%val%type == struct_type &
+				.or. node%lbound_%val%type == enum_type)) then
+			! `[Node; 0]`: the parser only makes it for sizes that are all zero, so
+			! the fill is never copied and is just a placeholder of the right type
+			v = dummy_val(em, t)
+		else
+			v = emit_expr(em, node%lbound_)
+		end if
 		if (is_numeric_type(t)) v = convert(em, v, t)
 		valp = entry_alloca(em, elem_ll(em, t), 'fill')
 		if (t == bool_type) then
@@ -2606,53 +2752,64 @@ end subroutine check_not_null
 
 !===============================================================================
 
-recursive function place_subscript(em, pl, subs) result(ok)
+recursive function place_subscript(em, pl, owner) result(ok)
 
 	! The element of the array that a place holds, if there is one scalar subscript
-	! per dimension.  Otherwise this has said that it isn't supported
+	! per dimension.  Otherwise the subscripts are left in the place, if they are a
+	! slice of the array or a substring, since nothing can follow them.  Anything
+	! else this has said that it isn't supported
 
 	type(nemitter_t), intent(inout) :: em
 	type(place_t), intent(inout) :: pl
-	type(syntax_node_t), intent(in) :: subs(:)
+	type(syntax_node_t), intent(in) :: owner
 	logical :: ok
 
-	integer :: i
+	integer :: i, nsub
 
 	type(c_ptr) :: a
 	type(c_ptr), allocatable :: idx(:)
 
 	ok = .false.
+	nsub = size(owner%lsubscripts)
 
 	if (pl%ty == str_type) then
-		call unsupported(em, 'a substring of a member')
+		if (nsub /= 1) then
+			call unsupported(em, 'this subscript of a string')
+			return
+		end if
+		pl%subs = build_subs(em, owner, pl%pend)
+		pl%has_subs = .true.
+		pl%nsub = nsub
+		ok = .true.
 		return
 	else if (pl%ty /= array_type) then
 		call unsupported(em, 'a subscript of a value that is not an array')
 		return
 	end if
 
-	if (size(subs) /= pl%rank) then
+	if (nsub == pl%rank .and. all_scalar(owner)) then
+		a = LLVMBuildLoad2(em%bld, em%t_ptr, pl%p, cs(''))
+		allocate(idx(pl%rank))
+		do i = 1, pl%rank
+			idx(i) = scalar_index(em, owner%lsubscripts(i))
+		end do
+
+		pl%p = elem_ptr(em, a, pl%elem, lin_index(em, a, idx))
+		pl%ty = pl%elem
+		pl%elem = unknown_type
+		pl%rank = 0
+		ok = .true.
+
+	else if (nsub == pl%rank .or. (nsub == pl%rank + 1 .and. pl%elem == str_type)) then
+		pl%subs = build_subs(em, owner, pl%pend)
+		pl%has_subs = .true.
+		pl%nsub = nsub
+		pl%out_rank = count(owner%lsubscripts(1: pl%rank)%sub_kind /= scalar_sub)
+		ok = .true.
+
+	else
 		call unsupported(em, 'a subscript with the wrong number of dimensions')
-		return
 	end if
-	do i = 1, size(subs)
-		if (subs(i)%sub_kind /= scalar_sub) then
-			call unsupported(em, 'a slice of a member')
-			return
-		end if
-	end do
-
-	a = LLVMBuildLoad2(em%bld, em%t_ptr, pl%p, cs(''))
-	allocate(idx(pl%rank))
-	do i = 1, pl%rank
-		idx(i) = scalar_index(em, subs(i))
-	end do
-
-	pl%p = elem_ptr(em, a, pl%elem, lin_index(em, a, idx))
-	pl%ty = pl%elem
-	pl%elem = unknown_type
-	pl%rank = 0
-	ok = .true.
 
 end function place_subscript
 
@@ -2679,6 +2836,11 @@ recursive function place_member(em, m, pl) result(ok)
 	type(value_t) :: mval
 
 	ok = .false.
+
+	if (pl%has_subs) then
+		call unsupported(em, 'a member of a slice')
+		return
+	end if
 
 	if (pl%ty /= struct_type .or. pl%sk < 1 .or. .not. associated(em%structs)) then
 		call unsupported(em, 'a member of a value whose struct is unknown')
@@ -2709,7 +2871,7 @@ recursive function place_member(em, m, pl) result(ok)
 	end if
 
 	if (allocated(m%lsubscripts)) then
-		if (.not. place_subscript(em, pl, m%lsubscripts)) return
+		if (.not. place_subscript(em, pl, m)) return
 	end if
 
 	if (allocated(m%member)) then
@@ -2763,7 +2925,7 @@ recursive function place_of(em, node, pl) result(ok)
 	end if
 
 	if (allocated(node%lsubscripts)) then
-		if (.not. place_subscript(em, pl, node%lsubscripts)) return
+		if (.not. place_subscript(em, pl, node)) return
 	end if
 
 	if (allocated(node%member)) then
@@ -2779,19 +2941,131 @@ end function place_of
 
 function place_load(em, pl) result(r)
 
-	! Read what a place holds.  A str, array, or struct is only lent
+	! Read what a place holds.  A str, array, or struct is only lent, unless the
+	! place is a slice or substring, which is made new
 
 	type(nemitter_t), intent(inout) :: em
 	type(place_t), intent(in) :: pl
 	type(nval_t) :: r
 
-	r = elem_load(em, pl%ty, pl%p)
-	if (pl%ty == array_type) then
+	!********
+
+	type(c_ptr) :: a, whole
+
+	if (.not. pl%has_subs) then
+		r = elem_load(em, pl%ty, pl%p)
+		if (pl%ty == array_type) then
+			r%elem = pl%elem
+			r%rank = pl%rank
+		end if
+		return
+	end if
+
+	a = LLVMBuildLoad2(em%bld, em%t_ptr, pl%p, cs(''))
+	r%owned = .true.
+
+	if (pl%ty == str_type) then
+		r%ty = str_type
+		r%v = rt_call(em, 'sy_str_sub', em%t_ptr, [a, pl%subs])
+
+	else if (pl%nsub == pl%rank) then
+		r%ty = array_type
+		r%v = rt_call(em, 'sy_arr_slice', em%t_ptr, [a, pl%subs])
 		r%elem = pl%elem
-		r%rank = pl%rank
+		r%rank = pl%out_rank
+
+	else if (pl%out_rank == 0) then
+		! A substring of one element, which is the only one of an array of one
+		whole = rt_call(em, 'sy_arr_str_sub', em%t_ptr, [a, pl%subs])
+		r%ty = str_type
+		r%v = rt_call(em, 'sy_str_dup', em%t_ptr, [LLVMBuildLoad2(em%bld, em%t_ptr, &
+			arr_data(em, whole), cs(''))])
+		call rt_void(em, 'sy_arr_free', [whole])
+
+	else
+		r%ty = array_type
+		r%v = rt_call(em, 'sy_arr_str_sub', em%t_ptr, [a, pl%subs])
+		r%elem = str_type
+		r%rank = pl%out_rank
 	end if
 
 end function place_load
+
+!===============================================================================
+
+subroutine arr_slice_store(em, a, subs, ety, v)
+
+	! a[subs] = v, where v is an array of the same size or a single element.  This
+	! consumes `v`
+
+	type(nemitter_t), intent(inout) :: em
+	type(c_ptr), intent(in) :: a, subs
+	integer, intent(in) :: ety
+	type(nval_t), intent(inout) :: v
+
+	type(c_ptr) :: valp, ignored
+
+	if (v%ty == array_type) then
+		call rt_void(em, 'sy_arr_slice_set', [a, subs, v%v, LLVMConstNull(em%t_ptr)])
+	else
+		valp = entry_alloca(em, elem_ll(em, ety), 'fill')
+		if (ptr_type(ety)) ignored = LLVMBuildStore(em%bld, LLVMConstNull(em%t_ptr), valp)
+		call elem_store(em, valp, ety, v)
+		call rt_void(em, 'sy_arr_slice_set', [a, subs, LLVMConstNull(em%t_ptr), valp])
+		if (ptr_type(ety)) call rt_void(em, free_fn(ety), &
+			[LLVMBuildLoad2(em%bld, em%t_ptr, valp, cs(''))])
+		v%owned = .false.
+	end if
+	call dispose(em, v)
+	v%owned = .false.
+
+end subroutine arr_slice_store
+
+!===============================================================================
+
+subroutine place_store(em, pl, v)
+
+	! Write to a place, which is an element or a member, or a slice or substring.
+	! This consumes `v`
+
+	type(nemitter_t), intent(inout) :: em
+	type(place_t), intent(in) :: pl
+	type(nval_t), intent(inout) :: v
+
+	type(c_ptr) :: a
+
+	if (.not. pl%has_subs) then
+		call elem_store(em, pl%p, pl%ty, v)
+		return
+	end if
+
+	a = LLVMBuildLoad2(em%bld, em%t_ptr, pl%p, cs(''))
+
+	if (pl%ty == array_type .and. pl%nsub == pl%rank) then
+		call arr_slice_store(em, a, pl%subs, pl%elem, v)
+		return
+	end if
+
+	if (v%ty /= str_type) then
+		call unsupported(em, 'assigning a `'//kind_name(v%ty)//'` to a substring')
+	else if (pl%ty == str_type) then
+		call rt_void(em, 'sy_str_set', [pl%p, pl%subs, v%v])
+	else
+		call rt_void(em, 'sy_arr_str_set', [a, pl%subs, v%v])
+	end if
+	call dispose(em, v)
+	v%owned = .false.
+
+end subroutine place_store
+
+!===============================================================================
+
+subroutine place_done(em, pl)
+	! Free what the subscripts of a place made, after it was read or written
+	type(nemitter_t), intent(inout) :: em
+	type(place_t), intent(in) :: pl
+	if (allocated(pl%pend)) call dispose_all(em, pl%pend)
+end subroutine place_done
 
 !===============================================================================
 
@@ -2901,10 +3175,12 @@ recursive function emit_member_read(em, node) result(r)
 	if (node%root_kind == 0) then
 		if (.not. place_of(em, node, pl)) return
 		r = place_load(em, pl)
+		call place_done(em, pl)
 		return
 	end if
 
-	if (node%root_kind /= fn_call_expr .and. node%root_kind /= method_call_expr) then
+	if (node%root_kind /= fn_call_expr .and. node%root_kind /= method_call_expr .and. &
+			node%root_kind /= fn_call_ptr_expr) then
 		call unsupported(em, 'a member of the result of a `'//kind_name(node%root_kind)//'`')
 		return
 	end if
@@ -2919,6 +3195,27 @@ recursive function emit_member_read(em, node) result(r)
 	root%root_kind = 0
 	deallocate(root%member)
 
+	if (node%root_kind == fn_call_ptr_expr) then
+		! What the fn returns is part of the type of the pointer.  The struct is
+		! the type of the call, and not that of the member that is read from it
+		if (allocated(node%left)) then
+			if (.not. allocated(node%left%val%fn_ret)) then
+				call unsupported(em, 'a member of the result of a call of unknown type')
+				return
+			end if
+			root%val = node%left%val%fn_ret
+		else
+			pl%sk = merge(em%l%sk(node%id_index), em%g%sk(node%id_index), node%is_loc)
+			if (pl%sk < 1 .or. .not. associated(em%structs)) then
+				call unsupported(em, 'a member of the result of a call of unknown type')
+				return
+			end if
+			root%val%type = struct_type
+			root%val%struct_cookie = em%structs%table(pl%sk)%val%cookie
+			root%val%struct_name = em%structs%table(pl%sk)%key
+		end if
+	end if
+
 	root_v = emit_expr(em, root)
 	if (root_v%ty /= struct_type .or. .not. associated(em%structs)) then
 		call unsupported(em, 'a member of a fn result of type `'//kind_name(root_v%ty)//'`')
@@ -2926,7 +3223,11 @@ recursive function emit_member_read(em, node) result(r)
 		return
 	end if
 
-	pl%sk = structs_slot_of(em%structs, em%fns%fns(node%id_index)%type)
+	if (node%root_kind == fn_call_ptr_expr) then
+		pl%sk = structs_slot_of(em%structs, root%val)
+	else
+		pl%sk = structs_slot_of(em%structs, em%fns%fns(node%id_index)%type)
+	end if
 	pl%ty = struct_type
 	slot = entry_alloca(em, em%t_ptr, 'tmp')
 	ignored = LLVMBuildStore(em%bld, root_v%v, slot)
@@ -2938,10 +3239,11 @@ recursive function emit_member_read(em, node) result(r)
 	end if
 
 	r = place_load(em, pl)
-	if (ptr_type(r%ty)) then
+	if (ptr_type(r%ty) .and. .not. r%owned) then
 		r%v = rt_call(em, dup_fn(r%ty), em%t_ptr, [r%v])
 		r%owned = .true.
 	end if
+	call place_done(em, pl)
 	call dispose(em, root_v)
 
 end function emit_member_read
@@ -3518,12 +3820,14 @@ function arr_binop_vals(em, op, op_text, l, rr, res_val) result(r)
 	call loop_begin(em, arr_len(em, shape_src), lp, q)
 	if (l%ty == array_type) then
 		x = elem_load(em, l%elem, elem_ptr(em, l%v, l%elem, q))
+		x%sk = l%sk
 	else
 		x = l
 		x%owned = .false.
 	end if
 	if (rr%ty == array_type) then
 		y = elem_load(em, rr%elem, elem_ptr(em, rr%v, rr%elem, q))
+		y%sk = rr%sk
 	else
 		y = rr
 		y%owned = .false.
@@ -3665,6 +3969,112 @@ end function emit_reduce
 
 !===============================================================================
 
+recursive function emit_reduce_ext(em, base, node) result(r)
+
+	! sum(), product(), minval(), maxval(), count(), all(), or any() with a
+	! dimension, a mask, or both.  The runtime does all of it, and makes an array
+	! with the other dimensions, whose one element is unwrapped if there are none
+
+	type(nemitter_t), intent(inout) :: em
+	character(len = *), intent(in) :: base
+	type(syntax_node_t), intent(in) :: node
+	type(nval_t) :: r
+
+	!********
+
+	integer :: n, op, rety
+
+	logical :: has_dim, has_mask
+
+	type(c_ptr) :: res, dimv, maskv
+
+	type(nval_t) :: a, d, m
+
+	n = size(node%args)
+	r = dummy_val(em, node%val%type)
+
+	! `f(a, mask)` is the only one that has a mask in the second place
+	has_dim  = node%args(2)%val%type /= array_type
+	has_mask = n == 3 .or. .not. has_dim
+
+	a = emit_expr(em, node%args(1))
+	if (a%ty /= array_type) then
+		call unsupported(em, 'the intrinsic fn `'//base//'` of a value of type `'// &
+			kind_name(a%ty)//'`', node%identifier%pos)
+		call dispose(em, a)
+		return
+	end if
+
+	if (a%rank == 0 .and. allocated(node%args(1)%val%array)) a%rank = node%args(1)%val%array%rank
+	if (a%rank == 0) then
+		call unsupported(em, 'the intrinsic fn `'//base//'` of an array of unknown rank', &
+			node%identifier%pos)
+		call dispose(em, a)
+		return
+	end if
+
+	select case (base)
+	case ('all', 'any', 'count')
+		if (a%elem /= bool_type) then
+			call unsupported(em, 'the intrinsic fn `'//base//'` of an array of type `'// &
+				kind_name(a%elem)//'`', node%identifier%pos)
+			call dispose(em, a)
+			return
+		end if
+	case default
+		if (.not. is_numeric_type(a%elem)) then
+			call unsupported(em, 'the intrinsic fn `'//base//'` of an array of type `'// &
+				kind_name(a%elem)//'`', node%identifier%pos)
+			call dispose(em, a)
+			return
+		end if
+	end select
+
+	select case (base)
+	case ('sum');     op = 0
+	case ('product'); op = 1
+	case ('minval');  op = 2
+	case ('maxval');  op = 3
+	case ('count');   op = 4
+	case ('all');     op = 5
+	case default;     op = 6
+	end select
+
+	! No dimension is -1, which is all of them
+	dimv = ci64(em, -1_8)
+	if (has_dim) then
+		d = convert(em, emit_expr(em, node%args(2)), i64_type)
+		dimv = d%v
+	end if
+	maskv = LLVMConstNull(em%t_ptr)
+	if (has_mask) then
+		m = emit_expr(em, node%args(n))
+		maskv = m%v
+	end if
+
+	rety = merge(i64_type, a%elem, base == 'count')
+	if (base == 'all' .or. base == 'any') rety = bool_type
+
+	res = rt_call(em, 'sy_arr_reduce', em%t_ptr, [a%v, dimv, ci32(em, op), maskv])
+	call dispose(em, a)
+	if (has_mask) call dispose(em, m)
+
+	if (has_dim .and. a%rank > 1) then
+		r%ty = array_type
+		r%owned = .true.
+		r%v = res
+		r%elem = rety
+		r%rank = a%rank - 1
+	else
+		! The array has one element, which is the result
+		r = elem_load(em, rety, elem_ptr(em, res, rety, ci64(em, 0_8)))
+		call rt_void(em, 'sy_arr_free', [res])
+	end if
+
+end function emit_reduce_ext
+
+!===============================================================================
+
 recursive function emit_intr_call(em, node) result(r)
 
 	! Call of an intrinsic fn which returns a value
@@ -3680,6 +4090,7 @@ recursive function emit_intr_call(em, node) result(r)
 	integer :: i, n, iu
 
 	type(c_ptr) :: zero
+	type(c_ptr) :: none(0)
 	type(c_ptr), allocatable :: dims(:)
 
 	type(nval_t) :: piece, acc, a, b
@@ -3748,11 +4159,9 @@ recursive function emit_intr_call(em, node) result(r)
 		r = convert(em, r, node%val%type)
 
 	case ('sum', 'product', 'minval', 'maxval', 'all', 'any', 'count')
-		! Of a whole array.  A dimension or a mask is not supported yet
+		! Of a whole array, or along a dimension, or of the elements where a mask is true
 		if (n /= 1) then
-			call unsupported(em, 'the intrinsic fn `'//base//'` with a dimension or mask', &
-				node%identifier%pos)
-			r = dummy_val(em, node%val%type)
+			r = emit_reduce_ext(em, base, node)
 		else
 			a = emit_expr(em, node%args(1))
 			if (a%ty /= array_type) then
@@ -3847,6 +4256,24 @@ recursive function emit_intr_call(em, node) result(r)
 			call dispose(em, a)
 		end if
 		r%v = LLVMBuildICmp(em%bld, LLVM_INT_NE, r%v, LLVMConstInt(em%t_i8, 0_c_int64_t, 0), cs(''))
+
+	case ('args')
+		r = arr_val(rt_call(em, 'sy_args', em%t_ptr, none), .true., node%val)
+
+	case ('getenv')
+		a = emit_expr(em, node%args(1))
+		r%ty = str_type
+		r%owned = .true.
+		r%v = rt_call(em, 'sy_getenv', em%t_ptr, [a%v])
+		call dispose(em, a)
+
+	case ('hasenv')
+		a = emit_expr(em, node%args(1))
+		r%ty = bool_type
+		r%owned = .false.
+		r%v = LLVMBuildICmp(em%bld, LLVM_INT_NE, rt_call(em, 'sy_hasenv', em%t_i8, [a%v]), &
+			LLVMConstInt(em%t_i8, 0_c_int64_t, 0), cs(''))
+		call dispose(em, a)
 
 	case ('exists')
 		a = emit_expr(em, node%args(1))
@@ -4227,13 +4654,14 @@ recursive subroutine emit_assign(em, node)
 
 	type(nval_t) :: v
 
-	v = emit_assign_val(em, node)
+	v = emit_assign_val(em, node, .true.)
+	call dispose(em, v)
 
 end subroutine emit_assign
 
 !===============================================================================
 
-recursive function emit_assign_val(em, node) result(res)
+recursive function emit_assign_val(em, node, as_stmt) result(res)
 
 	! Plain and compound assignment to a variable or an element of an array.  The
 	! value is that of the target afterward, which is lent, since `a = b = 1` is
@@ -4241,6 +4669,7 @@ recursive function emit_assign_val(em, node) result(res)
 
 	type(nemitter_t), intent(inout) :: em
 	type(syntax_node_t), intent(in) :: node
+	logical, intent(in), optional :: as_stmt
 	type(nval_t) :: res
 
 	!********
@@ -4286,18 +4715,32 @@ recursive function emit_assign_val(em, node) result(res)
 		end if
 		if (node%op%kind /= equals_token) then
 			cur = place_load(em, pl)
-			if (pl%ty == array_type) then
+			if (cur%ty == array_type) then
 				if (node%op%kind == matmul_token) then
 					call unsupported(em, 'a matrix product')
 					return
 				end if
+				if (.not. allocated(node%val%array)) then
+					call unsupported(em, 'an operation on an array')
+					return
+				end if
 				v = arr_binop_vals(em, op, node%op%text, cur, v, node%val)
+			else if (pl%has_subs) then
+				call unsupported(em, 'a compound assignment to a substring')
+				return
 			else
 				v = binop_vals(em, op, cur, v, node%op%text)
 			end if
 		end if
-		call elem_store(em, pl%p, pl%ty, v)
+		call place_store(em, pl, v)
+		if (pl%has_subs .and. present(as_stmt)) then
+			if (as_stmt) then
+				call place_done(em, pl)
+				return
+			end if
+		end if
 		res = place_load(em, pl)
+		call place_done(em, pl)
 		return
 	end if
 
@@ -4307,14 +4750,19 @@ recursive function emit_assign_val(em, node) result(res)
 		if (vty == str_type .or. size(node%lsubscripts) /= rank_ .or. .not. all_scalar(node)) then
 			! A character or substring, or a slice
 			if (node%op%kind /= equals_token) then
-				call unsupported(em, 'a compound assignment to a slice or substring')
-				return
+				! Only a slice of an array, which is made, operated on, and put back
+				if (vty /= array_type .or. size(node%lsubscripts) /= rank_ .or. &
+						node%op%kind == matmul_token .or. .not. allocated(node%val%array)) then
+					call unsupported(em, 'a compound assignment to a slice or substring')
+					return
+				end if
 			end if
 			if (vty == str_type .and. size(node%lsubscripts) /= 1) then
 				call unsupported(em, 'this subscript of a string')
 				return
 			end if
-			if (vty == array_type .and. size(node%lsubscripts) /= rank_) then
+			if (vty == array_type .and. size(node%lsubscripts) /= rank_ .and. .not. &
+					(size(node%lsubscripts) == rank_ + 1 .and. ety == str_type)) then
 				call unsupported(em, 'a subscript with the wrong number of dimensions')
 				return
 			end if
@@ -4329,16 +4777,19 @@ recursive function emit_assign_val(em, node) result(res)
 				end if
 			else
 				a = LLVMBuildLoad2(em%bld, em%t_ptr, ps, cs(''))
-				if (v%ty == array_type) then
-					call rt_void(em, 'sy_arr_slice_set', [a, subs, v%v, LLVMConstNull(em%t_ptr)])
+				if (size(node%lsubscripts) == rank_ + 1) then
+					! A substring of each of the elements of an array of strings
+					if (v%ty /= str_type) then
+						call unsupported(em, 'assigning a `'//kind_name(v%ty)//'` to a substring')
+					else
+						call rt_void(em, 'sy_arr_str_set', [a, subs, v%v])
+					end if
 				else
-					valp = entry_alloca(em, elem_ll(em, ety), 'fill')
-					if (ety == str_type) ignored = LLVMBuildStore(em%bld, LLVMConstNull(em%t_ptr), valp)
-					call elem_store(em, valp, ety, v)
-					call rt_void(em, 'sy_arr_slice_set', [a, subs, LLVMConstNull(em%t_ptr), valp])
-					if (ety == str_type) call rt_void(em, 'sy_str_free', &
-						[LLVMBuildLoad2(em%bld, em%t_ptr, valp, cs(''))])
-					v%owned = .false.
+					if (node%op%kind /= equals_token) then
+						cur = arr_val(rt_call(em, 'sy_arr_slice', em%t_ptr, [a, subs]), .true., node%val)
+						v = arr_binop_vals(em, op, node%op%text, cur, v, node%val)
+					end if
+					call arr_slice_store(em, a, subs, ety, v)
 				end if
 			end if
 			call dispose(em, v)
@@ -4590,6 +5041,9 @@ recursive subroutine emit_result_stmt(em, node)
 		if (.not. node%is_empty) then
 			if (.not. (allocated(node%lsubscripts) .or. allocated(node%member))) then
 				v = load_var(em, node)
+				if (v%ty == enum_type .or. (v%ty == array_type .and. v%elem == enum_type)) then
+					if (associated(em%enums)) v%sk = enums_slot_of(em%enums, node%val)
+				end if
 				call emit_result(em, v)
 			end if
 		end if
@@ -4676,6 +5130,10 @@ subroutine begin_fn(em, name, ret_ll, ret_ty, is_main, fn)
 
 	if (present(fn)) then
 		em%fn = fn
+	else if (is_main) then
+		! main(argc, argv)
+		fty = LLVMFunctionType(ret_ll, [em%t_i32, em%t_ptr], 2, 0)
+		em%fn = LLVMAddFunction(em%llmod, cs(name), fty)
 	else
 		nothing = c_null_ptr
 		fty = LLVMFunctionType(ret_ll, nothing, 0, 0)
@@ -5129,6 +5587,10 @@ recursive function emit_user_call(em, node) result(r)
 						(off == 1 .and. i == 1 .and. allocated(arg%lsubscripts))) then
 					! A member of a struct, or an element of an array of them
 					if (.not. place_of(em, arg, pl)) return
+					if (pl%has_subs) then
+						call unsupported(em, 'a slice of a member as a by-reference argument')
+						return
+					end if
 					args(i) = pl%p
 				else if (param_is_const(em, id, i)) then
 					v = emit_expr(em, arg)
@@ -5328,7 +5790,8 @@ recursive subroutine emit_switch(em, node, is_result)
 
 	subj = emit_expr(em, node%condition)
 	if (.not. supported_type(subj%ty) .and. subj%ty /= enum_type .and. &
-			.not. (subj%ty == array_type .and. supported_type(subj%elem))) then
+			.not. (subj%ty == array_type .and. (supported_type(subj%elem) .or. &
+			subj%elem == enum_type))) then
 		call unsupported(em, 'a `switch` on a value of type `'//kind_name(subj%ty)//'`')
 		call dispose(em, subj)
 		return
@@ -5376,7 +5839,8 @@ recursive subroutine emit_switch(em, node, is_result)
 					else
 						v = emit_expr(em, cv)
 						if (held%ty == array_type .and. v%ty == array_type .and. &
-								held%elem == v%elem) then
+								(held%elem == v%elem .or. (is_int_type(held%elem) .and. &
+								is_int_type(v%elem)))) then
 							! The same shape and elements
 							t%ty = bool_type
 							t%owned = .false.
@@ -5614,6 +6078,15 @@ recursive subroutine emit_for_array(em, node)
 
 	p = var_ptr(em, node, elem)
 	if (.not. c_associated(p)) return
+
+	! A struct loop variable is the same struct as the elements are
+	if (elem == struct_type .and. associated(em%structs)) then
+		if (node%is_loc) then
+			em%l%sk(node%id_index) = structs_slot_of(em%structs, node%array%val)
+		else
+			em%g%sk(node%id_index) = structs_slot_of(em%structs, node%array%val)
+		end if
+	end if
 
 	cond_bb  = new_block(em, 'for')
 	body_bb  = new_block(em, 'body')

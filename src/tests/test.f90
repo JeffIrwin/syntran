@@ -11914,7 +11914,7 @@ subroutine unit_test_native(npass, nfail)
 		[   &
 			! The top-level statements are main(), and printing is a call of the
 			! runtime
-			index(native_ir('println("hi");'), 'i32 @main()') > 0, &
+			index(native_ir('println("hi");'), 'i32 @main(i32') > 0, &
 			index(native_ir('println("hi");'), '@sy_println') > 0, &
 			index(native_ir('println("hi");'), 'declare void @sy_println(') > 0, &
 
@@ -11963,8 +11963,21 @@ subroutine unit_test_native(npass, nfail)
 			! What an array can't do yet is diagnosed, once per statement
 			diag_has_code(get_diags_native('let a = [1.0, 2.0, 3.0, 4.0; 2, 2]; ' &
 				//'let b = a @ a;'), EC_NATIVE_UNSUPPORTED), &
-			diag_has_code(get_diags_native('let a = [1, 2]; let b = sum(a, 0);'), &
-				EC_NATIVE_UNSUPPORTED), &
+			diag_has_code(get_diags_native('let a = [1.0, 2.0, 3.0, 4.0; 2, 2]; ' &
+				//'let b = std::transpose(a);'), EC_NATIVE_UNSUPPORTED), &
+
+			! A reduction along a dimension or with a mask is done by the runtime
+			index(native_ir('let a = [1, 2, 3, 4; 2, 2]; println(sum(a, 0), sum(a, a > 1));'), &
+				'@sy_arr_reduce') > 0, &
+
+			! The subscripts of the result of a call, and a slice of a member
+			index(native_ir('fn f(): [i32; :] { return [1, 2]; } println(f()[1]);'), &
+				'@sy_arr_new') > 0, &
+			index(native_ir('struct P { d: [i32; :], } let p = P{d = [1, 2, 3]}; ' &
+				//'p.d[0: 2] += 1; println(p.d[1: 3]);'), '@sy_arr_slice_set') > 0, &
+
+			! The arguments of the program come from main()
+			index(native_ir('println(std::args());'), '@sy_args') > 0, &
 
 			! A struct is a heap object that the runtime describes, and a method is a
 			! fn that takes its receiver by reference
