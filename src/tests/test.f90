@@ -12375,9 +12375,9 @@ subroutine unit_test_native(npass, nfail)
 			diag_has_code(get_diags_native('struct S { c: str, } ' &
 				//'let s = S{c = std::caller()};'), EC_NATIVE_UNSUPPORTED), &
 
-			! std::PI is a constant
-			index(native_ir('println(std::PI);'), '3.14159265358979') > 0 .or. &
-				index(native_ir('println(std::PI);'), 'f0x400921FB54442D18') > 0, &
+			! std::PI is a constant.  LLVM 18 prints it as 0x400921FB54442D18, and
+			! newer LLVMs as f0x400921FB54442D18
+			index(native_ir('println(std::PI);'), '0x400921FB54442D18') > 0, &
 
 			! A fn pointer is the address of a fn, which can be a variable, a
 			! parameter, or a member of a struct.  It prints as its type
