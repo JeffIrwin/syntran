@@ -6786,6 +6786,7 @@ subroutine unit_test_struct_long(npass, nfail)
 			interpret_file(path//'test-07.syntran', quiet) == 'true', &
 			interpret_file(path//'test-08.syntran', quiet) == 'true', &
 			interpret_file(path//'test-09.syntran', quiet) == 'true', &
+			interpret_file(path//'test-10.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -7614,6 +7615,7 @@ subroutine unit_test_bitwise_2(npass, nfail)
 			interpret_file(path//'test-02.syntran', quiet) == '0', &
 			interpret_file(path//'test-03.syntran', quiet) == '0', &
 			interpret_file(path//'test-04.syntran', quiet) == '0', &
+			interpret_file(path//'test-05.syntran', quiet) == '0', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -7655,6 +7657,7 @@ subroutine unit_test_ref(npass, nfail)
 			interpret_file(path//'test-07.syntran', quiet) == '0', &
 			interpret_file(path//'test-08.syntran', quiet) == '0', &
 			interpret_file(path//'test-09.syntran', quiet) == 'true', &
+			interpret_file(path//'test-10.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -10446,10 +10449,7 @@ subroutine unit_test_runtime_traces(npass, nfail)
 	! when the flag isn't set, since the OOB access is otherwise undefined
 	! behavior that faults straight through to a raw Fortran abort
 	!
-	! Not with --native: there a by-ref receiver is the address of the element, not a
-	! copy that is written back, so after shrink() it's a dangling pointer, and
-	! writing x through it is undefined behavior (see doc/native.md)
-	if (bounds_check .and. .not. test_native) then
+	if (bounds_check) then
 		diag_ = get_diags_file(P//'implicit-ret.syntran')
 		call unit_test_coda( [ &
 			diag_has_code(diag_, RC_SUBSCRIPT_OOB), &

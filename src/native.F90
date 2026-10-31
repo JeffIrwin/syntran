@@ -279,6 +279,10 @@ module syntran__native_m
 		! The name of each user fn, by id, for the trace of the calls
 		type(string_t), allocatable :: fnames(:)
 
+		! Is the target x86?  A float that is out of range converts to the smallest
+		! integer there, rather than saturating
+		logical :: x86 = .false.
+
 		! Does the fn being built push a frame of the call stack?
 		logical :: pushes = .false.
 
@@ -596,6 +600,8 @@ subroutine em_init(em, ok)
 	em%tm = LLVMCreateTargetMachine(tgt, cs(triple), cs(cpu), cs(feats), &
 		LLVM_CODEGEN_DEFAULT, LLVM_RELOC_PIC, LLVM_CODE_MODEL_DEFAULT)
 
+	em%x86 = index(triple, 'x86_64') == 1 .or. index(triple, 'i386') == 1 .or. &
+		index(triple, 'i686') == 1
 	call LLVMSetTarget(em%llmod, cs(triple))
 	dl = LLVMCreateTargetDataLayout(em%tm)
 	call LLVMSetModuleDataLayout(em%llmod, dl)
@@ -1251,6 +1257,57 @@ end subroutine dispose
 
 !===============================================================================
 
+function fp_to_int(em, v, to) result(r)
+
+	! A float to an integer, truncated.  What it does when the float is out of
+	! range or NaN is undefined in LLVM, so it is whatever the machine does, like
+	! the interpreter: x86 gives the smallest integer, and others saturate and
+	! give 0 for NaN
+
+	type(nemitter_t), intent(inout) :: em
+	type(c_ptr), intent(in) :: v
+	integer, intent(in) :: to
+	type(c_ptr) :: r
+
+	!********
+
+	logical :: from32
+
+	real(c_double) :: lo, hi
+
+	type(c_ptr) :: ity, fty, ok, small
+
+	from32 = c_associated(LLVMTypeOf(v), em%t_f32)
+	ity = merge(em%t_i32, em%t_i64, to == i32_type)
+	fty = merge(em%t_f32, em%t_f64, from32)
+
+	if (to == i32_type) then
+		r = rt_call(em, merge('llvm.fptosi.sat.i32.f32', 'llvm.fptosi.sat.i32.f64', from32), ity, [v])
+	else
+		r = rt_call(em, merge('llvm.fptosi.sat.i64.f32', 'llvm.fptosi.sat.i64.f64', from32), ity, [v])
+	end if
+	if (.not. em%x86) return
+
+	if (to == i32_type) then
+		hi = 2147483648.0_c_double
+		lo = merge(-2147483648.0_c_double, -2147483649.0_c_double, from32)
+	else
+		hi = 9223372036854775808.0_c_double
+		lo = -9223372036854775808.0_c_double
+	end if
+
+	! Everything that is not in range, including NaN, since the compares are ordered
+	ok = LLVMBuildAnd(em%bld, &
+		LLVMBuildFCmp(em%bld, merge(LLVM_REAL_OGE, LLVM_REAL_OGT, to == i64_type .or. from32), &
+			v, LLVMConstReal(fty, lo), cs('')), &
+		LLVMBuildFCmp(em%bld, LLVM_REAL_OLT, v, LLVMConstReal(fty, hi), cs('')), cs(''))
+	small = LLVMConstInt(ity, ishft(1_c_int64_t, merge(31, 63, to == i32_type)), 0)
+	r = LLVMBuildSelect(em%bld, ok, r, small, cs(''))
+
+end function fp_to_int
+
+!===============================================================================
+
 function convert(em, v, to) result(r)
 
 	! Convert a number to another type of number
@@ -1272,7 +1329,7 @@ function convert(em, v, to) result(r)
 		case (i64_type)
 			r%v = LLVMBuildTrunc(em%bld, v%v, em%t_i32, cs(''))
 		case (f32_type, f64_type)
-			r%v = LLVMBuildFPToSI(em%bld, v%v, em%t_i32, cs(''))
+			r%v = fp_to_int(em, v%v, i32_type)
 		end select
 
 	case (i64_type)
@@ -1280,7 +1337,7 @@ function convert(em, v, to) result(r)
 		case (i32_type)
 			r%v = LLVMBuildSExt(em%bld, v%v, em%t_i64, cs(''))
 		case (f32_type, f64_type)
-			r%v = LLVMBuildFPToSI(em%bld, v%v, em%t_i64, cs(''))
+			r%v = fp_to_int(em, v%v, i64_type)
 		end select
 
 	case (f32_type)
@@ -3721,16 +3778,23 @@ recursive function emit_member_read(em, node) result(r)
 		call unsupported(em, 'a member of the result of a `'//kind_name(node%root_kind)//'`')
 		return
 	end if
-	if (allocated(node%lsubscripts)) then
-		call unsupported(em, 'a subscripted fn call')
-		return
-	end if
 
-	! The call makes a struct that is only the member's until it is copied out
+	! The call makes a struct that is only the member's until it is copied out.
+	! If it has subscripts, like `f()[i].x`, then they select the struct from the
+	! array that the call makes, and they stay with the call
 	root = node
 	root%kind = node%root_kind
 	root%root_kind = 0
 	deallocate(root%member)
+
+	if (node%root_kind /= fn_call_ptr_expr) then
+		! The type of the call is that of the struct, and not of the member
+		root%val%type = struct_type
+		if (allocated(em%fns%fns(node%id_index)%type%struct_cookie)) &
+			root%val%struct_cookie = em%fns%fns(node%id_index)%type%struct_cookie
+		if (allocated(em%fns%fns(node%id_index)%type%struct_name)) &
+			root%val%struct_name = em%fns%fns(node%id_index)%type%struct_name
+	end if
 
 	if (node%root_kind == fn_call_ptr_expr) then
 		! What the fn returns is part of the type of the pointer.  The struct is
@@ -3820,6 +3884,8 @@ function binop_vals(em, op, l, r, op_text) result(res)
 	!********
 
 	integer :: ct, bits
+
+	type(c_ptr) :: masked
 
 	type(nval_t) :: a, b
 
@@ -3926,7 +3992,8 @@ function binop_vals(em, op, l, r, op_text) result(res)
 	end if
 
 	! Shifts are in the width of the left operand, and are logical.  A shift by
-	! as many bits as it has or more is 0, which LLVM leaves undefined
+	! as many bits as it has or more is 0, which LLVM leaves undefined.  A negative
+	! count is masked like Fortran's shifts do
 	if (op == lless_token .or. op == ggreater_token) then
 		if (l%ty /= i32_type .and. l%ty /= i64_type) then
 			call unsupported(em, 'a shift of type `'//kind_name(l%ty)//'`')
@@ -3937,13 +4004,16 @@ function binop_vals(em, op, l, r, op_text) result(res)
 		a = l
 		b = convert(em, r, l%ty)
 		res%ty = l%ty
+		! The count is masked to the width, so a negative one wraps like in Fortran
+		masked = LLVMBuildAnd(em%bld, b%v, &
+			LLVMConstInt(ll_type(em, l%ty), int(bits - 1, c_int64_t), 0), cs(''))
 		if (op == lless_token) then
-			res%v = LLVMBuildShl(em%bld, a%v, b%v, cs(''))
+			res%v = LLVMBuildShl(em%bld, a%v, masked, cs(''))
 		else
-			res%v = LLVMBuildLShr(em%bld, a%v, b%v, cs(''))
+			res%v = LLVMBuildLShr(em%bld, a%v, masked, cs(''))
 		end if
 		res%v = LLVMBuildSelect(em%bld, &
-			LLVMBuildICmp(em%bld, LLVM_INT_ULT, b%v, &
+			LLVMBuildICmp(em%bld, LLVM_INT_SLT, b%v, &
 				LLVMConstInt(ll_type(em, l%ty), int(bits, c_int64_t), 0), cs('')), &
 			res%v, LLVMConstNull(ll_type(em, l%ty)), cs(''))
 		return
@@ -6596,18 +6666,22 @@ recursive function emit_user_call(em, node) result(r)
 
 	!********
 
-	integer :: i, n, id, off
+	integer :: i, n, id, off, saved_n
 
-	type(c_ptr) :: fn, ignored
-	type(c_ptr), allocatable :: args(:)
+	logical :: copy_back, ok
 
-	type(nval_t) :: v
+	type(c_ptr) :: fn, ignored, recv_slot
+	type(c_ptr), allocatable :: args(:), saved(:)
+
+	type(nval_t) :: v, cur
 	type(nval_t), allocatable :: pending(:)
 
 	type(place_t) :: pl
 
 	id = node%id_index
 	r = dummy_val(em, node%val%type)
+	copy_back = .false.
+	saved_n = 0
 
 	! The receiver of a method is its first argument
 	off = merge(1, 0, node%kind == method_call_expr)
@@ -6640,12 +6714,37 @@ recursive function emit_user_call(em, node) result(r)
 				else if (arg%kind == dot_expr .or. allocated(arg%member) .or. &
 						(off == 1 .and. i == 1 .and. allocated(arg%lsubscripts))) then
 					! A member of a struct, or an element of an array of them
-					if (.not. place_of(em, arg, pl)) return
+					copy_back = off == 1 .and. i == 1 .and. .not. em%fns%fns(id)%is_const_method
+					if (copy_back) copy_back = chain_scalar_subs(arg) > 0
+					if (copy_back) em%idx_mode = 1
+					em%idx_n = 0
+					ok = place_of(em, arg, pl)
+					em%idx_mode = 0
+					if (.not. ok) return
 					if (pl%has_subs) then
 						call unsupported(em, 'a slice of a member as a by-reference argument')
 						return
 					end if
-					args(i) = pl%p
+					if (copy_back) then
+						! Like the interpreter, the method gets a copy of a receiver that is
+						! an element of an array, which is put back when it returns.  Whatever
+						! else the method does to the array, then, is not seen by the method,
+						! and the receiver is made again after it, with the subscripts that it
+						! had.  A method that makes the receiver go away fails that, instead
+						! of writing to memory that was freed.  A receiver that is only
+						! members of a variable isn't copied, since the interpreter moves it,
+						! and a deep recursion on a list would be cubic if it was copied
+						if (em%idx_n > 0) saved = em%idx_slots(1: em%idx_n)
+						saved_n = em%idx_n
+						cur = place_load(em, pl)
+						recv_slot = entry_alloca(em, em%t_ptr, 'recv')
+						ignored = LLVMBuildStore(em%bld, rt_call(em, dup_fn(struct_type), &
+							em%t_ptr, [cur%v]), recv_slot)
+						call place_done(em, pl)
+						args(i) = recv_slot
+					else
+						args(i) = pl%p
+					end if
 				else if (param_is_const(em, id, i)) then
 					v = emit_expr(em, arg)
 					args(i) = entry_alloca(em, ll_type(em, v%ty), 'tmp')
@@ -6685,9 +6784,62 @@ recursive function emit_user_call(em, node) result(r)
 	! The fn changed the location that the runtime has
 	call set_loc(em, force = .true.)
 
+	if (copy_back) call put_receiver_back()
+
 	do i = 1, n
 		call dispose(em, pending(i))
 	end do
+
+contains
+
+	subroutine put_receiver_back()
+
+		! The receiver is put back by the return of the method, which is in its
+		! frame, at its declaration, if that can fail
+
+		integer :: save_src, save_pos, save_loc
+
+		type(nval_t) :: back
+
+		save_src = em%cur_src_id
+		save_pos = em%cur_src_pos
+		save_loc = em%cur_loc
+
+		if (bounds_check) then
+			call push_frame(em, id)
+			if (allocated(em%fns%fns(id)%node)) then
+				if (em%fns%fns(id)%node%src_id > 0) then
+					em%cur_src_id  = em%fns%fns(id)%node%src_id
+					em%cur_src_pos = em%fns%fns(id)%node%src_pos
+					em%cur_loc = loc_id(em)
+					call set_loc(em, force = .true.)
+				end if
+			end if
+		end if
+
+		if (saved_n > 0) em%idx_slots(1: saved_n) = saved
+		em%idx_n = 0
+		em%idx_mode = 2
+		em%assigning = .true.
+		ok = place_of(em, node%args(1), pl)
+		em%assigning = .false.
+		em%idx_mode = 0
+
+		if (ok) then
+			back%ty = struct_type
+			back%owned = .true.
+			back%v = LLVMBuildLoad2(em%bld, em%t_ptr, recv_slot, cs(''))
+			call place_store(em, pl, back)
+			call place_done(em, pl)
+		end if
+
+		if (bounds_check) call pop_frame(em)
+		em%cur_src_id  = save_src
+		em%cur_src_pos = save_pos
+		em%cur_loc = save_loc
+		call set_loc(em, force = .true.)
+
+	end subroutine put_receiver_back
 
 end function emit_user_call
 
