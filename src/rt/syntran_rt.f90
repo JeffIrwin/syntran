@@ -1680,7 +1680,8 @@ function rt_fmt_val(kind_, ival, bits, rval, sval, sp) result(out)
             zero_ok = .false.
             digits = 'NaN'
         else
-            if (sign(1.0_real64, rval) < 0) then
+            ! The sign bit, because sign() doesn't see the sign of -0.0 in ifx
+            if (transfer(rval, rbits) < 0) then
                 prefix = '-'
             else if (plus) then
                 prefix = '+'
