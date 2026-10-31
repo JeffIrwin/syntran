@@ -12005,7 +12005,23 @@ subroutine unit_test_native(npass, nfail)
 			index(native_ir('fn sq(x: i32): i32 { return x * x; } let f = sq; println(f);'), &
 				'fn(i32): i32') > 0, &
 			.not. native_ir_is_empty('fn a(): i32 { return 1; } fn b(): i32 { return 2; } ' &
-				//'let f = a; println(f == b);') &
+				//'let f = a; println(f == b);'), &
+
+			! A file handle is a heap object that the runtime makes, and writing
+			! and reading it are calls of the runtime
+			index(native_ir('let f = open("x.txt", "w"); writeln(f, 1); close(f);'), &
+				'@sy_file_open') > 0, &
+			index(native_ir('let f = open("x.txt", "w"); writeln(f, 1); close(f);'), &
+				'@sy_file_wi32') > 0, &
+			index(native_ir('let f = open("x.txt", "r"); while not eof(f) { println(readln(f)); } ' &
+				//'close(f);'), '@sy_file_readln') > 0, &
+			index(native_ir('let f = open("x.bin", "wb"); std::write(f, [1.5, 2.5]); close(f);'), &
+				'@sy_file_warr') > 0, &
+			.not. native_ir_is_empty('let f = std::try_open("x", "r"); println(f.is_open, f.eof, ' &
+				//'f.name, std::exists("x"));'), &
+			.not. native_ir_is_empty('let f = open("x.bin", "rb"); println(std::read_i32(f), ' &
+				//'std::read_f64(f, 2));'), &
+			.not. native_ir_is_empty('writeln(std::OUT, "hi"); let s = readln(); println(eof());') &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

@@ -70,6 +70,11 @@ This is a subset of the language so far:
 - Structs, including methods, members that are arrays or other structs, arrays
   of structs, and optional structs (`?Node`) that can be `null`.  A struct is a
   value, so assigning or passing one copies it
+- Files: `open`, `std::try_open`, `close`, `readln`, `eof`, `writeln`,
+  `std::write`, `std::exists`, `std::read_i32` and the other `std::read_<type>`
+  fns, `std::IN`, `std::OUT`, and `std::ERR`, and the members `f.is_open`,
+  `f.eof`, and `f.name`.  A file handle is a value, so assigning or passing one
+  copies it
 - Function pointers: `fn(i32): i32` variables, parameters, return values, and
   members of structs.  They compare with `==` and print as their type, as in the
   interpreter
@@ -81,7 +86,7 @@ This is a subset of the language so far:
 Programs which use anything else are rejected with
 [E130](errors.md#e130----native-unsupported), pointing at each statement which
 isn't supported.  Run them with the interpreter instead.  So far, that includes
-files, the matrix product `@`, a `dim` or `mask` argument
+`format()` and `std::writef()`, `getenv()` and `args()`, the matrix product `@`, a `dim` or `mask` argument
 of the reductions above, slices or substrings of a member of a struct, and a
 member or subscript of the result of a call through a function pointer.
 
@@ -89,11 +94,16 @@ member or subscript of the result of a call through a function pointer.
 
 The output of a compiled program is the same as the interpreter's, but:
 
-- Syntran runtime errors are not checked yet.  In particular, a subscript which
-  is out of bounds is undefined behavior, as it is in the interpreter unless it
-  is built with `SYNTRAN_BOUNDS_CHECK`.
+- Most syntran runtime errors are not checked yet.  In particular, a subscript
+  which is out of bounds is undefined behavior, as it is in the interpreter
+  unless it is built with `SYNTRAN_BOUNDS_CHECK`.  The ones that are, like
+  reading a file that isn't open, are written to stderr as
+  `Runtime error[R9]: ...` and the program exits with status 1.  The interpreter
+  writes them to stdout, with the line of the source and a stack trace.
 - Overflow of integers wraps around, like in the interpreter.  Division of an
   integer by zero is 0, and `%` by zero is the dividend, like it is there.
+- Opening a file with mode `"w"` empties it right away.  The interpreter only
+  does when it first writes to it.
 
 ## How it works
 

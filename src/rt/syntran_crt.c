@@ -19,9 +19,11 @@
 #include <errno.h>
 #include <math.h>
 #include <stdint.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 typedef struct {
     int64_t len;
@@ -1195,4 +1197,527 @@ sy_str *sy_struct_str(const sy_struct *s)
     r = sy_str_from(b.p, (int64_t)b.n);
     free(b.p);
     return r;
+}
+
+/*============================================================================*/
+
+/* Files.  A file handle is a value, like in the interpreter: copying one copies
+ * its flags, so that reading from a handle, or closing it, does not change the
+ * flags of a copy.  The FILE itself is shared.  The variable that holds a
+ * handle owns it, and readln(), eof(), and close() change that one in place */
+typedef struct {
+    FILE *fp;
+    sy_str *name;
+    int8_t rd, wr, app, bin, is_open, eof, is_std;
+} sy_file;
+
+/* Did readln() or eof() hit the end of stdin?  It is not on the handle */
+static int8_t sy_stdin_eof = 0;
+
+/* The runtime error of the interpreter.  Unlike its message, which goes to
+ * stdout with the source line and a stack trace, this goes to stderr */
+static void sy_rt_error(const char *code, const char *fmt, ...)
+{
+    va_list ap;
+
+    fflush(stdout);
+    fprintf(stderr, "Runtime error[%s]: ", code);
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+    fputc('\n', stderr);
+    exit(1);
+}
+
+static sy_file *sy_file_blank(const char *name, int64_t len)
+{
+    sy_file *f = (sy_file *)calloc(1, sizeof(sy_file));
+
+    if (f == NULL) sy_fatal("out of memory");
+    f->name = sy_str_from(name, len);
+    return f;
+}
+
+void sy_file_free(sy_file *f)
+{
+    if (f == NULL) return;
+    sy_str_free(f->name);
+    free(f);
+}
+
+sy_file *sy_file_dup(const sy_file *f)
+{
+    sy_file *r;
+
+    if (f == NULL) return NULL;
+    r = sy_file_blank(f->name->data, f->name->len);
+    r->fp = f->fp;
+    r->rd = f->rd;
+    r->wr = f->wr;
+    r->app = f->app;
+    r->bin = f->bin;
+    r->is_open = f->is_open;
+    r->eof = f->eof;
+    r->is_std = f->is_std;
+    return r;
+}
+
+/* std::IN, std::OUT, or std::ERR, for k = 0, 1, or 2 */
+sy_file *sy_file_std(int32_t k)
+{
+    static const char *const names[] = {"stdin", "stdout", "stderr"};
+    sy_file *f = sy_file_blank(names[k], (int64_t)strlen(names[k]));
+
+    f->fp = k == 0 ? stdin : k == 1 ? stdout : stderr;
+    f->rd = k == 0;
+    f->wr = k != 0;
+    f->is_open = 1;
+    f->is_std = 1;
+    return f;
+}
+
+/* open(), or std::try_open() if not `must`, which makes a closed handle where
+ * open() would fail.  The mode is any of r, w, a (which writes at the end), and
+ * b (binary).  Unlike Fortran, "w" truncates a file when it's opened, not when
+ * it is first written to */
+sy_file *sy_file_open(const sy_str *name, const sy_str *mode, int32_t must)
+{
+    char fm[4];
+    int64_t i;
+    sy_file *f = sy_file_blank(name->data, name->len);
+
+    for (i = 0; i < mode->len; i++) {
+        switch (mode->data[i]) {
+        case 'r':
+            f->rd = 1;
+            break;
+        case 'w':
+            f->wr = 1;
+            break;
+        case 'a':
+            f->wr = 1;
+            f->app = 1;
+            break;
+        case 'b':
+            f->bin = 1;
+            break;
+        default:
+            sy_rt_error("R6", "bad file mode character \"%c\"", mode->data[i]);
+        }
+    }
+    if (f->rd && f->wr) {
+        sy_rt_error("R7", "cannot open file \"%s\" in combined read/write mode \"%s\"",
+            name->data, mode->data);
+    }
+
+    strcpy(fm, f->rd ? "r" : f->app ? "a" : f->wr ? "w" : "a+");
+    if (f->bin) strcat(fm, "b");
+    f->fp = fopen(name->data, fm);
+    if (f->fp == NULL) {
+        if (must) sy_rt_error("R8", "cannot open file \"%s\" (iostat = %d)", name->data, errno);
+        return f;
+    }
+    f->is_open = 1;
+    return f;
+}
+
+int8_t sy_exists(const sy_str *path)
+{
+    struct stat st;
+
+    if (path->len == 0) return 0;
+    return stat(path->data, &st) == 0;
+}
+
+void sy_file_close(sy_file *f)
+{
+    if (f->is_std) {
+        sy_rt_error("R28", "close() cannot be called on standard file handle \"%s\"",
+            f->name->data);
+    }
+    if (!f->is_open) {
+        sy_rt_error("R16", "close() was called for file \"%s\" which is not open",
+            f->name->data);
+    }
+    f->is_open = 0;
+    if (fclose(f->fp) != 0) {
+        sy_rt_error("R31", "cannot close() file \"%s\" (iostat = %d)", f->name->data, errno);
+    }
+    f->fp = NULL;
+}
+
+/* The members f.is_open, f.eof, and f.name */
+int8_t sy_file_is_open(const sy_file *f)
+{
+    return f->is_open;
+}
+
+static int sy_file_at_eof(const sy_file *f)
+{
+    return f->fp == stdin ? sy_stdin_eof : f->eof;
+}
+
+int8_t sy_file_eof_member(const sy_file *f)
+{
+    return (int8_t)sy_file_at_eof(f);
+}
+
+sy_str *sy_file_name(const sy_file *f)
+{
+    return sy_str_from(f->name->data, f->name->len);
+}
+
+/*----------------------------------------------------------------------------*/
+
+/* The line that is read next, without its line break (a CR before the LF is
+ * dropped too).  If the file ends before a line break, `*hit_eof` is set, and
+ * the line is what came before the end, which is "" at the end of a file that
+ * does end with a line break.  Like the interpreter's, a read that hits the end
+ * is not an error, the next one is */
+static sy_str *sy_read_line(FILE *fp, int *hit_eof)
+{
+    int c;
+    size_t n = 0, cap = 128;
+    char *buf = (char *)malloc(cap);
+    sy_str *s;
+
+    if (buf == NULL) sy_fatal("out of memory");
+    while ((c = getc(fp)) != EOF && c != '\n') {
+        if (n + 1 > cap) {
+            cap *= 2;
+            buf = (char *)realloc(buf, cap);
+            if (buf == NULL) sy_fatal("out of memory");
+        }
+        buf[n++] = (char)c;
+    }
+    *hit_eof = c == EOF;
+    if (c == '\n' && n > 0 && buf[n - 1] == '\r') n--;
+    s = sy_str_from(buf, (int64_t)n);
+    free(buf);
+    return s;
+}
+
+/* The checks that readln(), eof(), and std::read_<type>() make of the file they
+ * read from: that it is open (code `c_open`), that it is open for reading
+ * (`c_mode`), and for the first two that it isn't binary */
+static void sy_file_rcheck(const sy_file *f, const char *fn, const char *c_open,
+    const char *c_mode, const char *binary_hint)
+{
+    if (!f->is_open) {
+        sy_rt_error(c_open, "%s() was called for file \"%s\" which is not open", fn,
+            f->name->data);
+    }
+    if (!f->rd) {
+        sy_rt_error(c_mode, "%s() was called for file \"%s\" which was not opened in read "
+            "mode \"r\"", fn, f->name->data);
+    }
+    if (binary_hint != NULL && f->bin) {
+        sy_rt_error("R43", "%s() was called for file \"%s\" which was opened in binary "
+            "mode \"b\"%s", fn, f->name->data, binary_hint);
+    }
+}
+
+sy_str *sy_file_readln(sy_file *f)
+{
+    int hit;
+    sy_str *s;
+
+    sy_file_rcheck(f, "readln", "R9", "R10",
+        ".  Use std::read_i32() etc. instead");
+    if (sy_file_at_eof(f)) {
+        sy_rt_error("R11", "cannot readln() from file \"%s\" past end of file",
+            f->name->data);
+    }
+    s = sy_read_line(f->fp, &hit);
+    if (hit) {
+        if (f->fp == stdin) sy_stdin_eof = 1;
+        else f->eof = 1;
+    }
+    return s;
+}
+
+/* readln() of stdin */
+sy_str *sy_stdin_readln(void)
+{
+    int hit;
+    sy_str *s;
+
+    if (sy_stdin_eof) sy_rt_error("R11", "cannot readln() from stdin past end of input");
+    s = sy_read_line(stdin, &hit);
+    if (hit) sy_stdin_eof = 1;
+    return s;
+}
+
+int8_t sy_file_eof(const sy_file *f)
+{
+    sy_file_rcheck(f, "eof", "R14", "R15", "");
+    return (int8_t)sy_file_at_eof(f);
+}
+
+int8_t sy_stdin_at_eof(void)
+{
+    return sy_stdin_eof;
+}
+
+/*----------------------------------------------------------------------------*/
+
+/* Writing.  Each value of a call is written on its own, in the order that they
+ * are given.  In a text file, that is what str() of it is, and in a binary file
+ * it is the bytes that the value is stored as.  A value that has no bytes, like
+ * a struct, can't be written to a binary file */
+void sy_file_wcheck(const sy_file *f, int32_t is_writeln)
+{
+    const char *fn = is_writeln ? "writeln" : "write";
+
+    if (!f->is_open) {
+        sy_rt_error("R12", "%s() was called for file \"%s\" which is not open", fn,
+            f->name->data);
+    }
+    if (!f->wr) {
+        sy_rt_error("R13", "%s() was called for file \"%s\" which was not opened in write "
+            "mode \"w\"", fn, f->name->data);
+    }
+    if (is_writeln && f->bin) {
+        sy_rt_error("R43", "writeln() was called for file \"%s\" which was opened in binary "
+            "mode \"b\".  Use write() instead", f->name->data);
+    }
+}
+
+static void sy_file_put(sy_file *f, const void *p, size_t n)
+{
+    if (n > 0 && fwrite(p, 1, n, f->fp) != n) {
+        sy_rt_error("R30", "cannot write() to file \"%s\" (iostat = %d)", f->name->data, errno);
+    }
+}
+
+static void sy_file_put_str(sy_file *f, sy_str *s)
+{
+    sy_file_put(f, s->data, (size_t)s->len);
+    sy_str_free(s);
+}
+
+static void sy_file_bad_type(const sy_file *f, const char *tname)
+{
+    sy_rt_error("R45", "write() can not write a value of type `%s` to file \"%s\" which "
+        "was opened in binary mode \"b\"", tname, f->name->data);
+}
+
+void sy_file_wnl(sy_file *f)
+{
+    sy_file_put(f, "\n", 1);
+}
+
+void sy_file_wstr(sy_file *f, const sy_str *s)
+{
+    sy_file_put(f, s->data, (size_t)s->len);
+}
+
+void sy_file_wi32(sy_file *f, int32_t x)
+{
+    if (f->bin) sy_file_put(f, &x, sizeof x);
+    else sy_file_put_str(f, sy_str_i32(x));
+}
+
+void sy_file_wi64(sy_file *f, int64_t x)
+{
+    if (f->bin) sy_file_put(f, &x, sizeof x);
+    else sy_file_put_str(f, sy_str_i64(x));
+}
+
+void sy_file_wf32(sy_file *f, float x)
+{
+    if (f->bin) sy_file_put(f, &x, sizeof x);
+    else sy_file_put_str(f, sy_str_f32(x));
+}
+
+void sy_file_wf64(sy_file *f, double x)
+{
+    if (f->bin) sy_file_put(f, &x, sizeof x);
+    else sy_file_put_str(f, sy_str_f64(x));
+}
+
+void sy_file_wbool(sy_file *f, int8_t x)
+{
+    if (f->bin) sy_file_put(f, &x, sizeof x);
+    else sy_file_put_str(f, sy_str_bool(x));
+}
+
+/* An array, whose elements are enums if `names` is not NULL */
+void sy_file_warr(sy_file *f, const sy_arr *a, const sy_str *const *names, const char *tname)
+{
+    if (!f->bin) {
+        sy_file_put_str(f, names != NULL ? sy_arr_str_names(a, names) : sy_arr_str(a));
+        return;
+    }
+    if (names != NULL || a->elem == SY_STR || a->elem == SY_ARR || a->elem == SY_STRUCT) {
+        sy_file_bad_type(f, tname);
+    }
+    sy_file_put(f, a->data, (size_t)a->len * sy_esize(a->elem));
+}
+
+void sy_file_wstruct(sy_file *f, const sy_struct *s, const char *tname)
+{
+    if (f->bin) sy_file_bad_type(f, tname);
+    sy_file_put_str(f, sy_struct_str(s));
+}
+
+void sy_file_wenum(sy_file *f, int32_t v, const sy_str *const *names, const char *tname)
+{
+    if (f->bin) sy_file_bad_type(f, tname);
+    sy_file_put(f, names[v]->data, (size_t)names[v]->len);
+}
+
+/*----------------------------------------------------------------------------*/
+
+/* std::read_<type>().  In a text file, values are separated by blanks, tabs, or
+ * commas and can be on different lines.  The rest of the line of the last value
+ * is skipped.  Unlike a list-directed read, `/`, `*`, and quotes are not special
+ * and an empty field like the one in `1,,3` is not a null value: they are all
+ * errors, so that a bad value is never skipped or repeated.  A binary file is
+ * read as the bytes the values are stored as.  The values go to `out`, which has
+ * room for `n` of the type `elem` */
+static void sy_read_fail(const sy_file *f, const char *fn, const char *what)
+{
+    sy_rt_error("R44", "cannot %s() from file \"%s\" %s", fn, f->name->data, what);
+}
+
+static void sy_read_bad(const sy_file *f, const char *fn, const char *tok)
+{
+    char what[256];
+
+    if (tok[0] == '\0') snprintf(what, sizeof what, "(empty value)");
+    else snprintf(what, sizeof what, "(invalid value \"%.200s\")", tok);
+    sy_read_fail(f, fn, what);
+}
+
+static int sy_is_sep(int c)
+{
+    return c == ' ' || c == '\t' || c == '\r' || c == ',';
+}
+
+/* Fortran's list-directed read takes a `d` for an exponent too */
+static int sy_tok_value(int32_t elem, const char *tok, void *out)
+{
+    char *end, tmp[128];
+    size_t i, n = strlen(tok);
+    long long iv;
+    double dv;
+
+    if (n == 0 || n >= sizeof tmp) return 0;
+    errno = 0;
+    if (elem == SY_I32 || elem == SY_I64) {
+        iv = strtoll(tok, &end, 10);
+        if (*end != '\0' || errno != 0) return 0;
+        if (elem == SY_I32) {
+            if (iv < -2147483648LL || iv > 2147483647LL) return 0;
+            *(int32_t *)out = (int32_t)iv;
+        } else {
+            *(int64_t *)out = (int64_t)iv;
+        }
+        return 1;
+    }
+    for (i = 0; i <= n; i++) tmp[i] = (tok[i] == 'd' || tok[i] == 'D') ? 'e' : tok[i];
+    dv = strtod(tmp, &end);
+    if (*end != '\0' || end == tmp) return 0;
+    if (elem == SY_F32) *(float *)out = (float)dv;
+    else *(double *)out = dv;
+    return 1;
+}
+
+static void sy_read_values(sy_file *f, int32_t elem, int64_t n, void *out)
+{
+    static const char *const fns[] = {"read_i32", "read_i64", "read_f32", "read_f64"};
+    const char *fn = fns[elem];
+    size_t es = sy_esize(elem);
+    int64_t k = 0, i, j;
+    int hit, after_tok = 0;
+    char tok[256];
+    sy_str *line;
+
+    sy_file_rcheck(f, fn, "R9", "R10", NULL);
+    if (sy_file_at_eof(f)) sy_read_fail(f, fn, "past the end of the file");
+
+    if (f->bin) {
+        if (n > 0 && fread(out, es, (size_t)n, f->fp) != (size_t)n) {
+            sy_read_fail(f, fn, "past the end of the file");
+        }
+        return;
+    }
+
+    while (k < n) {
+        line = sy_read_line(f->fp, &hit);
+        if (hit && line->len == 0) sy_read_fail(f, fn, "past the end of the file");
+        i = 0;
+        while (i < line->len && k < n) {
+            char c = line->data[i];
+
+            if (c == ' ' || c == '\t' || c == '\r') {
+                i++;
+            } else if (c == ',') {
+                if (!after_tok) sy_read_bad(f, fn, "");
+                after_tok = 0;
+                i++;
+            } else {
+                for (j = i; j < line->len && !sy_is_sep(line->data[j]); j++) {}
+                if (j - i >= (int64_t)sizeof tok) sy_read_bad(f, fn, "");
+                memcpy(tok, line->data + i, (size_t)(j - i));
+                tok[j - i] = '\0';
+                if (strpbrk(tok, "/*'\"") != NULL ||
+                    !sy_tok_value(elem, tok, (char *)out + (size_t)k * es)) {
+                    sy_read_bad(f, fn, tok);
+                }
+                k++;
+                after_tok = 1;
+                i = j;
+            }
+        }
+        sy_str_free(line);
+    }
+}
+
+int32_t sy_file_read_i32(sy_file *f)
+{
+    int32_t x = 0;
+
+    sy_read_values(f, SY_I32, 1, &x);
+    return x;
+}
+
+int64_t sy_file_read_i64(sy_file *f)
+{
+    int64_t x = 0;
+
+    sy_read_values(f, SY_I64, 1, &x);
+    return x;
+}
+
+float sy_file_read_f32(sy_file *f)
+{
+    float x = 0;
+
+    sy_read_values(f, SY_F32, 1, &x);
+    return x;
+}
+
+double sy_file_read_f64(sy_file *f)
+{
+    double x = 0;
+
+    sy_read_values(f, SY_F64, 1, &x);
+    return x;
+}
+
+/* A rank 1 array of n values.  The type of the elements is SY_I32, etc. */
+sy_arr *sy_file_read_arr(sy_file *f, int32_t elem, int64_t n)
+{
+    sy_arr *a;
+
+    if (n < 0) {
+        sy_rt_error("R44", "cannot read_%s() a negative number of values (n = %lld)",
+            elem == SY_I32 ? "i32" : elem == SY_I64 ? "i64" : elem == SY_F32 ? "f32" : "f64",
+            (long long)n);
+    }
+    a = sy_arr_new(elem, 1, &n);
+    sy_read_values(f, elem, n, a->data);
+    return a;
 }
