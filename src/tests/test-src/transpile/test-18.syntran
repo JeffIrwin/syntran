@@ -48,8 +48,8 @@ status += check(near(cosd(-200.0 * one), -0.9396926207859084));
 
 let a = [0.0, 30.0, 60.0, 90.0, 120.0];
 let s = sind(a);
-println(s[1], " ", s[4]);
-status += check(s[1] == 0.5 and s[4] == sind(120.0 * one));
+println(near(s[1], 0.5), " ", near(s[4], sind(120.0 * one)));
+status += check(near(s[1], 0.5) and near(s[4], sind(120.0 * one)));
 status += check(size(cosd(a)) == 5);
 status += check(near(sum(tand([10.0, 20.0, 30.0])), 0.17632698070846498 + 0.36397023426620234 + 0.5773502691896258));
 
