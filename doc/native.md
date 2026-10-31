@@ -67,6 +67,7 @@ This is a subset of the language so far:
 - These intrinsic functions: `println`, `std::print`, `str`, `exit`, `len`,
   `repeat`, `char`, `i32`, `i64`, `f32`, `f64`, `abs`, `min`, `max`, `sqrt`,
   `exp`, `log`, `log2`, `log10`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`,
+  `sind`, `cosd`, `tand`, `asind`, `acosd`, `atand`,
   `parse_i32`, `parse_i64`, `parse_f32`, `parse_f64`, `parse_bool`, `size`,
   `reshape`, `shape`, and `sum`, `product`, `minval`, `maxval`, `all`, `any`, and
   `count` of an array, with a `dim` or a `mask` or both.  The math functions and
@@ -100,9 +101,9 @@ This is a subset of the language so far:
 
 Programs which use anything else are rejected with
 [E130](errors.md#e130----native-unsupported), pointing at each statement which
-isn't supported.  Run them with the interpreter instead.  So far, that includes
-`sind()` and the other trig fns in degrees, and a subscript of the result of a
-call through a function pointer that is in a variable.
+isn't supported.  Run them with the interpreter instead.  So far, that is a
+subscript of the result of a call through a function pointer that is in a
+variable, and `std::caller()` and the other fns that look at the call stack.
 
 ## Differences from the interpreter
 
@@ -114,6 +115,11 @@ The output of a compiled program is the same as the interpreter's, but:
   reading a file that isn't open, are written to stderr as
   `Runtime error[R9]: ...` and the program exits with status 1.  The interpreter
   writes them to stdout, with the line of the source and a stack trace.
+- `sind()`, `cosd()`, and `tand()` are the runtime's own, rather than
+  libgfortran's.  An angle with a simple result, like `sind(30.0)` or
+  `tand(45.0)`, has exactly that, as in the interpreter, but others can differ
+  from the interpreter's in the last digit.  So can `norm2()` and a matrix
+  product if syntran was built without BLAS
 - Overflow of integers wraps around, like in the interpreter.  Division of an
   integer by zero is 0, and `%` by zero is the dividend, like it is there.
 - `std::args()` is all of the arguments after the name of the program.  There
@@ -154,7 +160,12 @@ To check a change to the native backend, run
 
 ```
 bash utils/test-transpile.sh --backend native
+bash utils/test-transpile.sh --backend native --long
 ```
+
+The second one compiles the programs of the long tests (`src/tests/long.f90`),
+which are bigger programs from Advent of Code, and compares their output to the
+interpreter's.  It takes a few minutes, so CI doesn't run it.
 
 which compiles and runs every syntran test program and sample, and compares the
 output with the interpreter's.  It reports which unsupported constructs are the

@@ -11465,6 +11465,7 @@ subroutine unit_test_transpile(npass, nfail)
 			interpret_file(T//'transpile/test-15.syntran', .true.) == '0', &
 			interpret_file(T//'transpile/test-16.syntran', .true.) == '0', &
 			interpret_file(T//'transpile/test-17.syntran', .true.) == '0', &
+			interpret_file(T//'transpile/test-18.syntran', .true.) == '0', &
 			transpiles_ok(T//'transpile/test-01.syntran'), &
 			transpiles_ok(T//'transpile/test-02.syntran'), &
 			transpiles_ok(T//'transpile/test-03.syntran'), &
@@ -11480,6 +11481,7 @@ subroutine unit_test_transpile(npass, nfail)
 			transpiles_ok(T//'transpile/test-15.syntran'), &
 			transpiles_ok(T//'transpile/test-16.syntran'), &
 			transpiles_ok(T//'transpile/test-17.syntran'), &
+			transpiles_ok(T//'transpile/test-18.syntran'), &
 
 			! Most of the tests programs are supported
 			transpiles_ok(T//'fns/test-01.syntran'), &
@@ -12324,11 +12326,17 @@ subroutine unit_test_native(npass, nfail)
 			.not. native_ir_is_empty('let x = 2; switch x { case 1 { println("a"); } ' &
 				//'default { println("b"); } }'), &
 
-			! What an array can't do yet is diagnosed, once per statement
-			diag_has_code(get_diags_native('let a = [1.0, 2.0, 3.0, 4.0; 2, 2]; ' &
-				//'let b = a @ a;'), EC_NATIVE_UNSUPPORTED), &
-			diag_has_code(get_diags_native('let a = [1.0, 2.0, 3.0, 4.0; 2, 2]; ' &
-				//'let b = std::transpose(a);'), EC_NATIVE_UNSUPPORTED), &
+			! A matrix product and the linear algebra fns are compiled, and call the runtime
+			index(native_ir('let a = [1.0, 2.0, 3.0, 4.0; 2, 2]; println(a @ a);'), &
+				'@sy_matmul') > 0, &
+			index(native_ir('let a = [1.0, 2.0, 3.0, 4.0; 2, 2]; println(std::transpose(a));'), &
+				'@sy_transpose') > 0, &
+			index(native_ir('let a = [1.0, 2.0, 3.0, 4.0; 2, 2]; let b = [1.0, 2.0]; ' &
+				//'println(std::solve(a, b));'), '@sy_solve') > 0, &
+			index(native_ir('println(sind(30.0), cosd(60.0), tand(45.0));'), &
+				'@sy_sind_f64') > 0, &
+			index(native_ir('println(std::format("{:5}|", 7));'), '@sy_format_join') > 0, &
+			.not. diag_has_code(get_diags_native('let a = [1, 2]; a = 3;'), EC_NATIVE_UNSUPPORTED), &
 
 			! A reduction along a dimension or with a mask is done by the runtime
 			index(native_ir('let a = [1, 2, 3, 4; 2, 2]; println(sum(a, 0), sum(a, a > 1));'), &

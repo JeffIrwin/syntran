@@ -330,6 +330,7 @@ src/tests/test-src/switch/test-14.syntran
 src/tests/test-src/switch/test-15.syntran
 src/tests/test-src/switch/test-16.syntran
 src/tests/test-src/switch/test-17.syntran
+src/tests/test-src/transpile/test-01.syntran
 src/tests/test-src/transpile/test-02.syntran
 src/tests/test-src/transpile/test-03.syntran
 src/tests/test-src/transpile/test-04.syntran
@@ -346,6 +347,7 @@ src/tests/test-src/transpile/test-14.syntran
 src/tests/test-src/transpile/test-15.syntran
 src/tests/test-src/transpile/test-16.syntran
 src/tests/test-src/transpile/test-17.syntran
+src/tests/test-src/transpile/test-18.syntran
 src/tests/test-src/var-scopes/test-01.syntran
 src/tests/test-src/var-scopes/test-02.syntran
 src/tests/test-src/var-scopes/test-03.syntran
