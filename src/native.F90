@@ -26,6 +26,7 @@ module syntran__native_m
 	! still builds where LLVM is not installed.  See `native_available`.
 
 	use, intrinsic :: iso_c_binding
+	use syntran__bytecode_m, only: struct_move_chain, struct_move_member, take_member_assign
 	use syntran__compiler_m, only: bounds_check
 	use syntran__consts_m
 	use syntran__errors_m
@@ -2881,13 +2882,16 @@ end function struct_desc
 
 !===============================================================================
 
-recursive function emit_struct_instance(em, node) result(r)
+recursive function emit_struct_instance(em, node, imove) result(r)
 
 	! `Point{x = 1, y = 2}` is a new struct that owns its members.  They are in
-	! the order of the members' indices, which is the order of their slots
+	! the order of the members' indices, which is the order of their slots.  The
+	! member `imove`, if there is one, is not copied but taken out of the variable
+	! or member that it names, like the interpreter does for `x = S{m = x}`
 
 	type(nemitter_t), intent(inout) :: em
 	type(syntax_node_t), intent(in) :: node
+	integer, intent(in), optional :: imove
 	type(nval_t) :: r
 
 	!********
@@ -2925,7 +2929,15 @@ recursive function emit_struct_instance(em, node) result(r)
 				call unsupported(em, 'a struct of unknown type')
 				return
 			end if
-			v = emit_expr(em, node%members(i))
+			if (present(imove)) then
+				if (i == imove) then
+					v = take_place(em, node%members(i))
+				else
+					v = emit_expr(em, node%members(i))
+				end if
+			else
+				v = emit_expr(em, node%members(i))
+			end if
 			call elem_store(em, LLVMBuildGEP2(em%bld, em%t_i64, s, [ci64(em, int(i, 8))], 1, &
 				cs('')), mval%type, v)
 		end do
@@ -2935,6 +2947,47 @@ recursive function emit_struct_instance(em, node) result(r)
 	r%owned = .true.
 
 end function emit_struct_instance
+
+!===============================================================================
+
+recursive function take_place(em, node) result(v)
+
+	! Move a struct out of a variable or a member, leaving `null` behind.  The
+	! value is owned by the caller, and the place no longer owns it.  A struct
+	! that is moved is never read again before it is written, because the callers
+	! check that with the interpreter's own rules (cant_fail() etc.)
+
+	type(nemitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	type(nval_t) :: v
+
+	!********
+
+	logical :: ok
+
+	type(c_ptr) :: ignored
+
+	type(place_t) :: pl
+
+	ok = place_of(em, node, pl)
+	if (.not. ok) then
+		v = dummy_val(em, struct_type)
+		return
+	end if
+
+	if (pl%ty /= struct_type .or. pl%has_subs) then
+		! Not something that can be moved, so copy it
+		call place_done(em, pl)
+		v = emit_expr(em, node)
+		return
+	end if
+
+	v = elem_load(em, pl%ty, pl%p)
+	ignored = LLVMBuildStore(em%bld, LLVMConstNull(em%t_ptr), pl%p)
+	call place_done(em, pl)
+	v%owned = .true.
+
+end function take_place
 
 !===============================================================================
 
@@ -5506,7 +5559,7 @@ recursive function emit_assign_val(em, node, as_stmt) result(res)
 
 	!********
 
-	integer :: op, ety, vty, rank_
+	integer :: op, ety, vty, rank_, imove
 
 	logical :: as_stmt_, by_idx, ok
 
@@ -5561,7 +5614,13 @@ recursive function emit_assign_val(em, node, as_stmt) result(res)
 			if (.not. ok) return
 			saved = em%idx_slots(1: em%idx_n)
 		end if
-		v = emit_expr(em, node%right)
+		imove = 0
+		if (node%op%kind == equals_token) imove = struct_move_chain(node%right, node)
+		if (imove > 0) then
+			v = emit_struct_instance(em, node%right, imove)
+		else
+			v = emit_expr(em, node%right)
+		end if
 		if (by_idx) then
 			em%idx_slots = saved
 			em%idx_n = 0
@@ -5681,7 +5740,19 @@ recursive function emit_assign_val(em, node, as_stmt) result(res)
 	p = var_ptr(em, node, node%val%type)
 	if (.not. c_associated(p)) return
 
-	v = emit_expr(em, node%right)
+	imove = 0
+	if (node%op%kind == equals_token .and. node%val%type == struct_type) &
+		imove = struct_move_member(node%right, node%id_index, node%is_loc)
+	if (node%op%kind == equals_token .and. node%val%type == struct_type .and. &
+			take_member_assign(node)) then
+		! `x = x.a.b` takes the member out of x, instead of copying it and then
+		! freeing all of x
+		v = take_place(em, node%right)
+	else if (imove > 0) then
+		v = emit_struct_instance(em, node%right, imove)
+	else
+		v = emit_expr(em, node%right)
+	end if
 
 	if (node%op%kind /= equals_token) then
 		cur = load_var(em, node)
