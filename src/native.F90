@@ -4481,7 +4481,8 @@ recursive function emit_intr_call(em, node) result(r)
 		r%v = rt_call(em, 'sy_str_char', em%t_ptr, [a%v])
 
 	case ('i32', 'i64', 'f32', 'f64', 'exp', 'log', 'log10', 'sqrt', 'cos', 'sin', 'tan', &
-			'acos', 'asin', 'atan', 'log2', 'abs')
+			'acos', 'asin', 'atan', 'log2', 'abs', 'sind', 'cosd', 'tand', 'asind', 'acosd', &
+			'atand')
 		! Of a number, or of each element of an array
 		a = emit_expr(em, node%args(1))
 		if (a%ty == array_type) then
@@ -4575,6 +4576,24 @@ function intr_scalar(em, base, a, rtype, pos) result(r)
 				libm(em, 'log', a%ty, zero), cs(''))
 		else
 			r%v = libm(em, base, a%ty, a%v)
+		end if
+
+	case ('sind', 'cosd', 'tand', 'asind', 'acosd', 'atand')
+		if (a%ty /= f32_type .and. a%ty /= f64_type) then
+			call unsupported(em, 'the intrinsic fn `'//base//'` of a value of type `'// &
+				kind_name(a%ty)//'`', pos)
+			r = dummy_val(em, rtype)
+			return
+		end if
+		r%ty = a%ty
+		r%owned = .false.
+		if (base(len(base):) == 'd' .and. base(1:1) /= 'a') then
+			! Of degrees, in the runtime
+			r%v = rt_call(em, 'sy_'//base//'_'//type_sfx(a%ty), ll_type(em, a%ty), [a%v])
+		else
+			! In degrees, which the interpreter makes by multiplying radians by 180 / pi
+			r%v = LLVMBuildFMul(em%bld, libm(em, base(1: len(base) - 1), a%ty, a%v), &
+				LLVMConstReal(ll_type(em, a%ty), 57.295779513082322865_c_double), cs(''))
 		end if
 
 	case ('abs')

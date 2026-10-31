@@ -185,7 +185,9 @@ bash utils/test-transpile.sh --backend native build/native/bin/syntran
 bash utils/test-transpile.sh --backend native --update-pass-list build/native/bin/syntran
 ```
 Every file in `utils/native-pass.txt` must keep passing.  Pass `--ref` with an
-FMA-free interpreter, as for the Fortran backend.
+FMA-free interpreter, as for the Fortran backend.  Add `--long` to test the
+programs that `src/tests/long.f90` runs instead, which are listed in
+`utils/native-pass-long.txt` (set `TIMEOUT=<seconds>` if the interpreter is slow).
 
 ### Testing README.md code blocks
 `README.md`'s code blocks are annotated with hidden `<!-- syntran-begin -->`

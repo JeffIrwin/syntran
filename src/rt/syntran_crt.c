@@ -2662,3 +2662,78 @@ void sy_lu_solve(const sy_arr *a, const sy_arr *ipiv, sy_arr *b)
     }
     free(ip1);
 }
+
+/*============================================================================*/
+
+/* sind(), cosd(), and tand(): trig fns of degrees.  The angles that have a
+ * simple result, like sind(30) and tand(45), have exactly that, which
+ * sin(x * pi / 180) would not.  Everything else is within an ulp or so of the
+ * interpreter's, which is libgfortran's.  An f32 is done as an f64 and rounded */
+
+#define SY_PI 3.14159265358979323846
+
+/* sin(a) of a degrees in [0, 90] */
+static double sy_sin_deg(double a)
+{
+    if (a == 0) return 0;
+    if (a == 30) return 0.5;
+    if (a == 90) return 1;
+    return sin(a * (SY_PI / 180));
+}
+
+/* tan(a) of a degrees in [0, 90) */
+static double sy_tan_deg(double a)
+{
+    if (a == 0) return 0;
+    if (a == 45) return 1;
+    return tan(a * (SY_PI / 180));
+}
+
+double sy_sind_f64(double x)
+{
+    double u, v;
+    int neg;
+
+    if (isnan(x) || isinf(x)) return NAN;
+    u = fmod(fabs(x), 360);
+    neg = u >= 180;
+    if (neg) u -= 180;
+    if (u > 90) u = 180 - u;
+    v = sy_sin_deg(u);
+    if (neg) v = -v;
+    return signbit(x) ? -v : v;
+}
+
+double sy_cosd_f64(double x)
+{
+    double u;
+    int neg;
+
+    if (isnan(x) || isinf(x)) return NAN;
+    u = fmod(fabs(x), 360);
+    if (u > 180) u = 360 - u;
+    neg = u > 90;
+    if (neg) u = 180 - u;
+    return neg ? -sy_sin_deg(90 - u) : sy_sin_deg(90 - u);
+}
+
+double sy_tand_f64(double x)
+{
+    double u, v, t;
+
+    if (isnan(x) || isinf(x)) return NAN;
+    u = fmod(fabs(x), 360);
+    if (u == 90) {
+        t = INFINITY;
+    } else if (u == 270) {
+        t = -INFINITY;
+    } else {
+        v = fmod(u, 180);
+        t = v < 90 ? sy_tan_deg(v) : -sy_tan_deg(180 - v);
+    }
+    return signbit(x) ? -t : t;
+}
+
+float sy_sind_f32(float x) { return (float)sy_sind_f64((double)x); }
+float sy_cosd_f32(float x) { return (float)sy_cosd_f64((double)x); }
+float sy_tand_f32(float x) { return (float)sy_tand_f64((double)x); }
