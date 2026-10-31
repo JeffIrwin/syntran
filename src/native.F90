@@ -93,6 +93,9 @@ module syntran__native_m
 		! array of them
 		integer :: sk = 0
 
+		! The type name of a fn pointer, which is what `str()` of one makes
+		character(len = :), allocatable :: tname
+
 	end type nval_t
 
 	!********
@@ -629,7 +632,7 @@ function ll_type(em, ty) result(t)
 		t = em%t_f64
 	case (bool_type)
 		t = em%t_i1
-	case (str_type, array_type, struct_type)
+	case (str_type, array_type, struct_type, fn_type)
 		t = em%t_ptr
 	case default
 		t = em%t_i32
@@ -771,7 +774,7 @@ function dummy_val(em, ty) result(r)
 		r%v = cbool(em, .false.)
 	case (str_type)
 		r%v = str_literal(em, '')
-	case (array_type, struct_type, null_type)
+	case (array_type, struct_type, null_type, fn_type)
 		r%v = LLVMConstNull(em%t_ptr)
 	case default
 		r%ty = i32_type
@@ -982,6 +985,9 @@ function str_of(em, v) result(s)
 		call dispose(em, v)
 	case (null_type)
 		s%v = str_literal(em, 'null')
+	case (fn_type)
+		! A fn pointer is its type, not where it points to
+		s%v = str_literal(em, v%tname)
 	case (enum_type)
 		s%v = LLVMBuildLoad2(em%bld, em%t_ptr, LLVMBuildGEP2(em%bld, em%t_ptr, &
 			enum_names(em, v%sk), [v%v], 1, cs('')), cs(''))
@@ -1016,21 +1022,36 @@ function holdable(ty) result(ok)
 	integer, intent(in) :: ty
 	logical :: ok
 
-	ok = supported_type(ty) .or. ty == struct_type .or. ty == enum_type
+	ok = supported_type(ty) .or. ty == struct_type .or. ty == enum_type .or. ty == fn_type
 
 end function holdable
 
 !===============================================================================
 
-function supported_val(val) result(ok)
+recursive function supported_val(val) result(ok)
 
 	! Can a variable or parameter be of the type of this value?  An array of
-	! numbers, bools, or strs can
+	! numbers, bools, or strs can, and so can a fn pointer if every type in its
+	! signature can
 
 	type(value_t), intent(in) :: val
 	logical :: ok
 
-	if (val%type /= array_type) then
+	integer :: i
+
+	if (val%type == fn_type) then
+		ok = .true.
+		if (allocated(val%fn_params)) then
+			do i = 1, size(val%fn_params)
+				if (.not. supported_val(val%fn_params(i))) ok = .false.
+			end do
+		end if
+		if (allocated(val%fn_ret)) then
+			if (val%fn_ret%type /= void_type) then
+				if (.not. supported_val(val%fn_ret)) ok = .false.
+			end if
+		end if
+	else if (val%type /= array_type) then
 		ok = holdable(val%type)
 	else if (.not. allocated(val%array)) then
 		ok = .false.
@@ -1260,6 +1281,14 @@ function load_var(em, node) result(r)
 
 	type(c_ptr) :: p
 
+	! The first slot is `std::PI`, which is a constant
+	if (.not. node%is_loc .and. node%id_index == 1 .and. node%val%type == f64_type) then
+		r%ty = f64_type
+		r%owned = .false.
+		r%v = LLVMConstReal(em%t_f64, 3.14159265358979323846_c_double)
+		return
+	end if
+
 	p = var_ptr(em, node, node%val%type)
 	if (.not. c_associated(p)) then
 		r = dummy_val(em, node%val%type)
@@ -1317,6 +1346,15 @@ subroutine store_var(em, p, vty, v)
 		cv = convert(em, v, vty)
 		ignored = LLVMBuildStore(em%bld, cv%v, p)
 
+	else if (vty == fn_type) then
+		! A fn pointer is only an address, which is not owned
+		if (v%ty /= fn_type) then
+			call unsupported(em, 'assigning a `'//kind_name(v%ty)//'` to a `'// &
+				kind_name(vty)//'`')
+			return
+		end if
+		ignored = LLVMBuildStore(em%bld, v%v, p)
+
 	else
 		call unsupported(em, 'a variable of type `'//kind_name(vty)//'`')
 	end if
@@ -1364,6 +1402,17 @@ recursive function emit_expr(em, node) result(r)
 	case (fn_call_expr, method_call_expr)
 		r = emit_user_call(em, node)
 
+	case (fn_ref_expr)
+		! The address of a user fn, which is declared here if this is its first
+		! reference
+		r%ty = fn_type
+		r%owned = .false.
+		r%v = fn_llvm(em, node%id_index)
+		if (.not. c_associated(r%v)) r = dummy_val(em, fn_type)
+
+	case (fn_call_ptr_expr)
+		r = emit_ptr_call(em, node)
+
 	case (struct_instance_expr)
 		r = emit_struct_instance(em, node)
 
@@ -1383,6 +1432,9 @@ recursive function emit_expr(em, node) result(r)
 	if (r%ty == enum_type .or. (r%ty == array_type .and. r%elem == enum_type)) then
 		if (associated(em%enums)) r%sk = enums_slot_of(em%enums, node%val)
 	end if
+
+	! And a fn pointer's type is all that `str()` of it makes
+	if (r%ty == fn_type) r%tname = value_type_name(node%val)
 
 end function emit_expr
 
@@ -1575,6 +1627,9 @@ subroutine elem_store(em, p, ety, v)
 		ignored = LLVMBuildStore(em%bld, cv%v, p)
 
 	else if (ety == enum_type .and. v%ty == enum_type) then
+		ignored = LLVMBuildStore(em%bld, v%v, p)
+
+	else if (ety == fn_type .and. v%ty == fn_type) then
 		ignored = LLVMBuildStore(em%bld, v%v, p)
 
 	else
@@ -2130,7 +2185,11 @@ function struct_desc(em, k) result(d)
 		! An enum, or an array of them, has the names of its variants too
 		code = elem_code(mval%type)
 		aux = LLVMConstNull(em%t_ptr)
-		if (mval%type == enum_type) then
+		if (mval%type == fn_type) then
+			! A fn pointer prints as its type
+			code = 9
+			aux = c_string(em, value_type_name(mval))
+		else if (mval%type == enum_type) then
 			code = 8
 			aux = enum_names(em, enums_slot_of(em%enums, mval))
 		else if (mval%type == array_type .and. allocated(mval%array)) then
@@ -2886,6 +2945,21 @@ function binop_vals(em, op, l, r, op_text) result(res)
 	! unless two variants have the same one
 	if (l%ty == enum_type .and. r%ty == enum_type) then
 		res = enum_compare(em, op, l, r, op_text)
+		return
+	end if
+
+	! Fn pointers are the same if they point to the same fn
+	if (l%ty == fn_type .and. r%ty == fn_type) then
+		res%ty = bool_type
+		select case (op)
+		case (eequals_token)
+			res%v = LLVMBuildICmp(em%bld, LLVM_INT_EQ, l%v, r%v, cs(''))
+		case (bang_equals_token)
+			res%v = LLVMBuildICmp(em%bld, LLVM_INT_NE, l%v, r%v, cs(''))
+		case default
+			call unsupported(em, 'the `'//op_text//'` operator on fn pointers')
+			res = dummy_val(em, bool_type)
+		end select
 		return
 	end if
 
@@ -4848,6 +4922,77 @@ recursive function emit_user_call(em, node) result(r)
 	end do
 
 end function emit_user_call
+
+!===============================================================================
+
+recursive function emit_ptr_call(em, node) result(r)
+
+	! Call through a fn pointer, which is a variable or a member of a struct.
+	! Every argument is by value, and the parser only accepts one of the type of
+	! its parameter, so the signature of the call is made from the arguments and
+	! the type of the result.  That is the signature of any fn it can point to.
+	! As in emit_user_call(), a heap argument is lent to the callee, which copies
+	! what it keeps
+
+	type(nemitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	type(nval_t) :: r
+
+	!********
+
+	integer :: i, n
+
+	type(c_ptr) :: fty, ret, p
+	type(c_ptr), allocatable :: args(:), ptys(:)
+
+	type(nval_t) :: callee, v
+	type(nval_t), allocatable :: pending(:)
+
+	r = dummy_val(em, node%val%type)
+
+	if (allocated(node%left)) then
+		callee = emit_expr(em, node%left)
+	else
+		p = var_ptr(em, node, fn_type)
+		if (.not. c_associated(p)) return
+		callee%ty = fn_type
+		callee%v = LLVMBuildLoad2(em%bld, em%t_ptr, p, cs(''))
+	end if
+	if (callee%ty /= fn_type) then
+		call unsupported(em, 'a call of a `'//kind_name(callee%ty)//'`')
+		return
+	end if
+
+	n = 0
+	if (allocated(node%args)) n = size(node%args)
+	allocate(args(max(n, 1)), ptys(max(n, 1)), pending(max(n, 1)))
+	args = em%t_ptr
+	ptys = em%t_ptr
+
+	do i = 1, n
+		v = emit_expr(em, node%args(i))
+		pending(i) = v
+		args(i) = v%v
+		if (v%ty /= null_type) ptys(i) = ll_type(em, v%ty)
+	end do
+
+	if (node%val%type == void_type) then
+		ret = em%t_void
+	else
+		ret = ll_type(em, node%val%type)
+	end if
+	fty = LLVMFunctionType(ret, ptys, n, 0)
+
+	r%ty = node%val%type
+	r%owned = ptr_type(r%ty)
+	if (r%ty == array_type) r = arr_val(c_null_ptr, .true., node%val)
+	r%v = LLVMBuildCall2(em%bld, fty, callee%v, args, n, cs(''))
+
+	do i = 1, n
+		call dispose(em, pending(i))
+	end do
+
+end function emit_ptr_call
 
 !===============================================================================
 

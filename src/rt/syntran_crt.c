@@ -385,7 +385,7 @@ int64_t sy_ipow_i64(int64_t n, int64_t m)
  * 12, data 16, size 24), so don't reorder them.  Elements are stored in
  * column-major order, like the interpreter's, and a str element is an owned
  * pointer which is never NULL */
-enum { SY_I32, SY_I64, SY_F32, SY_F64, SY_BOOL, SY_STR, SY_ARR, SY_STRUCT, SY_ENUM };
+enum { SY_I32, SY_I64, SY_F32, SY_F64, SY_BOOL, SY_STR, SY_ARR, SY_STRUCT, SY_ENUM, SY_FN };
 
 /* A struct is defined below the arrays, which own them when they are elements */
 typedef struct sy_struct sy_struct;
@@ -985,6 +985,10 @@ static void sy_elem_put(sy_buf *b, int32_t kind, const void *p, int rt, const vo
     case SY_ENUM:
         s = ((sy_str *const *)aux)[*(const int32_t *)p];
         sy_buf_put(b, s->data, (size_t)s->len);
+        return;
+    case SY_FN:
+        /* A fn pointer is written as its type, which is `aux` */
+        sy_buf_put(b, (const char *)aux, strlen((const char *)aux));
         return;
     case SY_ARR:
         sy_arr_put(b, *(sy_arr *const *)p, 1, aux);

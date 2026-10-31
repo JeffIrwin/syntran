@@ -11987,8 +11987,25 @@ subroutine unit_test_native(npass, nfail)
 			.not. native_ir_is_empty('enum E { A, B, } let a = [E.A, E.B]; println(a);'), &
 
 			! A struct with a member that can't be compiled is diagnosed
-			diag_has_code(get_diags_native('fn g(): i32 { return 1; } ' &
-				//'struct S { f: fn(): i32, } let s = S{f = g};'), EC_NATIVE_UNSUPPORTED) &
+			diag_has_code(get_diags_native('struct S { c: str, } ' &
+				//'let s = S{c = std::caller()};'), EC_NATIVE_UNSUPPORTED), &
+
+			! std::PI is a constant
+			index(native_ir('println(std::PI);'), '3.14159265358979') > 0 .or. &
+				index(native_ir('println(std::PI);'), 'f0x400921FB54442D18') > 0, &
+
+			! A fn pointer is the address of a fn, which can be a variable, a
+			! parameter, or a member of a struct.  It prints as its type
+			.not. native_ir_is_empty('fn sq(x: i32): i32 { return x * x; } ' &
+				//'let f = sq; println(f(3));'), &
+			.not. native_ir_is_empty('fn sq(x: i32): i32 { return x * x; } ' &
+				//'fn app(g: fn(i32): i32, x: i32): i32 { return g(x); } println(app(sq, 4));'), &
+			.not. native_ir_is_empty('fn g(): i32 { return 1; } ' &
+				//'struct S { f: fn(): i32, } let s = S{f = g}; println(s.f());'), &
+			index(native_ir('fn sq(x: i32): i32 { return x * x; } let f = sq; println(f);'), &
+				'fn(i32): i32') > 0, &
+			.not. native_ir_is_empty('fn a(): i32 { return 1; } fn b(): i32 { return 2; } ' &
+				//'let f = a; println(f == b);') &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
