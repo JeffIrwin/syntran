@@ -16,6 +16,7 @@
  * is a no-op.
  */
 
+#include <errno.h>
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -253,6 +254,92 @@ void sy_exit(int32_t code)
 
 /*============================================================================*/
 
+/* parse_i32() and friends.  A string that isn't a number is a fatal error.  Like
+ * Fortran's list-directed read, which the interpreter uses, the number may have
+ * blanks around it, and may be followed by a comma or slash and anything */
+static const char *sy_blanks(const char *p)
+{
+    while (*p == ' ' || *p == '\t') p++;
+    return p;
+}
+
+static int sy_end_ok(const char *p)
+{
+    p = sy_blanks(p);
+    return *p == '\0' || *p == ',' || *p == '/';
+}
+
+static void sy_parse_fail(const char *fn, const sy_str *s)
+{
+    char msg[512];
+
+    snprintf(msg, sizeof msg, " cannot %s() for argument `%.400s`", fn, s->data);
+    sy_fatal(msg);
+}
+
+static int64_t sy_parse_int(const char *fn, const sy_str *s, int64_t lo, int64_t hi)
+{
+    char *end;
+    long long x;
+
+    errno = 0;
+    x = strtoll(sy_blanks(s->data), &end, 10);
+    if (end == sy_blanks(s->data) || errno != 0 || x < lo || x > hi || !sy_end_ok(end)) {
+        sy_parse_fail(fn, s);
+    }
+    return (int64_t)x;
+}
+
+int32_t sy_parse_i32(const sy_str *s)
+{
+    return (int32_t)sy_parse_int("parse_i32", s, INT32_MIN, INT32_MAX);
+}
+
+int64_t sy_parse_i64(const sy_str *s)
+{
+    return sy_parse_int("parse_i64", s, INT64_MIN, INT64_MAX);
+}
+
+/* A Fortran exponent can be introduced by d or D */
+static double sy_parse_real(const char *fn, const sy_str *s)
+{
+    char buf[512], *end, *q;
+    const char *p = sy_blanks(s->data);
+    double x;
+
+    snprintf(buf, sizeof buf, "%.500s", p);
+    for (q = buf; *q != '\0'; q++) {
+        if (*q == 'd' || *q == 'D') *q = 'e';
+    }
+    x = strtod(buf, &end);
+    if (end == buf || !sy_end_ok(end)) sy_parse_fail(fn, s);
+    return x;
+}
+
+float sy_parse_f32(const sy_str *s)
+{
+    return (float)sy_parse_real("parse_f32", s);
+}
+
+double sy_parse_f64(const sy_str *s)
+{
+    return sy_parse_real("parse_f64", s);
+}
+
+int8_t sy_parse_bool(const sy_str *s)
+{
+    const char *p = sy_blanks(s->data);
+    size_t n = strlen(p);
+
+    while (n > 0 && p[n - 1] == ' ') n--;
+    if (n == 4 && strncmp(p, "true", 4) == 0) return 1;
+    if (n == 5 && strncmp(p, "false", 5) == 0) return 0;
+    sy_parse_fail("parse_bool", s);
+    return 0;
+}
+
+/*============================================================================*/
+
 /* Integer powers, with the semantics of Fortran's `**`, which the interpreter
  * uses.  A negative exponent is 1 / n ** -m in integers, which is 0 unless n
  * is 1 or -1 */
@@ -288,6 +375,614 @@ int64_t sy_ipow_i64(int64_t n, int64_t m)
         b *= b;
     }
     return (int64_t)r;
+}
+
+/*============================================================================*/
+
+/* An array is a heap object like a str, which the generated code passes around
+ * by pointer.  Its size is fixed once it's made.  The fields before `size` are
+ * at fixed offsets that the generated code reads directly (len 0, rank 8, elem
+ * 12, data 16, size 24), so don't reorder them.  Elements are stored in
+ * column-major order, like the interpreter's, and a str element is an owned
+ * pointer which is never NULL */
+enum { SY_I32, SY_I64, SY_F32, SY_F64, SY_BOOL, SY_STR };
+
+typedef struct {
+    int64_t len;
+    int32_t rank;
+    int32_t elem;
+    char *data;
+    int64_t size[];
+} sy_arr;
+
+/* The empty string that a new array of strs is full of.  It's immortal */
+static struct { int64_t len; int64_t imm; char data[1]; } sy_empty_s = {0, 1, {0}};
+#define SY_EMPTY ((sy_str *)&sy_empty_s)
+
+static size_t sy_esize(int32_t e)
+{
+    switch (e) {
+    case SY_I32:
+    case SY_F32:
+        return 4;
+    case SY_BOOL:
+        return 1;
+    default:
+        return 8;
+    }
+}
+
+/* A zeroed array of the given shape */
+sy_arr *sy_arr_new(int32_t elem, int32_t rank, const int64_t *sizes)
+{
+    int64_t len = 1, i;
+    sy_arr *a = (sy_arr *)malloc(sizeof(sy_arr) + (size_t)rank * sizeof(int64_t));
+
+    if (a == NULL) sy_fatal("out of memory");
+    for (i = 0; i < rank; i++) {
+        a->size[i] = sizes[i] > 0 ? sizes[i] : 0;
+        len *= a->size[i];
+    }
+    a->len = len;
+    a->rank = rank;
+    a->elem = elem;
+    a->data = (char *)calloc(len > 0 ? (size_t)len : 1, sy_esize(elem));
+    if (a->data == NULL) sy_fatal("out of memory");
+    if (elem == SY_STR) {
+        for (i = 0; i < len; i++) ((sy_str **)a->data)[i] = SY_EMPTY;
+    }
+    return a;
+}
+
+static sy_arr *sy_arr_new1(int32_t elem, int64_t n)
+{
+    return sy_arr_new(elem, 1, &n);
+}
+
+void sy_arr_free(sy_arr *a)
+{
+    int64_t i;
+
+    if (a == NULL) return;
+    if (a->elem == SY_STR) {
+        for (i = 0; i < a->len; i++) sy_str_free(((sy_str **)a->data)[i]);
+    }
+    free(a->data);
+    free(a);
+}
+
+/* A deep copy that can be owned */
+sy_arr *sy_arr_dup(const sy_arr *a)
+{
+    sy_arr *r;
+    int64_t i;
+
+    if (a == NULL) return NULL;
+    r = sy_arr_new(a->elem, a->rank, a->size);
+    if (a->elem == SY_STR) {
+        for (i = 0; i < a->len; i++) {
+            sy_str_free(((sy_str **)r->data)[i]);
+            ((sy_str **)r->data)[i] = sy_str_dup(((sy_str **)a->data)[i]);
+        }
+    } else {
+        memcpy(r->data, a->data, (size_t)a->len * sy_esize(a->elem));
+    }
+    return r;
+}
+
+/* a == b for the switch statement: the same shape and the same elements */
+int8_t sy_arr_eq(const sy_arr *a, const sy_arr *b)
+{
+    int32_t k;
+    int64_t i;
+
+    if (a == NULL || b == NULL) return a == b;
+    if (a->rank != b->rank || a->elem != b->elem || a->len != b->len) return 0;
+    for (k = 0; k < a->rank; k++) {
+        if (a->size[k] != b->size[k]) return 0;
+    }
+    for (i = 0; i < a->len; i++) {
+        switch (a->elem) {
+        case SY_I32:
+            if (((int32_t *)a->data)[i] != ((int32_t *)b->data)[i]) return 0;
+            break;
+        case SY_I64:
+            if (((int64_t *)a->data)[i] != ((int64_t *)b->data)[i]) return 0;
+            break;
+        case SY_F32:
+            if (((float *)a->data)[i] != ((float *)b->data)[i]) return 0;
+            break;
+        case SY_F64:
+            if (((double *)a->data)[i] != ((double *)b->data)[i]) return 0;
+            break;
+        case SY_BOOL:
+            if (a->data[i] != b->data[i]) return 0;
+            break;
+        default:
+            if (!sy_str_eq(((sy_str **)a->data)[i], ((sy_str **)b->data)[i])) return 0;
+            break;
+        }
+    }
+    return 1;
+}
+
+/* A zeroed array of the shape of `a`, of another element type */
+sy_arr *sy_arr_like(const sy_arr *a, int32_t elem)
+{
+    return sy_arr_new(elem, a->rank, a->size);
+}
+
+/* The same elements in another shape.  This takes `a` and gives it a new header */
+sy_arr *sy_arr_reshape(sy_arr *a, int32_t rank, const int64_t *sizes)
+{
+    int64_t i;
+    sy_arr *r = (sy_arr *)malloc(sizeof(sy_arr) + (size_t)rank * sizeof(int64_t));
+
+    if (r == NULL) sy_fatal("out of memory");
+    r->len = a->len;
+    r->rank = rank;
+    r->elem = a->elem;
+    r->data = a->data;
+    for (i = 0; i < rank; i++) r->size[i] = sizes[i];
+    free(a);
+    return r;
+}
+
+/* [v; n, m].  `val` points to a value of the element type.  A str is copied */
+sy_arr *sy_arr_fill(int32_t elem, int32_t rank, const int64_t *sizes, const void *val)
+{
+    sy_arr *a = sy_arr_new(elem, rank, sizes);
+    size_t es = sy_esize(elem);
+    int64_t i;
+
+    for (i = 0; i < a->len; i++) {
+        if (elem == SY_STR) {
+            sy_str_free(((sy_str **)a->data)[i]);
+            ((sy_str **)a->data)[i] = sy_str_dup(*(sy_str *const *)val);
+        } else {
+            memcpy(a->data + (size_t)i * es, val, es);
+        }
+    }
+    return a;
+}
+
+/* Copy all of `src` into `dst`, starting at the element `at` */
+void sy_arr_copy_into(sy_arr *dst, int64_t at, const sy_arr *src)
+{
+    int64_t i;
+
+    if (src == NULL) return;
+    if (dst->elem == SY_STR) {
+        for (i = 0; i < src->len; i++) {
+            sy_str_free(((sy_str **)dst->data)[at + i]);
+            ((sy_str **)dst->data)[at + i] = sy_str_dup(((sy_str **)src->data)[i]);
+        }
+    } else {
+        memcpy(dst->data + (size_t)at * sy_esize(dst->elem), src->data,
+            (size_t)src->len * sy_esize(src->elem));
+    }
+}
+
+/*============================================================================*/
+
+/* [lb: ub], which is empty if ub <= lb */
+sy_arr *sy_arr_range_i32(int32_t lb, int32_t ub)
+{
+    int64_t n = (int64_t)ub - (int64_t)lb, i;
+    sy_arr *a;
+
+    if (n < 0) n = 0;
+    a = sy_arr_new1(SY_I32, n);
+    for (i = 0; i < n; i++) ((int32_t *)a->data)[i] = (int32_t)((int64_t)lb + i);
+    return a;
+}
+
+sy_arr *sy_arr_range_i64(int64_t lb, int64_t ub)
+{
+    int64_t n = ub > lb ? ub - lb : 0, i;
+    sy_arr *a = sy_arr_new1(SY_I64, n);
+
+    for (i = 0; i < n; i++) ((int64_t *)a->data)[i] = lb + i;
+    return a;
+}
+
+/* [lb: step: ub].  The bound is exclusive and the step may be negative.  This is
+ * the same algorithm as the interpreter's, including its loop condition */
+sy_arr *sy_arr_step_i32(int32_t lb, int32_t step, int32_t ub)
+{
+    int64_t cap, j = 0;
+    int32_t i;
+    sy_arr *a;
+
+    if (step == 0) sy_fatal("array step is 0");
+    cap = ((int64_t)ub - lb + step - (step < 0 ? -1 : 1)) / step;
+    a = sy_arr_new1(SY_I32, cap > 0 ? cap : 0);
+    i = lb;
+    if ((lb < ub) != (0 < step)) i = ub;
+    while (((i < ub) == (lb < ub)) && i != ub) {
+        ((int32_t *)a->data)[j++] = i;
+        i += step;
+    }
+    a->len = a->size[0] = j;
+    return a;
+}
+
+sy_arr *sy_arr_step_i64(int64_t lb, int64_t step, int64_t ub)
+{
+    int64_t cap, j = 0, i;
+    sy_arr *a;
+
+    if (step == 0) sy_fatal("array step is 0");
+    cap = (ub - lb + step - (step < 0 ? -1 : 1)) / step;
+    a = sy_arr_new1(SY_I64, cap > 0 ? cap : 0);
+    i = lb;
+    if ((lb < ub) != (0 < step)) i = ub;
+    while (((i < ub) == (lb < ub)) && i != ub) {
+        ((int64_t *)a->data)[j++] = i;
+        i += step;
+    }
+    a->len = a->size[0] = j;
+    return a;
+}
+
+/* A float step multiplies instead of repeatedly adding, so that rounding errors
+ * don't accumulate, e.g. [0.0: 0.1: 0.9] */
+sy_arr *sy_arr_step_f32(float lb, float step, float ub)
+{
+    int64_t cap, j = 0;
+    float f;
+    sy_arr *a;
+
+    if (!(step > 0.0f || step < 0.0f)) sy_fatal("array step is 0.0");
+    cap = (int64_t)ceilf((ub - lb) / step);
+    a = sy_arr_new1(SY_F32, cap > 0 ? cap : 0);
+    f = lb;
+    if ((lb < ub) != (0 < step)) f = ub;
+    while (((f < ub) == (lb < ub)) && (f < ub || f > ub)) {
+        ((float *)a->data)[j] = f;
+        j++;
+        f = lb + (float)j * step;
+    }
+    a->len = a->size[0] = j;
+    return a;
+}
+
+sy_arr *sy_arr_step_f64(double lb, double step, double ub)
+{
+    int64_t cap, j = 0;
+    double f;
+    sy_arr *a;
+
+    if (!(step > 0.0 || step < 0.0)) sy_fatal("array step is 0.0");
+    cap = (int64_t)ceil((ub - lb) / step);
+    a = sy_arr_new1(SY_F64, cap > 0 ? cap : 0);
+    f = lb;
+    if ((lb < ub) != (0 < step)) f = ub;
+    while (((f < ub) == (lb < ub)) && (f < ub || f > ub)) {
+        ((double *)a->data)[j] = f;
+        j++;
+        f = lb + (double)j * step;
+    }
+    a->len = a->size[0] = j;
+    return a;
+}
+
+/* [lb: ub; n], n evenly spaced values including both ends */
+sy_arr *sy_arr_linspace_f32(float lb, float ub, int64_t n)
+{
+    sy_arr *a = sy_arr_new1(SY_F32, n);
+    float dx = (ub - lb) / (float)(n - 1);
+    int64_t i;
+
+    for (i = 0; i < a->len; i++) ((float *)a->data)[i] = lb + (float)i * dx;
+    return a;
+}
+
+sy_arr *sy_arr_linspace_f64(double lb, double ub, int64_t n)
+{
+    sy_arr *a = sy_arr_new1(SY_F64, n);
+    double dx = (ub - lb) / (double)(n - 1);
+    int64_t i;
+
+    for (i = 0; i < a->len; i++) ((double *)a->data)[i] = lb + (double)i * dx;
+    return a;
+}
+
+/*============================================================================*/
+
+/* One subscript of an array or a string, as the generated code builds it: what
+ * kind it is, its bounds and step, which bounds were left out (bit 0 for the
+ * lower, bit 1 for the upper), and an array of indices if it is a vector */
+enum { SUB_SCALAR, SUB_RANGE, SUB_ALL, SUB_STEP, SUB_VEC };
+
+typedef struct {
+    int64_t kind, lo, hi, st, omit;
+    const sy_arr *vec;
+} sy_sub;
+
+#define SY_MAX_RANK 16
+
+/* The zero-based indices that a subscript selects out of a dimension that has
+ * the extent n, in a list that the caller frees.  A range's upper bound is
+ * exclusive.  An omitted bound of a stepped subscript depends on the sign of
+ * the step, and the loop is the one of sy_arr_step_i64() */
+static int64_t *sy_sub_idx(const sy_sub *s, int64_t n, int64_t *count)
+{
+    int64_t lo, hi, st, i, j = 0, cnt;
+    int64_t *idx;
+
+    switch (s->kind) {
+    case SUB_SCALAR:
+        idx = (int64_t *)malloc(sizeof(int64_t));
+        idx[0] = s->lo;
+        *count = 1;
+        return idx;
+
+    case SUB_RANGE:
+    case SUB_ALL:
+        lo = (s->kind == SUB_ALL || (s->omit & 1)) ? 0 : s->lo;
+        hi = (s->kind == SUB_ALL || (s->omit & 2)) ? n : s->hi;
+        cnt = hi > lo ? hi - lo : 0;
+        idx = (int64_t *)malloc((size_t)(cnt > 0 ? cnt : 1) * sizeof(int64_t));
+        for (i = 0; i < cnt; i++) idx[i] = lo + i;
+        *count = cnt;
+        return idx;
+
+    case SUB_STEP:
+        st = s->st;
+        if (st == 0) sy_fatal("subscript step is 0");
+        lo = (s->omit & 1) ? (st < 0 ? n - 1 : 0) : s->lo;
+        hi = (s->omit & 2) ? (st < 0 ? -1 : n) : s->hi;
+        cnt = (hi - lo + st - (st < 0 ? -1 : 1)) / st;
+        idx = (int64_t *)malloc((size_t)(cnt > 0 ? cnt : 1) * sizeof(int64_t));
+        i = lo;
+        if ((lo < hi) != (0 < st)) i = hi;
+        while (((i < hi) == (lo < hi)) && i != hi) {
+            idx[j++] = i;
+            i += st;
+        }
+        *count = j;
+        return idx;
+
+    default:
+        cnt = s->vec != NULL ? s->vec->len : 0;
+        idx = (int64_t *)malloc((size_t)(cnt > 0 ? cnt : 1) * sizeof(int64_t));
+        for (i = 0; i < cnt; i++) {
+            idx[i] = s->vec->elem == SY_I64 ? ((int64_t *)s->vec->data)[i]
+                : (int64_t)((int32_t *)s->vec->data)[i];
+        }
+        *count = cnt;
+        return idx;
+    }
+}
+
+/* Walks the elements that a subscript of each dimension of an array selects, in
+ * column-major order.  The position of the t-th one in the array is `lin` */
+typedef struct {
+    int32_t rank;
+    int64_t *idx[SY_MAX_RANK];
+    int64_t cnt[SY_MAX_RANK], pos[SY_MAX_RANK], ext[SY_MAX_RANK];
+    int64_t total;
+} sy_walk;
+
+static void sy_walk_init(sy_walk *w, const sy_arr *a, const sy_sub *subs)
+{
+    int32_t k;
+
+    if (a->rank > SY_MAX_RANK) sy_fatal("array rank is too big");
+    w->rank = a->rank;
+    w->total = 1;
+    for (k = 0; k < a->rank; k++) {
+        w->idx[k] = sy_sub_idx(&subs[k], a->size[k], &w->cnt[k]);
+        w->ext[k] = a->size[k];
+        w->pos[k] = 0;
+        w->total *= w->cnt[k];
+    }
+}
+
+static int64_t sy_walk_next(sy_walk *w)
+{
+    int32_t k;
+    int64_t lin = 0, mult = 1;
+
+    for (k = 0; k < w->rank; k++) {
+        lin += w->idx[k][w->pos[k]] * mult;
+        mult *= w->ext[k];
+    }
+    for (k = 0; k < w->rank; k++) {
+        if (++w->pos[k] < w->cnt[k]) break;
+        w->pos[k] = 0;
+    }
+    return lin;
+}
+
+static void sy_walk_free(sy_walk *w)
+{
+    int32_t k;
+
+    for (k = 0; k < w->rank; k++) free(w->idx[k]);
+}
+
+/* a[subs], where at least one subscript is not a single element.  The
+ * dimensions of single elements are dropped from the shape of the result */
+sy_arr *sy_arr_slice(const sy_arr *a, const sy_sub *subs)
+{
+    sy_walk w;
+    int64_t sizes[SY_MAX_RANK], t, lin;
+    int32_t k, rr = 0;
+    size_t es = sy_esize(a->elem);
+    sy_arr *out;
+
+    sy_walk_init(&w, a, subs);
+    for (k = 0; k < a->rank; k++) {
+        if (subs[k].kind != SUB_SCALAR) sizes[rr++] = w.cnt[k];
+    }
+    out = sy_arr_new(a->elem, rr, sizes);
+
+    for (t = 0; t < out->len; t++) {
+        lin = sy_walk_next(&w);
+        if (a->elem == SY_STR) {
+            sy_str_free(((sy_str **)out->data)[t]);
+            ((sy_str **)out->data)[t] = sy_str_dup(((sy_str **)a->data)[lin]);
+        } else {
+            memcpy(out->data + (size_t)t * es, a->data + (size_t)lin * es, es);
+        }
+    }
+    sy_walk_free(&w);
+    return out;
+}
+
+/* a[subs] = rhs, or a[subs] = *scalar if rhs is NULL, where `scalar` points to
+ * a value of the element type */
+void sy_arr_slice_set(sy_arr *a, const sy_sub *subs, const sy_arr *rhs, const void *scalar)
+{
+    sy_walk w;
+    int64_t t, lin;
+    size_t es = sy_esize(a->elem);
+    sy_arr *tmp = NULL;
+
+    sy_walk_init(&w, a, subs);
+    if (rhs != NULL && rhs->len != w.total) {
+        sy_walk_free(&w);
+        sy_fatal("size of RHS does not match size of LHS slice");
+    }
+    if (rhs == a) rhs = tmp = sy_arr_dup(a);
+
+    for (t = 0; t < w.total; t++) {
+        lin = sy_walk_next(&w);
+        if (a->elem == SY_STR) {
+            sy_str *src = rhs != NULL ? ((sy_str **)rhs->data)[t] : *(sy_str *const *)scalar;
+
+            sy_str_free(((sy_str **)a->data)[lin]);
+            ((sy_str **)a->data)[lin] = sy_str_dup(src);
+        } else {
+            memcpy(a->data + (size_t)lin * es,
+                rhs != NULL ? rhs->data + (size_t)t * es : (const char *)scalar, es);
+        }
+    }
+    sy_arr_free(tmp);
+    sy_walk_free(&w);
+}
+
+/* The i-th character of s, for iterating over it */
+sy_str *sy_str_at(const sy_str *s, int64_t i)
+{
+    return sy_str_from(s->data + i, 1);
+}
+
+/* s[sub], a character or a substring */
+sy_str *sy_str_sub(const sy_str *s, const sy_sub *sub)
+{
+    int64_t cnt, i;
+    int64_t *idx = sy_sub_idx(sub, s->len, &cnt);
+    sy_str *r = sy_str_alloc(cnt);
+
+    for (i = 0; i < cnt; i++) r->data[i] = s->data[idx[i]];
+    free(idx);
+    return r;
+}
+
+/* s[sub] = rhs, where `slot` is the variable that holds s.  A string is only
+ * changed in place if it isn't a literal, otherwise the variable gets a copy.
+ * The rhs of a single character or a range is truncated or padded with blanks
+ * to the length of the substring, like an assignment to a substring is in
+ * Fortran.  Otherwise it must be as long as the number of characters */
+void sy_str_set(sy_str **slot, const sy_sub *sub, const sy_str *rhs)
+{
+    sy_str *s = *slot;
+    int64_t cnt, i;
+    int64_t *idx = sy_sub_idx(sub, s->len, &cnt);
+    int fill = sub->kind == SUB_SCALAR || sub->kind == SUB_RANGE || sub->kind == SUB_ALL;
+
+    if (!fill && rhs->len != cnt) {
+        free(idx);
+        sy_fatal("size of RHS does not match size of LHS slice");
+    }
+    if (s->imm) s = *slot = sy_str_from(s->data, s->len);
+    for (i = 0; i < cnt; i++) s->data[idx[i]] = i < rhs->len ? rhs->data[i] : ' ';
+    free(idx);
+}
+
+/*============================================================================*/
+
+typedef struct {
+    char *p;
+    size_t n, cap;
+} sy_buf;
+
+static void sy_buf_put(sy_buf *b, const char *s, size_t n)
+{
+    if (b->n + n + 1 > b->cap) {
+        b->cap = 2 * (b->n + n + 1);
+        b->p = (char *)realloc(b->p, b->cap);
+        if (b->p == NULL) sy_fatal("out of memory");
+    }
+    memcpy(b->p + b->n, s, n);
+    b->n += n;
+}
+
+/* str(array), which is rt_join() of the Fortran runtime.  The elements are
+ * separated by ", ".  A rank > 1 array starts and ends with a line break, and
+ * has one after every complete row (and plane, etc.).  The elements of a float
+ * array are trimmed, unlike a scalar's */
+sy_str *sy_arr_str(const sy_arr *a)
+{
+    sy_buf b = {NULL, 0, 0};
+    char tmp[40];
+    const char *p;
+    int64_t i, prod;
+    int32_t j;
+    size_t n;
+    sy_str *s;
+
+    sy_buf_put(&b, "[", 1);
+    if (a != NULL && a->rank > 1) sy_buf_put(&b, "\n", 1);
+
+    for (i = 0; a != NULL && i < a->len; i++) {
+        p = tmp;
+        switch (a->elem) {
+        case SY_I32:
+            n = (size_t)snprintf(tmp, sizeof tmp, "%d", (int)((int32_t *)a->data)[i]);
+            break;
+        case SY_I64:
+            n = (size_t)snprintf(tmp, sizeof tmp, "%lld", (long long)((int64_t *)a->data)[i]);
+            break;
+        case SY_F32:
+        case SY_F64:
+            n = (size_t)(a->elem == SY_F32 ? sy_fmt_f32(((float *)a->data)[i], tmp)
+                : sy_fmt_f64(((double *)a->data)[i], tmp));
+            while (n > 0 && tmp[n - 1] == ' ') n--;
+            while (n > 0 && *p == ' ') {
+                p++;
+                n--;
+            }
+            break;
+        case SY_BOOL:
+            p = a->data[i] ? "true" : "false";
+            n = strlen(p);
+            break;
+        default:
+            p = ((sy_str **)a->data)[i]->data;
+            n = (size_t)((sy_str **)a->data)[i]->len;
+            break;
+        }
+        sy_buf_put(&b, p, n);
+        if (i >= a->len - 1) continue;
+        sy_buf_put(&b, ", ", 2);
+
+        prod = a->size[0];
+        for (j = 1; j < a->rank; j++) {
+            if ((i + 1) % prod == 0) sy_buf_put(&b, "\n", 1);
+            prod *= a->size[j];
+        }
+    }
+
+    if (a != NULL && a->rank > 1) sy_buf_put(&b, "\n", 1);
+    sy_buf_put(&b, "]", 1);
+
+    s = sy_str_from(b.p, (int64_t)b.n);
+    free(b.p);
+    return s;
 }
 
 /*============================================================================*/

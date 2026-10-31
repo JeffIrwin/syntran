@@ -11899,7 +11899,30 @@ subroutine unit_test_native(npass, nfail)
 				'not supported by the native backend'), &
 
 			! An invalid program is not a native diagnostic
-			.not. diag_has_code(get_diags_native('let x = ;'), EC_NATIVE_UNSUPPORTED) &
+			.not. diag_has_code(get_diags_native('let x = ;'), EC_NATIVE_UNSUPPORTED), &
+
+			! Arrays are heap objects made by the runtime, and so are the results
+			! of operations on them
+			index(native_ir('let a = [1, 2, 3]; println(a[1]);'), '@sy_arr_new') > 0, &
+			index(native_ir('let a = [0: 4]; println(a);'), '@sy_arr_range_i32') > 0, &
+			index(native_ir('let a = [1, 2]; let b = a + a; println(b);'), &
+				'@sy_arr_like') > 0, &
+			index(native_ir('let a = [1, 2, 3, 4, 5]; println(a[1: 3]);'), &
+				'@sy_arr_slice') > 0, &
+
+			! A fn can take and return an array, which it owns a copy of
+			index(native_ir('fn f(a: [i32; :]): [i32; :] { a[0] = 1; return a; } ' &
+				//'println(f([1, 2]));'), '@sy_arr_dup') > 0, &
+
+			! A `switch` is compiled
+			.not. native_ir_is_empty('let x = 2; switch x { case 1 { println("a"); } ' &
+				//'default { println("b"); } }'), &
+
+			! What an array can't do yet is diagnosed, once per statement
+			diag_has_code(get_diags_native('let a = [1.0, 2.0, 3.0, 4.0; 2, 2]; ' &
+				//'let b = a @ a;'), EC_NATIVE_UNSUPPORTED), &
+			diag_has_code(get_diags_native('let a = [1, 2]; let b = sum(a, 0);'), &
+				EC_NATIVE_UNSUPPORTED) &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
