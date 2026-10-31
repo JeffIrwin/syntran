@@ -1,0 +1,9 @@
+// E130: native-unsupported
+// A valid program, which the interpreter runs fine, but uses a construct that
+// `syntran --native` can't compile, here the interpreter's own call stack.
+// This is only an error when compiling natively
+
+let n = 5;
+let msg = "n is " + str(n);
+let where_am_i = std::caller();
+println(msg, where_am_i);

@@ -80,6 +80,27 @@ A project that *depends* on syntran links BLAS too, but can't select its
 features, so it opts out with `--flag "-DSYNTRAN_NO_BLAS"`, which still links
 the libraries.  See `doc/api.md`.
 
+#### LLVM (the native backend)
+
+`syntran --native` (see `doc/native.md`) compiles through LLVM.  It's opt-in:
+without LLVM installed, syntran builds as always and `--native` is an error.
+Everything that calls LLVM is inside `#ifdef SYNTRAN_LLVM` in `src/native.F90`
+(an uppercase `.F90`) and `src/c/llvm_shim.c`.  `src/llvm_c.f90` is only
+interfaces to the LLVM-C API, so it always compiles.
+
+```bash
+brew install llvm                       # or: sudo apt install llvm-dev
+export LIBRARY_PATH=$(llvm-config --libdir)
+fpm build --features debug,llvm-blas    # or debug,noblas,llvm
+fpm install --test --features debug,llvm-blas --prefix ./build/native/
+```
+
+fpm allows only one feature with a `build` table, so `blas` + `llvm` can't be
+combined and `llvm-blas` is both.  The C macro `SYNTRAN_LLVM` reaches C files
+too.  CMake spells it `-DSYNTRAN_LLVM=ON`.  The test suite must pass both with
+and without LLVM, since the latter is the default: the groups `native_rt` and
+`native` in `src/tests/test.f90` only exercise the backend if it's built in.
+
 #### Getting a stable path to a built binary
 
 fpm puts its output in `build/gfortran_<HASH>/`, where the hash changes with
@@ -154,6 +175,17 @@ bash utils/test-transpile.sh --only 'fns/'    # a subset, by path regex
 bash utils/test-transpile.sh --update-pass-list  # after coverage grows
 ```
 Every file in `utils/transpile-pass.txt` must keep passing.
+
+### Testing the native (LLVM) backend
+`unit_test_native` only checks diagnostics and the LLVM IR.  To compile and link
+every test program and sample and diff their output against the interpreter's,
+which needs a syntran built with LLVM and a C compiler:
+```bash
+bash utils/test-transpile.sh --backend native build/native/bin/syntran
+bash utils/test-transpile.sh --backend native --update-pass-list build/native/bin/syntran
+```
+Every file in `utils/native-pass.txt` must keep passing.  Pass `--ref` with an
+FMA-free interpreter, as for the Fortran backend.
 
 ### Testing README.md code blocks
 `README.md`'s code blocks are annotated with hidden `<!-- syntran-begin -->`
@@ -237,6 +269,27 @@ Fortran intrinsic or a name that the emitter makes up.  Those are emitted as
 block scopes and shadowing never need to be mirrored in Fortran (see
 `collect_names()` and `bare_ok()`).  The emitter reads types from `node%val`, and
 fn signatures from `state%fns`, since a `fn_declaration` node only has slots.
+
+### Native Backend (`--native`)
+Compiles the typed AST straight to machine code with LLVM, calling the LLVM-C
+API from Fortran.  User docs are in `doc/native.md`.
+- `src/llvm_c.f90` - bind(c) interfaces to the LLVM-C functions that are used.
+  Add an interface here when the emitter needs another one
+- `src/native.F90` - `syntran__native_m`: the public `native_t` options/result
+  type, the `nemitter_t` state, and `native_tree()`.  Everything that calls LLVM
+  is under `#ifdef SYNTRAN_LLVM`
+- `src/c/llvm_shim.c` - initializes LLVM for the host architecture, because
+  `LLVMInitializeNativeTarget()` is a static inline in a header
+- `src/rt/syntran_crt.c` - the C runtime that compiled programs link with
+  (`sy_` prefix).  **Use spaces, not tabs**, and keep lines under 100 chars.
+  It is also compiled into the library, so `unit_test_native_rt` can compare its
+  float formatting to `src/rt/syntran_rt.f90`
+- `src/native_rt.f90` - **Generated**, never edit by hand.  The C runtime as a
+  table of string literals.  Regenerate with `bash src/gen_native_rt.sh`
+- Diagnostic `E130` is reported for constructs that aren't supported yet
+
+A value that the emitter builds is an `nval_t`.  A `str` is a heap object that
+whoever made it owns, until it is moved into a variable or `dispose()`d.
 
 ### Math Operations (auto-generated)
 Binary arithmetic operations are generated from `src/math_bin_template.f90` via `src/gen_math.sh`:

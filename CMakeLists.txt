@@ -50,6 +50,14 @@ if(SYNTRAN_NO_BLAS)
 	add_compile_definitions(SYNTRAN_NO_BLAS)
 endif()
 
+# Build the native backend (`syntran --native`), which compiles through LLVM.
+# Only src/native.F90 and src/c/llvm_shim.c read this macro.  fpm builds spell
+# it `--features debug,blas,llvm` (see [features] in fpm.toml)
+option(SYNTRAN_LLVM "Build the native backend, which needs LLVM" OFF)
+if(SYNTRAN_LLVM)
+	add_compile_definitions(SYNTRAN_LLVM)
+endif()
+
 if(DEFINED ENV{SYNTRAN_INTEL})
 	# ifort-specific flags must NOT reach the C compiler (icx doesn't
 	# understand -fpp/etc), so gate them to Fortran only.
@@ -187,6 +195,8 @@ set(SRC_DIR "src")
 set(LIB "${PROJECT}")
 set(LIB_SRC
 	${SRC_DIR}/c/isocline_wrap.c
+	${SRC_DIR}/c/llvm_shim.c
+	${SRC_DIR}/rt/syntran_crt.c
 	# Compiled here (once), instead of duplicated into each of
 	# EXE_SRC/TEST_SRC/LONG_SRC below, to avoid recompiling it 3x per config.
 	${SRC_DIR}/app.f90
@@ -213,6 +223,7 @@ set(LIB_SRC
 	${SRC_DIR}/lex.f90
 	${SRC_DIR}/line_edit.f90
 	${SRC_DIR}/linalg.F90
+	${SRC_DIR}/llvm_c.f90
 	${SRC_DIR}/math.f90
 	${SRC_DIR}/math_bin_add.f90
 	${SRC_DIR}/math_bin_div.f90
@@ -226,6 +237,8 @@ set(LIB_SRC
 	${SRC_DIR}/math_bit_or.f90
 	${SRC_DIR}/math_bit_right_shift.f90
 	${SRC_DIR}/math_bit_xor.f90
+	${SRC_DIR}/native.F90
+	${SRC_DIR}/native_rt.f90
 	${SRC_DIR}/parse.f90
 	${SRC_DIR}/parse_array.f90
 	${SRC_DIR}/parse_control.f90
@@ -274,6 +287,19 @@ else()
 endif()
 
 set(LINK_LIBS "${LIB}")
+
+if(SYNTRAN_LLVM)
+	find_package(LLVM REQUIRED CONFIG)
+	message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+	if(TARGET LLVM)
+		# A shared libLLVM, which is the usual install
+		list(APPEND LINK_LIBS LLVM)
+	else()
+		llvm_map_components_to_libnames(LLVM_LIBS core analysis passes target
+			native)
+		list(APPEND LINK_LIBS ${LLVM_LIBS})
+	endif()
+endif()
 
 if(NOT SYNTRAN_NO_BLAS)
 	# Accelerate on Apple, otherwise whatever BLAS/LAPACK the system provides

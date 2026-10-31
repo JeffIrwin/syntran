@@ -18,7 +18,7 @@ module syntran__app_m
 
 	type args_t
 
-		character(len = :), allocatable :: syntran_file, command, color, transpile_out
+		character(len = :), allocatable :: syntran_file, command, color, transpile_out, native_out
 
 		integer :: maxerr
 
@@ -27,6 +27,7 @@ module syntran__app_m
 			command_arg        = .false., &
 			interactive        = .false., &
 			keep_unused_fns    = .false., &
+			native             = .false., &
 			permissive_return  = .false., &
 			quiet              = .false., &
 			syntax_only        = .false., &
@@ -236,6 +237,10 @@ function parse_args() result(args)
 			args%transpile = .true.
 			call get_next_arg(i, args%transpile_out)
 
+		case ("--native")
+			args%native = .true.
+			call get_next_arg(i, args%native_out)
+
 		case ("--keep-unused-fns")
 			args%keep_unused_fns = .true.
 
@@ -305,6 +310,37 @@ function parse_args() result(args)
 		error = .true.
 	end if
 
+	! Same for --native, which also needs a program and a syntran with LLVM
+	if (args%native .and. .not. args%help .and. .not. args%version) then
+		if (.not. (args%syntran_file_arg .or. args%command_arg)) then
+			write(*,*) err_prefix//"--native requires a <file.syntran> "// &
+				"or -c <cmd> argument"
+			error = .true.
+		end if
+		if (args%transpile .or. args%syntax_only) then
+			write(*,*) err_prefix//"--native cannot be used with --transpile "// &
+				"or --syntax-only"
+			error = .true.
+		end if
+		if (.not. native_available) then
+			write(*,*) err_prefix//"--native requires a syntran that is built "// &
+				"with LLVM, i.e. with SYNTRAN_LLVM"
+			error = .true.
+		end if
+	end if
+
+	! `syntran --native a.syntran a.syntran` would replace the program with its binary
+	if (args%native .and. args%syntran_file_arg .and. .not. args%help .and. &
+		.not. args%version) then
+		if (allocated(args%native_out) .and. allocated(args%syntran_file)) then
+			if (args%native_out == args%syntran_file) then
+				write(*,*) err_prefix//"--native output file `"//args%native_out// &
+					"` is also the input file"
+				error = .true.
+			end if
+		end if
+	end if
+
 	! It's an option of the transpiler, so it does nothing otherwise
 	if (args%keep_unused_fns .and. .not. args%transpile .and. .not. args%help .and. &
 		.not. args%version) then
@@ -326,13 +362,14 @@ function parse_args() result(args)
 				args%command_arg      .or. &
 				args%syntax_only      .or. &
 				args%transpile        .or. &
+				args%native           .or. &
 				args%version          .or. &
 				args%syntran_file_arg .or. &
 				args%help                  &
 			)
 
 		if (.not. args%command_arg .and. .not. args%syntax_only .and. &
-			.not. args%transpile) then
+			.not. args%transpile .and. .not. args%native) then
 			write(*,*)
 			write(*,*) fg_bright_magenta//lang_name//' '//version//color_reset
 			write(*,*) fg_bright_magenta//url//color_reset
@@ -378,6 +415,7 @@ function parse_args() result(args)
 		write(*,*) "    -s --syntax-only    Parse and type check without running the program"
 		write(*,*) "    -t --transpile <f>  Write the program as Fortran source to <f> ('-' for stdout) instead of running it"
 		write(*,*) "    --keep-unused-fns   With --transpile, also write the fns that nothing calls"
+		write(*,*) "    --native <f>        Compile the program with LLVM to an executable <f> (or an object <f>.o, or LLVM IR <f>.ll)"
 		write(*,*) "    -- <args>...        Pass remaining arguments to script via std::args()"
 		write(*,*)
 

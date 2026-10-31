@@ -12,6 +12,7 @@ module syntran
 	use syntran__vm_m
 	use syntran__line_edit_m
 	use syntran__repl_m
+	use syntran__native_m
 	use syntran__transpile_m
 
 	implicit none
@@ -358,7 +359,7 @@ end function syntran_interpret
 !===============================================================================
 
 subroutine syntran_eval_value(str_, val, quiet, want_type, src_file, chdir_, &
-		script_args, diags, syntax_only, transpile, io)
+		script_args, diags, syntax_only, transpile, native, io)
 
 	! Shared front end for syntran_eval() and the typed syntran_eval_i32() /
 	! _i64() / _f32() / _f64() / _bool() / _str() wrappers below.  Parses and
@@ -401,6 +402,12 @@ subroutine syntran_eval_value(str_, val, quiet, want_type, src_file, chdir_, &
 	! were parser errors.  Backs the `--transpile` CLI option
 	type(transpile_t), optional, intent(inout) :: transpile
 
+	! Compile to a native executable (or object, or LLVM IR) with LLVM instead of
+	! evaluating.  Nothing runs, and `val` is unset.  The output goes to the
+	! file that native%out names.  Constructs which are not supported by the
+	! native backend yet are diagnostics.  Backs the `--native` CLI option
+	type(native_t), optional, intent(inout) :: native
+
 	! exit_success/exit_failure status for callers.  Failure means the
 	! expression did not run to completion (parser diagnostics, or a runtime
 	! halt for quiet callers -- non-quiet callers exit the process from
@@ -415,7 +422,7 @@ subroutine syntran_eval_value(str_, val, quiet, want_type, src_file, chdir_, &
 	logical :: repl, syntax_onlyl
 
 	type(state_t) :: state
-	type(string_vector_t) :: transpile_diags
+	type(string_vector_t) :: transpile_diags, native_diags
 	type(syntax_node_t) :: tree
 
 	! Determine source directory first
@@ -472,6 +479,21 @@ subroutine syntran_eval_value(str_, val, quiet, want_type, src_file, chdir_, &
 
 		if (transpile_diags%len_ > 0) then
 			call tree%diagnostics%push_all(transpile_diags)
+			if (.not. state%quiet) call tree%log_diagnostics()
+			if (present(diags)) diags = tree%diagnostics
+			if (present(io)) io = exit_failure
+		end if
+
+		call state_destroy(state)
+		return
+	end if
+
+	if (present(native)) then
+		! Same as above, but the output is a file of machine code
+		call native_tree(tree, state, native, native_diags)
+
+		if (native_diags%len_ > 0) then
+			call tree%diagnostics%push_all(native_diags)
 			if (.not. state%quiet) call tree%log_diagnostics()
 			if (present(diags)) diags = tree%diagnostics
 			if (present(io)) io = exit_failure
@@ -696,7 +718,7 @@ end subroutine init_state
 !===============================================================================
 
 function syntran_eval(str_, quiet, src_file, chdir_, script_args, diags, &
-		syntax_only, transpile, io) result(res)
+		syntax_only, transpile, native, io) result(res)
 
 	! Note that this chdir_ optional arg is a str_, while the chdir_ optional arg
 	! for syntran_interpret_file() is boolean
@@ -723,6 +745,9 @@ function syntran_eval(str_, quiet, src_file, chdir_, script_args, diags, &
 	! Transpile to Fortran instead of evaluating.  See syntran_eval_value()
 	type(transpile_t), optional, intent(inout) :: transpile
 
+	! Compile natively instead of evaluating.  See syntran_eval_value()
+	type(native_t), optional, intent(inout) :: native
+
 	! exit_success/exit_failure status for non-interactive callers (the CLI in
 	! file or `-c` mode).  Failure means the program did not run to
 	! completion: parser diagnostics, or a runtime halt for quiet callers
@@ -737,7 +762,7 @@ function syntran_eval(str_, quiet, src_file, chdir_, script_args, diags, &
 
 	call syntran_eval_value(str_, val, quiet, src_file = src_file, chdir_ = chdir_, &
 		script_args = script_args, diags = diags, &
-		syntax_only = syntax_only, transpile = transpile, io = iol)
+		syntax_only = syntax_only, transpile = transpile, native = native, io = iol)
 
 	if (present(io)) io = iol
 
@@ -746,6 +771,7 @@ function syntran_eval(str_, quiet, src_file, chdir_, script_args, diags, &
 
 	! Nothing was evaluated when transpiling either
 	if (present(transpile)) return
+	if (present(native)) return
 
 	if (present(syntax_only)) then
 		! Parse and type check succeeded, but nothing was evaluated (see
@@ -800,7 +826,7 @@ end subroutine syntran_write_transpiled
 !===============================================================================
 
 function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args, diags, &
-		syntax_only, transpile, io) result(res)
+		syntax_only, transpile, native, io) result(res)
 
 	character(len = *), intent(in)  :: filename
 	character(len = :), allocatable :: res
@@ -825,6 +851,10 @@ function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args
 	! Transpile to Fortran instead of evaluating.  See syntran_eval_value().
 	! The CLI trims the result of a file, so this sets transpile%trim_result
 	type(transpile_t), optional, intent(inout) :: transpile
+
+	! Compile natively instead of evaluating.  See syntran_eval_value().  The
+	! CLI trims the result of a file, so this sets native%trim_result
+	type(native_t), optional, intent(inout) :: native
 
 	! exit_success/exit_failure status.  See syntran_eval()
 	integer, optional, intent(out) :: io
@@ -857,6 +887,10 @@ function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args
 		quiet_infol = .true.
 		transpile%trim_result = .true.
 	end if
+	if (present(native)) then
+		quiet_infol = .true.
+		native%trim_result = .true.
+	end if
 
 	if (present(io)) io = exit_success
 
@@ -881,11 +915,11 @@ function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args
 	if (chdirl) then
 		res = trim(adjustl(syntran_eval(source_text, state%quiet, filename, &
 			chdir_ = get_dir(filename), script_args = script_args, diags = diags, &
-			syntax_only = syntax_only, transpile = transpile, io = io)))
+			syntax_only = syntax_only, transpile = transpile, native = native, io = io)))
 	else
 		res = trim(adjustl(syntran_eval(source_text, state%quiet, filename, &
 			script_args = script_args, diags = diags, &
-			syntax_only = syntax_only, transpile = transpile, io = io)))
+			syntax_only = syntax_only, transpile = transpile, native = native, io = io)))
 	end if
 
 end function syntran_interpret_file

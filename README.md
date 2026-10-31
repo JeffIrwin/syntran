@@ -420,6 +420,21 @@ file I/O, and function pointers.  The interpreter's call stack
 for what is supported, and for how the generated program differs from
 interpreting.
 
+### Compiling natively with LLVM
+
+A syntran which is built with LLVM can also compile a program straight to a
+native executable, with no Fortran compiler involved:
+
+<!-- syntran-begin mode=skip reason="shell invocation example" -->
+```
+syntran --native fib fib.syntran
+./fib
+```
+<!-- syntran-end -->
+
+This is new, and only a small part of the language is supported so far.  See
+[doc/native.md](doc/native.md) for what it is, and how to build syntran with it.
+
 ### Other command-line arguments
 
 Run `syntran -h` to see a comprehensive listing of syntran command-line arguments:
@@ -449,6 +464,7 @@ Run `syntran -h` to see a comprehensive listing of syntran command-line argument
      -s --syntax-only    Parse and type check without running the program
      -t --transpile <f>  Write the program as Fortran source to <f> ('-' for stdout) instead of running it
      --keep-unused-fns   With --transpile, also write the fns that nothing calls
+     --native <f>        Compile the program with LLVM to an executable <f> (or an object <f>.o, or LLVM IR <f>.ll)
      -- <args>...        Pass remaining arguments to script via std::args()
 ```
 <!-- syntran-expect
@@ -473,6 +489,7 @@ Run `syntran -h` to see a comprehensive listing of syntran command-line argument
      -s --syntax-only    Parse and type check without running the program
      -t --transpile <f>  Write the program as Fortran source to <f> ('-' for stdout) instead of running it
      --keep-unused-fns   With --transpile, also write the fns that nothing calls
+     --native <f>        Compile the program with LLVM to an executable <f> (or an object <f>.o, or LLVM IR <f>.ll)
      -- <args>...        Pass remaining arguments to script via std::args()
 -->
 <!-- syntran-end -->

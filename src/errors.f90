@@ -145,6 +145,7 @@ module syntran__errors_m
 		EC_BAD_OPTIONAL = "E127", &
 		EC_NULL_ARRAY = "E128", &
 		EC_UNTYPED_NULL = "E129", &
+		EC_NATIVE_UNSUPPORTED = "E130", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -896,6 +897,13 @@ module syntran__errors_m
 			character(len = :), allocatable :: err
 			character(len = *), intent(in) :: var
 		end function err_untyped_null
+
+		module function err_native_unsupported(context, span, what) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+			character(len = *), intent(in) :: what
+		end function err_native_unsupported
 
 		module function err_bad_optional(context, span, type_text) result(err)
 			type(text_context_t) :: context

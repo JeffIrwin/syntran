@@ -848,6 +848,17 @@ can be null.
 
 [Example](../src/tests/test-src/errors/E129-untyped-null.syntran)
 
+### E130 -- native-unsupported
+
+A construct which the native backend (`syntran --native`) can't compile yet,
+e.g. a function declaration or a loop.  The program is still valid.  Run it with
+the interpreter instead, i.e. without `--native`.  This is only ever reported when
+compiling natively.  There is at most one diagnostic for each statement.
+
+See [native.md](native.md) for what is supported.
+
+[Example](../src/tests/test-src/errors/E130-native-unsupported.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type
