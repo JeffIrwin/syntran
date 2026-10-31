@@ -32,10 +32,11 @@ module syntran__core_m
 
 	! TODO:
 	!  - llvm compiled backend
-	!    * do unit tests run with llvm? might need a jit eval at least for
-	!      testing
-	!    * stack trace and related parity with vm. transpiler is behind on this
-	!      feature
+	!    * Side finding (VM bug, out of scope, report only): a[0:3:2, :] of a 3x3 gives
+	!      [1, 4, 4] in the VM; native gives the correct [1, 4, 7] (row 0).
+	!      + can/should the repl use llvm jit?
+	!    * fpm commands are getting unweildy with all these feature options.
+	!      update build.sh with args to enable llvm, blas, etc. (on by default?)
 	!    * windows ci/cd
 	!    * binary packaging? any llvm dll's?
 	!    * parity with vm, not with transpiler

@@ -131,6 +131,11 @@ The output of a compiled program is the same as the interpreter's, but:
   is no `--`, because there are no options of syntran to tell them apart from.
 - Opening a file with mode `"w"` empties it right away.  The interpreter only
   does when it first writes to it.
+- A method gets the address of its receiver, rather than a copy that is written
+  back when it returns.  So if the method makes the receiver go away, like
+  `a[1].bump()` where `bump()` assigns a shorter array to `a`, then the
+  interpreter reports an out of bounds subscript (R33) when the method returns,
+  but a compiled program writes to memory that was freed.
 
 ## How it works
 
@@ -169,7 +174,25 @@ program starts.  A fn pushes a frame, with its own id and the number of the
 statement that called it, in its first block, and pops it in its last.  Both are
 inline, so a call costs a few loads and stores.
 
-To check a change to the native backend, run
+To check a change to the native backend, there are two kinds of tests.  The first
+runs the unit tests of the interpreter with every program that they evaluate
+compiled by the native backend and run in memory, with LLVM's JIT, instead of
+on the VM:
+
+```
+fpm test test --features debug,llvm-blas --flag -Wno-tabs -- --native
+```
+
+A program that stops with a runtime error, or calls `std::exit()`, leaves the
+JIT with a `longjmp()` rather than `exit()`, and the runtime keeps its result and
+its error for the test.  This skips the tests of the REPL, of the other
+backends, and of the API that hands back a `value_t`, and a few cases that are
+listed in `src/tests/test.f90`.  Every other test must pass.
+
+The second kind compiles and links every syntran test program and sample, runs
+it, and compares the output with the interpreter's.  It reports which
+unsupported constructs are the most common among the programs that it can't
+compile yet.  Every file in `utils/native-pass.txt` must keep passing:
 
 ```
 bash utils/test-transpile.sh --backend native
@@ -179,8 +202,3 @@ bash utils/test-transpile.sh --backend native --long
 The second one compiles the programs of the long tests (`src/tests/long.f90`),
 which are bigger programs from Advent of Code, and compares their output to the
 interpreter's.  It takes a few minutes, so CI doesn't run it.
-
-which compiles and runs every syntran test program and sample, and compares the
-output with the interpreter's.  It reports which unsupported constructs are the
-most common among the programs that it can't compile yet.  Every file in
-`utils/native-pass.txt` must keep passing.

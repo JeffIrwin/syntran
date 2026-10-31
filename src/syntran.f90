@@ -17,9 +17,118 @@ module syntran
 
 	implicit none
 
+	! For the test suite: evaluate programs by compiling them with LLVM and running
+	! them in this process, rather than on the VM.  See syntran_set_native_evals()
+	logical, private :: native_evals = .false.
+
+	! The result of the last program that ran that way, as text, for syntran_eval()
+	character(len = :), allocatable, private :: native_text
+
 !===============================================================================
 
 contains
+
+!===============================================================================
+
+subroutine syntran_set_native_evals(on)
+
+	! Make syntran_eval(), syntran_eval_i32(), syntran_interpret_file(), etc.
+	! compile their programs with the native backend and run them in memory,
+	! instead of using the VM.  This is only for testing the native backend: it
+	! runs the unit tests of the VM on it.  It needs a syntran that was built with
+	! LLVM, and a program which the backend can't compile is a diagnostic.  The
+	! REPL, syntran_interpret(), is not affected
+
+	logical, intent(in) :: on
+
+	native_evals = on
+
+end subroutine syntran_set_native_evals
+
+!===============================================================================
+
+logical function syntran_native_evals()
+
+	syntran_native_evals = native_evals
+
+end function syntran_native_evals
+
+!===============================================================================
+
+subroutine eval_native(tree, state, val)
+
+	! Like eval_dispatch(), but with the native backend, in memory.  A runtime
+	! error is left in state%rt_halt and state%rt_diags, as it is there.  The
+	! result as text is in native_text, and when it is a scalar, which a typed
+	! syntran_eval_*() needs, it is in `val`
+
+	type(syntax_node_t), intent(in) :: tree
+	type(state_t), intent(inout) :: state
+	type(value_t), intent(out) :: val
+
+	!*******
+
+	integer :: ios
+
+	type(native_t) :: n
+	type(string_vector_t) :: diags
+
+	n%jit = .true.
+	n%print_result = .true.
+	n%trim_result = .false.
+
+	native_text = ''
+	call native_tree(tree, state, n, diags)
+
+	if (diags%len_ > 0) then
+		! The backend could not compile it, which is not the program's fault.  Report
+		! it as a runtime error so that a test of the program fails without crashing
+		state%rt_halt = .true.
+		call state%rt_diags%push_all(diags)
+		if (.not. state%quiet) call log_rt_diags(state%rt_diags)
+		return
+	end if
+
+	if (n%status == 1) then
+		state%rt_halt = .true.
+		call state%rt_diags%push(n%message)
+		if (.not. state%quiet) call log_rt_diags(state%rt_diags)
+		return
+	end if
+
+	if (n%status == 2) then
+		! std::exit().  Nothing to hand back, but it isn't an error of the program
+		native_text = ''
+		return
+	end if
+
+	native_text = n%result
+
+	select case (n%result_type)
+	case (i32_type)
+		val%type = i32_type
+		read(native_text, *, iostat = ios) val%sca%i32
+		if (ios /= 0) val%type = unknown_type
+	case (i64_type)
+		val%type = i64_type
+		read(native_text, *, iostat = ios) val%sca%i64
+		if (ios /= 0) val%type = unknown_type
+	case (f32_type)
+		val%type = f32_type
+		val%sca%f32 = n%result_f32
+	case (f64_type)
+		val%type = f64_type
+		val%sca%f64 = n%result_f64
+	case (bool_type)
+		val%type = bool_type
+		val%sca%bool = native_text == 'true'
+	case (str_type)
+		val%type = str_type
+		allocate(val%str)
+		val%str%s = native_text
+	end select
+
+end subroutine eval_native
 
 !===============================================================================
 
@@ -503,7 +612,11 @@ subroutine syntran_eval_value(str_, val, quiet, want_type, src_file, chdir_, &
 		return
 	end if
 
-	call eval_dispatch(tree, state, val)
+	if (native_evals) then
+		call eval_native(tree, state, val)
+	else
+		call eval_dispatch(tree, state, val)
+	end if
 
 	! A runtime error halted evaluation.  eval_dispatch() already printed and
 	! exited for non-quiet callers, so reaching here means state%quiet is
@@ -777,6 +890,11 @@ function syntran_eval(str_, quiet, src_file, chdir_, script_args, diags, &
 		! Parse and type check succeeded, but nothing was evaluated (see
 		! syntran_eval_value()); val is unset
 		if (syntax_only) return
+	end if
+
+	if (native_evals) then
+		res = native_text
+		return
 	end if
 
 	res = val%to_str()

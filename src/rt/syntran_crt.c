@@ -33,6 +33,33 @@
 #define sy_isatty(f) isatty(fileno(f))
 #endif
 
+#ifdef SYNTRAN_LLVM
+/* Only syntran itself defines this macro, when it is built with LLVM.  A program that is
+ * compiled by `syntran --native` never does.  The library runs a program that it has
+ * compiled in its own process, with an in-memory JIT, to test the backend.  Then the
+ * things that would exit() leave the program with a longjmp instead, and the result
+ * of the program, and its error, are kept for the caller rather than written.  The
+ * fns which start and end a run are at the end of this file */
+#include <setjmp.h>
+
+static int sy_jit = 0;
+static jmp_buf sy_jit_env;
+static char *sy_jit_res = NULL;
+static char *sy_jit_msg = NULL;
+static int sy_jit_kind = 0, sy_jit_code = 0;
+
+/* kind: 1 is a runtime error, with its report in msg, which is owned by this from here on.
+ * 2 is std::exit(code) */
+static void sy_jit_leave(int kind, int code, char *msg)
+{
+    free(sy_jit_msg);
+    sy_jit_msg = msg;
+    sy_jit_kind = kind;
+    sy_jit_code = code;
+    longjmp(sy_jit_env, 1);
+}
+#endif
+
 typedef struct {
     int64_t len;
     int64_t imm;    /* nonzero for a literal, which is never freed */
@@ -95,6 +122,15 @@ int sy_fmt_f32(float x, char *buf)
 
 void sy_fatal(const char *msg)
 {
+#ifdef SYNTRAN_LLVM
+    if (sy_jit) {
+        size_t n = strlen(msg) + 32;
+        char *m = (char *)malloc(n);
+
+        if (m != NULL) snprintf(m, n, "Runtime error: %s", msg);
+        sy_jit_leave(1, 1, m);
+    }
+#endif
     fflush(stdout);
     fprintf(stderr, "Runtime error: %s\n", msg);
     exit(1);
@@ -276,6 +312,9 @@ static void sy_rt_error(const char *code, const char *fmt, ...)
         sy_frames_str(&b, sy_loc, sy_depth);
     }
 
+#ifdef SYNTRAN_LLVM
+    if (sy_jit) sy_jit_leave(1, 1, b.p);
+#endif
     fflush(stdout);
     fprintf(stdout, "%s\n", b.p);
     fflush(stdout);
@@ -494,6 +533,16 @@ void sy_result(const sy_str *s, int32_t trim)
     const char *p = s->data;
     int64_t n = s->len;
 
+#ifdef SYNTRAN_LLVM
+    if (sy_jit) {
+        free(sy_jit_res);
+        sy_jit_res = (char *)malloc((size_t)n + 1);
+        if (sy_jit_res == NULL) sy_fatal("out of memory");
+        memcpy(sy_jit_res, p, (size_t)n);
+        sy_jit_res[n] = '\0';
+        return;
+    }
+#endif
     if (trim) {
         while (n > 0 && *p == ' ') {
             p++;
@@ -506,8 +555,19 @@ void sy_result(const sy_str *s, int32_t trim)
     fputc('\n', stdout);
 }
 
+/* The value of a float result, exactly.  The text of an f32 doesn't have enough digits to
+ * be read back as the same f32, and the typed evals of the test suite want the value.
+ * Nothing else calls these, except for the JIT of the test suite */
+static union { float f; double d; } sy_res_val;
+
+void sy_result_f32(float x) { sy_res_val.f = x; }
+void sy_result_f64(double x) { sy_res_val.d = x; }
+
 void sy_exit(int32_t code)
 {
+#ifdef SYNTRAN_LLVM
+    if (sy_jit) sy_jit_leave(2, (int)code, NULL);
+#endif
     printf(" Exiting syntran with status %d\n", (int)code);
     fflush(stdout);
     exit((int)code);
@@ -1299,15 +1359,15 @@ sy_str *sy_str_sub(const sy_str *s, const sy_sub *sub)
 
 /* s[sub] = rhs, where `slot` is the variable that holds s.  A string is only
  * changed in place if it isn't a literal, otherwise the variable gets a copy.
- * The rhs of a single character or a range is truncated or padded with blanks
- * to the length of the substring, like an assignment to a substring is in
- * Fortran.  Otherwise it must be as long as the number of characters */
+ * The rhs of a single character is truncated or padded with blanks to its length,
+ * which is 1.  Otherwise, a slice, it must be as long as the number of characters
+ * that it selects */
 void sy_str_set(sy_str **slot, const sy_sub *sub, const sy_str *rhs)
 {
     sy_str *s = *slot, *tmp = NULL;
     int64_t cnt, i;
     int64_t *idx = sy_sub_idx(sub, s->len, &cnt, 1, 0);
-    int fill = sub->kind == SUB_SCALAR || sub->kind == SUB_RANGE || sub->kind == SUB_ALL;
+    int fill = sub->kind == SUB_SCALAR;
 
     if (!fill && rhs->len != cnt) {
         free(idx);
@@ -1360,6 +1420,29 @@ void sy_arr_str_set(sy_arr *a, const sy_sub *subs, const sy_str *rhs)
     }
     sy_walk_free(&w);
     sy_str_free(own);
+}
+
+/* The same, where the rhs is an array of strs, with one for each of the elements that
+ * the others of the subscripts select */
+void sy_arr_str_set_arr(sy_arr *a, const sy_sub *subs, const sy_arr *rhs)
+{
+    sy_walk w;
+    int64_t t;
+    sy_arr *own;
+
+    sy_walk_init(&w, a, subs);
+    if (rhs->len != w.total) {
+        sy_walk_free(&w);
+        sy_rt_error("R21", "size of RHS does not match size of LHS slice");
+    }
+    /* The rhs can be the array, whose elements the first of them would change */
+    own = sy_arr_dup(rhs);
+    for (t = 0; t < w.total; t++) {
+        sy_str_set(&((sy_str **)a->data)[sy_walk_next(&w)], &subs[a->rank],
+            ((sy_str **)own->data)[t]);
+    }
+    sy_walk_free(&w);
+    sy_arr_free(own);
 }
 
 /*============================================================================*/
@@ -2003,6 +2086,10 @@ static const char *sy_red_name(int32_t op)
         break; \
     }
 
+/* `dim` is this if the program gave none, to reduce the whole array.  Then any other
+ * negative dim is the program's mistake */
+#define SY_NO_DIM INT64_MIN
+
 sy_arr *sy_arr_reduce(const sy_arr *a, int64_t dim, int32_t op, const sy_arr *mask)
 {
     int64_t inner = 1, n, outer = 1, i, j, o, k;
@@ -2011,7 +2098,7 @@ sy_arr *sy_arr_reduce(const sy_arr *a, int64_t dim, int32_t op, const sy_arr *ma
     const int8_t *m = NULL;
     sy_arr *r;
 
-    if (dim >= a->rank)
+    if (dim != SY_NO_DIM && (dim >= a->rank || dim < 0))
         sy_rt_error("R34", "dim %d is out of range for a rank-%d array in reduction call",
                     (int)dim, (int)a->rank);
 
@@ -2024,7 +2111,7 @@ sy_arr *sy_arr_reduce(const sy_arr *a, int64_t dim, int32_t op, const sy_arr *ma
         m = (const int8_t *)mask->data;
     }
 
-    if (dim < 0) {
+    if (dim == SY_NO_DIM) {
         n = a->len;
     } else {
         for (k = 0; k < dim; k++) inner *= a->size[k];
@@ -3116,3 +3203,57 @@ double sy_tand_f64(double x)
 float sy_sind_f32(float x) { return (float)sy_sind_f64((double)x); }
 float sy_cosd_f32(float x) { return (float)sy_cosd_f64((double)x); }
 float sy_tand_f32(float x) { return (float)sy_tand_f64((double)x); }
+
+/*============================================================================*/
+
+#ifdef SYNTRAN_LLVM
+
+/* Run the main() of a program that was compiled in memory, as if it were a fresh
+ * process.  The state of the runtime is reset first.  The return value is 0 if the
+ * program ran to the end, 1 if it stopped with a runtime error, and 2 if it called
+ * std::exit() */
+int sy_jit_call(int (*fn)(int, char **))
+{
+    static char name[] = "syntran";
+    char *argv[2];
+
+    argv[0] = name;
+    argv[1] = NULL;
+
+    free(sy_jit_res);
+    free(sy_jit_msg);
+    sy_jit_res = NULL;
+    sy_jit_msg = NULL;
+    sy_jit_kind = 0;
+    sy_jit_code = 0;
+
+    sy_loc = 0;
+    sy_depth = 0;
+    sy_loc_tab = NULL;
+    sy_nloc = 0;
+    sy_fn_tab = NULL;
+    sy_nfn = 0;
+    sy_bounds = 0;
+    sy_stdin_eof = 0;
+    memset(sy_unit_used, 0, sizeof(sy_unit_used));
+
+    sy_jit = 1;
+    if (setjmp(sy_jit_env) == 0) fn(1, argv);
+    sy_jit = 0;
+    fflush(stdout);
+
+    /* The tables are in the memory of the program, which is about to be freed */
+    sy_loc_tab = NULL;
+    sy_fn_tab = NULL;
+    return sy_jit_kind;
+}
+
+/* What the last program left: its result, as text, or "" if it had none.  The report
+ * of its runtime error.  The status that it exited with */
+const char *sy_jit_result(void) { return sy_jit_res != NULL ? sy_jit_res : ""; }
+const char *sy_jit_message(void) { return sy_jit_msg != NULL ? sy_jit_msg : ""; }
+int sy_jit_exit_code(void) { return sy_jit_code; }
+float sy_jit_value_f32(void) { return sy_res_val.f; }
+double sy_jit_value_f64(void) { return sy_res_val.d; }
+
+#endif /* SYNTRAN_LLVM */

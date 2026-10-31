@@ -73,6 +73,26 @@ module syntran__native_m
 		! executable
 		character(len = :), allocatable :: out
 
+		! Instead of writing a file, compile the program in memory and run it, in
+		! this process.  This is for testing, so that a unit test can evaluate
+		! thousands of small programs without linking each.  Then `out` isn't used
+		! and the outcome of the run is left in the fields below
+		logical :: jit = .false.
+
+		! The outcome of a run with `jit`.  `status` is 0 if the program ran to the
+		! end, 1 if a runtime error stopped it, and 2 if it called std::exit()
+		integer :: status = 0, exit_code = 0
+
+		! The type of the result, so that a caller can read it from its text, and
+		! its value if it is a float, since the text has too few digits for an f32
+		integer :: result_type = unknown_type
+		real :: result_f32 = 0.0
+		double precision :: result_f64 = 0.d0
+
+		! The result of the program, which is the text that `print_result` makes it
+		! write, and the report of its runtime error
+		character(len = :), allocatable :: result, message
+
 	end type native_t
 
 	!********
@@ -187,6 +207,11 @@ module syntran__native_m
 
 		logical :: print_result = .true., trim_result = .false.
 
+		! The type of the value that the program printed as its result, and
+		! whether it is being run in memory, which wants a float exactly
+		integer :: res_ty = unknown_type
+		logical :: jit = .false.
+
 		! Counter for the names of string literals
 		integer :: nstr = 0
 
@@ -262,6 +287,13 @@ module syntran__native_m
 		! emitted the target of an assignment?  They are for the text of an error
 		logical :: for_hdr = .false., assigning = .false.
 
+		! The values of the subscripts of the target of an assignment to a member,
+		! which must be made before the value that is assigned.  Mode 1 keeps each
+		! one in a stack slot as it makes it, in `idx_slots`, and mode 2 reads them
+		! back in the same order, instead of making them again
+		integer :: idx_mode = 0, idx_n = 0
+		type(c_ptr), allocatable :: idx_slots(:)
+
 		type(string_vector_t) :: diags
 
 	end type nemitter_t
@@ -330,6 +362,7 @@ subroutine native_tree(tree, state, n, diags)
 	diags = new_string_vector()
 
 	em%print_result = n%print_result
+	em%jit = n%jit
 	em%trim_result  = n%trim_result
 	em%diags = new_string_vector()
 	em%fns => state%fns
@@ -2042,6 +2075,16 @@ recursive function scalar_index(em, sub) result(i)
 
 	type(nval_t) :: v
 
+	type(c_ptr) :: ignored
+	type(c_ptr), allocatable :: tmp(:)
+
+	if (em%idx_mode == 2) then
+		! Made already, before the value of the assignment
+		em%idx_n = em%idx_n + 1
+		i = LLVMBuildLoad2(em%bld, em%t_i64, em%idx_slots(em%idx_n), cs(''))
+		return
+	end if
+
 	v = emit_expr(em, sub)
 	if (v%ty /= i32_type .and. v%ty /= i64_type) then
 		call unsupported(em, 'a subscript of type `'//kind_name(v%ty)//'`')
@@ -2049,6 +2092,18 @@ recursive function scalar_index(em, sub) result(i)
 	end if
 	v = convert(em, v, i64_type)
 	i = v%v
+
+	if (em%idx_mode == 1) then
+		if (.not. allocated(em%idx_slots)) allocate(em%idx_slots(0))
+		em%idx_n = em%idx_n + 1
+		if (em%idx_n > size(em%idx_slots)) then
+			allocate(tmp(max(2 * size(em%idx_slots), 4)))
+			tmp(1: size(em%idx_slots)) = em%idx_slots
+			call move_alloc(tmp, em%idx_slots)
+		end if
+		em%idx_slots(em%idx_n) = entry_alloca(em, em%t_i64, 'idx')
+		ignored = LLVMBuildStore(em%bld, i, em%idx_slots(em%idx_n))
+	end if
 
 end function scalar_index
 
@@ -2339,11 +2394,10 @@ recursive function emit_subscripted_call(em, node) result(r)
 		! The type of the call is part of the type of the pointer, and the type of
 		! the node is that of what the subscripts select from it
 		if (allocated(node%left)) then
-			if (.not. allocated(node%left%val%fn_ret)) then
+			if (.not. find_fn_ret(node%left, call_node%val)) then
 				call unsupported(em, 'a subscript of the result of a call of unknown type')
 				return
 			end if
-			call_node%val = node%left%val%fn_ret
 		else
 			! A variable, which remembers what its fn returns
 			if (node%is_loc) then
@@ -3458,7 +3512,9 @@ subroutine place_store(em, pl, v)
 		return
 	end if
 
-	if (v%ty /= str_type) then
+	if (v%ty == array_type .and. v%elem == str_type .and. pl%ty == array_type) then
+		call rt_void(em, 'sy_arr_str_set_arr', [a, pl%subs, v%v])
+	else if (v%ty /= str_type) then
 		call unsupported(em, 'assigning a `'//kind_name(v%ty)//'` to a substring')
 	else if (pl%ty == str_type) then
 		call rt_void(em, 'sy_str_set', [pl%p, pl%subs, v%v])
@@ -3553,6 +3609,61 @@ end function emit_file_member
 
 !===============================================================================
 
+recursive function find_fn_ret(node, ret) result(found)
+
+	! What the fn that a reference points to returns.  If the reference is a chain of
+	! members, like `a.b.f`, then it's the type of its last member that says, and the
+	! type of the first, `a`, doesn't
+
+	type(syntax_node_t), intent(in) :: node
+	type(value_t), intent(inout) :: ret
+	logical :: found
+
+	found = .false.
+	if (allocated(node%member)) then
+		found = find_fn_ret(node%member, ret)
+		if (found) return
+	end if
+	if (allocated(node%val%fn_ret)) then
+		ret = node%val%fn_ret
+		found = .true.
+	end if
+
+end function find_fn_ret
+
+!===============================================================================
+
+recursive function chain_scalar_subs(node) result(n)
+
+	! How many subscripts a chain of members has, or -1 if one of them isn't a
+	! single element
+
+	type(syntax_node_t), intent(in) :: node
+	integer :: n
+
+	integer :: m
+
+	n = 0
+	if (allocated(node%lsubscripts)) then
+		if (any(node%lsubscripts%sub_kind /= scalar_sub)) then
+			n = -1
+			return
+		end if
+		n = size(node%lsubscripts)
+	end if
+	if (allocated(node%member)) then
+		m = chain_scalar_subs(node%member)
+		if (m < 0) then
+			n = -1
+		else
+			n = n + m
+		end if
+	end if
+
+end function chain_scalar_subs
+
+!===============================================================================
+
 recursive function emit_member_read(em, node) result(r)
 
 	! `p.x`, `p.a[0].b`, `ps[1].x`, or `f().x`, the member of a temporary struct
@@ -3575,10 +3686,24 @@ recursive function emit_member_read(em, node) result(r)
 
 	! A member of a file handle is not a member of a struct
 	if (node%root_kind == 0 .and. node%id_index >= 1 .and. allocated(node%member)) then
-		if (.not. allocated(node%lsubscripts) .and. .not. allocated(node%member%member) &
-				.and. .not. allocated(node%member%lsubscripts)) then
+		if (.not. allocated(node%lsubscripts) .and. .not. allocated(node%member%member)) then
 			if (is_file_var(em, node)) then
 				r = emit_file_member(em, node)
+				if (allocated(node%member%lsubscripts)) then
+					! A character or substring of `f.name`
+					root_v = r
+					slot = entry_alloca(em, em%t_ptr, 'tmp')
+					ignored = LLVMBuildStore(em%bld, root_v%v, slot)
+					pl%p = slot
+					pl%ty = str_type
+					if (place_subscript(em, pl, node%member)) then
+						r = place_load(em, pl)
+						call place_done(em, pl)
+					else
+						r = dummy_val(em, node%val%type)
+					end if
+					call dispose(em, root_v)
+				end if
 				return
 			end if
 		end if
@@ -3611,11 +3736,10 @@ recursive function emit_member_read(em, node) result(r)
 		! What the fn returns is part of the type of the pointer.  The struct is
 		! the type of the call, and not that of the member that is read from it
 		if (allocated(node%left)) then
-			if (.not. allocated(node%left%val%fn_ret)) then
+			if (.not. find_fn_ret(node%left, root%val)) then
 				call unsupported(em, 'a member of the result of a call of unknown type')
 				return
 			end if
-			root%val = node%left%val%fn_ret
 		else
 			pl%sk = merge(em%l%sk(node%id_index), em%g%sk(node%id_index), node%is_loc)
 			if (pl%sk < 1 .or. .not. associated(em%structs)) then
@@ -4382,7 +4506,10 @@ recursive function emit_reduce(em, base, a, rtype) result(r)
 	case ('any')
 		init = cbool(em, .false.)
 	case ('minval', 'maxval')
-		! What Fortran gives for an empty array is the extreme of the type
+		! An empty array has no extreme, which is an error.  If it did, it would be
+		! the extreme of the type, like Fortran gives
+		call err_if(em, LLVMBuildICmp(em%bld, LLVM_INT_EQ, arr_len(em, a%v), &
+			LLVMConstNull(em%t_i64), cs('')), 'R36', 'minval/maxval of an empty array')
 		select case (ety)
 		case (i32_type)
 			init = LLVMConstInt(em%t_i32, merge(2147483647_c_int64_t, -2147483647_c_int64_t - 1, &
@@ -4522,8 +4649,9 @@ recursive function emit_reduce_ext(em, base, node) result(r)
 	case default;     op = 6
 	end select
 
-	! No dimension is -1, which is all of them
-	dimv = ci64(em, -1_8)
+	! No dimension is the smallest i64, which is all of them.  A dimension that the
+	! program gives is checked by the runtime
+	dimv = ci64(em, -huge(0_8) - 1_8)
 	if (has_dim) then
 		d = convert(em, emit_expr(em, node%args(2)), i64_type)
 		dimv = d%v
@@ -5088,7 +5216,8 @@ recursive function emit_intr_map(em, base, a, node) result(r)
 	end if
 
 	ety = node%val%array%type
-	if (.not. supported_type(ety) .or. a%elem == str_type) then
+	if (.not. supported_type(ety) .or. (a%elem == str_type .and. base /= 'i32' .and. &
+			base /= 'i64')) then
 		call unsupported(em, 'the intrinsic fn `'//base//'` of an array of type `'// &
 			kind_name(a%elem)//'`', node%identifier%pos)
 		return
@@ -5097,6 +5226,7 @@ recursive function emit_intr_map(em, base, a, node) result(r)
 	out = rt_call(em, 'sy_arr_like', em%t_ptr, [a%v, ci32(em, elem_code(ety))])
 	call loop_begin(em, arr_len(em, a%v), lp, q)
 	x = elem_load(em, a%elem, elem_ptr(em, a%v, a%elem, q))
+	x%sk = a%sk
 	y = intr_scalar(em, base, x, ety, node%identifier%pos)
 	call elem_store(em, elem_ptr(em, out, ety, q), ety, y)
 	call loop_end(em, lp)
@@ -5308,7 +5438,10 @@ recursive function emit_assign_val(em, node, as_stmt) result(res)
 
 	integer :: op, ety, vty, rank_
 
+	logical :: as_stmt_, by_idx, ok
+
 	type(c_ptr) :: p, ps, a, subs, valp, ignored
+	type(c_ptr), allocatable :: saved(:)
 
 	type(nval_t) :: v, cur
 	type(nval_t), allocatable :: pending(:)
@@ -5316,6 +5449,9 @@ recursive function emit_assign_val(em, node, as_stmt) result(res)
 	type(place_t) :: pl
 
 	res = dummy_val(em, node%val%type)
+
+	as_stmt_ = .false.
+	if (present(as_stmt)) as_stmt_ = as_stmt
 
 	if (node%op%kind /= equals_token) then
 		! `x += y` is `x = x + y`
@@ -5338,16 +5474,37 @@ recursive function emit_assign_val(em, node, as_stmt) result(res)
 	end if
 
 	if (allocated(node%member)) then
-		! A member of a struct, or an element of one.  The value is made first,
-		! because it might change what the struct is
-		v = emit_expr(em, node%right)
-		em%assigning = .true.
-		if (.not. place_of(em, node, pl)) then
+		! A member of a struct, or an element of one.  The value is made after the
+		! subscripts of the target, like the interpreter does.  The place is made
+		! after the value, because the value might change what the struct is.  So the
+		! subscripts are made first to find their values, and again, to find the
+		! place, with the values that they had
+		by_idx = node%val%type /= str_type .and. chain_scalar_subs(node) > 0
+		if (by_idx) then
+			em%idx_mode = 1
+			em%idx_n = 0
+			em%assigning = .true.
+			ok = place_of(em, node, pl)
 			em%assigning = .false.
+			em%idx_mode = 0
+			call place_done(em, pl)
+			if (.not. ok) return
+			saved = em%idx_slots(1: em%idx_n)
+		end if
+		v = emit_expr(em, node%right)
+		if (by_idx) then
+			em%idx_slots = saved
+			em%idx_n = 0
+			em%idx_mode = 2
+		end if
+		em%assigning = .true.
+		ok = place_of(em, node, pl)
+		em%assigning = .false.
+		em%idx_mode = 0
+		if (.not. ok) then
 			call dispose(em, v)
 			return
 		end if
-		em%assigning = .false.
 		if (node%op%kind /= equals_token) then
 			cur = place_load(em, pl)
 			if (cur%ty == array_type) then
@@ -5359,6 +5516,7 @@ recursive function emit_assign_val(em, node, as_stmt) result(res)
 					call unsupported(em, 'an operation on an array')
 					return
 				end if
+				v = to_elem_type(em, v, node%val%array%type)
 				v = arr_binop_vals(em, op, node%op%text, cur, v, node%val)
 			else if (pl%has_subs) then
 				call unsupported(em, 'a compound assignment to a substring')
@@ -5414,7 +5572,9 @@ recursive function emit_assign_val(em, node, as_stmt) result(res)
 				a = LLVMBuildLoad2(em%bld, em%t_ptr, ps, cs(''))
 				if (size(node%lsubscripts) == rank_ + 1) then
 					! A substring of each of the elements of an array of strings
-					if (v%ty /= str_type) then
+					if (v%ty == array_type .and. v%elem == str_type) then
+						call rt_void(em, 'sy_arr_str_set_arr', [a, subs, v%v])
+					else if (v%ty /= str_type) then
 						call unsupported(em, 'assigning a `'//kind_name(v%ty)//'` to a substring')
 					else
 						call rt_void(em, 'sy_arr_str_set', [a, subs, v%v])
@@ -5425,6 +5585,8 @@ recursive function emit_assign_val(em, node, as_stmt) result(res)
 						v = arr_binop_vals(em, op, node%op%text, cur, v, node%val)
 					end if
 					call arr_slice_store(em, a, subs, ety, v)
+					if (.not. as_stmt_) res = arr_val(rt_call(em, 'sy_arr_slice', em%t_ptr, [a, subs]), &
+						.true., node%val)
 				end if
 			end if
 			call dispose(em, v)
@@ -5458,6 +5620,7 @@ recursive function emit_assign_val(em, node, as_stmt) result(res)
 				call unsupported(em, 'a matrix product')
 				return
 			end if
+			if (allocated(node%val%array)) v = to_elem_type(em, v, node%val%array%type)
 			v = arr_binop_vals(em, op, node%op%text, cur, v, node%val)
 		else
 			v = binop_vals(em, op, cur, v, node%op%text)
@@ -5483,6 +5646,30 @@ recursive function emit_assign_val(em, node, as_stmt) result(res)
 	res = load_var(em, node)
 
 end function emit_assign_val
+
+!===============================================================================
+
+function to_elem_type(em, v, ety) result(r)
+
+	! The right hand side of a compound assignment to a whole array, in the type of
+	! the elements of the array, before the operation.  So `a *= 2.5` of an array of
+	! ints multiplies by 2, as the interpreter does, but `a[i] *= 2.5` doesn't.
+	! Others convert the result
+
+	type(nemitter_t), intent(inout) :: em
+	type(nval_t), intent(in) :: v
+	integer, intent(in) :: ety
+	type(nval_t) :: r
+
+	r = v
+	if (.not. is_numeric_type(ety)) return
+	if (v%ty == array_type) then
+		if (v%elem /= ety .and. is_numeric_type(v%elem)) r = arr_cast(em, v, ety)
+	else if (is_numeric_type(v%ty) .and. v%ty /= ety) then
+		r = convert(em, v, ety)
+	end if
+
+end function to_elem_type
 
 !===============================================================================
 
@@ -5842,7 +6029,21 @@ recursive subroutine emit_result_stmt(em, node)
 			call emit_result(em, v)
 		end if
 
-	case (let_expr, assignment_expr)
+	case (assignment_expr)
+		if (allocated(node%lsubscripts) .or. allocated(node%member)) then
+			! Its value is the target afterward, an element, a slice, or a member
+			v = emit_assign_val(em, node)
+			call emit_result(em, v)
+		else
+			call emit_stmt(em, node)
+			v = load_var(em, node)
+			if (v%ty == enum_type .or. (v%ty == array_type .and. v%elem == enum_type)) then
+				if (associated(em%enums)) v%sk = enums_slot_of(em%enums, node%val)
+			end if
+			call emit_result(em, v)
+		end if
+
+	case (let_expr)
 		call emit_stmt(em, node)
 		if (.not. node%is_empty) then
 			if (.not. (allocated(node%lsubscripts) .or. allocated(node%member))) then
@@ -5893,6 +6094,11 @@ subroutine emit_result(em, v)
 		return
 	end if
 
+	em%res_ty = v%ty
+	if (em%jit) then
+		if (v%ty == f32_type) call rt_void(em, 'sy_result_f32', [v%v])
+		if (v%ty == f64_type) call rt_void(em, 'sy_result_f64', [v%v])
+	end if
 	s = str_of(em, v)
 	call rt_void(em, 'sy_result', [s%v, ci32(em, merge(1, 0, em%trim_result))])
 	call dispose(em, s)
@@ -6418,7 +6624,16 @@ recursive function emit_user_call(em, node) result(r)
 		associate (arg => node%args(i))
 
 			if (param_is_ref(em, id, i)) then
-				if (arg%kind == name_expr .and. .not. allocated(arg%lsubscripts) &
+				if (off == 1 .and. i == 1 .and. (arg%root_kind /= 0 .or. &
+						arg%kind == fn_call_expr .or. arg%kind == method_call_expr .or. &
+						arg%kind == fn_call_ptr_expr)) then
+					! The receiver of a method is made by a call, e.g. `f().g()` or
+					! `f()[i].g()`.  It is a temporary that the method gets the address of
+					v = emit_expr(em, arg)
+					args(i) = entry_alloca(em, ll_type(em, v%ty), 'tmp')
+					ignored = LLVMBuildStore(em%bld, v%v, args(i))
+					pending(i) = v
+				else if (arg%kind == name_expr .and. .not. allocated(arg%lsubscripts) &
 						.and. .not. allocated(arg%member)) then
 					args(i) = var_ptr(em, arg, arg%val%type)
 					if (.not. c_associated(args(i))) return
@@ -7100,10 +7315,11 @@ end subroutine emit_for
 
 subroutine finish(em, n, diags)
 
-	! Check the module, optimize it, and write what `n%out` asks for
+	! Check the module, optimize it, and write what `n%out` asks for, or run it in
+	! memory if `n%jit`
 
 	type(nemitter_t), intent(inout) :: em
-	type(native_t), intent(in) :: n
+	type(native_t), intent(inout) :: n
 	type(string_vector_t), intent(inout) :: diags
 
 	!********
@@ -7116,11 +7332,13 @@ subroutine finish(em, n, diags)
 
 	logical :: is_ll, is_obj
 
-	if (.not. allocated(n%out)) then
-		call diags%push(err_prefix//'no output file for the native backend'//color_reset)
-		return
+	if (.not. n%jit) then
+		if (.not. allocated(n%out)) then
+			call diags%push(err_prefix//'no output file for the native backend'//color_reset)
+			return
+		end if
+		out = n%out
 	end if
-	out = n%out
 
 	if (LLVMVerifyModule(em%llmod, LLVM_RETURN_STATUS_ACTION, msg) /= 0) then
 		call diags%push(err_prefix//'internal error, LLVM rejected the module: '// &
@@ -7135,6 +7353,11 @@ subroutine finish(em, n, diags)
 	if (c_associated(err)) then
 		call diags%push(err_prefix//'internal error, LLVM failed to optimize: '// &
 			c_to_f_string(LLVMGetErrorMessage(err))//color_reset)
+		return
+	end if
+
+	if (n%jit) then
+		call jit_run(em, n, diags)
 		return
 	end if
 
@@ -7209,6 +7432,56 @@ subroutine finish(em, n, diags)
 	call delete_file(crt)
 
 end subroutine finish
+
+!===============================================================================
+
+subroutine jit_run(em, n, diags)
+
+	! Run the module that is built, here, and keep what it did in `n`.  The JIT
+	! takes the module and its context, so the emitter must not free them
+
+	type(nemitter_t), intent(inout) :: em
+	type(native_t), intent(inout) :: n
+	type(string_vector_t), intent(inout) :: diags
+
+	!********
+
+	integer :: status
+
+	type(c_ptr) :: m, c
+
+	! Nothing is built after this, and a builder has to go before its context
+	call LLVMDisposeBuilder(em%abld)
+	call LLVMDisposeBuilder(em%bld)
+	em%abld = c_null_ptr
+	em%bld = c_null_ptr
+
+	m = em%llmod
+	c = em%ctx
+	em%llmod = c_null_ptr
+	em%ctx = c_null_ptr
+
+	n%status = 0
+	n%exit_code = 0
+	n%result = ''
+	n%message = ''
+
+	status = sy_llvm_jit_run(m, c)
+	if (status < 0) then
+		call diags%push(err_prefix//'internal error, LLVM failed to run the program: '// &
+			c_to_f_string(sy_llvm_jit_error())//color_reset)
+		return
+	end if
+
+	n%status = status
+	n%exit_code = sy_jit_exit_code()
+	n%result_type = em%res_ty
+	n%result_f32 = sy_jit_value_f32()
+	n%result_f64 = sy_jit_value_f64()
+	n%result = c_to_f_string(sy_jit_result())
+	n%message = c_to_f_string(sy_jit_message())
+
+end subroutine jit_run
 
 !===============================================================================
 
