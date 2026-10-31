@@ -1131,6 +1131,261 @@ sy_str *sy_arr_str(const sy_arr *a)
     return sy_arr_str_names(a, NULL);
 }
 
+/*============================================================================*/
+
+/* format(): the spec of one placeholder, which the compiler parsed.  They are
+ * all int32_t, so that the compiler can lay one out as an array.  `fill`,
+ * `align`, and `ty` are characters, with a blank if not given, and `prec` is -1
+ * if not given.  This is src/rt/syntran_rt.f90's rt_fmt_val() */
+typedef struct {
+    int32_t fill, align, ty, plus, alt, zero, width, prec;
+} sy_fspec;
+
+/* A value with the sign or radix `prefix` and the `digits`, padded to the width
+ * of the spec.  A number pads with 0s after the prefix if `zero`, but a NaN or
+ * inf (`zero_ok` is false) never does */
+static sy_str *sy_fmt_pad(const char *prefix, const char *digits, int64_t nd, int numeric,
+    int zero_ok, const sy_fspec *sp)
+{
+    int64_t np = (int64_t)strlen(prefix);
+    int64_t pad = sp->width - (np + nd);
+    int64_t left = 0, right = 0;
+    int align = sp->align;
+    sy_str *r;
+    char *q;
+
+    if (pad <= 0) {
+        pad = 0;
+    } else if (sp->zero && numeric && zero_ok) {
+        r = sy_str_alloc(np + pad + nd);
+        memcpy(r->data, prefix, (size_t)np);
+        memset(r->data + np, '0', (size_t)pad);
+        memcpy(r->data + np + pad, digits, (size_t)nd);
+        return r;
+    } else {
+        if (align == ' ') align = numeric ? '>' : '<';
+        if (align == '<') {
+            right = pad;
+        } else if (align == '>') {
+            left = pad;
+        } else {
+            left = pad / 2;
+            right = pad - left;
+        }
+    }
+
+    r = sy_str_alloc(np + nd + left + right);
+    q = r->data;
+    memset(q, sp->fill, (size_t)left);
+    q += left;
+    memcpy(q, prefix, (size_t)np);
+    q += np;
+    memcpy(q, digits, (size_t)nd);
+    q += nd;
+    memset(q, sp->fill, (size_t)right);
+    return r;
+}
+
+/* An integer of `bits` bits.  `x`, `X`, `o`, and `b` are of its two's complement */
+static sy_str *sy_fmt_int(int64_t v, int32_t bits, const sy_fspec *sp)
+{
+    char digits[80], prefix[8];
+    uint64_t u;
+    int n = 0, np = 0;
+
+    if (sp->ty == ' ') {
+        u = v < 0 ? 0 - (uint64_t)v : (uint64_t)v;
+        n = snprintf(digits, sizeof digits, "%llu", (unsigned long long)u);
+        if (v < 0) prefix[np++] = '-';
+    } else {
+        u = bits == 32 ? (uint64_t)(uint32_t)v : (uint64_t)v;
+        if (sp->ty == 'b') {
+            int i;
+            for (i = 63; i > 0 && !((u >> i) & 1); i--) {}
+            for (; i >= 0; i--) digits[n++] = ((u >> i) & 1) ? '1' : '0';
+            digits[n] = '\0';
+        } else {
+            const char *f = sp->ty == 'o' ? "%llo" : sp->ty == 'X' ? "%llX" : "%llx";
+            n = snprintf(digits, sizeof digits, f, (unsigned long long)u);
+        }
+        if (sp->plus) prefix[np++] = '+';
+        if (sp->alt) {
+            prefix[np++] = '0';
+            prefix[np++] = sp->ty == 'b' ? 'b' : sp->ty == 'o' ? 'o' : 'x';
+        }
+    }
+    if (sp->ty == ' ' && sp->plus && v >= 0) prefix[np++] = '+';
+    prefix[np] = '\0';
+    return sy_fmt_pad(prefix, digits, n, 1, 1, sp);
+}
+
+/* A float, which is that of an f32 widened to an f64 if `bits` is 32.  Without a
+ * precision or `e`, it is written like str() does, but trimmed */
+static sy_str *sy_fmt_real(double v, int32_t bits, const sy_fspec *sp)
+{
+    char small[64], prefix[2] = {0, 0};
+    char *buf = small, *p;
+    double a = fabs(v);
+    int zero_ok = 1, n;
+    sy_str *r;
+
+    if (isnan(v)) {
+        zero_ok = 0;
+        strcpy(small, "NaN");
+        n = 3;
+    } else {
+        if (signbit(v)) prefix[0] = '-';
+        else if (sp->plus) prefix[0] = '+';
+
+        if (isinf(v)) {
+            zero_ok = 0;
+            strcpy(small, "inf");
+            n = 3;
+        } else if (sp->ty == 'e' || sp->ty == 'E') {
+            /* Like Rust's: 1.234560e-1, with no `+` and no leading 0s of the exponent */
+            int pp = sp->prec < 0 ? 6 : sp->prec;
+            char *e;
+            int ex;
+
+            buf = (char *)malloc((size_t)pp + 32);
+            snprintf(buf, (size_t)pp + 32, "%.*e", pp, a);
+            e = strchr(buf, 'e');
+            ex = atoi(e + 1);
+            *e = sp->ty;
+            n = (int)(e - buf) + 1;
+            n += snprintf(buf + n, 16, "%d", ex);
+        } else if (sp->prec >= 0) {
+            buf = (char *)malloc((size_t)sp->prec + 340);
+            n = snprintf(buf, (size_t)sp->prec + 340, "%.*f", sp->prec, a);
+        } else {
+            n = bits == 32 ? sy_fmt_f32((float)a, small) : sy_fmt_f64(a, small);
+            p = small;
+            while (n > 0 && *p == ' ') {
+                p++;
+                n--;
+            }
+            while (n > 0 && p[n - 1] == ' ') n--;
+            memmove(small, p, (size_t)n);
+        }
+    }
+
+    r = sy_fmt_pad(prefix, buf, n, 1, zero_ok, sp);
+    if (buf != small) free(buf);
+    return r;
+}
+
+static sy_str *sy_fmt_text(const char *s, int64_t n, int numeric, const sy_fspec *sp)
+{
+    if (!numeric && sp->prec >= 0 && sp->prec < n) n = sp->prec;
+    return sy_fmt_pad("", s, n, numeric, 1, sp);
+}
+
+sy_str *sy_format_i32(int32_t v, const sy_fspec *sp)
+{
+    return sy_fmt_int(v, 32, sp);
+}
+
+sy_str *sy_format_i64(int64_t v, const sy_fspec *sp)
+{
+    return sy_fmt_int(v, 64, sp);
+}
+
+sy_str *sy_format_f32(float v, const sy_fspec *sp)
+{
+    return sy_fmt_real((double)v, 32, sp);
+}
+
+sy_str *sy_format_f64(double v, const sy_fspec *sp)
+{
+    return sy_fmt_real(v, 64, sp);
+}
+
+sy_str *sy_format_bool(int8_t v, const sy_fspec *sp)
+{
+    /* A precision truncates a string, but not this */
+    return v ? sy_fmt_pad("", "true", 4, 0, 1, sp) : sy_fmt_pad("", "false", 5, 0, 1, sp);
+}
+
+sy_str *sy_format_str(const sy_str *s, const sy_fspec *sp)
+{
+    return sy_fmt_text(s->data, s->len, 0, sp);
+}
+
+/* An array: each element is formatted, and they are joined with a blank, and a
+ * line break after each row, i.e. every size[0] elements */
+sy_str *sy_format_arr(const sy_arr *a, const sy_fspec *sp)
+{
+    sy_buf b = {NULL, 0, 0};
+    size_t es = sy_esize(a->elem);
+    int64_t i, row = a->size[0] > 0 ? a->size[0] : 1;
+    sy_str *r, *item;
+
+    for (i = 0; i < a->len; i++) {
+        const char *p = a->data + (size_t)i * es;
+
+        switch (a->elem) {
+        case SY_I32:  item = sy_format_i32(*(const int32_t *)p, sp); break;
+        case SY_I64:  item = sy_format_i64(*(const int64_t *)p, sp); break;
+        case SY_F32:  item = sy_format_f32(*(const float *)p, sp); break;
+        case SY_F64:  item = sy_format_f64(*(const double *)p, sp); break;
+        case SY_BOOL: item = sy_format_bool(*(const int8_t *)p, sp); break;
+        default:      item = sy_format_str(*(sy_str *const *)p, sp); break;
+        }
+        sy_buf_put(&b, item->data, (size_t)item->len);
+        sy_str_free(item);
+        if (i < a->len - 1) sy_buf_put(&b, (i + 1) % row == 0 ? "\n" : " ", 1);
+    }
+
+    r = sy_str_from(b.p != NULL ? b.p : "", (int64_t)b.n);
+    free(b.p);
+    return r;
+}
+
+/* The result of format(): the n + 1 literal `pieces` around the n formatted
+ * `vals`, which this frees */
+sy_str *sy_format_join(int32_t n, const sy_str *const *pieces, sy_str *const *vals)
+{
+    int64_t total = 0, at = 0;
+    int32_t i;
+    sy_str *r;
+
+    for (i = 0; i <= n; i++) total += pieces[i]->len;
+    for (i = 0; i < n; i++) total += vals[i]->len;
+    r = sy_str_alloc(total);
+
+    for (i = 0; i <= n; i++) {
+        memcpy(r->data + at, pieces[i]->data, (size_t)pieces[i]->len);
+        at += pieces[i]->len;
+        if (i == n) break;
+        memcpy(r->data + at, vals[i]->data, (size_t)vals[i]->len);
+        at += vals[i]->len;
+        sy_str_free(vals[i]);
+    }
+    return r;
+}
+
+/* For the unit test, which compares these to rt_fmt_val() of the Fortran
+ * runtime.  `kind` is `i`, `r`, `b`, or `s` as there, and the result is copied to
+ * `out`, which has room for 1024 chars.  Returns its length */
+int32_t sy_format_test(int32_t kind, int64_t ival, int32_t bits, double rval, const char *sval,
+    const int32_t *spec, char *out)
+{
+    const sy_fspec *sp = (const sy_fspec *)spec;
+    sy_str *r;
+    int32_t n;
+
+    switch (kind) {
+    case 'i': r = sy_fmt_int(ival, bits, sp); break;
+    case 'r': r = sy_fmt_real(rval, bits, sp); break;
+    case 'b': r = ival ? sy_format_bool(1, sp) : sy_format_bool(0, sp); break;
+    default:  r = sy_fmt_text(sval, (int64_t)strlen(sval), 0, sp); break;
+    }
+    n = (int32_t)(r->len < 1023 ? r->len : 1023);
+    memcpy(out, r->data, (size_t)n);
+    sy_str_free(r);
+    return n;
+}
+
 /* The index of the first variant of an enum that has the backing value v, from
  * the values of all of the `n` variants, for a cast like `Suit(2)` */
 int32_t sy_enum_of(const int32_t *vals, int32_t n, int32_t v)

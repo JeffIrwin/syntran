@@ -1,0 +1,63 @@
+// format() and printf() of arrays, structs, and enums, and with the spec of each
+// kind of value.  These programs are run by both the interpreter and the
+// compiling backends (utils/test-transpile.sh), which must print the same thing.
+// The return value is the number of failed checks
+
+let status = 0;
+
+fn check(ok: bool): i32
+{
+	if (ok) return 0;
+	return 1;
+}
+
+enum Color
+{
+	Red,
+	Green,
+}
+
+struct P
+{
+	x: i32,
+	y: f64,
+}
+
+//==============================================================================
+// Arrays are their elements separated by blanks, and a line break after each row
+
+let a = [1, 2, 3, 4, 5, 6; 3, 2];
+println(std::format("{} | {:3}", a, a));
+status += check(std::format("{}", [1, 2, 3]) == "1 2 3");
+status += check(std::format("{:2}", a) == " 1  2  3" + char(10) + " 4  5  6");
+
+println(std::format("{:.1} {:>6.2e}", [1.5, 2.25], [1.5f, 2.5f]));
+println(std::format("{:6}|{:<6}|{:^6}", ["a", "bb"], [true, false], "x"));
+
+//==============================================================================
+// Structs and enums are the string that str() makes of them
+
+let p = P{x = 1, y = 2.5};
+println(std::format("{} {:>20} {:<10}|", p, p, Color.Green));
+let e = Color.Red;
+std::printf("pt={:08.3} e={:>7}\n", 3.14159, e);
+status += check(std::format("{:>9}", e) == "Color.Red");
+
+//==============================================================================
+// Numbers and strings
+
+println(std::format("{{}} {} {:x} {:#b} {:+}", -7, -1, 5, 3));
+status += check(std::format("{:x} {:X} {:#o}", 255, 255, 8) == "ff FF 0o10");
+status += check(std::format("{:+.2} {:e} {:E}", 2.5, 1234.5, 0.00012) == "+2.50 1.234500e3 1.200000E-4");
+status += check(std::format("{:<5}|{:^5}|{:>5}|", 7, 7, 7) == "7    |  7  |    7|");
+status += check(std::format("{:05} {:+05} {:*^7}", -42, 42, 5) == "-0042 +0042 ***5***");
+
+let s = "abc";
+println(std::format("{:.2}|{:*^9}|", s, s));
+println(std::format("no placeholders"));
+println(std::format("{}", 1'i64 << 40));
+println(std::format("{} {}", 1.5f, 0.1));
+println(std::format("{:5}|{:<5}", true, false));
+
+println(status);
+return status;
