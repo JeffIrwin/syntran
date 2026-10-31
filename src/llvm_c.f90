@@ -12,7 +12,7 @@ module syntran__llvm_c_m
 	! target machine, ...) is an opaque pointer, i.e. a c_ptr.  Names are C
 	! strings, so pass `"name"//c_null_char`.  The names of the constants below
 	! are those of the C enums.  They are what the headers number them as, and
-	! have been the same since LLVM 15
+	! have been the same since LLVM 17
 
 	use, intrinsic :: iso_c_binding
 
@@ -249,15 +249,16 @@ module syntran__llvm_c_m
 			type(c_ptr) :: LLVMConstNull
 		end function LLVMConstNull
 
-		function LLVMConstStringInContext2(ctx, str, n, dont_null_terminate) &
-				bind(c, name = "LLVMConstStringInContext2")
-			import :: c_ptr, c_char, c_int, c_size_t
+		! Not the *2 version with a size_t length, which is only in LLVM 19 and later
+		function LLVMConstStringInContext(ctx, str, n, dont_null_terminate) &
+				bind(c, name = "LLVMConstStringInContext")
+			import :: c_ptr, c_char, c_int
 			type(c_ptr), value :: ctx
 			character(kind = c_char), intent(in) :: str(*)
-			integer(c_size_t), value :: n
+			integer(c_int), value :: n
 			integer(c_int), value :: dont_null_terminate
-			type(c_ptr) :: LLVMConstStringInContext2
-		end function LLVMConstStringInContext2
+			type(c_ptr) :: LLVMConstStringInContext
+		end function LLVMConstStringInContext
 
 		function LLVMConstStructInContext(ctx, vals, n, packed) &
 				bind(c, name = "LLVMConstStructInContext")

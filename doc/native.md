@@ -28,7 +28,7 @@ same as the interpreter's.
 
 ## Building syntran with LLVM
 
-This is opt-in, because it needs LLVM (version 15 or later) installed.  Without
+This is opt-in, because it needs LLVM (version 17 or later) installed.  Without
 it, syntran builds as always and `--native` is an error.
 
 ```
