@@ -260,6 +260,14 @@ module syntran__llvm_c_m
 			type(c_ptr) :: LLVMConstStringInContext
 		end function LLVMConstStringInContext
 
+		function LLVMConstArray(elem, vals, n) bind(c, name = "LLVMConstArray")
+			import :: c_ptr, c_int
+			type(c_ptr), value :: elem
+			type(c_ptr), intent(in) :: vals(*)
+			integer(c_int), value :: n
+			type(c_ptr) :: LLVMConstArray
+		end function LLVMConstArray
+
 		function LLVMConstStructInContext(ctx, vals, n, packed) &
 				bind(c, name = "LLVMConstStructInContext")
 			import :: c_ptr, c_int

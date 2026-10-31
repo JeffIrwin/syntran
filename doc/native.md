@@ -67,15 +67,19 @@ This is a subset of the language so far:
   `reshape`, and `sum`, `product`, `minval`, `maxval`, `all`, `any`, and `count`
   of a whole array.  The math functions and conversions also apply to each
   element of an array
+- Structs, including methods, members that are arrays or other structs, arrays
+  of structs, and optional structs (`?Node`) that can be `null`.  A struct is a
+  value, so assigning or passing one copies it
+- Enums, including arrays of them and enums as members of structs.  They compare
+  and print like the interpreter's, and `i32(e)` and `Suit(2)` convert
 
 ## What isn't supported yet
 
 Programs which use anything else are rejected with
 [E130](errors.md#e130----native-unsupported), pointing at each statement which
 isn't supported.  Run them with the interpreter instead.  So far, that includes
-structs and enums (and so methods and arrays of them), files, function
-pointers, the matrix product `@`, and a `dim` or `mask` argument of the
-reductions above.
+files, function pointers, the matrix product `@`, a `dim` or `mask` argument
+of the reductions above, and slices or substrings of a member of a struct.
 
 ## Differences from the interpreter
 
@@ -109,9 +113,12 @@ variable or consumed by an operation, and a string literal is a constant that is
 never freed.  An array is the same kind of object: a fixed-size block of
 elements in column-major order, with its rank and shape, that is copied when it
 is assigned and freed when its owner is.  Element access is compiled inline,
-while slicing, and the construction of ranges, are in the runtime.  The runtime
-writes floats exactly as the Fortran runtime does, which a unit test checks
-against it.
+while slicing, and the construction of ranges, are in the runtime.  A struct is
+a heap object too, with a slot for each member after a pointer to a constant
+that describes the struct, so the runtime can copy, free, and print it.  An
+enum is the index of its variant, with constant tables of the variants' names
+and backing values.  The runtime writes floats exactly as the Fortran runtime
+does, which a unit test checks against it.
 
 To check a change to the native backend, run
 
