@@ -51,7 +51,7 @@
 			{
 				"if": "matrix.os == 'ubuntu-24.04'",
 				"name": "Check embedded native runtime is up to date",
-				"run": "bash src/gen_native_rt.sh && git diff --exit-code src/native_rt.f90"
+				"run": "bash src/gen_native_rt.sh && git diff --exit-code src/native_rt.f90 src/rt/syntran_syms.inc"
 			},
 			{
 				"if": "matrix.os == 'ubuntu-24.04'",
@@ -614,6 +614,10 @@
 					# Not just the short tests: the groups that need LLVM check the \n
 					# diagnostics and the IR of the native backend \n
 					fpm test test --features debug,llvm-blas --flag -Wno-tabs \n
+
+					# The same tests again, with every program they evaluate compiled \n
+					# by the native backend and run in memory, not on the VM \n
+					fpm test test --features debug,llvm-blas --flag -Wno-tabs -- --native \n
 
 					# A stable path to the binary, which would otherwise be in a \n
 					# directory named by a hash of the flags \n

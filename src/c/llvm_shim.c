@@ -49,4 +49,178 @@ void sy_llvm_init_native(void)
 #error "src/c/llvm_shim.c: add the LLVM initializers of this architecture"
 #endif
 
+/*============================================================================*/
+
+/* Run a module in memory, with LLVM's ORC JIT, for the test suite.  Compiling and
+ * linking an executable for each of thousands of tests is too slow, so a test
+ * compiles its program here and calls its main() in the process of the tests.
+ *
+ * Like above, what is needed of LLVM-C is declared here, so that no include path is
+ * needed.  These are the same types and fns as in llvm-c/Orc.h and LLJIT.h, which
+ * are stable.  A LLVMContextRef that the emitter made is handed over to the JIT
+ * along with its module */
+
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+typedef struct LLVMOpaqueError *LLVMErrorRef;
+typedef struct LLVMOrcOpaqueLLJIT *LLVMOrcLLJITRef;
+typedef struct LLVMOrcOpaqueJITDylib *LLVMOrcJITDylibRef;
+typedef struct LLVMOrcOpaqueThreadSafeContext *LLVMOrcThreadSafeContextRef;
+typedef struct LLVMOrcOpaqueThreadSafeModule *LLVMOrcThreadSafeModuleRef;
+typedef struct LLVMOrcOpaqueDefinitionGenerator *LLVMOrcDefinitionGeneratorRef;
+typedef struct LLVMOrcOpaqueMaterializationUnit *LLVMOrcMaterializationUnitRef;
+typedef struct LLVMOrcOpaqueSymbolStringPoolEntry *LLVMOrcSymbolStringPoolEntryRef;
+
+typedef struct {
+    uint8_t GenericFlags;
+    uint8_t TargetFlags;
+} LLVMJITSymbolFlags;
+
+typedef struct {
+    uint64_t Address;
+    LLVMJITSymbolFlags Flags;
+} LLVMJITEvaluatedSymbol;
+
+typedef struct {
+    LLVMOrcSymbolStringPoolEntryRef Name;
+    LLVMJITEvaluatedSymbol Sym;
+} LLVMOrcCSymbolMapPair;
+
+LLVMErrorRef LLVMOrcCreateLLJIT(LLVMOrcLLJITRef *Result, void *Builder);
+LLVMErrorRef LLVMOrcDisposeLLJIT(LLVMOrcLLJITRef J);
+LLVMOrcJITDylibRef LLVMOrcLLJITGetMainJITDylib(LLVMOrcLLJITRef J);
+char LLVMOrcLLJITGetGlobalPrefix(LLVMOrcLLJITRef J);
+LLVMOrcSymbolStringPoolEntryRef LLVMOrcLLJITMangleAndIntern(LLVMOrcLLJITRef J,
+    const char *UnmangledName);
+LLVMOrcMaterializationUnitRef LLVMOrcAbsoluteSymbols(LLVMOrcCSymbolMapPair *Syms,
+    size_t NumPairs);
+LLVMErrorRef LLVMOrcJITDylibDefine(LLVMOrcJITDylibRef JD, LLVMOrcMaterializationUnitRef MU);
+LLVMErrorRef LLVMOrcCreateDynamicLibrarySearchGeneratorForProcess(
+    LLVMOrcDefinitionGeneratorRef *Result, char GlobalPrefx, void *Filter, void *FilterCtx);
+void LLVMOrcJITDylibAddGenerator(LLVMOrcJITDylibRef JD, LLVMOrcDefinitionGeneratorRef DG);
+LLVMOrcThreadSafeContextRef LLVMOrcCreateNewThreadSafeContextFromLLVMContext(void *Ctx);
+void LLVMOrcDisposeThreadSafeContext(LLVMOrcThreadSafeContextRef TSCtx);
+LLVMOrcThreadSafeModuleRef LLVMOrcCreateNewThreadSafeModule(void *M,
+    LLVMOrcThreadSafeContextRef TSCtx);
+void LLVMOrcDisposeThreadSafeModule(LLVMOrcThreadSafeModuleRef TSM);
+LLVMErrorRef LLVMOrcLLJITAddLLVMIRModule(LLVMOrcLLJITRef J, LLVMOrcJITDylibRef JD,
+    LLVMOrcThreadSafeModuleRef TSM);
+LLVMErrorRef LLVMOrcLLJITLookup(LLVMOrcLLJITRef J, uint64_t *Result, const char *Name);
+char *LLVMGetErrorMessage(LLVMErrorRef Err);
+void LLVMDisposeErrorMessage(char *ErrMsg);
+
+/* In the C runtime, which is also compiled into syntran when it is built with LLVM */
+int sy_jit_call(int (*fn)(int, char **));
+
+/* The symbols of the C runtime, which the program refers to by name */
+#define SY_SYM(n) extern char n;
+#include "../rt/syntran_syms.inc"
+#undef SY_SYM
+
+#define SY_SYM(n) {#n, (void *)&n},
+static const struct {
+    const char *name;
+    void *addr;
+} sy_syms[] = {
+#include "../rt/syntran_syms.inc"
+};
+#undef SY_SYM
+
+static char sy_jit_err[1024];
+
+static int sy_jit_fail(LLVMErrorRef e, const char *what)
+{
+    char *m = LLVMGetErrorMessage(e);
+
+    snprintf(sy_jit_err, sizeof(sy_jit_err), "%s: %s", what, m);
+    LLVMDisposeErrorMessage(m);
+    return -1;
+}
+
+/* Compile `module` and run its main().  This takes ownership of the module, and of
+ * the context that it is in.  The result is what sy_jit_call() says, or -1 if LLVM
+ * couldn't compile it, in which case sy_llvm_jit_error() says why */
+int sy_llvm_jit_run(void *module, void *ctx)
+{
+    LLVMOrcLLJITRef jit = NULL;
+    LLVMOrcJITDylibRef jd;
+    LLVMOrcDefinitionGeneratorRef gen = NULL;
+    LLVMOrcThreadSafeContextRef tsc;
+    LLVMOrcThreadSafeModuleRef tsm;
+    LLVMErrorRef e;
+    LLVMOrcCSymbolMapPair *pairs;
+    size_t i, n = sizeof(sy_syms) / sizeof(sy_syms[0]);
+    uint64_t addr = 0;
+    int status;
+
+    sy_jit_err[0] = '\0';
+
+    /* The module's context is shared with the JIT.  Disposing of this reference
+     * after the module is handed over keeps the context alive until the JIT is done */
+    tsc = LLVMOrcCreateNewThreadSafeContextFromLLVMContext(ctx);
+    tsm = LLVMOrcCreateNewThreadSafeModule(module, tsc);
+    LLVMOrcDisposeThreadSafeContext(tsc);
+
+    e = LLVMOrcCreateLLJIT(&jit, NULL);
+    if (e != NULL) {
+        LLVMOrcDisposeThreadSafeModule(tsm);
+        return sy_jit_fail(e, "cannot start the JIT");
+    }
+    jd = LLVMOrcLLJITGetMainJITDylib(jit);
+
+    /* libc and libm, from the process.  The runtime itself next, whose symbols the
+     * executable of syntran doesn't export */
+    e = LLVMOrcCreateDynamicLibrarySearchGeneratorForProcess(&gen,
+        LLVMOrcLLJITGetGlobalPrefix(jit), NULL, NULL);
+    if (e != NULL) {
+        LLVMOrcDisposeThreadSafeModule(tsm);
+        LLVMOrcDisposeLLJIT(jit);
+        return sy_jit_fail(e, "cannot find the symbols of the process");
+    }
+    LLVMOrcJITDylibAddGenerator(jd, gen);
+
+    pairs = (LLVMOrcCSymbolMapPair *)malloc(n * sizeof(*pairs));
+    for (i = 0; i < n; i++) {
+        pairs[i].Name = LLVMOrcLLJITMangleAndIntern(jit, sy_syms[i].name);
+        pairs[i].Sym.Address = (uint64_t)(uintptr_t)sy_syms[i].addr;
+        /* Exported (1) | Callable (4).  A variable isn't callable, but it doesn't matter */
+        pairs[i].Sym.Flags.GenericFlags = 1 | 4;
+        pairs[i].Sym.Flags.TargetFlags = 0;
+    }
+    e = LLVMOrcJITDylibDefine(jd, LLVMOrcAbsoluteSymbols(pairs, n));
+    free(pairs);
+    if (e != NULL) {
+        LLVMOrcDisposeThreadSafeModule(tsm);
+        LLVMOrcDisposeLLJIT(jit);
+        return sy_jit_fail(e, "cannot define the runtime");
+    }
+
+    e = LLVMOrcLLJITAddLLVMIRModule(jit, jd, tsm);
+    if (e != NULL) {
+        /* tsm belongs to the JIT even if this fails */
+        LLVMOrcDisposeLLJIT(jit);
+        return sy_jit_fail(e, "cannot add the module");
+    }
+
+    e = LLVMOrcLLJITLookup(jit, &addr, "main");
+    if (e != NULL) {
+        LLVMOrcDisposeLLJIT(jit);
+        return sy_jit_fail(e, "cannot compile the module");
+    }
+
+    status = sy_jit_call((int (*)(int, char **))(uintptr_t)addr);
+    e = LLVMOrcDisposeLLJIT(jit);
+    if (e != NULL) LLVMDisposeErrorMessage(LLVMGetErrorMessage(e));
+    return status;
+}
+
+const char *sy_llvm_jit_error(void)
+{
+    return sy_jit_err;
+}
+
 #endif /* SYNTRAN_LLVM */

@@ -626,6 +626,47 @@ module syntran__llvm_c_m
 		subroutine sy_llvm_init_native() bind(c, name = "sy_llvm_init_native")
 		end subroutine sy_llvm_init_native
 
+		! Also in src/c/llvm_shim.c.  Compile a module in memory and run its main(),
+		! taking ownership of the module and its context.  The result is 0 if the
+		! program ran to the end, 1 for a runtime error, 2 for std::exit(), or -1 if
+		! LLVM failed, and then sy_llvm_jit_error() says why
+		function sy_llvm_jit_run(m, ctx) bind(c, name = "sy_llvm_jit_run")
+			import :: c_ptr, c_int
+			type(c_ptr), value :: m, ctx
+			integer(c_int) :: sy_llvm_jit_run
+		end function sy_llvm_jit_run
+
+		function sy_llvm_jit_error() bind(c, name = "sy_llvm_jit_error")
+			import :: c_ptr
+			type(c_ptr) :: sy_llvm_jit_error
+		end function sy_llvm_jit_error
+
+		! In the C runtime.  What the program that was last run left behind
+		function sy_jit_result() bind(c, name = "sy_jit_result")
+			import :: c_ptr
+			type(c_ptr) :: sy_jit_result
+		end function sy_jit_result
+
+		function sy_jit_message() bind(c, name = "sy_jit_message")
+			import :: c_ptr
+			type(c_ptr) :: sy_jit_message
+		end function sy_jit_message
+
+		function sy_jit_value_f32() bind(c, name = "sy_jit_value_f32")
+			import :: c_float
+			real(c_float) :: sy_jit_value_f32
+		end function sy_jit_value_f32
+
+		function sy_jit_value_f64() bind(c, name = "sy_jit_value_f64")
+			import :: c_double
+			real(c_double) :: sy_jit_value_f64
+		end function sy_jit_value_f64
+
+		function sy_jit_exit_code() bind(c, name = "sy_jit_exit_code")
+			import :: c_int
+			integer(c_int) :: sy_jit_exit_code
+		end function sy_jit_exit_code
+
 		function LLVMGetDefaultTargetTriple() bind(c, name = "LLVMGetDefaultTargetTriple")
 			import :: c_ptr
 			type(c_ptr) :: LLVMGetDefaultTargetTriple

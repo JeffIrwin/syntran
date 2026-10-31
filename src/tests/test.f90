@@ -10,6 +10,11 @@ module test_m
 	! read by run_group().  Unallocated means "no filter"
 	character(len = :), allocatable :: test_only, test_skip
 
+	! Set by --native.  Then eval() and the like compile their programs with LLVM
+	! and run them in this process, rather than on the VM, and run_group() skips
+	! the groups which can't mean anything that way
+	logical :: test_native = .false.
+
 	! Anchor for symbolizing -fbacktrace output, printed by --anchor.  The exe
 	! is relocated by ASLR on every run, so the raw addresses gfortran prints
 	! on a crash mean nothing on their own.  This is an ordinary saved symbol;
@@ -22,6 +27,24 @@ module test_m
 	integer, save :: aslr_anchor = 0
 
 contains
+
+!===============================================================================
+
+logical function native_mode_skips(name)
+
+	! Groups which don't test the language, or which can't mean anything with
+	! --native.  The rest is what the native backend has to do the same as the VM
+
+	character(len = *), intent(in) :: name
+
+	native_mode_skips = &
+		index(name, 'native') == 1 .or.   & ! they test the backend on its own
+		index(name, 'transpile') == 1 .or. & ! the other backend
+		index(name, 'repl') == 1 .or.      & ! the REPL is the VM's alone
+		index(name, 'eval_api') == 1 .or.  & ! it reads the VM's value_t
+		name == 'args'                       ! script arguments are the VM's too
+
+end function native_mode_skips
 
 !===============================================================================
 
@@ -47,6 +70,8 @@ logical function run_group(name)
 	if (allocated(test_only)) run_group = index(name, test_only) > 0
 	if (.not. run_group) return
 	if (allocated(test_skip)) run_group = index(name, test_skip) == 0
+	if (.not. run_group) return
+	if (test_native) run_group = .not. native_mode_skips(name)
 
 end function run_group
 
@@ -10423,7 +10448,11 @@ subroutine unit_test_runtime_traces(npass, nfail)
 	! a location-less "at bump" frame.  Skipped (like unit_test_bounds_check())
 	! when the flag isn't set, since the OOB access is otherwise undefined
 	! behavior that faults straight through to a raw Fortran abort
-	if (bounds_check) then
+	!
+	! Not with --native: there a by-ref receiver is the address of the element, not a
+	! copy that is written back, so after shrink() it's a dangling pointer, and
+	! writing x through it is undefined behavior (see doc/native.md)
+	if (bounds_check .and. .not. test_native) then
 		diag_ = get_diags_file(P//'implicit-ret.syntran')
 		call unit_test_coda( [ &
 			diag_has_code(diag_, RC_SUBSCRIPT_OOB), &
@@ -13405,6 +13434,14 @@ program test
 			i = i + 1
 			call get_command_argument(i, argv)
 			read(argv, *) nrep
+		case ('--native')
+			! Run the programs of the tests in memory with LLVM, not on the VM
+			if (.not. native_available) then
+				write(*,*) 'error: --native needs a syntran that was built with LLVM'
+				call exit(1)
+			end if
+			test_native = .true.
+			call syntran_set_native_evals(.true.)
 		end select
 	end do
 

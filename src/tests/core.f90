@@ -51,7 +51,7 @@ subroutine unit_test_coda(tests, label, npass, nfail)
 
 	!********
 
-	integer :: id(1)
+	integer :: id(1), k
 
 	if (.not. all(tests)) then
 
@@ -61,6 +61,8 @@ subroutine unit_test_coda(tests, label, npass, nfail)
 
 		id = findlocl1(tests, .false.)
 		write(*, '(a,i0,a)') '     Test ID ', id(1), ' was the first failure'
+		if (count(.not. tests) > 1) write(*, '(a,*(i0,1x))') '     All failing IDs: ', &
+			pack([(k, k = 1, size(tests))], .not. tests)
 		call console_color_reset()
 
 	end if
