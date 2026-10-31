@@ -1011,7 +1011,31 @@ typedef struct {
  * the extent n, in a list that the caller frees.  A range's upper bound is
  * exclusive.  An omitted bound of a stepped subscript depends on the sign of
  * the step, and the loop is the one of sy_arr_step_i64() */
-static int64_t *sy_sub_idx(const sy_sub *s, int64_t n, int64_t *count)
+/* Is a subscript out of bounds an error?  Only if the compiler that made the program
+ * was built with SYNTRAN_BOUNDS_CHECK, like the interpreter, and says so */
+static int sy_bounds = 0;
+
+void sy_set_bounds(int32_t on)
+{
+    sy_bounds = on;
+}
+
+/* The R33 error, for the subscript `sub` of dimension `dim` (from 1) of an array of
+ * `rank`, whose extent is `size`.  A rank of 0 is a string, whose size is its length */
+void sy_oob(int64_t sub, int32_t dim, int32_t rank, int64_t size)
+{
+    if (rank == 0)
+        sy_rt_error("R33", "string index %lld is out of bounds for length %lld", (long long)sub,
+            (long long)size);
+    else if (rank == 1)
+        sy_rt_error("R33", "subscript %lld is out of bounds for size %lld", (long long)sub,
+            (long long)size);
+    else
+        sy_rt_error("R33", "subscript %lld is out of bounds for dimension %d of %d (size %lld)",
+            (long long)sub, (int)dim, (int)rank, (long long)size);
+}
+
+static int64_t *sy_sub_idx_raw(const sy_sub *s, int64_t n, int64_t *count)
 {
     int64_t lo, hi, st, i, j = 0, cnt;
     int64_t *idx;
@@ -1061,6 +1085,29 @@ static int64_t *sy_sub_idx(const sy_sub *s, int64_t n, int64_t *count)
     }
 }
 
+/* The indices that a subscript of dimension `dim` selects, of an array of `rank`, or
+ * of a string if rank is 0.  `n` is the extent */
+static int64_t *sy_sub_idx(const sy_sub *s, int64_t n, int64_t *count, int32_t dim, int32_t rank)
+{
+    int64_t *idx = sy_sub_idx_raw(s, n, count), i;
+
+    /* A range has a constant stride, so its first and last index are enough.  Those of
+     * a vector are each checked */
+    if (sy_bounds && *count > 0) {
+        if (s->kind == SUB_SCALAR || s->kind == SUB_RANGE || s->kind == SUB_ALL
+                || s->kind == SUB_STEP) {
+            if (idx[0] < 0 || idx[0] >= n) sy_oob(idx[0], dim, rank, n);
+            i = *count - 1;
+            if (idx[i] < 0 || idx[i] >= n) sy_oob(idx[i], dim, rank, n);
+        } else {
+            for (i = 0; i < *count; i++) {
+                if (idx[i] < 0 || idx[i] >= n) sy_oob(idx[i], dim, rank, n);
+            }
+        }
+    }
+    return idx;
+}
+
 /* Walks the elements that a subscript of each dimension of an array selects, in
  * column-major order.  The position of the t-th one in the array is `lin` */
 typedef struct {
@@ -1078,7 +1125,7 @@ static void sy_walk_init(sy_walk *w, const sy_arr *a, const sy_sub *subs)
     w->rank = a->rank;
     w->total = 1;
     for (k = 0; k < a->rank; k++) {
-        w->idx[k] = sy_sub_idx(&subs[k], a->size[k], &w->cnt[k]);
+        w->idx[k] = sy_sub_idx(&subs[k], a->size[k], &w->cnt[k], k + 1, a->rank);
         w->ext[k] = a->size[k];
         w->pos[k] = 0;
         w->total *= w->cnt[k];
@@ -1179,7 +1226,7 @@ sy_str *sy_str_at(const sy_str *s, int64_t i)
 sy_str *sy_str_sub(const sy_str *s, const sy_sub *sub)
 {
     int64_t cnt, i;
-    int64_t *idx = sy_sub_idx(sub, s->len, &cnt);
+    int64_t *idx = sy_sub_idx(sub, s->len, &cnt, 1, 0);
     sy_str *r = sy_str_alloc(cnt);
 
     for (i = 0; i < cnt; i++) r->data[i] = s->data[idx[i]];
@@ -1196,7 +1243,7 @@ void sy_str_set(sy_str **slot, const sy_sub *sub, const sy_str *rhs)
 {
     sy_str *s = *slot, *tmp = NULL;
     int64_t cnt, i;
-    int64_t *idx = sy_sub_idx(sub, s->len, &cnt);
+    int64_t *idx = sy_sub_idx(sub, s->len, &cnt, 1, 0);
     int fill = sub->kind == SUB_SCALAR || sub->kind == SUB_RANGE || sub->kind == SUB_ALL;
 
     if (!fill && rhs->len != cnt) {

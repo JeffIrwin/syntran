@@ -26,6 +26,7 @@ module syntran__native_m
 	! still builds where LLVM is not installed.  See `native_available`.
 
 	use, intrinsic :: iso_c_binding
+	use syntran__compiler_m, only: bounds_check
 	use syntran__consts_m
 	use syntran__errors_m
 	use syntran__linalg_m, only: blas_enabled
@@ -375,6 +376,7 @@ subroutine native_tree(tree, state, n, diags)
 
 	call begin_fn(em, 'main', em%t_i32, void_type, .true.)
 	call rt_void(em, 'sy_set_args', [LLVMGetParam(em%fn, 0_c_int), LLVMGetParam(em%fn, 1_c_int)])
+	if (bounds_check) call rt_void(em, 'sy_set_bounds', [ci32(em, 1)])
 
 	if (allocated(tree%members)) then
 		do i = 1, size(tree%members)
@@ -1900,6 +1902,24 @@ function lin_index(em, a, idx) result(lin)
 	type(c_ptr) :: lin
 
 	integer :: k
+
+	type(c_ptr) :: bad_bb, good_bb, ignored, sz
+
+	! Like the interpreter's, a subscript is only checked in a build that asks for
+	! it.  The unsigned comparison is also true for a negative subscript
+	if (bounds_check) then
+		do k = 1, size(idx)
+			sz = arr_dim(em, a, ci64(em, int(k - 1, 8)))
+			bad_bb  = new_block(em, 'oob')
+			good_bb = new_block(em, 'inbounds')
+			ignored = LLVMBuildCondBr(em%bld, LLVMBuildICmp(em%bld, LLVM_INT_UGE, idx(k), sz, &
+				cs('')), bad_bb, good_bb)
+			call LLVMPositionBuilderAtEnd(em%bld, bad_bb)
+			call rt_void(em, 'sy_oob', [idx(k), ci32(em, k), ci32(em, size(idx)), sz])
+			ignored = LLVMBuildBr(em%bld, good_bb)
+			call LLVMPositionBuilderAtEnd(em%bld, good_bb)
+		end do
+	end if
 
 	lin = idx(size(idx))
 	do k = size(idx) - 1, 1, -1

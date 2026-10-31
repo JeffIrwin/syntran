@@ -12313,6 +12313,11 @@ subroutine unit_test_native(npass, nfail)
 				//'println(f(3));'), '@sy_frames_grow') > 0, &
 			index(native_ir('println(std::args());'), '@sy_set_trace') > 0, &
 
+			! A subscript is only checked in a build with SYNTRAN_BOUNDS_CHECK, like the
+			! interpreter's
+			(index(native_ir('let a = [1, 2, 3]; let i = size(std::args()); println(a[i]);'), &
+				'@sy_oob') > 0) .eqv. bounds_check, &
+
 			! A step of zero is an error of the loop or the array, which the code checks for
 			index(native_ir('let s = 0; for i in [0: s: 5] { println(i); }'), &
 				'for loop step is 0') > 0, &
