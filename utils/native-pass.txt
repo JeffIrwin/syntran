@@ -123,7 +123,6 @@ src/tests/test-src/errors/R27-subscript-step-zero.syntran
 src/tests/test-src/errors/R28-close-standard.syntran
 src/tests/test-src/errors/R29-getenv-unset.syntran
 src/tests/test-src/errors/R3-parse-i64.syntran
-src/tests/test-src/errors/R33-subscript-oob.syntran
 src/tests/test-src/errors/R34-reduce-dim-range.syntran
 src/tests/test-src/errors/R35-mask-shape-mismatch.syntran
 src/tests/test-src/errors/R36-minmax-empty.syntran

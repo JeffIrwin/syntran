@@ -155,6 +155,13 @@ run_one() {
 		echo "SKIP runtime-error $f" > "$base.result"
 		return
 	fi
+	# An interpreter without bounds checking (see SYNTRAN_BOUNDS_CHECK in CLAUDE.md)
+	# aborts with a raw Fortran error on an out of bounds subscript, which is
+	# undefined behavior, so there is no result of it to compare with
+	if [ "$BACKEND" = native ] && grep -q 'Fortran runtime error' "$base.exp.raw" "$base.exp.err" 2> /dev/null; then
+		echo "SKIP out-of-bounds $f" > "$base.result"
+		return
+	fi
 	# A compiled native program reports a runtime error like the interpreter, with
 	# the same message, source line, and trace, so those are compared too.  The
 	# Fortran backend does not
