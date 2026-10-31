@@ -69,6 +69,7 @@ src/tests/test-src/bitwise/test-01.syntran
 src/tests/test-src/bitwise/test-02.syntran
 src/tests/test-src/bitwise/test-03.syntran
 src/tests/test-src/bitwise/test-04.syntran
+src/tests/test-src/bitwise/test-05.syntran
 src/tests/test-src/control/test-01.syntran
 src/tests/test-src/control/test-02.syntran
 src/tests/test-src/control/test-03.syntran
@@ -343,6 +344,7 @@ src/tests/test-src/ref/test-06.syntran
 src/tests/test-src/ref/test-07.syntran
 src/tests/test-src/ref/test-08.syntran
 src/tests/test-src/ref/test-09.syntran
+src/tests/test-src/ref/test-10.syntran
 src/tests/test-src/stacktrace/caller.syntran
 src/tests/test-src/stacktrace/fnptr.syntran
 src/tests/test-src/stacktrace/include.syntran
@@ -363,6 +365,7 @@ src/tests/test-src/struct/test-06.syntran
 src/tests/test-src/struct/test-07.syntran
 src/tests/test-src/struct/test-08.syntran
 src/tests/test-src/struct/test-09.syntran
+src/tests/test-src/struct/test-10.syntran
 src/tests/test-src/struct/test-methods.syntran
 src/tests/test-src/switch/switch_helper.syntran
 src/tests/test-src/switch/test-01.syntran

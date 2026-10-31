@@ -131,11 +131,23 @@ The output of a compiled program is the same as the interpreter's, but:
   is no `--`, because there are no options of syntran to tell them apart from.
 - Opening a file with mode `"w"` empties it right away.  The interpreter only
   does when it first writes to it.
-- A method gets the address of its receiver, rather than a copy that is written
-  back when it returns.  So if the method makes the receiver go away, like
-  `a[1].bump()` where `bump()` assigns a shorter array to `a`, then the
-  interpreter reports an out of bounds subscript (R33) when the method returns,
-  but a compiled program writes to memory that was freed.
+- A method gets a copy of its receiver if that is an element of an array, like
+  `a[1].bump()` or `w.items[1].bump()`, and it is put back when the method
+  returns, like the interpreter does.  So a fn that the method calls sees the
+  receiver as it was before the call, and if the method makes the receiver go
+  away, like `bump()` assigning a shorter array to `a`, then the interpreter and
+  a compiled program built with `SYNTRAN_BOUNDS_CHECK` report an out of bounds
+  subscript (R33) when the method returns.  The copy costs as much as copying
+  the struct.  A receiver which is a variable, or a member of one, is passed by
+  address, as are the other `&` arguments, so if the fn also reads that variable
+  by name, like a global, then it sees what the method wrote.  The interpreter
+  moves it out of the variable for the call, so there a fn that reads it
+  crashes, or sees what was there before the call for numbers and strings.
+- A float which is out of range or NaN converts to an integer like the machine
+  does: `i32(1.0e20)` saturates on Arm, and is the smallest integer on x86.
+  That is the interpreter's too, when it is on the same machine.
+- A shift by a negative count masks the count to the width of the integer, like
+  the interpreter does.
 
 ## How it works
 
