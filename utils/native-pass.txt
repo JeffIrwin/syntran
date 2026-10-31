@@ -101,6 +101,7 @@ src/tests/test-src/enum/test-06.syntran
 src/tests/test-src/enum/test-07.syntran
 src/tests/test-src/enum/test-08.syntran
 src/tests/test-src/enum/test-09.syntran
+src/tests/test-src/explorer/arrays.syntran
 src/tests/test-src/explorer/fn.syntran
 src/tests/test-src/explorer/for.syntran
 src/tests/test-src/explorer/hello.syntran
@@ -146,6 +147,7 @@ src/tests/test-src/fns/test-31.syntran
 src/tests/test-src/fns/test-33.syntran
 src/tests/test-src/fns/test-34.syntran
 src/tests/test-src/fns/test-35.syntran
+src/tests/test-src/fns/test-36.syntran
 src/tests/test-src/fns/test-37.syntran
 src/tests/test-src/fns/test-38.syntran
 src/tests/test-src/fns/test-39.syntran
@@ -155,6 +157,7 @@ src/tests/test-src/fns/test-42.syntran
 src/tests/test-src/fns/test-43.syntran
 src/tests/test-src/fns/test-44.syntran
 src/tests/test-src/fns/test-45.syntran
+src/tests/test-src/fns/test-46.syntran
 src/tests/test-src/for-loops/test-01.syntran
 src/tests/test-src/for-loops/test-02.syntran
 src/tests/test-src/for-loops/test-03.syntran
@@ -216,6 +219,11 @@ src/tests/test-src/linear-algebra/test-03.syntran
 src/tests/test-src/linear-algebra/test-04.syntran
 src/tests/test-src/linear-algebra/test-05.syntran
 src/tests/test-src/linear-algebra/test-06.syntran
+src/tests/test-src/linear-algebra/test-07.syntran
+src/tests/test-src/linear-algebra/test-08.syntran
+src/tests/test-src/linear-algebra/test-09.syntran
+src/tests/test-src/linear-algebra/test-10.syntran
+src/tests/test-src/linear-algebra/test-11.syntran
 src/tests/test-src/modules/array_mod.syntran
 src/tests/test-src/modules/arrstruct_mod.syntran
 src/tests/test-src/modules/box.syntran
@@ -261,7 +269,9 @@ src/tests/test-src/modules/test-modvar-array.syntran
 src/tests/test-src/modules/test-modvar-arrstruct.syntran
 src/tests/test-src/modules/test-qual-assign-ok.syntran
 src/tests/test-src/modules/test-std-glob-module.syntran
+src/tests/test-src/modules/test-std-glob.syntran
 src/tests/test-src/modules/test-std-name-module.syntran
+src/tests/test-src/modules/test-std-name.syntran
 src/tests/test-src/modules/test-struct-collision-rev.syntran
 src/tests/test-src/modules/test-struct-collision.syntran
 src/tests/test-src/modules/test-struct-mod-qualified-annot.syntran
@@ -320,6 +330,7 @@ src/tests/test-src/switch/test-14.syntran
 src/tests/test-src/switch/test-15.syntran
 src/tests/test-src/switch/test-16.syntran
 src/tests/test-src/switch/test-17.syntran
+src/tests/test-src/transpile/test-02.syntran
 src/tests/test-src/transpile/test-03.syntran
 src/tests/test-src/transpile/test-04.syntran
 src/tests/test-src/transpile/test-05.syntran

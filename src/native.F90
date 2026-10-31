@@ -28,6 +28,7 @@ module syntran__native_m
 	use, intrinsic :: iso_c_binding
 	use syntran__consts_m
 	use syntran__errors_m
+	use syntran__linalg_m, only: blas_enabled
 	use syntran__llvm_c_m
 	use syntran__native_rt_m
 	use syntran__runtime_m
@@ -177,6 +178,9 @@ module syntran__native_m
 
 		! Counter for the names of string literals
 		integer :: nstr = 0
+
+		! Does the program call BLAS or LAPACK, which it has to be linked with?
+		logical :: uses_blas = .false.
 
 		type(slots_t) :: g, l
 
@@ -3787,7 +3791,9 @@ recursive function emit_array_binary(em, node) result(r)
 	r = dummy_val(em, array_type)
 
 	if (node%op%kind == matmul_token) then
-		call unsupported(em, 'a matrix product')
+		l  = emit_expr(em, node%left)
+		rr = emit_expr(em, node%right)
+		r  = matmul_vals(em, l, rr, node%val)
 		return
 	end if
 	if (.not. allocated(node%val%array)) then
@@ -3800,6 +3806,71 @@ recursive function emit_array_binary(em, node) result(r)
 	r  = arr_binop_vals(em, node%op%kind, node%op%text, l, rr, node%val)
 
 end function emit_array_binary
+
+!===============================================================================
+
+function matmul_vals(em, l, rr, res_val) result(r)
+
+	! The matrix product `l @ rr`, where the type of the result is that of
+	! `res_val`.  Both operands are converted to it first, as the interpreter does.
+	! Two vectors have a scalar product.  This consumes both operands
+
+	type(nemitter_t), intent(inout) :: em
+	type(nval_t), intent(in) :: l, rr
+	type(value_t), intent(in) :: res_val
+	type(nval_t) :: r
+
+	!********
+
+	integer :: ety
+
+	type(nval_t) :: x, y
+
+	ety = res_val%type
+	if (ety == array_type .and. allocated(res_val%array)) ety = res_val%array%type
+
+	if (l%ty /= array_type .or. rr%ty /= array_type .or. &
+			.not. (ety == i32_type .or. ety == i64_type .or. ety == f32_type .or. &
+			ety == f64_type)) then
+		call unsupported(em, 'a matrix product of these types')
+		r = dummy_val(em, array_type)
+		return
+	end if
+
+	x = arr_cast(em, l, ety)
+	y = arr_cast(em, rr, ety)
+
+	if (res_val%type /= array_type) then
+		r%ty = ety
+		r%owned = .false.
+		r%v = rt_call(em, 'sy_dot_'//type_sfx(ety), ll_type(em, ety), [x%v, y%v, ci32(em, 1)])
+	else
+		if (ety == f32_type .or. ety == f64_type) em%uses_blas = .true.
+		r = arr_val(rt_call(em, 'sy_matmul', em%t_ptr, [x%v, y%v]), .true., res_val)
+	end if
+
+	call dispose(em, x)
+	call dispose(em, y)
+
+end function matmul_vals
+
+!===============================================================================
+
+function type_sfx(ty) result(s)
+
+	! The suffix of the runtime fns of a numeric type, like `f64` for sy_dot_f64
+
+	integer, intent(in) :: ty
+	character(len = :), allocatable :: s
+
+	select case (ty)
+	case (i32_type);  s = 'i32'
+	case (i64_type);  s = 'i64'
+	case (f32_type);  s = 'f32'
+	case default;     s = 'f64'
+	end select
+
+end function type_sfx
 
 !===============================================================================
 
@@ -4115,7 +4186,7 @@ recursive function emit_intr_call(em, node) result(r)
 
 	integer :: i, n, iu
 
-	type(c_ptr) :: zero
+	type(c_ptr) :: zero, valp
 	type(c_ptr) :: none(0)
 	type(c_ptr), allocatable :: dims(:)
 
@@ -4126,9 +4197,7 @@ recursive function emit_intr_call(em, node) result(r)
 	if (len(name) > 1) then
 		if (name(1:1) == '0') then
 			! An overload, which the parser named like `0abs_i32`
-			base = name(2:)
-			iu = index(base, '_')
-			if (iu > 0) base = base(1: iu-1)
+			base = intr_display_name(name)
 		end if
 	end if
 
@@ -4159,6 +4228,67 @@ recursive function emit_intr_call(em, node) result(r)
 
 	case ('format')
 		r = emit_format(em, node, 1)
+
+	case ('dot')
+		a = emit_expr(em, node%args(1))
+		b = emit_expr(em, node%args(2))
+		r%ty = node%val%type
+		r%owned = .false.
+		r%v = rt_call(em, 'sy_dot_'//type_sfx(r%ty), ll_type(em, r%ty), &
+			[a%v, b%v, ci32(em, 0)])
+		call dispose(em, a)
+		call dispose(em, b)
+
+	case ('norm2')
+		a = emit_expr(em, node%args(1))
+		r%ty = node%val%type
+		r%owned = .false.
+		r%v = rt_call(em, 'sy_norm2_'//type_sfx(r%ty), ll_type(em, r%ty), &
+			[arr_data(em, a%v), arr_len(em, a%v)])
+		call dispose(em, a)
+
+	case ('shape')
+		a = emit_expr(em, node%args(1))
+		r = arr_val(rt_call(em, 'sy_shape', em%t_ptr, [a%v]), .true., node%val)
+		call dispose(em, a)
+
+	case ('transpose')
+		a = emit_expr(em, node%args(1))
+		r = arr_val(rt_call(em, 'sy_transpose', em%t_ptr, [a%v]), .true., node%val)
+		r%sk = a%sk
+		call dispose(em, a)
+
+	case ('solve')
+		em%uses_blas = .true.
+		a = emit_expr(em, node%args(1))
+		b = emit_expr(em, node%args(2))
+		r = arr_val(rt_call(em, 'sy_solve', em%t_ptr, [a%v, b%v]), .true., node%val)
+		call dispose(em, a)
+		call dispose(em, b)
+
+	case ('lu_factor')
+		! The matrix is changed in place, through the array that the variable holds,
+		! and so is `info`, which is a variable
+		em%uses_blas = .true.
+		a = emit_expr(em, node%args(1))
+		if (n >= 2) then
+			valp = var_ptr(em, node%args(2), i32_type)
+		else
+			valp = LLVMConstNull(em%t_ptr)
+		end if
+		r = arr_val(rt_call(em, 'sy_lu_factor', em%t_ptr, [a%v, valp]), .true., node%val)
+		call dispose(em, a)
+
+	case ('lu_solve')
+		em%uses_blas = .true.
+		a = emit_expr(em, node%args(1))
+		b = emit_expr(em, node%args(2))
+		piece = emit_expr(em, node%args(3))
+		call rt_void(em, 'sy_lu_solve', [a%v, b%v, piece%v])
+		call dispose(em, a)
+		call dispose(em, b)
+		call dispose(em, piece)
+		r = dummy_val(em, i32_type)
 
 	case ('len')
 		! The length is the first field of a string
@@ -4489,7 +4619,7 @@ function arr_cast(em, a, ety) result(r)
 
 	type(nval_t) :: x, y
 
-	if (.not. (is_numeric_type(a%elem) .and. is_numeric_type(ety))) then
+	if (a%elem == ety .or. .not. (is_numeric_type(a%elem) .and. is_numeric_type(ety))) then
 		r = a
 		return
 	end if
@@ -6485,7 +6615,7 @@ subroutine finish(em, n, diags)
 
 	!********
 
-	character(len = :), allocatable :: out, obj, crt, cc, cmd, flags
+	character(len = :), allocatable :: out, obj, crt, cc, cmd, flags, libs
 
 	integer :: i, ou, ios, es, cmd_stat, ln
 
@@ -6566,7 +6696,16 @@ subroutine finish(em, n, diags)
 
 	! The same floating point as the interpreter, so no fused multiply-adds
 	flags = '-O2 -ffp-contract=off'
-	cmd = cc//' '//flags//' '//sh_quote(obj)//' '//sh_quote(crt)//' -lm -o '//sh_quote(out)
+
+	! The linear algebra fns use BLAS and LAPACK if syntran does, so that the
+	! results are the same as the interpreter's.  Nothing else links them
+	libs = '-lm'
+	if (em%uses_blas .and. blas_enabled) then
+		flags = flags//' -DSY_BLAS'
+		libs = '-llapack -lblas -lm'
+	end if
+	cmd = cc//' '//flags//' '//sh_quote(obj)//' '//sh_quote(crt)//' '//libs//' -o '// &
+		sh_quote(out)
 
 	call execute_command_line(cmd, wait = .true., exitstat = es, cmdstat = cmd_stat)
 	if (cmd_stat /= 0 .or. es /= 0) then

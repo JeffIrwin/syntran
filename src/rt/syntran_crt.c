@@ -941,7 +941,7 @@ sy_str *sy_str_sub(const sy_str *s, const sy_sub *sub)
  * Fortran.  Otherwise it must be as long as the number of characters */
 void sy_str_set(sy_str **slot, const sy_sub *sub, const sy_str *rhs)
 {
-    sy_str *s = *slot;
+    sy_str *s = *slot, *tmp = NULL;
     int64_t cnt, i;
     int64_t *idx = sy_sub_idx(sub, s->len, &cnt);
     int fill = sub->kind == SUB_SCALAR || sub->kind == SUB_RANGE || sub->kind == SUB_ALL;
@@ -951,7 +951,10 @@ void sy_str_set(sy_str **slot, const sy_sub *sub, const sy_str *rhs)
         sy_fatal("size of RHS does not match size of LHS slice");
     }
     if (s->imm) s = *slot = sy_str_from(s->data, s->len);
+    /* `s[:-1:] = s` reads the characters that it writes */
+    if (rhs == s) rhs = tmp = sy_str_from(s->data, s->len);
     for (i = 0; i < cnt; i++) s->data[idx[i]] = i < rhs->len ? rhs->data[i] : ' ';
+    sy_str_free(tmp);
     free(idx);
 }
 
@@ -985,12 +988,15 @@ void sy_arr_str_set(sy_arr *a, const sy_sub *subs, const sy_str *rhs)
 {
     sy_walk w;
     int64_t t;
+    /* The rhs can be one of the elements, which the first of them would change */
+    sy_str *own = sy_str_from(rhs->data, rhs->len);
 
     sy_walk_init(&w, a, subs);
     for (t = 0; t < w.total; t++) {
-        sy_str_set(&((sy_str **)a->data)[sy_walk_next(&w)], &subs[a->rank], rhs);
+        sy_str_set(&((sy_str **)a->data)[sy_walk_next(&w)], &subs[a->rank], own);
     }
     sy_walk_free(&w);
+    sy_str_free(own);
 }
 
 /*============================================================================*/
@@ -2195,4 +2201,464 @@ sy_arr *sy_file_read_arr(sy_file *f, int32_t elem, int64_t n)
     a = sy_arr_new(elem, 1, &n);
     sy_read_values(f, elem, n, a->data);
     return a;
+}
+
+/*============================================================================*/
+
+/* Linear algebra: `@`, dot(), norm2(), transpose(), solve(), lu_factor(), and
+ * lu_solve(), like the interpreter's (src/linalg.F90).  A matrix is stored by
+ * column, so a(i, j) of an m x n matrix is a[i + j * m].
+ *
+ * Floating point matrix products and the solvers call BLAS and LAPACK if the
+ * program was compiled with -DSY_BLAS, which the compiler does if syntran was
+ * built with them.  Otherwise these are the portable loops, which do the same
+ * operations in the same order as src/linalg.F90 does without them */
+
+#ifdef SY_BLAS
+extern void sgemm_(const char *, const char *, const int *, const int *, const int *,
+    const float *, const float *, const int *, const float *, const int *, const float *,
+    float *, const int *);
+extern void dgemm_(const char *, const char *, const int *, const int *, const int *,
+    const double *, const double *, const int *, const double *, const int *, const double *,
+    double *, const int *);
+extern void sgesv_(const int *, const int *, float *, const int *, int *, float *, const int *,
+    int *);
+extern void dgesv_(const int *, const int *, double *, const int *, int *, double *, const int *,
+    int *);
+extern void sgetrf_(const int *, const int *, float *, const int *, int *, int *);
+extern void dgetrf_(const int *, const int *, double *, const int *, int *, int *);
+extern void sgetrs_(const char *, const int *, const int *, const float *, const int *,
+    const int *, float *, const int *, int *);
+extern void dgetrs_(const char *, const int *, const int *, const double *, const int *,
+    const int *, double *, const int *, int *);
+#endif
+
+/* c(m, n) = a(m, k) * b(k, n), for floats */
+#ifdef SY_BLAS
+#define SY_GEMM_FLOAT(T, S, GEMM)                                                         \
+    void sy_gemm_##S(int m, int n, int k, const T *a, const T *b, T *c)                   \
+    {                                                                                     \
+        const T one = 1, zero = 0;                                                        \
+        if (m <= 0 || n <= 0) return;                                                     \
+        if (k <= 0) {                                                                     \
+            memset(c, 0, sizeof(T) * (size_t)m * (size_t)n);                              \
+            return;                                                                       \
+        }                                                                                 \
+        GEMM("N", "N", &m, &n, &k, &one, a, &m, b, &k, &zero, c, &m);                     \
+    }
+#else
+#define SY_GEMM_FLOAT(T, S, GEMM)                                                         \
+    void sy_gemm_##S(int m, int n, int k, const T *a, const T *b, T *c)                   \
+    {                                                                                     \
+        int i, j, l;                                                                      \
+        if (m <= 0 || n <= 0) return;                                                     \
+        memset(c, 0, sizeof(T) * (size_t)m * (size_t)n);                                  \
+        for (j = 0; j < n; j++)                                                           \
+            for (l = 0; l < k; l++)                                                       \
+                for (i = 0; i < m; i++)                                                   \
+                    c[i + (size_t)j * m] += a[i + (size_t)l * m] * b[l + (size_t)j * k];  \
+    }
+#endif
+
+SY_GEMM_FLOAT(float, f32, sgemm_)
+SY_GEMM_FLOAT(double, f64, dgemm_)
+
+/* The same for integers, which wrap around on overflow */
+#define SY_GEMM_INT(T, U, S)                                                              \
+    static void sy_gemm_##S(int m, int n, int k, const T *a, const T *b, T *c)            \
+    {                                                                                     \
+        int i, j, l;                                                                      \
+        if (m <= 0 || n <= 0) return;                                                     \
+        memset(c, 0, sizeof(T) * (size_t)m * (size_t)n);                                  \
+        for (j = 0; j < n; j++)                                                           \
+            for (l = 0; l < k; l++)                                                       \
+                for (i = 0; i < m; i++)                                                   \
+                    c[i + (size_t)j * m] = (T)((U)c[i + (size_t)j * m] +                  \
+                        (U)a[i + (size_t)l * m] * (U)b[l + (size_t)j * k]);               \
+    }
+
+SY_GEMM_INT(int32_t, uint32_t, i32)
+SY_GEMM_INT(int64_t, uint64_t, i64)
+
+/* a @ b, where at least one of them is a matrix, and both have the same type */
+sy_arr *sy_matmul(const sy_arr *a, const sy_arr *b)
+{
+    int64_t lr = 1, lc, rr, rc = 1, sizes[2];
+    int32_t rank = 1;
+    sy_arr *c;
+
+    if (a->rank == 2) {
+        lr = a->size[0];
+        lc = a->size[1];
+    } else {
+        lc = a->size[0];
+    }
+    rr = b->size[0];
+    if (b->rank == 2) rc = b->size[1];
+    if (lc != rr) {
+        sy_rt_error("R1", "matmul `@` dimension mismatch: inner dimensions %lld and %lld do "
+            "not agree", (long long)lc, (long long)rr);
+    }
+
+    if (a->rank == 2 && b->rank == 2) {
+        rank = 2;
+        sizes[0] = lr;
+        sizes[1] = rc;
+    } else {
+        sizes[0] = a->rank == 1 ? rc : lr;
+    }
+    c = sy_arr_new(a->elem, rank, sizes);
+
+    switch (a->elem) {
+    case SY_I32:
+        sy_gemm_i32((int)lr, (int)rc, (int)lc, (const int32_t *)a->data,
+            (const int32_t *)b->data, (int32_t *)c->data);
+        break;
+    case SY_I64:
+        sy_gemm_i64((int)lr, (int)rc, (int)lc, (const int64_t *)a->data,
+            (const int64_t *)b->data, (int64_t *)c->data);
+        break;
+    case SY_F32:
+        sy_gemm_f32((int)lr, (int)rc, (int)lc, (const float *)a->data,
+            (const float *)b->data, (float *)c->data);
+        break;
+    default:
+        sy_gemm_f64((int)lr, (int)rc, (int)lc, (const double *)a->data,
+            (const double *)b->data, (double *)c->data);
+        break;
+    }
+    return c;
+}
+
+/* The dot product of two vectors, which is `a @ b` if `from_op`, and dot(a, b)
+ * otherwise, which only differ in their error */
+#define SY_DOT(T, U, S)                                                                   \
+    T sy_dot_##S(const sy_arr *a, const sy_arr *b, int32_t from_op)                       \
+    {                                                                                     \
+        const T *x = (const T *)a->data, *y = (const T *)b->data;                         \
+        T s = 0;                                                                          \
+        int64_t i;                                                                        \
+        if (a->size[0] != b->size[0]) {                                                   \
+            if (from_op) {                                                                \
+                sy_rt_error("R1", "matmul `@` dimension mismatch: inner dimensions %lld " \
+                    "and %lld do not agree", (long long)a->size[0], (long long)b->size[0]);\
+            }                                                                             \
+            sy_rt_error("R38", "vector length mismatch in dot(): %lld and %lld",          \
+                (long long)a->size[0], (long long)b->size[0]);                            \
+        }                                                                                 \
+        for (i = 0; i < a->len; i++) s = (T)((U)s + (U)x[i] * (U)y[i]);                   \
+        return s;                                                                         \
+    }
+
+SY_DOT(int32_t, uint32_t, i32)
+SY_DOT(int64_t, uint64_t, i64)
+
+/* The same for floats, which can't be cast to an unsigned type */
+#define SY_DOT_FLOAT(T, S)                                                                \
+    T sy_dot_##S(const sy_arr *a, const sy_arr *b, int32_t from_op)                       \
+    {                                                                                     \
+        const T *x = (const T *)a->data, *y = (const T *)b->data;                         \
+        T s = 0;                                                                          \
+        int64_t i;                                                                        \
+        if (a->size[0] != b->size[0]) {                                                   \
+            if (from_op) {                                                                \
+                sy_rt_error("R1", "matmul `@` dimension mismatch: inner dimensions %lld " \
+                    "and %lld do not agree", (long long)a->size[0], (long long)b->size[0]);\
+            }                                                                             \
+            sy_rt_error("R38", "vector length mismatch in dot(): %lld and %lld",          \
+                (long long)a->size[0], (long long)b->size[0]);                            \
+        }                                                                                 \
+        for (i = 0; i < a->len; i++) s += x[i] * y[i];                                    \
+        return s;                                                                         \
+    }
+
+SY_DOT_FLOAT(float, f32)
+SY_DOT_FLOAT(double, f64)
+
+/* norm2(), like gfortran's: the Euclidean norm, scaled so that it doesn't
+ * overflow or underflow in the squares */
+#define SY_NORM2(T, S, ABS, SQRT)                                                         \
+    T sy_norm2_##S(const T *x, int64_t n)                                                 \
+    {                                                                                     \
+        T scale = 0, result = 1, val;                                                     \
+        int64_t i;                                                                        \
+        for (i = 0; i < n; i++) {                                                         \
+            if (x[i] == 0) continue;                                                      \
+            val = ABS(x[i]);                                                              \
+            if (scale < val) {                                                            \
+                result = 1 + result * (scale / val) * (scale / val);                      \
+                scale = val;                                                              \
+            } else {                                                                      \
+                result += (val / scale) * (val / scale);                                  \
+            }                                                                             \
+        }                                                                                 \
+        return scale * SQRT(result);                                                      \
+    }
+
+SY_NORM2(float, f32, fabsf, sqrtf)
+SY_NORM2(double, f64, fabs, sqrt)
+
+/* shape(a): the extents of a along each dimension */
+sy_arr *sy_shape(const sy_arr *a)
+{
+    sy_arr *r = sy_arr_new1(SY_I64, a->rank);
+    int32_t i;
+
+    for (i = 0; i < a->rank; i++) ((int64_t *)r->data)[i] = a->size[i];
+    return r;
+}
+
+sy_arr *sy_transpose(const sy_arr *a)
+{
+    int64_t r, c, sizes[2];
+    size_t es = sy_esize(a->elem);
+    sy_arr *t;
+
+    if (a->rank != 2) sy_rt_error("R18", "transpose requires a rank-2 array");
+
+    r = a->size[0];
+    c = a->size[1];
+    sizes[0] = c;
+    sizes[1] = r;
+    t = sy_arr_new(a->elem, 2, sizes);
+
+    /* The element (i, j) of a is the element (j, i) of t */
+    {
+        int64_t i, j;
+
+        for (j = 0; j < c; j++) {
+            for (i = 0; i < r; i++) {
+                const char *src = a->data + (size_t)(i + j * r) * es;
+                char *dst = t->data + (size_t)(j + i * c) * es;
+
+                if (sy_eptr(a->elem)) {
+                    sy_eptr_free(a->elem, *(void **)dst);
+                    *(void **)dst = sy_eptr_dup(a->elem, *(void *const *)src);
+                } else {
+                    memcpy(dst, src, es);
+                }
+            }
+        }
+    }
+    return t;
+}
+
+/* LU factorization of an m x n matrix in place, by Gaussian elimination with
+ * partial pivoting, like LAPACK getf2.  `ipiv` is 1-based.  Returns info: the
+ * first column with an exactly zero pivot, or 0.  The elimination continues
+ * past a zero pivot, so that the factors match LAPACK's */
+#define SY_LU(T, S, ABS)                                                                  \
+    static int sy_lu_factor_##S(int m, int n, T *a, int *ipiv)                            \
+    {                                                                                     \
+        int info = 0, mn = m < n ? m : n, i, j, k, p;                                     \
+        for (j = 0; j < mn; j++) {                                                        \
+            T mx = ABS(a[j + (size_t)j * m]), tmp;                                        \
+            p = j;                                                                        \
+            for (i = j + 1; i < m; i++) {                                                 \
+                if (ABS(a[i + (size_t)j * m]) > mx) {                                     \
+                    mx = ABS(a[i + (size_t)j * m]);                                       \
+                    p = i;                                                                \
+                }                                                                         \
+            }                                                                             \
+            ipiv[j] = p + 1;                                                              \
+            if (a[p + (size_t)j * m] == 0) {                                              \
+                if (info == 0) info = j + 1;                                              \
+                continue;                                                                 \
+            }                                                                             \
+            if (p != j) {                                                                 \
+                for (k = 0; k < n; k++) {                                                 \
+                    tmp = a[j + (size_t)k * m];                                           \
+                    a[j + (size_t)k * m] = a[p + (size_t)k * m];                          \
+                    a[p + (size_t)k * m] = tmp;                                           \
+                }                                                                         \
+            }                                                                             \
+            for (i = j + 1; i < m; i++) a[i + (size_t)j * m] /= a[j + (size_t)j * m];     \
+            for (k = j + 1; k < n; k++)                                                   \
+                for (i = j + 1; i < m; i++)                                               \
+                    a[i + (size_t)k * m] -= a[i + (size_t)j * m] * a[j + (size_t)k * m];  \
+        }                                                                                 \
+        return info;                                                                      \
+    }                                                                                     \
+                                                                                          \
+    /* Solve with the n x n factors and 1-based pivots of the above.  b is n x nrhs */    \
+    static void sy_lu_subst_##S(int n, int nrhs, const T *a, const int *ipiv, T *b)       \
+    {                                                                                     \
+        int i, j, k, p;                                                                   \
+        T tmp, bj;                                                                        \
+        for (i = 0; i < n; i++) {                                                         \
+            p = ipiv[i] - 1;                                                              \
+            if (p == i) continue;                                                         \
+            for (k = 0; k < nrhs; k++) {                                                  \
+                tmp = b[i + (size_t)k * n];                                               \
+                b[i + (size_t)k * n] = b[p + (size_t)k * n];                              \
+                b[p + (size_t)k * n] = tmp;                                               \
+            }                                                                             \
+        }                                                                                 \
+        for (k = 0; k < nrhs; k++) {                                                      \
+            T *bk = b + (size_t)k * n;                                                    \
+            for (j = 0; j < n - 1; j++) {                                                 \
+                bj = bk[j];                                                               \
+                for (i = j + 1; i < n; i++) bk[i] -= bj * a[i + (size_t)j * n];           \
+            }                                                                             \
+            for (j = n - 1; j >= 0; j--) {                                                \
+                bk[j] /= a[j + (size_t)j * n];                                            \
+                bj = bk[j];                                                               \
+                for (i = 0; i < j; i++) bk[i] -= bj * a[i + (size_t)j * n];               \
+            }                                                                             \
+        }                                                                                 \
+    }
+
+SY_LU(float, f32, fabsf)
+SY_LU(double, f64, fabs)
+
+/* getrf, getrs, and gesv for either type, through LAPACK if there is one */
+#ifdef SY_BLAS
+#define SY_LAPACK(T, S, GETRF, GETRS, GESV)                                               \
+    static int sy_getrf_##S(int m, int n, T *a, int *ipiv)                                \
+    {                                                                                     \
+        int info = 0;                                                                     \
+        if (m > 0 && n > 0) GETRF(&m, &n, a, &m, ipiv, &info);                            \
+        return info;                                                                      \
+    }                                                                                     \
+    static void sy_getrs_##S(int n, int nrhs, const T *a, const int *ipiv, T *b)          \
+    {                                                                                     \
+        int info = 0;                                                                     \
+        if (n > 0 && nrhs > 0) GETRS("N", &n, &nrhs, a, &n, ipiv, b, &n, &info);          \
+    }                                                                                     \
+    static int sy_gesv_##S(int n, int nrhs, T *w, int *ipiv, T *b)                        \
+    {                                                                                     \
+        int info = 0;                                                                     \
+        if (n > 0 && nrhs > 0) GESV(&n, &nrhs, w, &n, ipiv, b, &n, &info);                \
+        return info;                                                                      \
+    }
+SY_LAPACK(float, f32, sgetrf_, sgetrs_, sgesv_)
+SY_LAPACK(double, f64, dgetrf_, dgetrs_, dgesv_)
+#else
+#define SY_LAPACK(T, S)                                                                   \
+    static int sy_getrf_##S(int m, int n, T *a, int *ipiv)                                \
+    {                                                                                     \
+        return m > 0 && n > 0 ? sy_lu_factor_##S(m, n, a, ipiv) : 0;                      \
+    }                                                                                     \
+    static void sy_getrs_##S(int n, int nrhs, const T *a, const int *ipiv, T *b)          \
+    {                                                                                     \
+        if (n > 0 && nrhs > 0) sy_lu_subst_##S(n, nrhs, a, ipiv, b);                      \
+    }                                                                                     \
+    static int sy_gesv_##S(int n, int nrhs, T *w, int *ipiv, T *b)                        \
+    {                                                                                     \
+        int info;                                                                         \
+        if (n <= 0 || nrhs <= 0) return 0;                                                \
+        info = sy_lu_factor_##S(n, n, w, ipiv);                                           \
+        if (info == 0) sy_lu_subst_##S(n, nrhs, w, ipiv, b);                              \
+        return info;                                                                      \
+    }
+SY_LAPACK(float, f32)
+SY_LAPACK(double, f64)
+#endif
+
+static void sy_singular(const char *fn, int info)
+{
+    sy_rt_error("R41", "matrix `A` in %s() is singular: pivot U[%d, %d] is zero", fn,
+        info - 1, info - 1);
+}
+
+/* solve(a, b): the x of a x = b, where b is a vector or a matrix.  Neither is
+ * changed */
+sy_arr *sy_solve(const sy_arr *a, const sy_arr *b)
+{
+    int n, nrhs = 1, info, *ipiv;
+    sy_arr *x, *w;
+
+    if (a->size[0] != a->size[1] || a->size[0] != b->size[0]) {
+        if (a->size[0] != a->size[1]) {
+            sy_rt_error("R40", "matrix `A` in solve() is not square: %lld x %lld",
+                (long long)a->size[0], (long long)a->size[1]);
+        }
+        sy_rt_error("R40", "size mismatch in solve(): `A` is %lld x %lld but `b` has %lld rows",
+            (long long)a->size[0], (long long)a->size[1], (long long)b->size[0]);
+    }
+    n = (int)a->size[0];
+    if (b->rank == 2) nrhs = (int)b->size[1];
+
+    x = sy_arr_dup(b);
+    w = sy_arr_dup(a);
+    ipiv = (int *)malloc(sizeof(int) * (size_t)(n > 0 ? n : 1));
+    if (ipiv == NULL) sy_fatal("out of memory");
+
+    if (a->elem == SY_F32) {
+        info = sy_gesv_f32(n, nrhs, (float *)w->data, ipiv, (float *)x->data);
+    } else {
+        info = sy_gesv_f64(n, nrhs, (double *)w->data, ipiv, (double *)x->data);
+    }
+    free(ipiv);
+    sy_arr_free(w);
+    if (info > 0) {
+        sy_arr_free(x);
+        sy_singular("solve", info);
+    }
+    return x;
+}
+
+/* lu_factor(&a, &info): `a` becomes its L and U factors.  The result is the
+ * 0-based pivots.  If `info` is NULL, a zero pivot is an error, and otherwise it
+ * is what `info` gets */
+sy_arr *sy_lu_factor(sy_arr *a, int32_t *info_out)
+{
+    int m = (int)a->size[0], n = (int)a->size[1], i, info;
+    int64_t np = m < n ? m : n;
+    sy_arr *piv = sy_arr_new1(SY_I32, np);
+
+    info = a->elem == SY_F32 ? sy_getrf_f32(m, n, (float *)a->data, (int *)piv->data)
+                             : sy_getrf_f64(m, n, (double *)a->data, (int *)piv->data);
+    for (i = 0; i < np; i++) ((int32_t *)piv->data)[i] -= 1;
+
+    if (info_out != NULL) {
+        *info_out = info;
+    } else if (info > 0) {
+        sy_arr_free(piv);
+        sy_singular("lu_factor", info);
+    }
+    return piv;
+}
+
+/* lu_solve(a, ipiv, &b): the factors and pivots of lu_factor(), and b becomes x */
+void sy_lu_solve(const sy_arr *a, const sy_arr *ipiv, sy_arr *b)
+{
+    int m = (int)a->size[0], n = (int)a->size[1], nrhs = 1, i, *ip1;
+    const int32_t *p = (const int32_t *)ipiv->data;
+
+    if (m != n || m != b->size[0]) {
+        if (m != n) {
+            sy_rt_error("R40", "matrix `A` in lu_solve() is not square: %d x %d", m, n);
+        }
+        sy_rt_error("R40", "size mismatch in lu_solve(): `A` is %d x %d but `b` has %lld rows",
+            m, n, (long long)b->size[0]);
+    }
+    if (ipiv->len != n) {
+        sy_rt_error("R42", "size mismatch in lu_solve(): `A` is %d x %d but `ipiv` has %lld "
+            "elements", n, n, (long long)ipiv->len);
+    }
+    for (i = 0; i < n; i++) {
+        if (p[i] < 0 || p[i] >= n) {
+            sy_rt_error("R42", "invalid pivot in lu_solve(): ipiv[%d] is %d, which is outside "
+                "of [0, %d)", i, (int)p[i], n);
+        }
+    }
+    if (b->rank == 2) nrhs = (int)b->size[1];
+
+    /* An exactly zero diagonal of U means that the factors are of a singular matrix */
+    for (i = 0; i < n; i++) {
+        double d = a->elem == SY_F32 ? (double)((const float *)a->data)[i + (size_t)i * n]
+                                     : ((const double *)a->data)[i + (size_t)i * n];
+        if (d == 0) sy_singular("lu_solve", i + 1);
+    }
+
+    ip1 = (int *)malloc(sizeof(int) * (size_t)(n > 0 ? n : 1));
+    if (ip1 == NULL) sy_fatal("out of memory");
+    for (i = 0; i < n; i++) ip1[i] = p[i] + 1;
+    if (a->elem == SY_F32) {
+        sy_getrs_f32(n, nrhs, (const float *)a->data, ip1, (float *)b->data);
+    } else {
+        sy_getrs_f64(n, nrhs, (const double *)a->data, ip1, (double *)b->data);
+    }
+    free(ip1);
 }

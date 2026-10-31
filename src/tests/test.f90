@@ -12009,6 +12009,245 @@ end subroutine unit_test_native_rt_format
 
 !===============================================================================
 
+subroutine unit_test_native_rt_linalg(npass, nfail)
+
+	! The linear algebra of the C runtime of the native backend.  The library is
+	! built without SY_BLAS, so these are its portable loops, which are what a
+	! program is linked with if syntran has no BLAS.  norm2() is the same as
+	! gfortran's, but for a few ulps, which depend on whether the compiler fuses
+	! multiplications and additions.  The rest is checked by its residual, since
+	! the interpreter may call BLAS and LAPACK
+
+	use, intrinsic :: iso_c_binding
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	type, bind(c) :: arr_head
+		integer(c_int64_t) :: len_
+		integer(c_int32_t) :: rank_, elem
+		type(c_ptr) :: data
+	end type arr_head
+
+	interface
+		function sy_norm2_f64(x, n) bind(c, name = "sy_norm2_f64")
+			import :: c_double, c_int64_t
+			real(c_double) :: x(*)
+			integer(c_int64_t), value :: n
+			real(c_double) :: sy_norm2_f64
+		end function sy_norm2_f64
+
+		function sy_norm2_f32(x, n) bind(c, name = "sy_norm2_f32")
+			import :: c_float, c_int64_t
+			real(c_float) :: x(*)
+			integer(c_int64_t), value :: n
+			real(c_float) :: sy_norm2_f32
+		end function sy_norm2_f32
+
+		subroutine sy_gemm_f64(m, n, k, a, b, c) bind(c, name = "sy_gemm_f64")
+			import :: c_double, c_int
+			integer(c_int), value :: m, n, k
+			real(c_double) :: a(*), b(*), c(*)
+		end subroutine sy_gemm_f64
+
+		subroutine sy_gemm_f32(m, n, k, a, b, c) bind(c, name = "sy_gemm_f32")
+			import :: c_float, c_int
+			integer(c_int), value :: m, n, k
+			real(c_float) :: a(*), b(*), c(*)
+		end subroutine sy_gemm_f32
+
+		function sy_arr_new(elem, rank_, sizes) bind(c, name = "sy_arr_new")
+			import :: c_int32_t, c_int64_t, c_ptr
+			integer(c_int32_t), value :: elem, rank_
+			integer(c_int64_t) :: sizes(*)
+			type(c_ptr) :: sy_arr_new
+		end function sy_arr_new
+
+		subroutine sy_arr_free(a) bind(c, name = "sy_arr_free")
+			import :: c_ptr
+			type(c_ptr), value :: a
+		end subroutine sy_arr_free
+
+		function sy_solve(a, b) bind(c, name = "sy_solve")
+			import :: c_ptr
+			type(c_ptr), value :: a, b
+			type(c_ptr) :: sy_solve
+		end function sy_solve
+
+		function sy_lu_factor(a, info) bind(c, name = "sy_lu_factor")
+			import :: c_ptr, c_int32_t
+			type(c_ptr), value :: a
+			integer(c_int32_t) :: info
+			type(c_ptr) :: sy_lu_factor
+		end function sy_lu_factor
+
+		subroutine sy_lu_solve(a, ipiv, b) bind(c, name = "sy_lu_solve")
+			import :: c_ptr
+			type(c_ptr), value :: a, ipiv, b
+		end subroutine sy_lu_solve
+
+		function sy_transpose(a) bind(c, name = "sy_transpose")
+			import :: c_ptr
+			type(c_ptr), value :: a
+			type(c_ptr) :: sy_transpose
+		end function sy_transpose
+	end interface
+
+	character(len = *), parameter :: label = 'native C runtime linear algebra'
+
+	integer, parameter :: n = 6, nrhs = 2, m = 4, k = 5
+
+	integer :: i, j, it
+	integer(kind = 8) :: bits
+	logical, allocatable :: tests(:)
+	real(kind = 8) :: a(n, n), b(n, nrhs), x(n, nrhs), r(m, n), c(m, 3), ac(m, k), bc(k, 3)
+	real(kind = 8) :: v64(40), u
+	real(kind = 4) :: v32(40), ac32(m, k), bc32(k, 3), c32(m, 3)
+	type(c_ptr) :: pa, pb, px, pp
+	real(kind = 8), pointer :: fa(:), fb(:), fx(:)
+	integer(c_int32_t), pointer :: fp(:)
+	integer(c_int32_t) :: info
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = [logical ::]
+
+	! norm2(), of values of every magnitude and with zeros
+	bits = 88172645463325252_8
+	do it = 1, 200
+		do i = 1, size(v64)
+			bits = ieor(bits, ishft(bits, 13))
+			bits = ieor(bits, ishft(bits, -7))
+			bits = ieor(bits, ishft(bits, 17))
+			u = real(iand(bits, 2147483647_8), 8) / 2147483648.d0 - 0.5d0
+			v64(i) = u * 10.d0 ** (mod(it * 7 + i, 41) - 20)
+			if (mod(i + it, 9) == 0) v64(i) = 0
+			v32(i) = real(u * 10.d0 ** (mod(it * 5 + i, 21) - 10), 4)
+			if (mod(i + it, 7) == 0) v32(i) = 0
+		end do
+		tests = [tests, &
+			abs(sy_norm2_f64(v64, int(size(v64), 8)) - norm2(v64)) <= 8 * epsilon(1.d0) * norm2(v64), &
+			abs(sy_norm2_f32(v32, int(size(v32), 8)) - norm2(v32)) <= 8 * epsilon(1.e0) * norm2(v32)]
+	end do
+	v64 = 0
+	tests = [tests, sy_norm2_f64(v64, int(size(v64), 8)) == 0.d0]
+
+	! The matrix product, which is the sum over the inner index in order
+	do j = 1, k
+		do i = 1, m
+			ac(i, j) = sin(real(3 * i + j, 8))
+		end do
+	end do
+	do j = 1, 3
+		do i = 1, k
+			bc(i, j) = cos(real(i - 2 * j, 8))
+		end do
+	end do
+	call sy_gemm_f64(m, 3, k, ac, bc, c)
+	tests = [tests, maxval(abs(c - matmul(ac, bc))) < 1.d-14]
+	ac32 = real(ac, 4)
+	bc32 = real(bc, 4)
+	call sy_gemm_f32(m, 3, k, ac32, bc32, c32)
+	tests = [tests, maxval(abs(c32 - matmul(ac32, bc32))) < 1.e-5]
+
+	! solve(), with a matrix that is dominated by its diagonal
+	do j = 1, n
+		do i = 1, n
+			a(i, j) = sin(real(i * 7 + j * 3, 8))
+		end do
+		a(j, j) = a(j, j) + 10
+	end do
+	do j = 1, nrhs
+		do i = 1, n
+			b(i, j) = cos(real(i + 5 * j, 8))
+		end do
+	end do
+
+	pa = la_new_f64([n, n], a)
+	pb = la_new_f64([n, nrhs], b)
+	px = sy_solve(pa, pb)
+	x = reshape(la_f64_of(px), [n, nrhs])
+	tests = [tests, maxval(abs(matmul(a, x) - b)) < 1.d-12]
+	call sy_arr_free(px)
+
+	! lu_factor() and lu_solve() in place.  The pivots are 0-based
+	pp = sy_lu_factor(pa, info)
+	tests = [tests, info == 0]
+	call c_f_pointer(la_data_of(pp), fp, [n])
+	tests = [tests, all(fp >= 0) .and. all(fp < n)]
+	call sy_lu_solve(pa, pp, pb)
+	x = reshape(la_f64_of(pb), [n, nrhs])
+	tests = [tests, maxval(abs(matmul(a, x) - b)) < 1.d-12]
+	call sy_arr_free(pp)
+	call sy_arr_free(pa)
+	call sy_arr_free(pb)
+
+	! A zero pivot is reported in info
+	a = 0
+	pa = la_new_f64([n, n], a)
+	pp = sy_lu_factor(pa, info)
+	tests = [tests, info == 1]
+	call sy_arr_free(pp)
+	call sy_arr_free(pa)
+
+	! transpose()
+	do j = 1, n
+		do i = 1, m
+			r(i, j) = real(i * 10 + j, 8)
+		end do
+	end do
+	pa = la_new_f64([m, n], r)
+	px = sy_transpose(pa)
+	tests = [tests, all(reshape(la_f64_of(px), [n, m]) == transpose(r))]
+	call sy_arr_free(px)
+	call sy_arr_free(pa)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+contains
+
+	function la_new_f64(sz, vals) result(p)
+		! A new f64 array of the given shape, with these values in storage order
+		integer, intent(in) :: sz(2)
+		real(kind = 8), intent(in) :: vals(:,:)
+		type(c_ptr) :: p
+		integer(c_int64_t) :: sizes(2)
+		type(arr_head), pointer :: h
+		real(kind = 8), pointer :: d(:)
+		sizes = int(sz, c_int64_t)
+		p = sy_arr_new(3_c_int32_t, 2_c_int32_t, sizes)
+		call c_f_pointer(p, h)
+		call c_f_pointer(h%data, d, [size(vals)])
+		d = reshape(vals, [size(vals)])
+	end function la_new_f64
+
+	function la_f64_of(p) result(d)
+		! The values of an f64 array in storage order
+		type(c_ptr), intent(in) :: p
+		real(kind = 8), allocatable :: d(:)
+		type(arr_head), pointer :: h
+		real(kind = 8), pointer :: dp(:)
+		call c_f_pointer(p, h)
+		call c_f_pointer(h%data, dp, [int(h%len_)])
+		d = dp
+	end function la_f64_of
+
+	function la_data_of(p) result(q)
+		! The data of an array
+		type(c_ptr), intent(in) :: p
+		type(c_ptr) :: q
+		type(arr_head), pointer :: h
+		call c_f_pointer(p, h)
+		q = h%data
+	end function la_data_of
+
+end subroutine unit_test_native_rt_linalg
+
+!===============================================================================
+
 subroutine unit_test_native(npass, nfail)
 
 	! The native backend.  These only check the diagnostics and the LLVM IR,
@@ -12281,6 +12520,7 @@ subroutine unit_tests(iostat)
 	if (run_group('transpile')) call unit_test_transpile(npass, nfail)
 	if (run_group('native_rt')) call unit_test_native_rt(npass, nfail)
 	if (run_group('native_rt_format')) call unit_test_native_rt_format(npass, nfail)
+	if (run_group('native_rt_linalg')) call unit_test_native_rt_linalg(npass, nfail)
 	if (run_group('native')) call unit_test_native(npass, nfail)
 	if (run_group('runtime_errors')) call unit_test_runtime_errors(npass, nfail)
 	if (run_group('bounds_check')) call unit_test_bounds_check(npass, nfail)
