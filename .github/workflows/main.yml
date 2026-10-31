@@ -620,7 +620,7 @@
 					fpm install --features debug,llvm-blas --flag -Wno-tabs --prefix ./build/native/ \n
 
 					# End to end, with the C compiler that links the program \n
-					./build/native/bin/syntran --native hello -c 'println(\"hello \", 6 * 7);' \n
+					./build/native/bin/syntran --quiet --native hello -c 'println(\"hello \", 6 * 7);' \n
 					[[ \"$(./hello)\" == \"hello 42\" ]] \n
 				"
 			},
@@ -648,7 +648,7 @@
 					set -exu \n
 					cmake -S . -B build/llvm -DCMAKE_BUILD_TYPE=Debug -DSYNTRAN_LLVM=ON -DCMAKE_Fortran_COMPILER=gfortran-14 -DCMAKE_PREFIX_PATH=\"$(llvm-config --prefix)\" \n
 					cmake --build build/llvm -j 4 \n
-					./build/llvm/syntran --native hello-cmake -c 'println(\"hello \", 6 * 7);' \n
+					./build/llvm/syntran --quiet --native hello-cmake -c 'println(\"hello \", 6 * 7);' \n
 					[[ \"$(./hello-cmake)\" == \"hello 42\" ]] \n
 					./build/llvm/test \n
 				"
