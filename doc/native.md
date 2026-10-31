@@ -70,6 +70,9 @@ This is a subset of the language so far:
 - Structs, including methods, members that are arrays or other structs, arrays
   of structs, and optional structs (`?Node`) that can be `null`.  A struct is a
   value, so assigning or passing one copies it
+- Function pointers: `fn(i32): i32` variables, parameters, return values, and
+  members of structs.  They compare with `==` and print as their type, as in the
+  interpreter
 - Enums, including arrays of them and enums as members of structs.  They compare
   and print like the interpreter's, and `i32(e)` and `Suit(2)` convert
 
@@ -78,8 +81,9 @@ This is a subset of the language so far:
 Programs which use anything else are rejected with
 [E130](errors.md#e130----native-unsupported), pointing at each statement which
 isn't supported.  Run them with the interpreter instead.  So far, that includes
-files, function pointers, the matrix product `@`, a `dim` or `mask` argument
-of the reductions above, and slices or substrings of a member of a struct.
+files, the matrix product `@`, a `dim` or `mask` argument
+of the reductions above, slices or substrings of a member of a struct, and a
+member or subscript of the result of a call through a function pointer.
 
 ## Differences from the interpreter
 
