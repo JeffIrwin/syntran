@@ -46,24 +46,44 @@ isn't found.
 
 This is a subset of the language so far:
 
-- Types: `i32`, `i64`, `f32`, `f64`, `bool`, and `str`
+- Types: `i32`, `i64`, `f32`, `f64`, `bool`, `str`, and arrays of those, of any
+  rank
 - Variables and assignment, including compound assignment.  Scopes and shadowing
 - Operators: arithmetic, comparison, logical, bitwise, and shifts.  Strings are
-  joined with `+`
-- These intrinsic functions: `println`, `std::print`, `str`, and `exit`
+  joined with `+`.  Operators apply to each element of an array
+- `if`, `while`, `for` (over a range, an array, or a string), `switch`, `break`,
+  `continue`, and `return`
+- Functions, including recursion and `&` and `&const` parameters, which can take
+  and return numbers, bools, strings, and arrays
+- `use` of other modules
+- Array literals of every kind: `[a, b, c]`, `[a: b]`, `[a: step: b]`,
+  `[a: b; n]`, `[v; n, m]`, and `[a, b, c; n, m]`.  Elements and slices
+  (including steps, omitted bounds, and vectors of indices) can be read and
+  assigned, and so can characters and substrings of a string
+- These intrinsic functions: `println`, `std::print`, `str`, `exit`, `len`,
+  `repeat`, `char`, `i32`, `i64`, `f32`, `f64`, `abs`, `min`, `max`, `sqrt`,
+  `exp`, `log`, `log2`, `log10`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`,
+  `parse_i32`, `parse_i64`, `parse_f32`, `parse_f64`, `parse_bool`, `size`,
+  `reshape`, and `sum`, `product`, `minval`, `maxval`, `all`, `any`, and `count`
+  of a whole array.  The math functions and conversions also apply to each
+  element of an array
 
 ## What isn't supported yet
 
 Programs which use anything else are rejected with
 [E130](errors.md#e130----native-unsupported), pointing at each statement which
 isn't supported.  Run them with the interpreter instead.  So far, that includes
-control flow, functions, arrays, structs, and enums.
+structs and enums (and so methods and arrays of them), files, function
+pointers, the matrix product `@`, and a `dim` or `mask` argument of the
+reductions above.
 
 ## Differences from the interpreter
 
 The output of a compiled program is the same as the interpreter's, but:
 
-- Syntran runtime errors are not checked yet.
+- Syntran runtime errors are not checked yet.  In particular, a subscript which
+  is out of bounds is undefined behavior, as it is in the interpreter unless it
+  is built with `SYNTRAN_BOUNDS_CHECK`.
 - Overflow of integers wraps around, like in the interpreter.  Division of an
   integer by zero is 0, and `%` by zero is the dividend, like it is there.
 
@@ -86,8 +106,12 @@ The runtime that a compiled program is linked with is
 it at run time.  A string is a heap object that the generated code passes around
 by pointer.  The code that makes a string owns it until it is moved into a
 variable or consumed by an operation, and a string literal is a constant that is
-never freed.  The runtime writes floats exactly as the Fortran runtime does, which
-a unit test checks against it.
+never freed.  An array is the same kind of object: a fixed-size block of
+elements in column-major order, with its rank and shape, that is copied when it
+is assigned and freed when its owner is.  Element access is compiled inline,
+while slicing, and the construction of ranges, are in the runtime.  The runtime
+writes floats exactly as the Fortran runtime does, which a unit test checks
+against it.
 
 To check a change to the native backend, run
 

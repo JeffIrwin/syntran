@@ -34,6 +34,11 @@ module syntran__core_m
 	!  - llvm compiled backend
 	!    * windows ci/cd
 	!    * parity with vm, not with transpiler
+	!    * '--native' should have a short option, maybe -o ?
+	!    * 'syntran -h' output is too wide in console, not just the new options
+	!      either
+	!    * what's going on with the sy_ipow_* implementations in syntran_crt.c?
+	!      looks like some repeated squaring algorithm, but is this optimal?
 	!  - massive old readme bug:
 	!    * "recursive functions are not possible currently"
 	!    * of course the sentence before is wrong too, which says fns need to be
