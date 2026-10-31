@@ -11933,12 +11933,22 @@ subroutine unit_test_native_rt_format(npass, nfail)
 	integer :: i, j
 	integer(kind = 8), parameter :: ints(*) = [0_8, 1_8, -1_8, 255_8, -255_8, 2147483647_8, &
 		-2147483647_8 - 1_8, 1234567890123_8, huge(1_8), -huge(1_8) - 1_8]
+	character(len = 400) :: probe
+	logical :: exact_fixed
 	logical, allocatable :: tests(:)
 	real(kind = 8) :: reals(18)
+	type(rt_fmt_spec_t) :: sp
 
 	write(*,*) 'Unit testing '//label//' ...'
 
 	tests = [logical ::]
+
+	! Fortran's F editing isn't exact for every compiler.  ifx pads a number with
+	! more than ~39 digits with zeros, where C prints all of them.  The C runtime
+	! is the right one, but the Fortran runtime is the reference here, so the
+	! fixed-point format of a huge number can only be compared if it is exact
+	write(probe, '(f400.0)') 2.d0 ** 1000
+	exact_fixed = trim(probe(len_trim(probe) - 5: len_trim(probe))) == '069376'
 
 	do i = 1, size(ints)
 		do j = 1, size(int_specs)
@@ -11953,6 +11963,9 @@ subroutine unit_test_native_rt_format(npass, nfail)
 		ieee_value(1.d0, ieee_quiet_nan), ieee_value(1.d0, ieee_positive_inf)]
 	do i = 1, size(reals)
 		do j = 1, size(real_specs)
+			sp = rt_fmt_spec(trim(real_specs(j)))
+			if (.not. exact_fixed .and. abs(reals(i)) >= 1.d30 .and. sp%prec >= 0 &
+				.and. sp%ty /= 'e' .and. sp%ty /= 'E' .and. ieee_is_finite(reals(i))) cycle
 			call check('r', 0_8, 64, reals(i), '', trim(real_specs(j)))
 			call check('r', 0_8, 64, -reals(i), '', trim(real_specs(j)))
 			if (abs(reals(i)) < 1.d30 .or. .not. ieee_is_finite(reals(i))) &
