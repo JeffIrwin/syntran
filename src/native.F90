@@ -2993,6 +2993,31 @@ end function place_load
 
 !===============================================================================
 
+subroutine arr_set_all(em, a, ety, v)
+
+	! a = v, for a single element v.  This consumes `v`
+
+	type(nemitter_t), intent(inout) :: em
+	type(c_ptr), intent(in) :: a
+	integer, intent(in) :: ety
+	type(nval_t), intent(inout) :: v
+
+	type(c_ptr) :: valp, ignored
+
+	valp = entry_alloca(em, elem_ll(em, ety), 'fill')
+	if (ptr_type(ety)) ignored = LLVMBuildStore(em%bld, LLVMConstNull(em%t_ptr), valp)
+	call elem_store(em, valp, ety, v)
+	call rt_void(em, 'sy_arr_set_all', [a, valp])
+	if (ptr_type(ety)) call rt_void(em, free_fn(ety), &
+		[LLVMBuildLoad2(em%bld, em%t_ptr, valp, cs(''))])
+	v%owned = .false.
+	call dispose(em, v)
+	v%owned = .false.
+
+end subroutine arr_set_all
+
+!===============================================================================
+
 subroutine arr_slice_store(em, a, subs, ety, v)
 
 	! a[subs] = v, where v is an array of the same size or a single element.  This
@@ -4442,6 +4467,46 @@ end function intr_scalar
 
 !===============================================================================
 
+function arr_cast(em, a, ety) result(r)
+
+	! The elements of a numeric array converted to the type `ety`.  This consumes
+	! `a`, and any other array is left as it is
+
+	type(nemitter_t), intent(inout) :: em
+	type(nval_t), intent(in) :: a
+	integer, intent(in) :: ety
+	type(nval_t) :: r
+
+	!********
+
+	type(c_ptr) :: out, q
+
+	type(loop_t) :: lp
+
+	type(nval_t) :: x, y
+
+	if (.not. (is_numeric_type(a%elem) .and. is_numeric_type(ety))) then
+		r = a
+		return
+	end if
+
+	out = rt_call(em, 'sy_arr_like', em%t_ptr, [a%v, ci32(em, elem_code(ety))])
+	call loop_begin(em, arr_len(em, a%v), lp, q)
+	x = elem_load(em, a%elem, elem_ptr(em, a%v, a%elem, q))
+	y = convert(em, x, ety)
+	call elem_store(em, elem_ptr(em, out, ety, q), ety, y)
+	call loop_end(em, lp)
+
+	call dispose(em, a)
+	r = a
+	r%v = out
+	r%owned = .true.
+	r%elem = ety
+
+end function arr_cast
+
+!===============================================================================
+
 recursive function emit_intr_map(em, base, a, node) result(r)
 
 	! A scalar fn of each element of an array.  This consumes `a`
@@ -4829,7 +4894,22 @@ recursive function emit_assign_val(em, node, as_stmt) result(res)
 		end if
 	end if
 
-	call store_var(em, p, slot_type(em, node), v)
+	if (slot_type(em, node) == array_type .and. v%ty == array_type .and. &
+			allocated(node%val%array)) then
+		! The array keeps the type of its elements, e.g. an i32 array that is
+		! assigned the i64 array `[x, y]`
+		if (v%elem /= node%val%array%type) v = arr_cast(em, v, node%val%array%type)
+	end if
+
+	if (slot_type(em, node) == array_type .and. v%ty /= array_type .and. &
+			node%op%kind == equals_token) then
+		! `a = x` sets every element of the array and keeps its shape
+		ety = node%val%array%type
+		if (is_numeric_type(ety)) v = convert(em, v, ety)
+		call arr_set_all(em, LLVMBuildLoad2(em%bld, em%t_ptr, p, cs('')), ety, v)
+	else
+		call store_var(em, p, slot_type(em, node), v)
+	end if
 	res = load_var(em, node)
 
 end function emit_assign_val
