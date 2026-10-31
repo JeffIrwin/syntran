@@ -632,7 +632,7 @@ function ll_type(em, ty) result(t)
 		t = em%t_f64
 	case (bool_type)
 		t = em%t_i1
-	case (str_type, array_type, struct_type, fn_type)
+	case (str_type, array_type, struct_type, fn_type, file_type)
 		t = em%t_ptr
 	case default
 		t = em%t_i32
@@ -646,7 +646,7 @@ function ptr_type(ty) result(p)
 	! Is a value of this type a heap object that its holder owns?
 	integer, intent(in) :: ty
 	logical :: p
-	p = ty == str_type .or. ty == array_type .or. ty == struct_type
+	p = ty == str_type .or. ty == array_type .or. ty == struct_type .or. ty == file_type
 end function ptr_type
 
 !===============================================================================
@@ -660,6 +660,8 @@ function free_fn(ty) result(name)
 		name = 'sy_str_free'
 	case (struct_type)
 		name = 'sy_struct_free'
+	case (file_type)
+		name = 'sy_file_free'
 	case default
 		name = 'sy_arr_free'
 	end select
@@ -676,6 +678,8 @@ function dup_fn(ty) result(name)
 		name = 'sy_str_dup'
 	case (struct_type)
 		name = 'sy_struct_dup'
+	case (file_type)
+		name = 'sy_file_dup'
 	case default
 		name = 'sy_arr_dup'
 	end select
@@ -774,7 +778,7 @@ function dummy_val(em, ty) result(r)
 		r%v = cbool(em, .false.)
 	case (str_type)
 		r%v = str_literal(em, '')
-	case (array_type, struct_type, null_type, fn_type)
+	case (array_type, struct_type, null_type, fn_type, file_type)
 		r%v = LLVMConstNull(em%t_ptr)
 	case default
 		r%ty = i32_type
@@ -1022,7 +1026,7 @@ function holdable(ty) result(ok)
 	integer, intent(in) :: ty
 	logical :: ok
 
-	ok = supported_type(ty) .or. ty == struct_type .or. ty == enum_type .or. ty == fn_type
+	ok = supported_type(ty) .or. ty == struct_type .or. ty == enum_type .or. ty == fn_type .or. ty == file_type
 
 end function holdable
 
@@ -1056,7 +1060,8 @@ recursive function supported_val(val) result(ok)
 	else if (.not. allocated(val%array)) then
 		ok = .false.
 	else
-		ok = holdable(val%array%type)
+		! A file is not copied by the runtime when it's in an array
+		ok = holdable(val%array%type) .and. val%array%type /= file_type
 	end if
 
 end function supported_val
@@ -1286,6 +1291,16 @@ function load_var(em, node) result(r)
 		r%ty = f64_type
 		r%owned = .false.
 		r%v = LLVMConstReal(em%t_f64, 3.14159265358979323846_c_double)
+		return
+	end if
+
+	! And the next three are `std::IN`, `std::OUT`, and `std::ERR`, which are
+	! new handles of the standard files
+	if (.not. node%is_loc .and. node%id_index >= 2 .and. node%id_index <= 4 &
+			.and. node%val%type == file_type) then
+		r%ty = file_type
+		r%owned = .true.
+		r%v = rt_call(em, 'sy_file_std', em%t_ptr, [ci32(em, node%id_index - 2)])
 		return
 	end if
 
@@ -2177,7 +2192,7 @@ function struct_desc(em, k) result(d)
 			call unsupported(em, 'a struct of unknown type')
 			return
 		end if
-		if (.not. supported_val(mval)) then
+		if (.not. supported_val(mval) .or. mval%type == file_type) then
 			call unsupported(em, 'a struct member of type `'//kind_name(mval%type)//'`')
 			return
 		end if
@@ -2780,6 +2795,78 @@ end function place_load
 
 !===============================================================================
 
+function is_file_var(em, node) result(yes)
+
+	! Is the variable at the root of this reference a file handle?  The standard
+	! ones are the slots of `std::IN`, `std::OUT`, and `std::ERR`
+
+	type(nemitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	logical :: yes
+
+	type(c_ptr) :: slot
+
+	yes = .false.
+	if (.not. node%is_loc .and. node%id_index >= 2 .and. node%id_index <= 4) then
+		yes = node%member%id_index >= 1 .and. node%member%id_index <= 3 .and. &
+			node%member%val%type /= unknown_type
+		return
+	end if
+
+	slot = ref_slot(em, node)
+	if (.not. c_associated(slot)) return
+	if (node%is_loc) then
+		yes = em%l%ty(node%id_index) == file_type
+	else
+		yes = em%g%ty(node%id_index) == file_type
+	end if
+
+end function is_file_var
+
+!===============================================================================
+
+function emit_file_member(em, node) result(r)
+
+	! `f.is_open`, `f.eof`, or `f.name`
+
+	type(nemitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	type(nval_t) :: r
+
+	type(nval_t) :: f
+
+	if (.not. node%is_loc .and. node%id_index >= 2 .and. node%id_index <= 4) then
+		f%ty = file_type
+		f%owned = .true.
+		f%v = rt_call(em, 'sy_file_std', em%t_ptr, [ci32(em, node%id_index - 2)])
+	else
+		f%ty = file_type
+		f%owned = .false.
+		f%v = LLVMBuildLoad2(em%bld, em%t_ptr, ref_slot(em, node), cs(''))
+	end if
+
+	r%owned = .false.
+	select case (node%member%id_index)
+	case (FILE_MEM_IS_OPEN)
+		r%ty = bool_type
+		r%v = LLVMBuildICmp(em%bld, LLVM_INT_NE, rt_call(em, 'sy_file_is_open', em%t_i8, &
+			[f%v]), LLVMConstInt(em%t_i8, 0_c_int64_t, 0), cs(''))
+	case (FILE_MEM_EOF)
+		r%ty = bool_type
+		r%v = LLVMBuildICmp(em%bld, LLVM_INT_NE, rt_call(em, 'sy_file_eof_member', em%t_i8, &
+			[f%v]), LLVMConstInt(em%t_i8, 0_c_int64_t, 0), cs(''))
+	case default
+		r%ty = str_type
+		r%owned = .true.
+		r%v = rt_call(em, 'sy_file_name', em%t_ptr, [f%v])
+	end select
+
+	call dispose(em, f)
+
+end function emit_file_member
+
+!===============================================================================
+
 recursive function emit_member_read(em, node) result(r)
 
 	! `p.x`, `p.a[0].b`, `ps[1].x`, or `f().x`, the member of a temporary struct
@@ -2799,6 +2886,17 @@ recursive function emit_member_read(em, node) result(r)
 	type(syntax_node_t) :: root
 
 	r = dummy_val(em, node%val%type)
+
+	! A member of a file handle is not a member of a struct
+	if (node%root_kind == 0 .and. node%id_index >= 1 .and. allocated(node%member)) then
+		if (.not. allocated(node%lsubscripts) .and. .not. allocated(node%member%member) &
+				.and. .not. allocated(node%member%lsubscripts)) then
+			if (is_file_var(em, node)) then
+				r = emit_file_member(em, node)
+				return
+			end if
+		end if
+	end if
 
 	if (node%root_kind == 0) then
 		if (.not. place_of(em, node, pl)) return
@@ -3715,6 +3813,73 @@ recursive function emit_intr_call(em, node) result(r)
 		end if
 		call dispose(em, b)
 
+	case ('open', 'try_open')
+		! A new handle, which is owned like a string is
+		a = emit_expr(em, node%args(1))
+		b = emit_expr(em, node%args(2))
+		r%ty = file_type
+		r%owned = .true.
+		r%v = rt_call(em, 'sy_file_open', em%t_ptr, &
+			[a%v, b%v, ci32(em, merge(1, 0, base == 'open'))])
+		call dispose(em, a)
+		call dispose(em, b)
+
+	case ('readln')
+		! A line of a file, or of stdin without one
+		r%ty = str_type
+		r%owned = .true.
+		if (n == 0) then
+			r%v = rt_call(em, 'sy_stdin_readln', em%t_ptr, [c_ptr ::])
+		else
+			a = emit_expr(em, node%args(1))
+			r%v = rt_call(em, 'sy_file_readln', em%t_ptr, [a%v])
+			call dispose(em, a)
+		end if
+
+	case ('eof')
+		r%ty = bool_type
+		r%owned = .false.
+		if (n == 0) then
+			r%v = rt_call(em, 'sy_stdin_at_eof', em%t_i8, [c_ptr ::])
+		else
+			a = emit_expr(em, node%args(1))
+			r%v = rt_call(em, 'sy_file_eof', em%t_i8, [a%v])
+			call dispose(em, a)
+		end if
+		r%v = LLVMBuildICmp(em%bld, LLVM_INT_NE, r%v, LLVMConstInt(em%t_i8, 0_c_int64_t, 0), cs(''))
+
+	case ('exists')
+		a = emit_expr(em, node%args(1))
+		r%ty = bool_type
+		r%owned = .false.
+		r%v = LLVMBuildICmp(em%bld, LLVM_INT_NE, rt_call(em, 'sy_exists', em%t_i8, [a%v]), &
+			LLVMConstInt(em%t_i8, 0_c_int64_t, 0), cs(''))
+		call dispose(em, a)
+
+	case ('read', 'read_i32', 'read_i64', 'read_f32', 'read_f64')
+		! std::read_i32() etc. of a value, or of `n` of them as an array
+		a = emit_expr(em, node%args(1))
+		if (node%val%type == array_type .and. allocated(node%val%array)) then
+			iu = node%val%array%type
+			b = convert(em, emit_expr(em, node%args(2)), i64_type)
+			r = arr_val(rt_call(em, 'sy_file_read_arr', em%t_ptr, [a%v, ci32(em, elem_code(iu)), &
+				b%v]), .true., node%val)
+		else
+			r%ty = node%val%type
+			r%owned = .false.
+			select case (r%ty)
+			case (i64_type)
+				r%v = rt_call(em, 'sy_file_read_i64', em%t_i64, [a%v])
+			case (f32_type)
+				r%v = rt_call(em, 'sy_file_read_f32', em%t_f32, [a%v])
+			case (f64_type)
+				r%v = rt_call(em, 'sy_file_read_f64', em%t_f64, [a%v])
+			case default
+				r%v = rt_call(em, 'sy_file_read_i32', em%t_i32, [a%v])
+			end select
+		end if
+		call dispose(em, a)
+
 	case ('repeat')
 		a = emit_expr(em, node%args(1))
 		b = convert(em, emit_expr(em, node%args(2)), i64_type)
@@ -4271,6 +4436,17 @@ recursive subroutine emit_call_stmt(em, node)
 		v = convert(em, emit_expr(em, node%args(1)), i32_type)
 		call rt_void(em, 'sy_exit', [v%v])
 
+	case ('writeln')
+		call emit_file_write(em, node, .true.)
+
+	case ('write')
+		call emit_file_write(em, node, .false.)
+
+	case ('close')
+		v = emit_expr(em, node%args(1))
+		call rt_void(em, 'sy_file_close', [v%v])
+		call dispose(em, v)
+
 	case default
 		v = emit_intr_call(em, node)
 		call dispose(em, v)
@@ -4278,6 +4454,79 @@ recursive subroutine emit_call_stmt(em, node)
 	end select
 
 end subroutine emit_call_stmt
+
+!===============================================================================
+
+recursive subroutine emit_file_write(em, node, is_writeln)
+
+	! writeln() and write() of a file and any number of values.  Every value is
+	! built first, then the file is checked, and then each value is written on
+	! its own, as its string in a text file or as its bytes in a binary one,
+	! which the runtime tells apart
+
+	type(nemitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	logical, intent(in) :: is_writeln
+
+	!********
+
+	integer :: i, n
+
+	type(c_ptr) :: names, tname
+
+	type(nval_t) :: f
+	type(nval_t), allocatable :: vals(:)
+
+	n = size(node%args) - 1
+	f = emit_expr(em, node%args(1))
+	allocate(vals(max(n, 1)))
+	do i = 1, n
+		vals(i) = emit_expr(em, node%args(i + 1))
+	end do
+
+	call rt_void(em, 'sy_file_wcheck', [f%v, ci32(em, merge(1, 0, is_writeln))])
+
+	do i = 1, n
+		associate (v => vals(i))
+
+			tname = c_string(em, value_type_name(node%args(i + 1)%val))
+
+			select case (v%ty)
+			case (i32_type)
+				call rt_void(em, 'sy_file_wi32', [f%v, v%v])
+			case (i64_type)
+				call rt_void(em, 'sy_file_wi64', [f%v, v%v])
+			case (f32_type)
+				call rt_void(em, 'sy_file_wf32', [f%v, v%v])
+			case (f64_type)
+				call rt_void(em, 'sy_file_wf64', [f%v, v%v])
+			case (bool_type)
+				call rt_void(em, 'sy_file_wbool', [f%v, LLVMBuildZExt(em%bld, v%v, em%t_i8, cs(''))])
+			case (str_type)
+				call rt_void(em, 'sy_file_wstr', [f%v, v%v])
+			case (array_type)
+				names = LLVMConstNull(em%t_ptr)
+				if (v%elem == enum_type) names = enum_names(em, v%sk)
+				call rt_void(em, 'sy_file_warr', [f%v, v%v, names, tname])
+			case (struct_type)
+				call rt_void(em, 'sy_file_wstruct', [f%v, v%v, tname])
+			case (enum_type)
+				call rt_void(em, 'sy_file_wenum', [f%v, v%v, enum_names(em, v%sk), tname])
+			case default
+				call unsupported(em, 'writing a value of type `'//kind_name(v%ty)//'` to a file')
+			end select
+
+		end associate
+	end do
+
+	if (is_writeln) call rt_void(em, 'sy_file_wnl', [f%v])
+
+	do i = 1, n
+		call dispose(em, vals(i))
+	end do
+	call dispose(em, f)
+
+end subroutine emit_file_write
 
 !===============================================================================
 ! The result of the program
