@@ -11821,10 +11821,52 @@ contains
 		real(kind = 8) :: x, y
 		read(a, *, iostat = ios_a) x
 		read(b, *, iostat = ios_b) y
-		same = ios_a == 0 .and. ios_b == 0
-		if (.not. same) return
+		if (ios_a /= 0 .or. ios_b /= 0) then
+			! huge() prints as 1.797693134862316+308, which is above huge().
+			! gfortran reads it as infinity but Intel reports an overflow, so
+			! compare the mantissas and the exponents instead
+			same = same_parts(a, b)
+			return
+		end if
 		same = x == y .or. (ieee_is_nan(x) .and. ieee_is_nan(y))
 	end function same_f64
+
+	function same_parts(a, b) result(same)
+		! Do two `d.ddd[E]+xxx` strings have the same mantissa and exponent?
+		character(len = *), intent(in) :: a, b
+		logical :: same
+		integer :: ea, eb
+		real(kind = 8) :: ma, mb
+		logical :: ok_a, ok_b
+		call split_es(a, ma, ea, ok_a)
+		call split_es(b, mb, eb, ok_b)
+		same = ok_a .and. ok_b .and. ma == mb .and. ea == eb
+	end function same_parts
+
+	subroutine split_es(str, m, e, ok)
+		character(len = *), intent(in) :: str
+		real(kind = 8), intent(out) :: m
+		integer, intent(out) :: e
+		logical, intent(out) :: ok
+		character(len = :), allocatable :: t
+		integer :: i, k, ios_m, ios_e
+		m = 0
+		e = 0
+		t = trim(adjustl(str))
+		k = 0
+		do i = 2, len(t)
+			if (any(t(i:i) == ['E', 'e', '+', '-'])) then
+				k = i
+				exit
+			end if
+		end do
+		ok = k > 0
+		if (.not. ok) return
+		read(t(1: k-1), *, iostat = ios_m) m
+		if (any(t(k:k) == ['E', 'e'])) k = k + 1
+		read(t(k:), *, iostat = ios_e) e
+		ok = ios_m == 0 .and. ios_e == 0
+	end subroutine split_es
 
 	function same_f32(a, b) result(same)
 		character(len = *), intent(in) :: a, b
