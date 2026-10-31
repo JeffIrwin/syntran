@@ -331,6 +331,7 @@ module procedure get_all_error_codes
 	call codes%push(EC_BAD_OPTIONAL)
 	call codes%push(EC_NULL_ARRAY)
 	call codes%push(EC_UNTYPED_NULL)
+	call codes%push(EC_NATIVE_UNSUPPORTED)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -1395,6 +1396,18 @@ module procedure err_untyped_null
 		//underline(context, span)//" untyped null"//color_reset
 
 end procedure err_untyped_null
+
+!===============================================================================
+
+module procedure err_native_unsupported
+
+	err = err_pre(EC_NATIVE_UNSUPPORTED) &
+		//what//' is not supported by the native backend yet' &
+		//underline(context, span)//" unsupported" &
+		//color_reset//line_feed//fg_bright_green//"help"//color_reset &
+		//": run the program with the interpreter instead, i.e. without `--native`"
+
+end procedure err_native_unsupported
 
 !===============================================================================
 

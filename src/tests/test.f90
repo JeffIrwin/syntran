@@ -149,6 +149,84 @@ end function get_diags_transpile_file
 
 !===============================================================================
 
+function get_diags_native(str_) result(diag_)
+	! Diagnostics from compiling a string natively, which for a valid program
+	! are only constructs that aren't supported yet.  Without LLVM, the only
+	! diagnostic is that.  A program with none is written to a scratch file
+	character(len = *), intent(in) :: str_
+	type(string_vector_t) :: diag_
+	character(len = :), allocatable :: res_
+	type(native_t) :: n
+	n%out = 'build/native-unit-test.ll'
+	res_ = eval(str_, .true., diags = diag_, native = n)
+end function get_diags_native
+
+!===============================================================================
+
+function native_ndiags(str_) result(n)
+	! How many diagnostics compiling a string natively gives
+	character(len = *), intent(in) :: str_
+	integer :: n
+	type(string_vector_t) :: d
+	d = get_diags_native(str_)
+	n = d%len_
+end function native_ndiags
+
+!===============================================================================
+
+function get_diags_native_file(filename) result(diag_)
+	character(len = *), intent(in) :: filename
+	type(string_vector_t) :: diag_
+	character(len = :), allocatable :: res_
+	type(native_t) :: n
+	n%out = 'build/native-unit-test.ll'
+	res_ = interpret_file(filename, quiet = .true., diags = diag_, native = n)
+end function get_diags_native_file
+
+!===============================================================================
+
+function native_ir(str_) result(ir)
+
+	! The LLVM IR that a program is compiled to, as one string.  Empty if it
+	! didn't compile
+
+	character(len = *), intent(in) :: str_
+	character(len = :), allocatable :: ir
+
+	character(len = *), parameter :: filename = 'build/native-unit-ir.ll'
+
+	character(len = 1024) :: line
+	integer :: ios, u
+	type(string_vector_t) :: diag_
+
+	ir = ''
+	diag_ = get_diags_native_to(str_, filename)
+	if (diag_%len_ > 0) return
+
+	open(newunit = u, file = filename, status = 'old', action = 'read', iostat = ios)
+	if (ios /= 0) return
+	do
+		read(u, '(a)', iostat = ios) line
+		if (ios /= 0) exit
+		ir = ir//trim(line)//line_feed
+	end do
+	close(u, status = 'delete')
+
+end function native_ir
+
+!===============================================================================
+
+function get_diags_native_to(str_, filename) result(diag_)
+	character(len = *), intent(in) :: str_, filename
+	type(string_vector_t) :: diag_
+	character(len = :), allocatable :: res_
+	type(native_t) :: n
+	n%out = filename
+	res_ = eval(str_, .true., diags = diag_, native = n)
+end function get_diags_native_to
+
+!===============================================================================
+
 function transpiles_ok(filename) result(ok)
 	! Does a file transpile without any diagnostics?
 	character(len = *), intent(in) :: filename
@@ -8701,6 +8779,18 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_has_code(get_diags('const x = null;'), EC_UNTYPED_NULL), &
 			diag_count_code(get_diags_file(P//'E129-untyped-null.syntran'), &
 				EC_UNTYPED_NULL) == 1, &
+
+			! E130: the native backend can't compile everything.  A syntran without
+			! LLVM has no backend to say so
+			.not. native_available .or. &
+				diag_has_code(get_diags_native('let c = std::caller();'), &
+					EC_NATIVE_UNSUPPORTED), &
+			.not. native_available .or. &
+				diag_count_code(get_diags_native_file(P//'E130-native-unsupported.syntran'), &
+					EC_NATIVE_UNSUPPORTED) == 1, &
+			! ... but a program it supports has no diagnostics
+			.not. native_available .or. &
+				native_ndiags('let x = 1 + 2; println(x);') == 0, &
 			! ... but an optional that holds null is a struct variable
 			.not. diag_has_code(get_diags( &
 				'struct N{v:i32, next:?N,} let n = N{v = 1, next = null}; ' &
@@ -10907,7 +10997,10 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E128-null-array.syntran'), &
 				EC_NULL_ARRAY, P//'E128-null-array.syntran', 6, 14, 4), &
 			diag_loc_ok(get_diags_file(P//'E129-untyped-null.syntran'), &
-				EC_UNTYPED_NULL, P//'E129-untyped-null.syntran', 9, 1, 18) &
+				EC_UNTYPED_NULL, P//'E129-untyped-null.syntran', 9, 1, 18), &
+			.not. native_available .or. &
+				diag_loc_ok(get_diags_native_file(P//'E130-native-unsupported.syntran'), &
+					EC_NATIVE_UNSUPPORTED, P//'E130-native-unsupported.syntran', 8, 23, 6) &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
@@ -11579,6 +11672,195 @@ end subroutine unit_test_transpile
 
 !===============================================================================
 
+subroutine unit_test_native_rt(npass, nfail)
+
+	! The C runtime of the native backend (src/rt/syntran_crt.c) has to write
+	! numbers just like the Fortran runtime does, since the interpreter's output
+	! is the reference.  This doesn't need LLVM, because the runtime is
+	! compiled into the library either way
+
+	use, intrinsic :: iso_c_binding
+	use, intrinsic :: ieee_arithmetic
+	use syntran_rt, only: rt_str_f32, rt_str_f64
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	interface
+		function sy_fmt_f64(x, buf) bind(c, name = "sy_fmt_f64")
+			import :: c_double, c_char, c_int
+			real(c_double), value :: x
+			character(kind = c_char) :: buf(*)
+			integer(c_int) :: sy_fmt_f64
+		end function sy_fmt_f64
+
+		function sy_fmt_f32(x, buf) bind(c, name = "sy_fmt_f32")
+			import :: c_float, c_char, c_int
+			real(c_float), value :: x
+			character(kind = c_char) :: buf(*)
+			integer(c_int) :: sy_fmt_f32
+		end function sy_fmt_f32
+	end interface
+
+	character(len = *), parameter :: label = 'native C runtime number formatting'
+
+	integer :: i
+	integer(kind = 8) :: bits
+	logical, allocatable :: tests(:)
+	real(kind = 8) :: x64
+	real(kind = 4) :: x32
+
+	real(kind = 8), parameter :: specials64(*) = [ &
+		0.0d0, 1.0d0, -1.0d0, 1.5d0, 0.1d0, 1.0d0 / 3.0d0, 1.0d20, 1.0d-20, 1.0d100, &
+		1.0d-100, 1.0d300, 1.0d-300, 5.0d-324, tiny(1.0d0), huge(1.0d0), &
+		2.0d0 ** (-24), 2.0d0 ** (-20), 123456789.123456789d0, 9.9999999999999995d0, &
+		99999999999999.99d0, 0.5d0, 9.5d-1, 1.0d99, 9.999999999999999d99, 1.0d-99, &
+		4.0d-300, 1.7976931348623157d308 ]
+	real(kind = 4), parameter :: specials32(*) = [ &
+		0.0, 1.0, -1.0, 1.5, 0.1, 1.0 / 3.0, 1.0e20, 1.0e-20, 1.0e30, 1.0e-30, &
+		1.0e-45, tiny(1.0), huge(1.0), 2.0 ** (-24), 16777216.0, 0.5, 9.5e-1, &
+		9.9999995e-1, 1.17549435e-38 ]
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = [logical ::]
+
+	do i = 1, size(specials64)
+		tests = [tests, c_f64(specials64(i)) == rt_str_f64(specials64(i)), &
+			c_f64(-specials64(i)) == rt_str_f64(-specials64(i))]
+	end do
+	do i = 1, size(specials32)
+		tests = [tests, c_f32(specials32(i)) == rt_str_f32(specials32(i)), &
+			c_f32(-specials32(i)) == rt_str_f32(-specials32(i))]
+	end do
+
+	! Not a number, and infinity
+	x64 = ieee_value(x64, ieee_quiet_nan)
+	tests = [tests, c_f64(x64) == rt_str_f64(x64)]
+	x64 = ieee_value(x64, ieee_positive_inf)
+	tests = [tests, c_f64(x64) == rt_str_f64(x64), c_f64(-x64) == rt_str_f64(-x64)]
+	x32 = ieee_value(x32, ieee_quiet_nan)
+	tests = [tests, c_f32(x32) == rt_str_f32(x32)]
+	x32 = ieee_value(x32, ieee_positive_inf)
+	tests = [tests, c_f32(x32) == rt_str_f32(x32), c_f32(-x32) == rt_str_f32(-x32)]
+
+	! Every kind of exponent, from random bit patterns (xorshift, so that they
+	! are the same on every run).  Not numbers are left to the cases above
+	bits = 88172645463325252_8
+	do i = 1, 4000
+		bits = ieor(bits, ishft(bits, 13))
+		bits = ieor(bits, ishft(bits, -7))
+		bits = ieor(bits, ishft(bits, 17))
+		x64 = transfer(bits, x64)
+		if (ieee_is_nan(x64)) cycle
+		tests = [tests, c_f64(x64) == rt_str_f64(x64)]
+
+		x32 = transfer(int(ishft(bits, -32), 4), x32)
+		if (ieee_is_nan(x32)) cycle
+		tests = [tests, c_f32(x32) == rt_str_f32(x32)]
+	end do
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+contains
+
+	function c_f64(x) result(s)
+		real(kind = 8), intent(in) :: x
+		character(len = :), allocatable :: s
+		character(kind = c_char) :: buf(40)
+		integer :: j, n
+		n = sy_fmt_f64(real(x, c_double), buf)
+		allocate(character(len = n) :: s)
+		do j = 1, n
+			s(j:j) = buf(j)
+		end do
+	end function c_f64
+
+	function c_f32(x) result(s)
+		real(kind = 4), intent(in) :: x
+		character(len = :), allocatable :: s
+		character(kind = c_char) :: buf(40)
+		integer :: j, n
+		n = sy_fmt_f32(real(x, c_float), buf)
+		allocate(character(len = n) :: s)
+		do j = 1, n
+			s(j:j) = buf(j)
+		end do
+	end function c_f32
+
+end subroutine unit_test_native_rt
+
+!===============================================================================
+
+subroutine unit_test_native(npass, nfail)
+
+	! The native backend.  These only check the diagnostics and the LLVM IR,
+	! which doesn't need a C compiler.  Linking and running the compiled
+	! programs and comparing their output with the interpreter's is
+	! `utils/test-transpile.sh --backend native`.  Without LLVM there is
+	! nothing to test, besides saying so
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'native backend'
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	if (.not. native_available) then
+		tests = [native_ndiags('let x = 1;') == 1]
+		call unit_test_coda(tests, label//' (no LLVM)', npass, nfail)
+		return
+	end if
+
+	tests = &
+		[   &
+			! The top-level statements are main(), and printing is a call of the
+			! runtime
+			index(native_ir('println("hi");'), 'i32 @main()') > 0, &
+			index(native_ir('println("hi");'), '@sy_println') > 0, &
+			index(native_ir('println("hi");'), 'declare void @sy_println(') > 0, &
+
+			! A string literal is a constant of the program
+			index(native_ir('println("needle");'), 'needle') > 0, &
+
+			! The program's result is printed unless it's quiet.  A literal is
+			! folded into the call, so only the call is there
+			index(native_ir('1 + 2;'), '@sy_result') > 0, &
+
+			! No program is compiled when there is an unsupported construct
+			len(native_ir('let c = std::caller();')) == 0, &
+
+			! A fn is compiled, and the optimizer sees through a call of it
+			index(native_ir('fn f(n: i32): i32 { return n + 1; } println(f(2));'), &
+				'@sy_str_i32(i32 3)') > 0, &
+			index(native_ir('let t = 0; for i in [0: 4] { t += i; } println(t);'), &
+				'@sy_str_i32(i32 6)') > 0, &
+
+			! Unsupported constructs are diagnosed once per statement
+			diag_count_code(get_diags_native('let c = std::caller(); let d = std::caller();'), &
+				EC_NATIVE_UNSUPPORTED) == 2, &
+			diag_has_text(get_diags_native('let c = std::caller();'), &
+				'not supported by the native backend'), &
+
+			! An invalid program is not a native diagnostic
+			.not. diag_has_code(get_diags_native('let x = ;'), EC_NATIVE_UNSUPPORTED) &
+		]
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_native
+
+!===============================================================================
+
 subroutine unit_test_args(npass, nfail)
 
 	implicit none
@@ -11690,6 +11972,8 @@ subroutine unit_tests(iostat)
 	if (run_group('return_paths')) call unit_test_return_paths(npass, nfail)
 	if (run_group('error_codes')) call unit_test_error_codes(npass, nfail)
 	if (run_group('transpile')) call unit_test_transpile(npass, nfail)
+	if (run_group('native_rt')) call unit_test_native_rt(npass, nfail)
+	if (run_group('native')) call unit_test_native(npass, nfail)
 	if (run_group('runtime_errors')) call unit_test_runtime_errors(npass, nfail)
 	if (run_group('bounds_check')) call unit_test_bounds_check(npass, nfail)
 	if (run_group('runtime_traces')) call unit_test_runtime_traces(npass, nfail)

@@ -16,6 +16,8 @@ program main
 
 	type(transpile_t) :: transpile
 
+	type(native_t) :: native
+
 	!********
 
 	! What happens if there's an error while parsing args?  Here I initialize to
@@ -66,6 +68,22 @@ program main
 
 		if (io == EXIT_SUCCESS) then
 			call syntran_write_transpiled(transpile, args%transpile_out, io)
+		end if
+
+	else if (args%native) then
+		! Compile the program to machine code with LLVM, instead of running it.
+		! The value of the last statement is only printed by the compiled
+		! program if we're not --quiet, like the interpreter
+		native%print_result = .not. args%quiet
+		native%out = args%native_out
+
+		if (args%syntran_file_arg) then
+			res = syntran_interpret_file(args%syntran_file, &
+				chdir_ = args%chdir, script_args = args%script_args, &
+				native = native, io = io)
+		else
+			res = syntran_eval(args%command, script_args = args%script_args, &
+				native = native, io = io)
 		end if
 
 	else if (args%interactive) then

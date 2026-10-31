@@ -33,6 +33,10 @@
 #   -v, --verbose        print a diff for each FAIL
 #   -k, --keep           keep the temporary directory of generated programs
 #   --only <regex>       only test files whose path matches this extended regex
+#   --backend <name>     fortran (the default) tests `--transpile`.  native tests
+#                        `--native`, which needs a syntran built with LLVM, a C
+#                        compiler instead of a Fortran one, and has its own pass
+#                        list, utils/native-pass.txt.  Skips are E130, not E115
 #   --ref <binary>       interpreter to produce the expected output with, if
 #                        not the same binary.  Don't use a build with -Ofast,
 #                        because fast-math changes floating point results
@@ -40,7 +44,7 @@
 #
 # Defaults:
 #   syntran_binary   = build/v1/bin/syntran     (see: fpm install --prefix ./build/v1/)
-#   fortran_compiler = gfortran, honoring $FC
+#   fortran_compiler = gfortran, honoring $FC.  Not used by --backend native
 #   $FFLAGS          = -fcheck=all -w, or -check all -w for ifx and ifort.  Set
 #                      it, even to empty, to use other options for compiling
 #
@@ -71,26 +75,35 @@ with_timeout() {
 #===============================================================================
 # Worker: test one file, and write the verdict to "$base.result".  This runs in
 # a subprocess of the driver below, several at once.  The environment has CUR,
-# REF, FC, FFLAGS, and VERBOSE
+# REF, FC, FFLAGS, VERBOSE, and BACKEND
 
 run_one() {
 	local f="$1" base="$2"
 	local dir exp_status out_status rundir
 	dir="$(dirname "$f")"
 
-	# Transpile.  Both unsupported constructs and an invalid program are
-	# reported as diagnostics with a nonzero status
-	if ! "$CUR" --color off --cd -t "$base.f90" "$f" > "$base.tp.log" 2>&1 < /dev/null; then
-		# Remember why, to see what the transpiler should learn next
-		grep -o 'E115\]: .* is not supported by the Fortran transpiler yet' "$base.tp.log" \
-			| sed -e 's/^E115\]: //' -e 's/ is not supported by.*$//' > "$base.reasons"
+	# Transpile, or compile natively, which also links.  Both unsupported
+	# constructs and an invalid program are reported as diagnostics with a
+	# nonzero status
+	if [ "$BACKEND" = native ]; then
+		code=E130
+		"$CUR" --color off --cd --native "$base.exe" "$f" > "$base.tp.log" 2>&1 < /dev/null
+	else
+		code=E115
+		"$CUR" --color off --cd -t "$base.f90" "$f" > "$base.tp.log" 2>&1 < /dev/null
+	fi
+	# shellcheck disable=SC2181  # the status is of the if/else above
+	if [ $? -ne 0 ]; then
+		# Remember why, to see what the backend should learn next
+		grep -o "$code\]: .* is not supported by the .* yet" "$base.tp.log" \
+			| sed -e "s/^$code\]: //" -e 's/ is not supported by.*$//' > "$base.reasons"
 		if [ -s "$base.reasons" ]; then
 			echo "SKIP unsupported" > "$base.result"
 		elif "$REF" --color off --cd -s "$f" > "$base.syn.log" 2>&1 < /dev/null; then
-			# The syntax check accepts it, so the transpiler should have too.
+			# The syntax check accepts it, so the backend should have too.
 			# This is a crash or a spurious diagnostic
 			{
-				echo "FAIL (transpiler rejected a valid program): $f"
+				echo "FAIL (backend rejected a valid program): $f"
 				[ "$VERBOSE" -eq 1 ] && head -20 "$base.tp.log" | cut -c1-200
 			} > "$base.result"
 		else
@@ -124,17 +137,19 @@ run_one() {
 		return
 	fi
 
-	# The compiler writes the .mod files of the program's modules in the working
-	# directory, so each file gets its own for them to not clash when running
-	# several at once
-	mkdir -p "$base.d"
-	# shellcheck disable=SC2086  # FFLAGS is several words
-	if ! (cd "$base.d" && "$FC" $FFLAGS -o "$base.exe" "$base.f90") > "$base.fc.log" 2>&1; then
-		{
-			echo "FAIL (does not compile): $f"
-			[ "$VERBOSE" -eq 1 ] && head -20 "$base.fc.log"
-		} > "$base.result"
-		return
+	if [ "$BACKEND" != native ]; then
+		# The compiler writes the .mod files of the program's modules in the
+		# working directory, so each file gets its own for them to not clash when
+		# running several at once
+		mkdir -p "$base.d"
+		# shellcheck disable=SC2086  # FFLAGS is several words
+		if ! (cd "$base.d" && "$FC" $FFLAGS -o "$base.exe" "$base.f90") > "$base.fc.log" 2>&1; then
+			{
+				echo "FAIL (does not compile): $f"
+				[ "$VERBOSE" -eq 1 ] && head -20 "$base.fc.log"
+			} > "$base.result"
+			return
+		fi
 	fi
 
 	# Run where the interpreter did
@@ -166,6 +181,7 @@ keep=0
 only=""
 ref=""
 jobs=""
+BACKEND=fortran
 positional=()
 while [ $# -gt 0 ]; do
 	case "$1" in
@@ -174,6 +190,7 @@ while [ $# -gt 0 ]; do
 		-k|--keep) keep=1 ;;
 		--only) shift; only="$1" ;;
 		--ref) shift; ref="$1" ;;
+		--backend) shift; BACKEND="$1" ;;
 		-j) shift; jobs="$1" ;;
 		*) positional+=("$1") ;;
 	esac
@@ -188,6 +205,14 @@ case "$(basename "$FC")" in
 esac
 FFLAGS="${FFLAGS-$default_fflags}"
 PASS_LIST="utils/transpile-pass.txt"
+case "$BACKEND" in
+	fortran) ;;
+	native)  PASS_LIST="utils/native-pass.txt" ;;
+	*)
+		echo "error: --backend must be fortran or native, not $BACKEND" >&2
+		exit 1
+		;;
+esac
 REF="${ref:-$CUR}"
 
 if [ ! -x "$CUR" ]; then
@@ -198,7 +223,7 @@ if [ ! -x "$REF" ]; then
 	echo "error: reference binary not found or not executable: $REF" >&2
 	exit 1
 fi
-if ! command -v "$FC" > /dev/null 2>&1; then
+if [ "$BACKEND" = fortran ] && ! command -v "$FC" > /dev/null 2>&1; then
 	echo "error: fortran compiler not found: $FC" >&2
 	exit 1
 fi
@@ -241,7 +266,7 @@ fi
 
 # Test each file in a subprocess, `jobs` at a time.  A file's working files are
 # all named "$TMP/t<index>.*"
-export CUR REF FC FFLAGS ROOT VERBOSE
+export CUR REF FC FFLAGS ROOT VERBOSE BACKEND
 # (No path in the repo has a space in it)
 echo "$files" | awk -v tmp="$TMP" 'NF { print $0; print tmp "/t" NR }' \
 	| xargs -n 2 -P "$jobs" bash "${BASH_SOURCE[0]}" --worker
@@ -296,7 +321,7 @@ if [ "$VERBOSE" -eq 1 ] && [ "${#other_skips[@]}" -gt 0 ]; then
 fi
 
 echo
-echo "transpile: $npass passed, $nskip skipped (unsupported or not comparable), $nfail failed"
+echo "${BACKEND/fortran/transpile}: $npass passed, $nskip skipped (unsupported or not comparable), $nfail failed"
 
 status=0
 [ "$nfail" -gt 0 ] && status=1

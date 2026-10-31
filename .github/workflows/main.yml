@@ -50,6 +50,11 @@
 			},
 			{
 				"if": "matrix.os == 'ubuntu-24.04'",
+				"name": "Check embedded native runtime is up to date",
+				"run": "bash src/gen_native_rt.sh && git diff --exit-code src/native_rt.f90"
+			},
+			{
+				"if": "matrix.os == 'ubuntu-24.04'",
 				"name": "Set ubuntu PATH",
 				"run": "echo \"$HOME/bin\" >> $GITHUB_PATH"
 			},
