@@ -593,28 +593,9 @@ module function enum_slot_of(em, val) result(k)
 	type(value_t), intent(in) :: val
 	integer :: k
 
-	integer :: i
-
 	k = 0
 	if (.not. associated(em%enums)) return
-	if (.not. allocated(em%enums%table)) return
-
-	do i = 1, size(em%enums%table)
-		if (.not. allocated(em%enums%table(i)%key)) cycle
-		if (.not. allocated(em%enums%table(i)%val)) cycle
-
-		if (allocated(val%enum_cookie) .and. allocated(em%enums%table(i)%val%cookie)) then
-			if (em%enums%table(i)%val%cookie == val%enum_cookie) then
-				k = i
-				return
-			end if
-		else if (allocated(val%enum_name)) then
-			if (em%enums%table(i)%key == val%enum_name) then
-				k = i
-				return
-			end if
-		end if
-	end do
+	k = enums_slot_of(em%enums, val)
 
 end function enum_slot_of
 
@@ -755,55 +736,11 @@ module function struct_slot_of(em, val) result(k)
 	type(value_t), intent(in) :: val
 	integer :: k
 
-	integer :: i
-
 	k = 0
 	if (.not. associated(em%structs)) return
-	if (.not. allocated(em%structs%table)) return
-
-	do i = 1, size(em%structs%table)
-		if (.not. allocated(em%structs%table(i)%key)) cycle
-		if (.not. allocated(em%structs%table(i)%val)) cycle
-
-		if (allocated(val%struct_cookie) .and. allocated(em%structs%table(i)%val%cookie)) then
-			if (em%structs%table(i)%val%cookie == val%struct_cookie) then
-				k = i
-				return
-			end if
-		else if (allocated(val%struct_name)) then
-			if (same_struct_name(em%structs%table(i)%key, val%struct_name)) then
-				k = i
-				return
-			end if
-		end if
-	end do
+	k = structs_slot_of(em%structs, val)
 
 end function struct_slot_of
-
-!===============================================================================
-
-function same_struct_name(a, b) result(same)
-
-	! Is `a` the name of the struct that `b` is, which differ by a module
-	! prefix like `mod::Point` if one is imported with a qualified name?
-
-	character(len = *), intent(in) :: a, b
-	logical :: same
-
-	integer :: n
-
-	same = a == b
-	if (same) return
-
-	if (len(a) > len(b)) then
-		n = len(a) - len(b)
-		if (n >= 2) same = a(n+1:) == b .and. a(n-1:n) == '::'
-	else if (len(b) > len(a)) then
-		n = len(b) - len(a)
-		if (n >= 2) same = b(n+1:) == a .and. b(n-1:n) == '::'
-	end if
-
-end function same_struct_name
 
 !===============================================================================
 
@@ -1069,24 +1006,10 @@ module subroutine struct_member(em, k, id, val, name, ok)
 	character(len = :), allocatable, intent(out) :: name
 	logical, intent(out) :: ok
 
-	integer :: i, mid, io
-
 	ok = .false.
 	name = ''
-	if (k < 1) return
-
-	associate (st => em%structs%table(k)%val)
-		if (.not. allocated(st%member_names%v)) return
-		do i = 1, size(st%member_names%v)
-			call st%vars%search(st%member_names%v(i)%s, mid, io, val)
-			if (io /= 0) cycle
-			if (mid == id) then
-				name = st%member_names%v(i)%s
-				ok = .true.
-				return
-			end if
-		end do
-	end associate
+	if (.not. associated(em%structs)) return
+	call structs_member(em%structs, k, id, val, name, ok)
 
 end subroutine struct_member
 

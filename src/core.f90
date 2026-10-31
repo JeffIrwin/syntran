@@ -33,6 +33,7 @@ module syntran__core_m
 	! TODO:
 	!  - llvm compiled backend
 	!    * windows ci/cd
+	!    * binary packaging? any llvm dll's?
 	!    * parity with vm, not with transpiler
 	!    * '--native' should have a short option, maybe -o ?
 	!    * 'syntran -h' output is too wide in console, not just the new options

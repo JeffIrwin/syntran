@@ -385,7 +385,12 @@ int64_t sy_ipow_i64(int64_t n, int64_t m)
  * 12, data 16, size 24), so don't reorder them.  Elements are stored in
  * column-major order, like the interpreter's, and a str element is an owned
  * pointer which is never NULL */
-enum { SY_I32, SY_I64, SY_F32, SY_F64, SY_BOOL, SY_STR };
+enum { SY_I32, SY_I64, SY_F32, SY_F64, SY_BOOL, SY_STR, SY_ARR, SY_STRUCT, SY_ENUM };
+
+/* A struct is defined below the arrays, which own them when they are elements */
+typedef struct sy_struct sy_struct;
+void sy_struct_free(sy_struct *s);
+sy_struct *sy_struct_dup(const sy_struct *s);
 
 typedef struct {
     int64_t len;
@@ -410,6 +415,25 @@ static size_t sy_esize(int32_t e)
     default:
         return 8;
     }
+}
+
+/* Does an element own a heap object, i.e. a str or a struct? */
+static int sy_eptr(int32_t e)
+{
+    return e == SY_STR || e == SY_STRUCT;
+}
+
+static void sy_eptr_free(int32_t e, void *p)
+{
+    if (e == SY_STR) sy_str_free((sy_str *)p);
+    else sy_struct_free((sy_struct *)p);
+}
+
+static void *sy_eptr_dup(int32_t e, void *p)
+{
+    if (p == NULL) return NULL;
+    if (e == SY_STR) return sy_str_dup((sy_str *)p);
+    return sy_struct_dup((const sy_struct *)p);
 }
 
 /* A zeroed array of the given shape */
@@ -444,8 +468,8 @@ void sy_arr_free(sy_arr *a)
     int64_t i;
 
     if (a == NULL) return;
-    if (a->elem == SY_STR) {
-        for (i = 0; i < a->len; i++) sy_str_free(((sy_str **)a->data)[i]);
+    if (sy_eptr(a->elem)) {
+        for (i = 0; i < a->len; i++) sy_eptr_free(a->elem, ((void **)a->data)[i]);
     }
     free(a->data);
     free(a);
@@ -459,10 +483,10 @@ sy_arr *sy_arr_dup(const sy_arr *a)
 
     if (a == NULL) return NULL;
     r = sy_arr_new(a->elem, a->rank, a->size);
-    if (a->elem == SY_STR) {
+    if (sy_eptr(a->elem)) {
         for (i = 0; i < a->len; i++) {
-            sy_str_free(((sy_str **)r->data)[i]);
-            ((sy_str **)r->data)[i] = sy_str_dup(((sy_str **)a->data)[i]);
+            sy_eptr_free(a->elem, ((void **)r->data)[i]);
+            ((void **)r->data)[i] = sy_eptr_dup(a->elem, ((void **)a->data)[i]);
         }
     } else {
         memcpy(r->data, a->data, (size_t)a->len * sy_esize(a->elem));
@@ -536,9 +560,9 @@ sy_arr *sy_arr_fill(int32_t elem, int32_t rank, const int64_t *sizes, const void
     int64_t i;
 
     for (i = 0; i < a->len; i++) {
-        if (elem == SY_STR) {
-            sy_str_free(((sy_str **)a->data)[i]);
-            ((sy_str **)a->data)[i] = sy_str_dup(*(sy_str *const *)val);
+        if (sy_eptr(elem)) {
+            sy_eptr_free(elem, ((void **)a->data)[i]);
+            ((void **)a->data)[i] = sy_eptr_dup(elem, *(void *const *)val);
         } else {
             memcpy(a->data + (size_t)i * es, val, es);
         }
@@ -552,10 +576,10 @@ void sy_arr_copy_into(sy_arr *dst, int64_t at, const sy_arr *src)
     int64_t i;
 
     if (src == NULL) return;
-    if (dst->elem == SY_STR) {
+    if (sy_eptr(dst->elem)) {
         for (i = 0; i < src->len; i++) {
-            sy_str_free(((sy_str **)dst->data)[at + i]);
-            ((sy_str **)dst->data)[at + i] = sy_str_dup(((sy_str **)src->data)[i]);
+            sy_eptr_free(dst->elem, ((void **)dst->data)[at + i]);
+            ((void **)dst->data)[at + i] = sy_eptr_dup(dst->elem, ((void **)src->data)[i]);
         }
     } else {
         memcpy(dst->data + (size_t)at * sy_esize(dst->elem), src->data,
@@ -821,9 +845,9 @@ sy_arr *sy_arr_slice(const sy_arr *a, const sy_sub *subs)
 
     for (t = 0; t < out->len; t++) {
         lin = sy_walk_next(&w);
-        if (a->elem == SY_STR) {
-            sy_str_free(((sy_str **)out->data)[t]);
-            ((sy_str **)out->data)[t] = sy_str_dup(((sy_str **)a->data)[lin]);
+        if (sy_eptr(a->elem)) {
+            sy_eptr_free(a->elem, ((void **)out->data)[t]);
+            ((void **)out->data)[t] = sy_eptr_dup(a->elem, ((void **)a->data)[lin]);
         } else {
             memcpy(out->data + (size_t)t * es, a->data + (size_t)lin * es, es);
         }
@@ -850,11 +874,11 @@ void sy_arr_slice_set(sy_arr *a, const sy_sub *subs, const sy_arr *rhs, const vo
 
     for (t = 0; t < w.total; t++) {
         lin = sy_walk_next(&w);
-        if (a->elem == SY_STR) {
-            sy_str *src = rhs != NULL ? ((sy_str **)rhs->data)[t] : *(sy_str *const *)scalar;
+        if (sy_eptr(a->elem)) {
+            void *src = rhs != NULL ? ((void **)rhs->data)[t] : *(void *const *)scalar;
 
-            sy_str_free(((sy_str **)a->data)[lin]);
-            ((sy_str **)a->data)[lin] = sy_str_dup(src);
+            sy_eptr_free(a->elem, ((void **)a->data)[lin]);
+            ((void **)a->data)[lin] = sy_eptr_dup(a->elem, src);
         } else {
             memcpy(a->data + (size_t)lin * es,
                 rhs != NULL ? rhs->data + (size_t)t * es : (const char *)scalar, es);
@@ -921,68 +945,250 @@ static void sy_buf_put(sy_buf *b, const char *s, size_t n)
     b->n += n;
 }
 
+static void sy_arr_put(sy_buf *b, const sy_arr *a, int rt, const void *aux);
+static void sy_struct_put(sy_buf *b, const sy_struct *s);
+
+/* One element of an array, or one member of a struct, from the address that it's
+ * stored at.  `rt` is the round-trip form that a struct uses for its members,
+ * which quotes a str and gives an i64 or an f32 a suffix, so that it reads back
+ * as a literal.  The elements of a float array or struct are trimmed, unlike a
+ * scalar's.  An enum is the index of its variant, and `aux` is the table of the
+ * names of the variants, which is also that of an array of them */
+static void sy_elem_put(sy_buf *b, int32_t kind, const void *p, int rt, const void *aux)
+{
+    char tmp[40];
+    const char *q = tmp;
+    const sy_str *s;
+    size_t n, i;
+
+    switch (kind) {
+    case SY_I32:
+        n = (size_t)snprintf(tmp, sizeof tmp, "%d", (int)*(const int32_t *)p);
+        break;
+    case SY_I64:
+        n = (size_t)snprintf(tmp, sizeof tmp, "%lld", (long long)*(const int64_t *)p);
+        break;
+    case SY_F32:
+    case SY_F64:
+        n = (size_t)(kind == SY_F32 ? sy_fmt_f32(*(const float *)p, tmp)
+            : sy_fmt_f64(*(const double *)p, tmp));
+        while (n > 0 && tmp[n - 1] == ' ') n--;
+        while (n > 0 && *q == ' ') {
+            q++;
+            n--;
+        }
+        break;
+    case SY_BOOL:
+        q = *(const int8_t *)p ? "true" : "false";
+        n = strlen(q);
+        break;
+    case SY_ENUM:
+        s = ((sy_str *const *)aux)[*(const int32_t *)p];
+        sy_buf_put(b, s->data, (size_t)s->len);
+        return;
+    case SY_ARR:
+        sy_arr_put(b, *(sy_arr *const *)p, 1, aux);
+        return;
+    case SY_STRUCT:
+        sy_struct_put(b, *(sy_struct *const *)p);
+        return;
+    default:
+        s = *(sy_str *const *)p;
+        if (rt) {
+            sy_buf_put(b, "\"", 1);
+            for (i = 0; i < (size_t)s->len; i++) {
+                if (s->data[i] == '"') sy_buf_put(b, "\"", 1);
+                sy_buf_put(b, s->data + i, 1);
+            }
+            sy_buf_put(b, "\"", 1);
+            return;
+        }
+        q = s->data;
+        n = (size_t)s->len;
+        break;
+    }
+    sy_buf_put(b, q, n);
+    if (rt && kind == SY_I64) sy_buf_put(b, "'i64", 4);
+    if (rt && kind == SY_F32) sy_buf_put(b, "'f32", 4);
+}
+
 /* str(array), which is rt_join() of the Fortran runtime.  The elements are
  * separated by ", ".  A rank > 1 array starts and ends with a line break, and
- * has one after every complete row (and plane, etc.).  The elements of a float
- * array are trimmed, unlike a scalar's */
-sy_str *sy_arr_str(const sy_arr *a)
+ * has one after every complete row (and plane, etc.), except if its elements
+ * are structs */
+static void sy_arr_put(sy_buf *b, const sy_arr *a, int rt, const void *aux)
 {
-    sy_buf b = {NULL, 0, 0};
-    char tmp[40];
-    const char *p;
     int64_t i, prod;
-    int32_t j;
-    size_t n;
-    sy_str *s;
+    int32_t j, kind;
+    size_t es;
 
-    sy_buf_put(&b, "[", 1);
-    if (a != NULL && a->rank > 1) sy_buf_put(&b, "\n", 1);
+    sy_buf_put(b, "[", 1);
+    if (a != NULL && a->rank > 1) sy_buf_put(b, "\n", 1);
 
+    es = a != NULL ? sy_esize(a->elem) : 0;
+    kind = a != NULL && a->elem == SY_I32 && aux != NULL ? SY_ENUM : a != NULL ? a->elem : 0;
     for (i = 0; a != NULL && i < a->len; i++) {
-        p = tmp;
-        switch (a->elem) {
-        case SY_I32:
-            n = (size_t)snprintf(tmp, sizeof tmp, "%d", (int)((int32_t *)a->data)[i]);
-            break;
-        case SY_I64:
-            n = (size_t)snprintf(tmp, sizeof tmp, "%lld", (long long)((int64_t *)a->data)[i]);
-            break;
-        case SY_F32:
-        case SY_F64:
-            n = (size_t)(a->elem == SY_F32 ? sy_fmt_f32(((float *)a->data)[i], tmp)
-                : sy_fmt_f64(((double *)a->data)[i], tmp));
-            while (n > 0 && tmp[n - 1] == ' ') n--;
-            while (n > 0 && *p == ' ') {
-                p++;
-                n--;
-            }
-            break;
-        case SY_BOOL:
-            p = a->data[i] ? "true" : "false";
-            n = strlen(p);
-            break;
-        default:
-            p = ((sy_str **)a->data)[i]->data;
-            n = (size_t)((sy_str **)a->data)[i]->len;
-            break;
-        }
-        sy_buf_put(&b, p, n);
+        sy_elem_put(b, kind, a->data + (size_t)i * es, rt, aux);
         if (i >= a->len - 1) continue;
-        sy_buf_put(&b, ", ", 2);
+        sy_buf_put(b, ", ", 2);
+        if (a->elem == SY_STRUCT) continue;
 
         prod = a->size[0];
         for (j = 1; j < a->rank; j++) {
-            if ((i + 1) % prod == 0) sy_buf_put(&b, "\n", 1);
+            if ((i + 1) % prod == 0) sy_buf_put(b, "\n", 1);
             prod *= a->size[j];
         }
     }
 
-    if (a != NULL && a->rank > 1) sy_buf_put(&b, "\n", 1);
-    sy_buf_put(&b, "]", 1);
+    if (a != NULL && a->rank > 1) sy_buf_put(b, "\n", 1);
+    sy_buf_put(b, "]", 1);
+}
 
+/* str(array), where the elements are enums, whose variants have these names */
+sy_str *sy_arr_str_names(const sy_arr *a, const sy_str *const *names)
+{
+    sy_buf b = {NULL, 0, 0};
+    sy_str *s;
+
+    sy_arr_put(&b, a, 0, names);
     s = sy_str_from(b.p, (int64_t)b.n);
     free(b.p);
     return s;
 }
 
+sy_str *sy_arr_str(const sy_arr *a)
+{
+    return sy_arr_str_names(a, NULL);
+}
+
+/* The index of the first variant of an enum that has the backing value v, from
+ * the values of all of the `n` variants, for a cast like `Suit(2)` */
+int32_t sy_enum_of(const int32_t *vals, int32_t n, int32_t v)
+{
+    int32_t i;
+
+    for (i = 0; i < n; i++) {
+        if (vals[i] == v) return i;
+    }
+    sy_fatal("enum has no variant with this value");
+    return 0;
+}
+
 /*============================================================================*/
+
+/*============================================================================*/
+
+/* A struct is a heap object too.  `desc` is a constant of the program, which
+ * says what the members are.  Member i is stored in the 8 bytes at offset
+ * 8 + 8 * i, as the type that it is (a bool is a byte), and a str, array, or
+ * struct member is an owned pointer.  A NULL struct is `null`, which
+ * everything here accepts */
+typedef struct {
+    const char *name;
+    int32_t kind;
+    int32_t pad;
+    const void *aux;    /* for an enum, or an array of them: the names of the variants */
+} sy_mdesc;
+
+typedef struct {
+    const char *name;
+    int64_t n;
+    const sy_mdesc *m;
+} sy_sdesc;
+
+struct sy_struct {
+    const sy_sdesc *desc;
+    int64_t slot[];
+};
+
+sy_struct *sy_struct_new(const sy_sdesc *d)
+{
+    sy_struct *s = (sy_struct *)calloc(1, sizeof(sy_struct) + (size_t)d->n * sizeof(int64_t));
+
+    if (s == NULL) sy_fatal("out of memory");
+    s->desc = d;
+    return s;
+}
+
+void sy_struct_free(sy_struct *s)
+{
+    int64_t i;
+
+    if (s == NULL) return;
+    for (i = 0; i < s->desc->n; i++) {
+        switch (s->desc->m[i].kind) {
+        case SY_STR:
+            sy_str_free((sy_str *)s->slot[i]);
+            break;
+        case SY_ARR:
+            sy_arr_free((sy_arr *)s->slot[i]);
+            break;
+        case SY_STRUCT:
+            sy_struct_free((sy_struct *)s->slot[i]);
+            break;
+        default:
+            break;
+        }
+    }
+    free(s);
+}
+
+/* A deep copy that can be owned */
+sy_struct *sy_struct_dup(const sy_struct *s)
+{
+    int64_t i;
+    sy_struct *r;
+
+    if (s == NULL) return NULL;
+    r = sy_struct_new(s->desc);
+    for (i = 0; i < s->desc->n; i++) {
+        r->slot[i] = s->slot[i];
+        if (s->slot[i] == 0) continue;
+        switch (s->desc->m[i].kind) {
+        case SY_STR:
+            r->slot[i] = (int64_t)(intptr_t)sy_str_dup((sy_str *)(intptr_t)s->slot[i]);
+            break;
+        case SY_ARR:
+            r->slot[i] = (int64_t)(intptr_t)sy_arr_dup((const sy_arr *)(intptr_t)s->slot[i]);
+            break;
+        case SY_STRUCT:
+            r->slot[i] = (int64_t)(intptr_t)sy_struct_dup((const sy_struct *)(intptr_t)s->slot[i]);
+            break;
+        default:
+            break;
+        }
+    }
+    return r;
+}
+
+/* The members are named, and rendered in the form that reads back as a
+ * literal, like `P{x = 1, s = "hi"}` */
+static void sy_struct_put(sy_buf *b, const sy_struct *s)
+{
+    int64_t i;
+
+    if (s == NULL) {
+        sy_buf_put(b, "null", 4);
+        return;
+    }
+    sy_buf_put(b, s->desc->name, strlen(s->desc->name));
+    sy_buf_put(b, "{", 1);
+    for (i = 0; i < s->desc->n; i++) {
+        sy_buf_put(b, s->desc->m[i].name, strlen(s->desc->m[i].name));
+        sy_buf_put(b, " = ", 3);
+        sy_elem_put(b, s->desc->m[i].kind, &s->slot[i], 1, s->desc->m[i].aux);
+        if (i < s->desc->n - 1) sy_buf_put(b, ", ", 2);
+    }
+    sy_buf_put(b, "}", 1);
+}
+
+sy_str *sy_struct_str(const sy_struct *s)
+{
+    sy_buf b = {NULL, 0, 0};
+    sy_str *r;
+
+    sy_struct_put(&b, s);
+    r = sy_str_from(b.p, (int64_t)b.n);
+    free(b.p);
+    return r;
+}

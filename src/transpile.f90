@@ -1378,6 +1378,137 @@ end function is_name_char
 
 !===============================================================================
 
+!===============================================================================
+
+function enums_slot_of(enums, val) result(k)
+
+	! Position in the enum table of the enum that `val` is a value or an array of,
+	! or 0.  The native backend has no emitter_t, so it calls this too
+
+	type(enums_t), intent(in) :: enums
+	type(value_t), intent(in) :: val
+	integer :: k
+
+	integer :: i
+
+	k = 0
+	if (.not. allocated(enums%table)) return
+
+	do i = 1, size(enums%table)
+		if (.not. allocated(enums%table(i)%key)) cycle
+		if (.not. allocated(enums%table(i)%val)) cycle
+
+		if (allocated(val%enum_cookie) .and. allocated(enums%table(i)%val%cookie)) then
+			if (enums%table(i)%val%cookie == val%enum_cookie) then
+				k = i
+				return
+			end if
+		else if (allocated(val%enum_name)) then
+			if (enums%table(i)%key == val%enum_name) then
+				k = i
+				return
+			end if
+		end if
+	end do
+
+end function enums_slot_of
+
+!===============================================================================
+
+function structs_slot_of(structs, val) result(k)
+
+	! Position in the struct table of the struct that `val` is a value or an array
+	! of, or 0
+
+	type(structs_t), intent(in) :: structs
+	type(value_t), intent(in) :: val
+	integer :: k
+
+	integer :: i
+
+	k = 0
+	if (.not. allocated(structs%table)) return
+
+	do i = 1, size(structs%table)
+		if (.not. allocated(structs%table(i)%key)) cycle
+		if (.not. allocated(structs%table(i)%val)) cycle
+
+		if (allocated(val%struct_cookie) .and. allocated(structs%table(i)%val%cookie)) then
+			if (structs%table(i)%val%cookie == val%struct_cookie) then
+				k = i
+				return
+			end if
+		else if (allocated(val%struct_name)) then
+			if (same_struct_name(structs%table(i)%key, val%struct_name)) then
+				k = i
+				return
+			end if
+		end if
+	end do
+
+end function structs_slot_of
+
+!===============================================================================
+
+function same_struct_name(a, b) result(same)
+
+	! Is `a` the name of the struct that `b` is, which differ by a module
+	! prefix like `mod::Point` if one is imported with a qualified name?
+
+	character(len = *), intent(in) :: a, b
+	logical :: same
+
+	integer :: n
+
+	same = a == b
+	if (same) return
+
+	if (len(a) > len(b)) then
+		n = len(a) - len(b)
+		if (n >= 2) same = a(n+1:) == b .and. a(n-1:n) == '::'
+	else if (len(b) > len(a)) then
+		n = len(b) - len(a)
+		if (n >= 2) same = b(n+1:) == a .and. b(n-1:n) == '::'
+	end if
+
+end function same_struct_name
+
+!===============================================================================
+
+subroutine structs_member(structs, k, id, val, name, ok)
+
+	! The type and the name of the member of struct `k` which the parser gave the
+	! index `id`.  `ok` is false if there is no such member
+
+	type(structs_t), intent(in) :: structs
+	integer, intent(in) :: k, id
+	type(value_t), intent(out) :: val
+	character(len = :), allocatable, intent(out) :: name
+	logical, intent(out) :: ok
+
+	integer :: i, mid, io
+
+	ok = .false.
+	name = ''
+	if (k < 1) return
+
+	associate (st => structs%table(k)%val)
+		if (.not. allocated(st%member_names%v)) return
+		do i = 1, size(st%member_names%v)
+			call st%vars%search(st%member_names%v(i)%s, mid, io, val)
+			if (io /= 0) cycle
+			if (mid == id) then
+				name = st%member_names%v(i)%s
+				ok = .true.
+				return
+			end if
+		end do
+	end associate
+
+end subroutine structs_member
+
+!===============================================================================
+
 end module syntran__transpile_m
 
 !===============================================================================

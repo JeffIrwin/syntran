@@ -32,7 +32,7 @@ module syntran__native_m
 	use syntran__native_rt_m
 	use syntran__runtime_m
 	use syntran__transpile_m, only: elem_type, intr_display_name, is_arr, &
-		is_name_char, is_numeric_type, wider_type
+		enums_slot_of, is_name_char, is_numeric_type, structs_member, structs_slot_of, wider_type
 	use syntran__types_m
 	use syntran__utils_m
 	use syntran__value_m
@@ -89,6 +89,10 @@ module syntran__native_m
 		logical :: owned = .false.
 		integer :: elem = unknown_type, rank = 0
 
+		! The position in the enum table of an enum, or of the elements of an
+		! array of them
+		integer :: sk = 0
+
 	end type nval_t
 
 	!********
@@ -120,7 +124,24 @@ module syntran__native_m
 		! The type and rank of the elements, for a slot that is an array
 		integer, allocatable :: elem(:), rank(:)
 
+		! The position in the struct table of the struct that a slot holds, or
+		! that an array in it has for elements
+		integer, allocatable :: sk(:)
+
 	end type slots_t
+
+	!********
+
+	type place_t
+
+		! Where a variable, an element of an array, or a member of a struct is
+		! stored: the address of the storage, its type, and what it holds if
+		! it's an array or a struct
+
+		type(c_ptr) :: p = c_null_ptr
+		integer :: ty = unknown_type, elem = unknown_type, rank = 0, sk = 0
+
+	end type place_t
 
 	!********
 
@@ -149,6 +170,16 @@ module syntran__native_m
 		! types
 		type(fns_t), pointer :: fns => null()
 		type(vars_t), pointer :: vars => null()
+
+		! The structs, for their members.  The descriptor that the runtime
+		! describes each one with is made at its first use, by position
+		type(structs_t), pointer :: structs => null()
+		type(c_ptr), allocatable :: sdesc(:)
+
+		! The enums, and the tables of the values and the names of the variants of
+		! each, which are made at their first use, by position
+		type(enums_t), pointer :: enums => null()
+		type(c_ptr), allocatable :: evals(:), enames(:)
 
 		! The LLVM fn and type of each user fn, by id.  They are declared at their
 		! first reference
@@ -254,6 +285,8 @@ subroutine native_tree(tree, state, n, diags)
 	em%diags = new_string_vector()
 	em%fns => state%fns
 	em%vars => state%vars
+	em%structs => state%structs
+	em%enums => state%enums
 
 	call em_init(em, ok)
 	if (.not. ok) then
@@ -291,6 +324,8 @@ subroutine native_tree(tree, state, n, diags)
 			if (tree%members(i)%kind == fn_declaration) then
 				call done%push(tree%members(i)%id_index)
 				call emit_fn(em, tree%members(i))
+			else if (tree%members(i)%kind == struct_declaration) then
+				call emit_struct_methods(em, tree%members(i), done)
 			end if
 		end do
 		do i = 1, size(tree%members)
@@ -376,6 +411,10 @@ recursive subroutine emit_module_fns(em, unit, done)
 	end do
 
 	do i = 1, size(unit%members)
+		if (unit%members(i)%kind == struct_declaration) then
+			call emit_struct_methods(em, unit%members(i), done)
+			cycle
+		end if
 		if (unit%members(i)%kind /= fn_declaration) cycle
 
 		found = .false.
@@ -590,7 +629,7 @@ function ll_type(em, ty) result(t)
 		t = em%t_f64
 	case (bool_type)
 		t = em%t_i1
-	case (str_type, array_type)
+	case (str_type, array_type, struct_type)
 		t = em%t_ptr
 	case default
 		t = em%t_i32
@@ -604,7 +643,7 @@ function ptr_type(ty) result(p)
 	! Is a value of this type a heap object that its holder owns?
 	integer, intent(in) :: ty
 	logical :: p
-	p = ty == str_type .or. ty == array_type
+	p = ty == str_type .or. ty == array_type .or. ty == struct_type
 end function ptr_type
 
 !===============================================================================
@@ -613,7 +652,14 @@ function free_fn(ty) result(name)
 	! The runtime fn that frees a value of a heap type
 	integer, intent(in) :: ty
 	character(len = :), allocatable :: name
-	name = merge('sy_str_free', 'sy_arr_free', ty == str_type)
+	select case (ty)
+	case (str_type)
+		name = 'sy_str_free'
+	case (struct_type)
+		name = 'sy_struct_free'
+	case default
+		name = 'sy_arr_free'
+	end select
 end function free_fn
 
 !===============================================================================
@@ -622,7 +668,14 @@ function dup_fn(ty) result(name)
 	! The runtime fn that copies a value of a heap type so that it can be owned
 	integer, intent(in) :: ty
 	character(len = :), allocatable :: name
-	name = merge('sy_str_dup', 'sy_arr_dup', ty == str_type)
+	select case (ty)
+	case (str_type)
+		name = 'sy_str_dup'
+	case (struct_type)
+		name = 'sy_struct_dup'
+	case default
+		name = 'sy_arr_dup'
+	end select
 end function dup_fn
 
 !===============================================================================
@@ -646,6 +699,10 @@ function elem_code(ty) result(c)
 		c = 4
 	case (str_type)
 		c = 5
+	case (array_type)
+		c = 6
+	case (struct_type)
+		c = 7
 	case default
 		c = 0
 	end select
@@ -714,7 +771,7 @@ function dummy_val(em, ty) result(r)
 		r%v = cbool(em, .false.)
 	case (str_type)
 		r%v = str_literal(em, '')
-	case (array_type)
+	case (array_type, struct_type, null_type)
 		r%v = LLVMConstNull(em%t_ptr)
 	case default
 		r%ty = i32_type
@@ -914,8 +971,20 @@ function str_of(em, v) result(s)
 		s%v = rt_call(em, 'sy_str_bool', em%t_ptr, &
 			[LLVMBuildZExt(em%bld, v%v, em%t_i8, cs(''))])
 	case (array_type)
-		s%v = rt_call(em, 'sy_arr_str', em%t_ptr, [v%v])
+		if (v%elem == enum_type) then
+			s%v = rt_call(em, 'sy_arr_str_names', em%t_ptr, [v%v, enum_names(em, v%sk)])
+		else
+			s%v = rt_call(em, 'sy_arr_str', em%t_ptr, [v%v])
+		end if
 		call dispose(em, v)
+	case (struct_type)
+		s%v = rt_call(em, 'sy_struct_str', em%t_ptr, [v%v])
+		call dispose(em, v)
+	case (null_type)
+		s%v = str_literal(em, 'null')
+	case (enum_type)
+		s%v = LLVMBuildLoad2(em%bld, em%t_ptr, LLVMBuildGEP2(em%bld, em%t_ptr, &
+			enum_names(em, v%sk), [v%v], 1, cs('')), cs(''))
 	case default
 		call unsupported(em, 'a value of type `'//kind_name(v%ty)//'`')
 		s = dummy_val(em, str_type)
@@ -939,6 +1008,20 @@ end function supported_type
 
 !===============================================================================
 
+function holdable(ty) result(ok)
+
+	! Can a variable, parameter, or element of an array have this type?  A struct
+	! can, but nothing is computed with one, unlike with the types above
+
+	integer, intent(in) :: ty
+	logical :: ok
+
+	ok = supported_type(ty) .or. ty == struct_type .or. ty == enum_type
+
+end function holdable
+
+!===============================================================================
+
 function supported_val(val) result(ok)
 
 	! Can a variable or parameter be of the type of this value?  An array of
@@ -948,11 +1031,11 @@ function supported_val(val) result(ok)
 	logical :: ok
 
 	if (val%type /= array_type) then
-		ok = supported_type(val%type)
+		ok = holdable(val%type)
 	else if (.not. allocated(val%array)) then
 		ok = .false.
 	else
-		ok = supported_type(val%array%type)
+		ok = holdable(val%array%type)
 	end if
 
 end function supported_val
@@ -973,12 +1056,13 @@ subroutine slots_ensure(s, id)
 
 	if (.not. allocated(s%p)) then
 		n = max(id, 16)
-		allocate(s%p(n), s%ty(n), s%own(n), s%elem(n), s%rank(n))
+		allocate(s%p(n), s%ty(n), s%own(n), s%elem(n), s%rank(n), s%sk(n))
 		s%p    = c_null_ptr
 		s%ty   = unknown_type
 		s%own  = .false.
 		s%elem = unknown_type
 		s%rank = 0
+		s%sk   = 0
 		return
 	end if
 
@@ -1004,6 +1088,10 @@ subroutine slots_ensure(s, id)
 	itmp = 0
 	itmp(1: size(s%rank)) = s%rank
 	call move_alloc(itmp, s%rank)
+	allocate(itmp(n))
+	itmp = 0
+	itmp(1: size(s%sk)) = s%sk
+	call move_alloc(itmp, s%sk)
 
 end subroutine slots_ensure
 
@@ -1032,7 +1120,7 @@ function var_ptr(em, node, ty) result(p)
 
 	if (id < 1) return
 
-	if (.not. supported_type(ty) .and. .not. (ty == array_type .and. supported_val(node%val))) then
+	if (.not. holdable(ty) .and. .not. (ty == array_type .and. supported_val(node%val))) then
 		call unsupported(em, 'a variable of type `'//kind_name(ty)//'`')
 		return
 	end if
@@ -1046,7 +1134,7 @@ function var_ptr(em, node, ty) result(p)
 			end if
 			em%l%ty(id)  = ty
 			em%l%own(id) = ptr_type(ty)
-			call slot_array_info(em%l, id, node%val)
+			call slot_array_info(em, em%l, id, node%val)
 		end if
 		p = em%l%p(id)
 
@@ -1060,13 +1148,23 @@ end function var_ptr
 
 !===============================================================================
 
-subroutine slot_array_info(s, id, val)
+subroutine slot_array_info(em, s, id, val)
 
-	! Remember the type and rank of the elements of the array that a slot holds
+	! Remember the type and rank of the elements of the array that a slot holds,
+	! and the struct that it or its elements are
 
+	type(nemitter_t), intent(in) :: em
 	type(slots_t), intent(inout) :: s
 	integer, intent(in) :: id
 	type(value_t), intent(in) :: val
+
+	if (associated(em%structs)) then
+		if (val%type == struct_type) then
+			s%sk(id) = structs_slot_of(em%structs, val)
+		else if (val%type == array_type .and. allocated(val%array)) then
+			if (val%array%type == struct_type) s%sk(id) = structs_slot_of(em%structs, val)
+		end if
+	end if
 
 	if (val%type /= array_type) return
 	if (.not. allocated(val%array)) return
@@ -1093,7 +1191,7 @@ subroutine make_global(em, id, ty, val)
 	call LLVMSetLinkage(g, LLVM_INTERNAL_LINKAGE)
 	em%g%p(id)  = g
 	em%g%ty(id) = ty
-	call slot_array_info(em%g, id, val)
+	call slot_array_info(em, em%g, id, val)
 
 end subroutine make_global
 
@@ -1196,7 +1294,7 @@ subroutine store_var(em, p, vty, v)
 	type(nval_t) :: cv
 
 	if (ptr_type(vty)) then
-		if (v%ty /= vty) then
+		if (v%ty /= vty .and. .not. (v%ty == null_type .and. vty == struct_type)) then
 			call unsupported(em, 'assigning a `'//kind_name(v%ty)//'` to a `'// &
 				kind_name(vty)//'`')
 			return
@@ -1210,7 +1308,7 @@ subroutine store_var(em, p, vty, v)
 		ignored = LLVMBuildStore(em%bld, new_, p)
 		call rt_void(em, free_fn(vty), [old])
 
-	else if (is_numeric_type(vty) .or. vty == bool_type) then
+	else if (is_numeric_type(vty) .or. vty == bool_type .or. vty == enum_type) then
 		if (v%ty /= vty .and. .not. (is_numeric_type(v%ty) .and. is_numeric_type(vty))) then
 			call unsupported(em, 'assigning a `'//kind_name(v%ty)//'` to a `'// &
 				kind_name(vty)//'`')
@@ -1239,10 +1337,9 @@ recursive function emit_expr(em, node) result(r)
 	case (literal_expr)
 		r = emit_literal(em, node)
 
-	case (name_expr)
+	case (name_expr, dot_expr)
 		if (allocated(node%member)) then
-			call unsupported(em, 'a subscript or member of a variable')
-			r = dummy_val(em, node%val%type)
+			r = emit_member_read(em, node)
 		else if (allocated(node%lsubscripts)) then
 			r = emit_subscript(em, node)
 		else
@@ -1264,14 +1361,28 @@ recursive function emit_expr(em, node) result(r)
 	case (fn_call_intr_expr)
 		r = emit_intr_call(em, node)
 
-	case (fn_call_expr)
+	case (fn_call_expr, method_call_expr)
 		r = emit_user_call(em, node)
+
+	case (struct_instance_expr)
+		r = emit_struct_instance(em, node)
+
+	case (enum_access_expr)
+		r = emit_enum_access(em, node)
+
+	case (enum_cast_expr)
+		r = emit_enum_cast(em, node)
 
 	case default
 		call unsupported(em, 'a `'//kind_name(node%kind)//'`')
 		r = dummy_val(em, node%val%type)
 
 	end select
+
+	! An enum is only an index, so which enum it is has to go with it
+	if (r%ty == enum_type .or. (r%ty == array_type .and. r%elem == enum_type)) then
+		if (associated(em%enums)) r%sk = enums_slot_of(em%enums, node%val)
+	end if
 
 end function emit_expr
 
@@ -1299,6 +1410,8 @@ function emit_literal(em, node) result(r)
 		r%v = cbool(em, node%val%sca%bool)
 	case (str_type)
 		r%v = str_literal(em, node%val%str%s)
+	case (null_type)
+		r%v = LLVMConstNull(em%t_ptr)
 	case default
 		call unsupported(em, 'a literal of type `'//kind_name(node%val%type)//'`')
 		r = dummy_val(em, node%val%type)
@@ -1447,8 +1560,8 @@ subroutine elem_store(em, p, ety, v)
 
 	type(nval_t) :: cv
 
-	if (ety == str_type) then
-		call store_var(em, p, str_type, v)
+	if (ptr_type(ety)) then
+		call store_var(em, p, ety, v)
 
 	else if (ety == bool_type) then
 		if (v%ty /= bool_type) then
@@ -1460,6 +1573,9 @@ subroutine elem_store(em, p, ety, v)
 	else if (is_numeric_type(ety) .and. is_numeric_type(v%ty)) then
 		cv = convert(em, v, ety)
 		ignored = LLVMBuildStore(em%bld, cv%v, p)
+
+	else if (ety == enum_type .and. v%ty == enum_type) then
+		ignored = LLVMBuildStore(em%bld, v%v, p)
 
 	else
 		call unsupported(em, 'assigning a `'//kind_name(v%ty)//'` to a `'// &
@@ -1796,7 +1912,7 @@ recursive function emit_array_expr(em, node) result(r)
 	t = node%val%array%type
 	kind_ = node%val%array%kind
 
-	if (.not. supported_type(t)) then
+	if (.not. holdable(t)) then
 		call unsupported(em, 'an array of type `'//kind_name(t)//'`')
 		return
 	end if
@@ -1930,6 +2046,751 @@ end function emit_array_expr
 
 !===============================================================================
 
+!===============================================================================
+! Structs
+
+function c_string(em, s) result(g)
+
+	! A constant string of the program with a NUL after it, for the descriptors
+	! that the runtime describes a struct with, and for its messages
+
+	type(nemitter_t), intent(inout) :: em
+	character(len = *), intent(in) :: s
+	type(c_ptr) :: g
+
+	g = LLVMAddGlobal(em%llmod, LLVMArrayType2(em%t_i8, int(len(s) + 1, c_int64_t)), &
+		cs('.cs.'//str(em%nstr)))
+	em%nstr = em%nstr + 1
+	call LLVMSetInitializer(g, LLVMConstStringInContext(em%ctx, s, int(len(s), c_int), 0))
+	call LLVMSetGlobalConstant(g, 1)
+	call LLVMSetLinkage(g, LLVM_PRIVATE_LINKAGE)
+
+end function c_string
+
+!===============================================================================
+
+function struct_desc(em, k) result(d)
+
+	! The runtime's description of the struct at position `k` of the table: its
+	! name, and the name and kind of each member, c.f. `sy_sdesc` in the runtime.
+	! It's a constant of the program that's made at the first use
+
+	type(nemitter_t), intent(inout) :: em
+	integer, intent(in) :: k
+	type(c_ptr) :: d
+
+	!********
+
+	character(len = :), allocatable :: mname
+
+	integer :: i, n
+
+	logical :: ok
+
+	type(c_ptr) :: tys(4), vals(4), dty(3), dvals(3), mty, gm, aux
+	type(c_ptr), allocatable :: ms(:)
+
+	integer :: code
+
+	type(value_t) :: mval
+
+	d = c_null_ptr
+	if (.not. associated(em%structs)) return
+	if (k < 1) return
+
+	if (.not. allocated(em%sdesc)) then
+		allocate(em%sdesc(size(em%structs%table)))
+		em%sdesc = c_null_ptr
+	end if
+	if (c_associated(em%sdesc(k))) then
+		d = em%sdesc(k)
+		return
+	end if
+
+	n = 0
+	if (allocated(em%structs%table(k)%val%member_names%v)) &
+		n = size(em%structs%table(k)%val%member_names%v)
+	allocate(ms(max(n, 1)))
+	ms = c_null_ptr
+
+	tys = [em%t_ptr, em%t_i32, em%t_i32, em%t_ptr]
+	mty = LLVMStructTypeInContext(em%ctx, tys, 4, 0)
+
+	do i = 1, n
+		call structs_member(em%structs, k, i, mval, mname, ok)
+		if (.not. ok) then
+			call unsupported(em, 'a struct of unknown type')
+			return
+		end if
+		if (.not. supported_val(mval)) then
+			call unsupported(em, 'a struct member of type `'//kind_name(mval%type)//'`')
+			return
+		end if
+
+		! An enum, or an array of them, has the names of its variants too
+		code = elem_code(mval%type)
+		aux = LLVMConstNull(em%t_ptr)
+		if (mval%type == enum_type) then
+			code = 8
+			aux = enum_names(em, enums_slot_of(em%enums, mval))
+		else if (mval%type == array_type .and. allocated(mval%array)) then
+			if (mval%array%type == enum_type) &
+				aux = enum_names(em, enums_slot_of(em%enums, mval))
+		end if
+
+		vals(1) = c_string(em, mname)
+		vals(2) = ci32(em, code)
+		vals(3) = ci32(em, 0)
+		vals(4) = aux
+		ms(i) = LLVMConstStructInContext(em%ctx, vals, 4, 0)
+	end do
+
+	gm = LLVMAddGlobal(em%llmod, LLVMArrayType2(mty, int(n, c_int64_t)), cs('.sm.'//str(k)))
+	call LLVMSetInitializer(gm, LLVMConstArray(mty, ms, n))
+	call LLVMSetGlobalConstant(gm, 1)
+	call LLVMSetLinkage(gm, LLVM_PRIVATE_LINKAGE)
+
+	dty = [em%t_ptr, em%t_i64, em%t_ptr]
+	dvals = [c_string(em, em%structs%table(k)%key), ci64(em, int(n, 8)), gm]
+	d = LLVMAddGlobal(em%llmod, LLVMStructTypeInContext(em%ctx, dty, 3, 0), &
+		cs('.sd.'//str(k)))
+	call LLVMSetInitializer(d, LLVMConstStructInContext(em%ctx, dvals, 3, 0))
+	call LLVMSetGlobalConstant(d, 1)
+	call LLVMSetLinkage(d, LLVM_PRIVATE_LINKAGE)
+
+	em%sdesc(k) = d
+
+end function struct_desc
+
+!===============================================================================
+
+recursive function emit_struct_instance(em, node) result(r)
+
+	! `Point{x = 1, y = 2}` is a new struct that owns its members.  They are in
+	! the order of the members' indices, which is the order of their slots
+
+	type(nemitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	type(nval_t) :: r
+
+	!********
+
+	character(len = :), allocatable :: mname
+
+	integer :: i, k
+
+	logical :: ok
+
+	type(c_ptr) :: d, s
+
+	type(nval_t) :: v
+
+	type(value_t) :: mval
+
+	r = dummy_val(em, struct_type)
+
+	k = 0
+	if (associated(em%structs)) k = structs_slot_of(em%structs, node%val)
+	if (k == 0) then
+		call unsupported(em, 'a struct of unknown type')
+		return
+	end if
+
+	d = struct_desc(em, k)
+	if (.not. c_associated(d)) return
+
+	s = rt_call(em, 'sy_struct_new', em%t_ptr, [d])
+
+	if (allocated(node%members)) then
+		do i = 1, size(node%members)
+			call structs_member(em%structs, k, i, mval, mname, ok)
+			if (.not. ok) then
+				call unsupported(em, 'a struct of unknown type')
+				return
+			end if
+			v = emit_expr(em, node%members(i))
+			call elem_store(em, LLVMBuildGEP2(em%bld, em%t_i64, s, [ci64(em, int(i, 8))], 1, &
+				cs('')), mval%type, v)
+		end do
+	end if
+
+	r%v = s
+	r%owned = .true.
+
+end function emit_struct_instance
+
+!===============================================================================
+
+recursive subroutine emit_struct_methods(em, decl, done)
+
+	! Build the methods of a struct, which are fns.  `done` has the ids of the
+	! fns that are already built, as for emit_module_fns()
+
+	type(nemitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: decl
+	type(integer_vector_t), intent(inout) :: done
+
+	integer :: j, k, m
+
+	logical :: found
+
+	if (.not. allocated(decl%members)) return
+	if (.not. associated(em%structs)) return
+	if (.not. allocated(em%structs%table)) return
+
+	k = 0
+	do j = 1, size(em%structs%table)
+		if (.not. allocated(em%structs%table(j)%key)) cycle
+		if (em%structs%table(j)%id_index == decl%id_index) k = j
+	end do
+	if (k == 0) return
+
+	do j = 1, size(decl%members)
+		if (decl%members(j)%kind /= fn_declaration) cycle
+
+		found = .false.
+		do m = 1, done%len_
+			if (done%v(m) == decl%members(j)%id_index) found = .true.
+		end do
+		if (found) cycle
+
+		call done%push(decl%members(j)%id_index)
+		call emit_fn(em, decl%members(j), k)
+	end do
+
+end subroutine emit_struct_methods
+
+!===============================================================================
+! Enums
+
+subroutine enum_tables(em, k)
+
+	! The constant tables of the enum at position `k` of the table, which hold
+	! the backing value of each of its variants and the name of each as a str.
+	! The value of an enum is the index of its variant
+
+	type(nemitter_t), intent(inout) :: em
+	integer, intent(in) :: k
+
+	!********
+
+	integer :: i, n
+
+	type(c_ptr) :: g
+	type(c_ptr), allocatable :: vs(:), ns(:)
+
+	if (.not. allocated(em%evals)) then
+		allocate(em%evals(size(em%enums%table)), em%enames(size(em%enums%table)))
+		em%evals = c_null_ptr
+		em%enames = c_null_ptr
+	end if
+	if (c_associated(em%evals(k))) return
+
+	associate (e => em%enums%table(k)%val)
+
+		n = e%num_vars
+		allocate(vs(max(n, 1)), ns(max(n, 1)))
+		vs = c_null_ptr
+		ns = c_null_ptr
+		do i = 1, n
+			vs(i) = ci32(em, e%variant_values(i))
+			ns(i) = str_literal(em, em%enums%table(k)%key//'.'//e%variant_names%v(i)%s)
+		end do
+
+		g = LLVMAddGlobal(em%llmod, LLVMArrayType2(em%t_i32, int(n, c_int64_t)), &
+			cs('.ev.'//str(k)))
+		call LLVMSetInitializer(g, LLVMConstArray(em%t_i32, vs, n))
+		call LLVMSetGlobalConstant(g, 1)
+		call LLVMSetLinkage(g, LLVM_PRIVATE_LINKAGE)
+		em%evals(k) = g
+
+		g = LLVMAddGlobal(em%llmod, LLVMArrayType2(em%t_ptr, int(n, c_int64_t)), &
+			cs('.en.'//str(k)))
+		call LLVMSetInitializer(g, LLVMConstArray(em%t_ptr, ns, n))
+		call LLVMSetGlobalConstant(g, 1)
+		call LLVMSetLinkage(g, LLVM_PRIVATE_LINKAGE)
+		em%enames(k) = g
+
+	end associate
+
+end subroutine enum_tables
+
+!===============================================================================
+
+function enum_names(em, k) result(g)
+
+	! The table of the names of the variants of an enum, as strs
+
+	type(nemitter_t), intent(inout) :: em
+	integer, intent(in) :: k
+	type(c_ptr) :: g
+
+	g = LLVMConstNull(em%t_ptr)
+	if (k < 1 .or. .not. associated(em%enums)) then
+		call unsupported(em, 'an enum of unknown type')
+		return
+	end if
+
+	call enum_tables(em, k)
+	g = em%enames(k)
+
+end function enum_names
+
+!===============================================================================
+
+function enum_backing(em, v) result(b)
+
+	! The backing value of an enum variant, which is looked up by its index
+
+	type(nemitter_t), intent(inout) :: em
+	type(nval_t), intent(in) :: v
+	type(c_ptr) :: b
+
+	b = ci32(em, 0)
+	if (v%sk < 1 .or. .not. associated(em%enums)) then
+		call unsupported(em, 'an enum of unknown type')
+		return
+	end if
+
+	call enum_tables(em, v%sk)
+	b = LLVMBuildLoad2(em%bld, em%t_i32, LLVMBuildGEP2(em%bld, em%t_i32, em%evals(v%sk), &
+		[v%v], 1, cs('')), cs(''))
+
+end function enum_backing
+
+!===============================================================================
+
+function enum_compare(em, op, l, r, op_text) result(res)
+
+	! Compare two enum values.  Equality is that of their indices, unless two
+	! variants of the enum have the same backing value, and an ordering is always
+	! that of the backing values
+
+	type(nemitter_t), intent(inout) :: em
+	integer, intent(in) :: op
+	type(nval_t), intent(in) :: l, r
+	character(len = *), intent(in) :: op_text
+	type(nval_t) :: res
+
+	!********
+
+	integer :: i, j, k
+
+	logical :: by_value
+
+	type(c_ptr) :: a, b
+
+	type(nval_t) :: lk, rk
+
+	res = dummy_val(em, bool_type)
+
+	k = max(l%sk, r%sk)
+	if (k < 1 .or. .not. associated(em%enums)) then
+		call unsupported(em, 'an enum of unknown type')
+		return
+	end if
+
+	by_value = .not. (op == eequals_token .or. op == bang_equals_token)
+	associate (e => em%enums%table(k)%val)
+		do i = 1, e%num_vars
+			do j = i + 1, e%num_vars
+				if (e%variant_values(i) == e%variant_values(j)) by_value = .true.
+			end do
+		end do
+	end associate
+
+	a = l%v
+	b = r%v
+	if (by_value) then
+		lk = l
+		rk = r
+		lk%sk = k
+		rk%sk = k
+		a = enum_backing(em, lk)
+		b = enum_backing(em, rk)
+	end if
+
+	select case (op)
+	case (eequals_token)
+		res%v = LLVMBuildICmp(em%bld, LLVM_INT_EQ, a, b, cs(''))
+	case (bang_equals_token)
+		res%v = LLVMBuildICmp(em%bld, LLVM_INT_NE, a, b, cs(''))
+	case (less_token)
+		res%v = LLVMBuildICmp(em%bld, LLVM_INT_SLT, a, b, cs(''))
+	case (less_equals_token)
+		res%v = LLVMBuildICmp(em%bld, LLVM_INT_SLE, a, b, cs(''))
+	case (greater_token)
+		res%v = LLVMBuildICmp(em%bld, LLVM_INT_SGT, a, b, cs(''))
+	case (greater_equals_token)
+		res%v = LLVMBuildICmp(em%bld, LLVM_INT_SGE, a, b, cs(''))
+	case default
+		call unsupported(em, 'the `'//op_text//'` operator on enums')
+	end select
+
+end function enum_compare
+
+!===============================================================================
+
+function emit_enum_access(em, node) result(r)
+
+	! `Suit.Clubs` is the index of the variant, which is not necessarily its
+	! backing value
+
+	type(nemitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	type(nval_t) :: r
+
+	integer :: i, k
+
+	r = dummy_val(em, enum_type)
+
+	k = 0
+	if (associated(em%enums)) k = enums_slot_of(em%enums, node%val)
+	if (k == 0 .or. .not. allocated(node%val%enum_variant)) then
+		call unsupported(em, 'an enum of unknown type')
+		return
+	end if
+
+	associate (e => em%enums%table(k)%val)
+		do i = 1, e%num_vars
+			if (e%variant_names%v(i)%s == node%val%enum_variant) then
+				r%ty = enum_type
+				r%v = ci32(em, i - 1)
+				r%sk = k
+				return
+			end if
+		end do
+	end associate
+
+	call unsupported(em, 'an enum variant that is not found')
+
+end function emit_enum_access
+
+!===============================================================================
+
+recursive function emit_enum_cast(em, node) result(r)
+
+	! `Suit(2)` is the first variant with the backing value 2
+
+	type(nemitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	type(nval_t) :: r
+
+	integer :: k
+
+	type(nval_t) :: v
+
+	r = dummy_val(em, enum_type)
+
+	k = 0
+	if (associated(em%enums)) k = enums_slot_of(em%enums, node%val)
+	if (k == 0) then
+		call unsupported(em, 'an enum of unknown type')
+		return
+	end if
+
+	v = emit_expr(em, node%right)
+	if (.not. is_numeric_type(v%ty)) then
+		call unsupported(em, 'an enum cast of a value of type `'//kind_name(v%ty)//'`')
+		call dispose(em, v)
+		return
+	end if
+	v = convert(em, v, i32_type)
+
+	call enum_tables(em, k)
+	r%v = rt_call(em, 'sy_enum_of', em%t_i32, [em%evals(k), &
+		ci32(em, em%enums%table(k)%val%num_vars), v%v])
+	r%ty = enum_type
+	r%sk = k
+
+end function emit_enum_cast
+
+!===============================================================================
+! Places
+
+subroutine check_not_null(em, sp)
+
+	! A member of a struct that is `null` is a runtime error
+
+	type(nemitter_t), intent(inout) :: em
+	type(c_ptr), intent(in) :: sp
+
+	type(c_ptr) :: bad, good, ignored
+
+	bad  = new_block(em, 'null')
+	good = new_block(em, 'nonnull')
+	ignored = LLVMBuildCondBr(em%bld, LLVMBuildICmp(em%bld, LLVM_INT_EQ, sp, &
+		LLVMConstNull(em%t_ptr), cs('')), bad, good)
+
+	call LLVMPositionBuilderAtEnd(em%bld, bad)
+	call rt_void(em, 'sy_fatal', [c_string(em, 'member of a null struct')])
+	ignored = LLVMBuildBr(em%bld, good)
+
+	call LLVMPositionBuilderAtEnd(em%bld, good)
+
+end subroutine check_not_null
+
+!===============================================================================
+
+recursive function place_subscript(em, pl, subs) result(ok)
+
+	! The element of the array that a place holds, if there is one scalar subscript
+	! per dimension.  Otherwise this has said that it isn't supported
+
+	type(nemitter_t), intent(inout) :: em
+	type(place_t), intent(inout) :: pl
+	type(syntax_node_t), intent(in) :: subs(:)
+	logical :: ok
+
+	integer :: i
+
+	type(c_ptr) :: a
+	type(c_ptr), allocatable :: idx(:)
+
+	ok = .false.
+
+	if (pl%ty == str_type) then
+		call unsupported(em, 'a substring of a member')
+		return
+	else if (pl%ty /= array_type) then
+		call unsupported(em, 'a subscript of a value that is not an array')
+		return
+	end if
+
+	if (size(subs) /= pl%rank) then
+		call unsupported(em, 'a subscript with the wrong number of dimensions')
+		return
+	end if
+	do i = 1, size(subs)
+		if (subs(i)%sub_kind /= scalar_sub) then
+			call unsupported(em, 'a slice of a member')
+			return
+		end if
+	end do
+
+	a = LLVMBuildLoad2(em%bld, em%t_ptr, pl%p, cs(''))
+	allocate(idx(pl%rank))
+	do i = 1, pl%rank
+		idx(i) = scalar_index(em, subs(i))
+	end do
+
+	pl%p = elem_ptr(em, a, pl%elem, lin_index(em, a, idx))
+	pl%ty = pl%elem
+	pl%elem = unknown_type
+	pl%rank = 0
+	ok = .true.
+
+end function place_subscript
+
+!===============================================================================
+
+recursive function place_member(em, m, pl) result(ok)
+
+	! Move a place that holds a struct to its member `m`, and to what is after it
+	! in the chain
+
+	type(nemitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: m
+	type(place_t), intent(inout) :: pl
+	logical :: ok
+
+	!********
+
+	character(len = :), allocatable :: mname
+
+	logical :: mok
+
+	type(c_ptr) :: sp
+
+	type(value_t) :: mval
+
+	ok = .false.
+
+	if (pl%ty /= struct_type .or. pl%sk < 1 .or. .not. associated(em%structs)) then
+		call unsupported(em, 'a member of a value whose struct is unknown')
+		return
+	end if
+
+	sp = LLVMBuildLoad2(em%bld, em%t_ptr, pl%p, cs(''))
+	call check_not_null(em, sp)
+
+	call structs_member(em%structs, pl%sk, m%id_index, mval, mname, mok)
+	if (.not. mok) then
+		call unsupported(em, 'a member of a struct whose type is unknown')
+		return
+	end if
+
+	! Slot 0 of the struct is its descriptor
+	pl%p = LLVMBuildGEP2(em%bld, em%t_i64, sp, [ci64(em, int(m%id_index, 8))], 1, cs(''))
+	pl%ty = mval%type
+	pl%elem = unknown_type
+	pl%rank = 0
+	pl%sk = 0
+	if (mval%type == array_type .and. allocated(mval%array)) then
+		pl%elem = mval%array%type
+		pl%rank = mval%array%rank
+	end if
+	if (mval%type == struct_type .or. pl%elem == struct_type) then
+		pl%sk = structs_slot_of(em%structs, mval)
+	end if
+
+	if (allocated(m%lsubscripts)) then
+		if (.not. place_subscript(em, pl, m%lsubscripts)) return
+	end if
+
+	if (allocated(m%member)) then
+		ok = place_member(em, m%member, pl)
+		return
+	end if
+
+	ok = .true.
+
+end function place_member
+
+!===============================================================================
+
+recursive function place_of(em, node, pl) result(ok)
+
+	! The place of a reference to a member of a struct, or to an element of an
+	! array of structs: its variable, then the subscripts and members that follow
+	! it.  If it can't be done, this has said that it isn't supported
+
+	type(nemitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	type(place_t), intent(out) :: pl
+	logical :: ok
+
+	integer :: id
+
+	ok = .false.
+
+	if (node%root_kind /= 0) then
+		call unsupported(em, 'a member of the result of a fn here')
+		return
+	end if
+
+	pl%p = ref_slot(em, node)
+	if (.not. c_associated(pl%p)) then
+		call unsupported(em, 'a member of a variable whose type is unknown')
+		return
+	end if
+
+	id = node%id_index
+	if (node%is_loc) then
+		pl%ty   = em%l%ty(id)
+		pl%elem = em%l%elem(id)
+		pl%rank = em%l%rank(id)
+		pl%sk   = em%l%sk(id)
+	else
+		pl%ty   = em%g%ty(id)
+		pl%elem = em%g%elem(id)
+		pl%rank = em%g%rank(id)
+		pl%sk   = em%g%sk(id)
+	end if
+
+	if (allocated(node%lsubscripts)) then
+		if (.not. place_subscript(em, pl, node%lsubscripts)) return
+	end if
+
+	if (allocated(node%member)) then
+		ok = place_member(em, node%member, pl)
+		return
+	end if
+
+	ok = .true.
+
+end function place_of
+
+!===============================================================================
+
+function place_load(em, pl) result(r)
+
+	! Read what a place holds.  A str, array, or struct is only lent
+
+	type(nemitter_t), intent(inout) :: em
+	type(place_t), intent(in) :: pl
+	type(nval_t) :: r
+
+	r = elem_load(em, pl%ty, pl%p)
+	if (pl%ty == array_type) then
+		r%elem = pl%elem
+		r%rank = pl%rank
+	end if
+
+end function place_load
+
+!===============================================================================
+
+recursive function emit_member_read(em, node) result(r)
+
+	! `p.x`, `p.a[0].b`, `ps[1].x`, or `f().x`, the member of a temporary struct
+
+	type(nemitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	type(nval_t) :: r
+
+	!********
+
+	type(c_ptr) :: slot, ignored
+
+	type(nval_t) :: root_v
+
+	type(place_t) :: pl
+
+	type(syntax_node_t) :: root
+
+	r = dummy_val(em, node%val%type)
+
+	if (node%root_kind == 0) then
+		if (.not. place_of(em, node, pl)) return
+		r = place_load(em, pl)
+		return
+	end if
+
+	if (node%root_kind /= fn_call_expr .and. node%root_kind /= method_call_expr) then
+		call unsupported(em, 'a member of the result of a `'//kind_name(node%root_kind)//'`')
+		return
+	end if
+	if (allocated(node%lsubscripts)) then
+		call unsupported(em, 'a subscripted fn call')
+		return
+	end if
+
+	! The call makes a struct that is only the member's until it is copied out
+	root = node
+	root%kind = node%root_kind
+	root%root_kind = 0
+	deallocate(root%member)
+
+	root_v = emit_expr(em, root)
+	if (root_v%ty /= struct_type .or. .not. associated(em%structs)) then
+		call unsupported(em, 'a member of a fn result of type `'//kind_name(root_v%ty)//'`')
+		call dispose(em, root_v)
+		return
+	end if
+
+	pl%sk = structs_slot_of(em%structs, em%fns%fns(node%id_index)%type)
+	pl%ty = struct_type
+	slot = entry_alloca(em, em%t_ptr, 'tmp')
+	ignored = LLVMBuildStore(em%bld, root_v%v, slot)
+	pl%p = slot
+
+	if (.not. place_member(em, node%member, pl)) then
+		call dispose(em, root_v)
+		return
+	end if
+
+	r = place_load(em, pl)
+	if (ptr_type(r%ty)) then
+		r%v = rt_call(em, dup_fn(r%ty), em%t_ptr, [r%v])
+		r%owned = .true.
+	end if
+	call dispose(em, root_v)
+
+end function emit_member_read
+
+!===============================================================================
+
 recursive function emit_binary(em, node) result(r)
 
 	type(nemitter_t), intent(inout) :: em
@@ -1999,6 +2860,32 @@ function binop_vals(em, op, l, r, op_text) result(res)
 		end select
 		call dispose(em, l)
 		call dispose(em, r)
+		return
+	end if
+
+	! Structs can only be compared to `null`, for whether they are
+	if ((l%ty == struct_type .or. l%ty == null_type) .and. &
+			(r%ty == struct_type .or. r%ty == null_type)) then
+		res%ty = bool_type
+		select case (op)
+		case (eequals_token)
+			res%v = LLVMBuildICmp(em%bld, LLVM_INT_EQ, l%v, r%v, cs(''))
+		case (bang_equals_token)
+			res%v = LLVMBuildICmp(em%bld, LLVM_INT_NE, l%v, r%v, cs(''))
+		case default
+			call unsupported(em, 'the `'//op_text//'` operator on structs')
+			res = dummy_val(em, bool_type)
+			return
+		end select
+		call dispose(em, l)
+		call dispose(em, r)
+		return
+	end if
+
+	! Enums are compared by their backing values, which are the variants' indices
+	! unless two variants have the same one
+	if (l%ty == enum_type .and. r%ty == enum_type) then
+		res = enum_compare(em, op, l, r, op_text)
 		return
 	end if
 
@@ -2822,6 +3709,12 @@ function intr_scalar(em, base, a, rtype, pos) result(r)
 			r%v = rt_call(em, 'sy_str_code', em%t_i32, [a%v])
 			call dispose(em, a)
 			r = convert(em, r, merge(i32_type, i64_type, base == 'i32'))
+		else if (a%ty == enum_type) then
+			! The backing value of the variant
+			r%ty = i32_type
+			r%owned = .false.
+			r%v = enum_backing(em, a)
+			r = convert(em, r, merge(i32_type, i64_type, base == 'i32'))
 		else if (is_numeric_type(a%ty)) then
 			r = convert(em, a, merge(i32_type, i64_type, base == 'i32'))
 		else
@@ -3051,8 +3944,9 @@ recursive subroutine emit_stmt(em, node)
 	case (return_statement)
 		call emit_return(em, node)
 
-	case (fn_declaration)
-		! Built separately, since a fn is its own LLVM function
+	case (fn_declaration, struct_declaration, enum_declaration)
+		! Built separately, since a fn is its own LLVM function.  A struct is
+		! only a type, and its methods are fns
 
 	case default
 		! A bare expression statement, which at most has side effects from calls
@@ -3119,12 +4013,9 @@ recursive function emit_assign_val(em, node) result(res)
 	type(nval_t) :: v, cur
 	type(nval_t), allocatable :: pending(:)
 
-	res = dummy_val(em, node%val%type)
+	type(place_t) :: pl
 
-	if (allocated(node%member)) then
-		call unsupported(em, 'an assignment to a member')
-		return
-	end if
+	res = dummy_val(em, node%val%type)
 
 	if (node%op%kind /= equals_token) then
 		! `x += y` is `x = x + y`
@@ -3144,6 +4035,31 @@ recursive function emit_assign_val(em, node) result(res)
 			call unsupported(em, 'the `'//node%op%text//'` operator')
 			return
 		end select
+	end if
+
+	if (allocated(node%member)) then
+		! A member of a struct, or an element of one.  The value is made first,
+		! because it might change what the struct is
+		v = emit_expr(em, node%right)
+		if (.not. place_of(em, node, pl)) then
+			call dispose(em, v)
+			return
+		end if
+		if (node%op%kind /= equals_token) then
+			cur = place_load(em, pl)
+			if (pl%ty == array_type) then
+				if (node%op%kind == matmul_token) then
+					call unsupported(em, 'a matrix product')
+					return
+				end if
+				v = arr_binop_vals(em, op, node%op%text, cur, v, node%val)
+			else
+				v = binop_vals(em, op, cur, v, node%op%text)
+			end if
+		end if
+		call elem_store(em, pl%p, pl%ty, v)
+		res = place_load(em, pl)
+		return
 	end if
 
 	if (allocated(node%lsubscripts)) then
@@ -3335,9 +4251,9 @@ recursive subroutine emit_result_stmt(em, node)
 	case (return_statement)
 		call emit_stmt(em, node)
 
-	case (fn_declaration)
+	case (fn_declaration, struct_declaration, enum_declaration)
 
-	case (fn_call_expr)
+	case (fn_call_expr, method_call_expr)
 		if (node%val%type == void_type) then
 			v = emit_expr(em, node)
 			call emit_result_text(em, 'Error: <invalid_value>')
@@ -3449,7 +4365,7 @@ subroutine begin_fn(em, name, ret_ll, ret_ty, is_main, fn)
 	em%ntemps = 0
 	em%block_exit = c_null_ptr
 
-	if (allocated(em%l%p)) deallocate(em%l%p, em%l%ty, em%l%own, em%l%elem, em%l%rank)
+	if (allocated(em%l%p)) deallocate(em%l%p, em%l%ty, em%l%own, em%l%elem, em%l%rank, em%l%sk)
 
 	em%ablk = LLVMAppendBasicBlockInContext(em%ctx, em%fn, cs('alloca'))
 	em%body = LLVMAppendBasicBlockInContext(em%ctx, em%fn, cs('body'))
@@ -3645,7 +4561,7 @@ function fn_llvm(em, id) result(fn)
 
 	character(len = :), allocatable :: name
 
-	integer :: i, n, n_old
+	integer :: i, n, n_old, off
 
 	logical :: ok
 
@@ -3680,8 +4596,11 @@ function fn_llvm(em, id) result(fn)
 
 	associate (f => em%fns%fns(id))
 
-		n = 0
-		if (allocated(f%params)) n = size(f%params)
+		! A method has its receiver first, by reference, which is not among the
+		! parameters that the fn declares
+		off = merge(1, 0, f%is_method)
+		n = off
+		if (allocated(f%params)) n = n + size(f%params)
 		allocate(ptys(max(n, 1)))
 
 		ok = .true.
@@ -3689,9 +4608,11 @@ function fn_llvm(em, id) result(fn)
 			if (param_is_ref(em, id, i)) then
 				ptys(i) = em%t_ptr
 			else
-				ptys(i) = ll_type(em, f%params(i)%type)
+				ptys(i) = ll_type(em, f%params(i - off)%type)
 			end if
-			if (.not. supported_val(f%params(i))) ok = .false.
+			if (i > off) then
+				if (.not. supported_val(f%params(i - off))) ok = .false.
+			end if
 		end do
 
 		if (f%type%type == void_type) then
@@ -3703,7 +4624,7 @@ function fn_llvm(em, id) result(fn)
 
 		if (.not. ok) then
 			call unsupported(em, 'a fn with a parameter or return value that is not '// &
-				'a number, bool, string, or array of those')
+				'a number, bool, string, struct, or array of those')
 			return
 		end if
 
@@ -3758,17 +4679,20 @@ end function param_is_const
 
 !===============================================================================
 
-recursive subroutine emit_fn(em, decl)
+recursive subroutine emit_fn(em, decl, self_sk)
 
 	! Build a user fn.  A parameter passed by value is a stack slot of its own, so
-	! the body may assign to it, and a string is copied in so that the fn owns it
+	! the body may assign to it, and a string is copied in so that the fn owns it.
+	! A method has `self_sk`, the position of its struct in the table, and its
+	! receiver is the first of the parameters of the node, but not of the fn
 
 	type(nemitter_t), intent(inout) :: em
 	type(syntax_node_t), intent(in) :: decl
+	integer, intent(in), optional :: self_sk
 
 	!********
 
-	integer :: i, slot, ptype
+	integer :: i, slot, ptype, off
 
 	type(c_ptr) :: fn, pv, ignored, p
 	type(nval_t) :: copy
@@ -3785,15 +4709,23 @@ recursive subroutine emit_fn(em, decl)
 
 		call begin_fn(em, '', em%t_void, f%type%type, .false., fn)
 
+		off = merge(1, 0, present(self_sk))
+
 		if (allocated(decl%params)) then
 			do i = 1, size(decl%params)
 				slot  = decl%params(i)
-				ptype = f%params(i)%type
 				pv = LLVMGetParam(fn, i - 1)
 
 				call slots_ensure(em%l, slot)
-				em%l%ty(slot) = ptype
-				call slot_array_info(em%l, slot, f%params(i))
+				if (i <= off) then
+					ptype = struct_type
+					em%l%ty(slot) = ptype
+					em%l%sk(slot) = self_sk
+				else
+					ptype = f%params(i - off)%type
+					em%l%ty(slot) = ptype
+					call slot_array_info(em, em%l, slot, f%params(i - off))
+				end if
 
 				if (param_is_ref(em, decl%id_index, i)) then
 					! The caller's variable itself
@@ -3838,7 +4770,7 @@ recursive function emit_user_call(em, node) result(r)
 
 	!********
 
-	integer :: i, n, id
+	integer :: i, n, id, off
 
 	type(c_ptr) :: fn, ignored
 	type(c_ptr), allocatable :: args(:)
@@ -3846,13 +4778,13 @@ recursive function emit_user_call(em, node) result(r)
 	type(nval_t) :: v
 	type(nval_t), allocatable :: pending(:)
 
+	type(place_t) :: pl
+
 	id = node%id_index
 	r = dummy_val(em, node%val%type)
 
-	if (node%kind /= fn_call_expr) then
-		call unsupported(em, 'a method call')
-		return
-	end if
+	! The receiver of a method is its first argument
+	off = merge(1, 0, node%kind == method_call_expr)
 
 	fn = fn_llvm(em, id)
 	if (.not. c_associated(fn)) return
@@ -3870,6 +4802,11 @@ recursive function emit_user_call(em, node) result(r)
 						.and. .not. allocated(arg%member)) then
 					args(i) = var_ptr(em, arg, arg%val%type)
 					if (.not. c_associated(args(i))) return
+				else if (arg%kind == dot_expr .or. allocated(arg%member) .or. &
+						(off == 1 .and. i == 1 .and. allocated(arg%lsubscripts))) then
+					! A member of a struct, or an element of an array of them
+					if (.not. place_of(em, arg, pl)) return
+					args(i) = pl%p
 				else if (param_is_const(em, id, i)) then
 					v = emit_expr(em, arg)
 					args(i) = entry_alloca(em, ll_type(em, v%ty), 'tmp')
@@ -3883,10 +4820,10 @@ recursive function emit_user_call(em, node) result(r)
 			else
 				v = emit_expr(em, arg)
 				if (is_numeric_type(v%ty) .and. is_numeric_type( &
-						em%fns%fns(id)%params(i)%type)) then
+						em%fns%fns(id)%params(i - off)%type)) then
 					pending(i) = v
 					pending(i)%owned = v%owned
-					v = convert(em, v, em%fns%fns(id)%params(i)%type)
+					v = convert(em, v, em%fns%fns(id)%params(i - off)%type)
 				else
 					pending(i) = v
 				end if
@@ -3945,7 +4882,8 @@ recursive subroutine emit_return(em, node)
 		v = emit_expr(em, node%right)
 
 		if (ptr_type(em%ret_type)) then
-			if (v%ty /= em%ret_type) then
+			if (v%ty /= em%ret_type .and. .not. (v%ty == null_type .and. &
+					em%ret_type == struct_type)) then
 				call unsupported(em, 'returning a `'//kind_name(v%ty)//'` from a fn of `'// &
 					kind_name(em%ret_type)//'`')
 			else
@@ -3995,8 +4933,8 @@ recursive subroutine emit_switch(em, node, is_result)
 	type(nval_t) :: subj, held, v, t
 
 	subj = emit_expr(em, node%condition)
-	if (.not. supported_type(subj%ty) .and. .not. (subj%ty == array_type .and. &
-			supported_type(subj%elem))) then
+	if (.not. supported_type(subj%ty) .and. subj%ty /= enum_type .and. &
+			.not. (subj%ty == array_type .and. supported_type(subj%elem))) then
 		call unsupported(em, 'a `switch` on a value of type `'//kind_name(subj%ty)//'`')
 		call dispose(em, subj)
 		return
@@ -4262,7 +5200,7 @@ recursive subroutine emit_for_array(em, node)
 	else
 		if (.not. allocated(node%array%val%array)) return
 		elem = node%array%val%array%type
-		if (.not. supported_type(elem)) then
+		if (.not. holdable(elem)) then
 			call unsupported(em, 'a `for` loop over an array of type `'//kind_name(elem)//'`')
 			return
 		end if

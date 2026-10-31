@@ -11964,7 +11964,31 @@ subroutine unit_test_native(npass, nfail)
 			diag_has_code(get_diags_native('let a = [1.0, 2.0, 3.0, 4.0; 2, 2]; ' &
 				//'let b = a @ a;'), EC_NATIVE_UNSUPPORTED), &
 			diag_has_code(get_diags_native('let a = [1, 2]; let b = sum(a, 0);'), &
-				EC_NATIVE_UNSUPPORTED) &
+				EC_NATIVE_UNSUPPORTED), &
+
+			! A struct is a heap object that the runtime describes, and a method is a
+			! fn that takes its receiver by reference
+			index(native_ir('struct P { x: i32, } let p = P{x = 1}; println(p);'), &
+				'@sy_struct_new') > 0, &
+			index(native_ir('struct P { x: i32, } let p = P{x = 1}; println(p);'), &
+				'@sy_struct_str') > 0, &
+			.not. native_ir_is_empty('struct C { n: i32, fn inc() { n += 1; } } ' &
+				//'let c = C{n = 0}; c.inc(); c.inc(); println(c.n);'), &
+			index(native_ir('struct P { x: i32, } let p = P{x = 1}; let q = p; ' &
+				//'q.x = 2; println(p.x);'), '@sy_struct_dup') > 0, &
+
+			! An optional struct can be `null`, which a member access checks for
+			index(native_ir('struct N { v: i32, next: ?N, } let n = N{v = 1, next = null}; ' &
+				//'println(n.v);'), 'member of a null struct') > 0, &
+
+			! An enum is the index of its variant, and its names are a table
+			index(native_ir('enum E { A, B = 5, } let e = E.B; println(i32(e), e);'), &
+				'E.B') > 0, &
+			.not. native_ir_is_empty('enum E { A, B, } let a = [E.A, E.B]; println(a);'), &
+
+			! A struct with a member that can't be compiled is diagnosed
+			diag_has_code(get_diags_native('fn g(): i32 { return 1; } ' &
+				//'struct S { f: fn(): i32, } let s = S{f = g};'), EC_NATIVE_UNSUPPORTED) &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
