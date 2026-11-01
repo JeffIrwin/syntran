@@ -55,17 +55,18 @@ C:\msys64\usr\bin\pacman.exe -S --needed --noconfirm mingw-w64-ucrt-x86_64-llvm 
 # Don't put C:\msys64\ucrt64\lib itself on -L, because its libgfortran.a would
 # shadow your toolchain's.  Copy the libraries that are needed into private dirs
 New-Item -ItemType Directory -Force build/llvm-win, build/openblas
-Copy-Item C:\msys64\ucrt64\lib\libLLVM-22.dll.a build/llvm-win/libLLVM.a
+Copy-Item (Get-Item C:\msys64\ucrt64\lib\libLLVM-*.dll.a).FullName build/llvm-win/libLLVM.a
 Copy-Item C:\msys64\ucrt64\lib\libopenblas.a build/openblas/libblas.a
 Copy-Item C:\msys64\ucrt64\lib\libopenblas.a build/openblas/liblapack.a
 
-# libLLVM-22.dll is loaded when syntran starts, and needs the runtime DLLs next to it
+# libLLVM-*.dll is loaded when syntran starts, and needs the runtime DLLs next to it
 $env:PATH = "C:\msys64\ucrt64\bin;$env:PATH"
 
 fpm install --test --features debug,llvm-blas --prefix ./build/native/ --flag "-Wno-tabs -static -fopenmp -Lbuild/openblas -Lbuild/llvm-win -Wl,--wrap=setlocale -Wl,--stack,67108864"
 ```
 
-(`libLLVM-22.dll.a` is named for the major version of LLVM that MSYS2 ships.)
+(The import library, `libLLVM-<major version>.dll.a`, is found with a wildcard,
+since MSYS2 bumps the version of LLVM.)
 
 The flags other than the `-L`s are the same as for any Windows build of syntran.
 Compiling a program links it with `gcc`, or `$CC`.  A program which uses `@` or

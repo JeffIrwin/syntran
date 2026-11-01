@@ -590,12 +590,13 @@
 
 					# Private dirs on -L, since C:\\msys64\\ucrt64\\lib itself would \n
 					# shadow the toolchain's libgfortran.a.  The LLVM one is an \n
-					# import library, so syntran loads libLLVM-22.dll from \n
+					# import library (its name has the major version of LLVM, which \n
+# MSYS2 bumps), so syntran loads libLLVM-*.dll from \n
 					# C:\\msys64\\ucrt64\\bin at run time \n
 					New-Item -ItemType Directory -Force build/openblas, build/llvm-win | Out-Null \n
 					Copy-Item C:\\msys64\\ucrt64\\lib\\libopenblas.a build/openblas/libblas.a \n
 					Copy-Item C:\\msys64\\ucrt64\\lib\\libopenblas.a build/openblas/liblapack.a \n
-					Copy-Item C:\\msys64\\ucrt64\\lib\\libLLVM-22.dll.a build/llvm-win/libLLVM.a \n
+					Copy-Item (Get-Item C:\\msys64\\ucrt64\\lib\\libLLVM-*.dll.a).FullName build/llvm-win/libLLVM.a \n
 				"
 			},
 			{
@@ -616,7 +617,7 @@
 				"
 					set -exu \n
 
-					# libLLVM-22.dll and the DLLs it needs, for this step only, so \n
+					# libLLVM-*.dll and the DLLs it needs, for this step only, so \n
 					# that they don't shadow the runner's gfortran \n
 					export PATH=\"/c/msys64/ucrt64/bin:$PATH\" \n
 					llvm-config --version \n
