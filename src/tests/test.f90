@@ -3888,6 +3888,19 @@ subroutine unit_test_rhs_slc_1(npass, nfail)
 			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7; 2, 2, 2]; sum(m[:,:,:]);', quiet) == '28', &
 			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7; 2, 2, 2]; sum(m[0,:,:]);', quiet) == '12', &
 			eval('let m = [0, 1, 2, 3, 4, 5, 6, 7; 2, 2, 2]; sum(m[:,0,:]);', quiet) == '10', &
+			! Regression: a stepped or reversed range on a non-last dimension
+			! used to never wrap in get_next_subscript(), which assumed step 1
+			eval('let m = [0,1,2,3,4,5,6,7,8; 3,3]; let s = m[0:3:2, :];' &
+				//'return [s[0,0], s[0,1], s[0,2]];', quiet) == '[0, 3, 6]', &
+			eval('let m = [0,1,2,3,4,5,6,7,8; 3,3]; std::shape(m[0:3:2, :]);', quiet) == '[1, 3]', &
+			eval('let m = [0,1,2,3,4,5,6,7,8; 3,3]; sum(m[0:3:2, :]);', quiet) == '9', &
+			eval('let m = [0,1,2,3,4,5,6,7,8; 3,3]; let s = m[2:-1:0, :];' &
+				//'return [s[0,0], s[1,0], s[0,2], s[1,2]];', quiet) == '[2, 1, 8, 7]', &
+			eval('let m = [0,1,2,3,4,5,6,7,8; 3,3]; sum(m[0:3:3, 0:3:3]);', quiet) == '0', &
+			eval('let m = [0,1,2,3,4,5,6,7; 2,2,2]; let s = m[:, 1:-1:-1, :];' &
+				//'return [s[0,0,0], s[0,1,0], s[0,0,1], s[1,1,1]];', quiet) == '[2, 0, 6, 5]', &
+			eval('let m = [0,1,2,3,4,5,6,7; 2,2,2]; let s = m[1:-1:-1, :, 0:2:2];' &
+				//'return [s[0,0,0], s[1,0,0], s[0,1,0], s[1,1,0]];', quiet) == '[1, 0, 3, 2]', &
 			! Omitted lower/upper bounds
 			eval('let v = [0: 10]; v[3:];',         quiet) == '[3, 4, 5, 6, 7, 8, 9]',  &
 			eval('let v = [0: 10]; v[:4];',         quiet) == '[0, 1, 2, 3]',            &
@@ -3979,6 +3992,10 @@ subroutine unit_test_lhs_slc_1(npass, nfail)
 	tests = &
 		[   &
 			eval('let v = [0: 5]; v[1: 4] = [3:-1:0]; v;', quiet) == '[0, 3, 2, 1, 4]', &
+			eval('let m = [0; 3,3]; m[0:3:2, :] = [7,8,9; 1,3]; [m[0,0], m[0,1], m[0,2], m[1,0], m[2,2]];', &
+				quiet) == '[7, 8, 9, 0, 0]', &
+			eval('let m = [0; 3,3]; m[2:-1:0, :] = [1,2,3,4,5,6; 2,3]; [m[0,0], m[1,0], m[2,0], m[1,2], m[2,2]];', &
+				quiet) == '[0, 2, 1, 6, 5]', &
 			eval('let v = [0: 5]; v[1: 4] += [10; 3]; v;', quiet) == '[0, 11, 12, 13, 4]', &
 			eval('let v = [0: 5]; v[1: 4] += [10; 3]; sum(v);', quiet) == '40', &
 			eval('let v = [0: 5]; v[1: 4] += 10; v;', quiet) == '[0, 11, 12, 13, 4]', &

@@ -32,12 +32,10 @@ module syntran__core_m
 
 	! TODO:
 	!  - llvm compiled backend
-	!    * Side finding (VM bug, out of scope, report only): a[0:3:2, :] of a 3x3 gives
-	!      [1, 4, 4] in the VM; native gives the correct [1, 4, 7] (row 0).
 	!      + can/should the repl use llvm jit?
 	!    * fpm commands are getting unweildy with all these feature options.
 	!      update build.sh with args to enable llvm, blas, etc. (on by default?)
-	!    * windows ci/cd
+	!    * test (manually) all aoc solutions in its repo
 	!    * dockerfile, at least in the rocky one which ships the official binary
 	!    * build devx -- i don't like having openblas and llvm libs under
 	!      "build" dir because they get nuked on cleaning. maybe make a
