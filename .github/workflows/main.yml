@@ -638,6 +638,8 @@
 					export CC=\"gcc -static -fopenmp -L$PWD/build/openblas\" \n
 					./build/native/bin/syntran --quiet --native hello.exe -c 'println(\"hello \", 6 * 7);' \n
 					[[ \"$(./hello.exe)\" == \"hello 42\" ]] \n
+					# The same in memory, with no C compiler or file \n
+					[[ \"$(./build/native/bin/syntran --quiet --jit -c 'println(\"hello \", 6 * 7);')\" == \"hello 42\" ]] \n
 				"
 			},
 			{
@@ -680,6 +682,8 @@
 					# End to end, with the C compiler that links the program \n
 					./build/native/bin/syntran --quiet --native hello -c 'println(\"hello \", 6 * 7);' \n
 					[[ \"$(./hello)\" == \"hello 42\" ]] \n
+					# The same in memory, with no C compiler or file \n
+					[[ \"$(./build/native/bin/syntran --quiet --jit -c 'println(\"hello \", 6 * 7);')\" == \"hello 42\" ]] \n
 				"
 			},
 			{
@@ -708,6 +712,8 @@
 					cmake --build build/llvm -j 4 \n
 					./build/llvm/syntran --quiet --native hello-cmake -c 'println(\"hello \", 6 * 7);' \n
 					[[ \"$(./hello-cmake)\" == \"hello 42\" ]] \n
+					# The same in memory, with no C compiler or file \n
+					[[ \"$(./build/llvm/syntran --quiet --jit -c 'println(\"hello \", 6 * 7);')\" == \"hello 42\" ]] \n
 					./build/llvm/test \n
 				"
 			}

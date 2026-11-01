@@ -73,7 +73,7 @@ subroutine eval_native(tree, state, val)
 	type(native_t) :: n
 	type(string_vector_t) :: diags
 
-	n%jit = .true.
+	n%capture = .true.
 	n%print_result = .true.
 	n%trim_result = .false.
 

@@ -75,13 +75,19 @@ module syntran__native_m
 		character(len = :), allocatable :: out
 
 		! Instead of writing a file, compile the program in memory and run it, in
-		! this process.  This is for testing, so that a unit test can evaluate
-		! thousands of small programs without linking each.  Then `out` isn't used
-		! and the outcome of the run is left in the fields below
+		! this process, like `--jit`.  Then `out` isn't used.  The program prints
+		! and exits as an executable would, so a runtime error or std::exit()
+		! ends syntran.  `script_args` of the state are its arguments, and
+		! `exit_code` is what it returns if it runs to the end
 		logical :: jit = .false.
 
-		! The outcome of a run with `jit`.  `status` is 0 if the program ran to the
-		! end, 1 if a runtime error stopped it, and 2 if it called std::exit()
+		! Like `jit`, but for testing, so that a unit test can evaluate thousands
+		! of small programs without linking each.  The program doesn't print or exit:
+		! the outcome of the run is left in the fields below
+		logical :: capture = .false.
+
+		! The outcome of a run with `capture`.  `status` is 0 if the program ran to
+		! the end, 1 if a runtime error stopped it, and 2 if it called std::exit()
 		integer :: status = 0, exit_code = 0
 
 		! The type of the result, so that a caller can read it from its text, and
@@ -209,9 +215,12 @@ module syntran__native_m
 		logical :: print_result = .true., trim_result = .false.
 
 		! The type of the value that the program printed as its result, and
-		! whether it is being run in memory, which wants a float exactly
+		! whether it is being run in memory and captured, which wants a float exactly
 		integer :: res_ty = unknown_type
-		logical :: jit = .false.
+		logical :: capture = .false.
+
+		! The arguments of the program, if it is run in memory
+		type(string_vector_t) :: script_args
 
 		! Counter for the names of string literals
 		integer :: nstr = 0
@@ -367,8 +376,9 @@ subroutine native_tree(tree, state, n, diags)
 	diags = new_string_vector()
 
 	em%print_result = n%print_result
-	em%jit = n%jit
+	em%capture = n%capture
 	em%trim_result  = n%trim_result
+	em%script_args = state%script_args
 	em%diags = new_string_vector()
 	em%fns => state%fns
 	em%vars => state%vars
@@ -6236,7 +6246,7 @@ subroutine emit_result(em, v)
 	end if
 
 	em%res_ty = v%ty
-	if (em%jit) then
+	if (em%capture) then
 		if (v%ty == f32_type) call rt_void(em, 'sy_result_f32', [v%v])
 		if (v%ty == f64_type) call rt_void(em, 'sy_result_f64', [v%v])
 	end if
@@ -7539,7 +7549,7 @@ end subroutine emit_for
 subroutine finish(em, n, diags)
 
 	! Check the module, optimize it, and write what `n%out` asks for, or run it in
-	! memory if `n%jit`
+	! memory if `n%jit` or `n%capture`
 
 	type(nemitter_t), intent(inout) :: em
 	type(native_t), intent(inout) :: n
@@ -7555,7 +7565,7 @@ subroutine finish(em, n, diags)
 
 	logical :: is_ll, is_obj
 
-	if (.not. n%jit) then
+	if (.not. (n%jit .or. n%capture)) then
 		if (.not. allocated(n%out)) then
 			call diags%push(err_prefix//'no output file for the native backend'//color_reset)
 			return
@@ -7579,7 +7589,7 @@ subroutine finish(em, n, diags)
 		return
 	end if
 
-	if (n%jit) then
+	if (n%jit .or. n%capture) then
 		call jit_run(em, n, diags)
 		return
 	end if
@@ -7665,13 +7675,17 @@ subroutine jit_run(em, n, diags)
 	! Run the module that is built, here, and keep what it did in `n`.  The JIT
 	! takes the module and its context, so the emitter must not free them
 
+	use, intrinsic :: iso_fortran_env, only: output_unit
+
 	type(nemitter_t), intent(inout) :: em
 	type(native_t), intent(inout) :: n
 	type(string_vector_t), intent(inout) :: diags
 
 	!********
 
-	integer :: status
+	character(len = :), allocatable :: argbuf
+
+	integer :: i, status, rc
 
 	type(c_ptr) :: m, c
 
@@ -7690,6 +7704,28 @@ subroutine jit_run(em, n, diags)
 	n%exit_code = 0
 	n%result = ''
 	n%message = ''
+
+	if (.not. n%capture) then
+		! Run it like an executable: the runtime prints and exits for itself, and
+		! main() only returns if the program ran to the end.  Anything of ours that
+		! is buffered goes out first, so that it comes before the program's output
+		flush(output_unit)
+
+		argbuf = ''
+		do i = 1, em%script_args%len_
+			argbuf = argbuf//em%script_args%v(i)%s//c_null_char
+		end do
+		argbuf = argbuf//c_null_char
+
+		status = sy_llvm_jit_exec(m, c, int(em%script_args%len_, c_int), cs(argbuf), rc)
+		if (status < 0) then
+			call diags%push(err_prefix//'internal error, LLVM failed to run the program: '// &
+				c_to_f_string(sy_llvm_jit_error())//color_reset)
+			return
+		end if
+		n%exit_code = rc
+		return
+	end if
 
 	status = sy_llvm_jit_run(m, c)
 	if (status < 0) then

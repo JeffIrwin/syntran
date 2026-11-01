@@ -26,6 +26,7 @@ module syntran__app_m
 			chdir              = .false., &
 			command_arg        = .false., &
 			interactive        = .false., &
+			jit                = .false., &
 			keep_unused_fns    = .false., &
 			native             = .false., &
 			permissive_return  = .false., &
@@ -241,6 +242,9 @@ function parse_args() result(args)
 			args%native = .true.
 			call get_next_arg(i, args%native_out)
 
+		case ("-j", "--jit")
+			args%jit = .true.
+
 		case ("--keep-unused-fns")
 			args%keep_unused_fns = .true.
 
@@ -341,6 +345,27 @@ function parse_args() result(args)
 		end if
 	end if
 
+	! --jit compiles with LLVM like --native, but runs the program instead of
+	! writing it
+	if (args%jit .and. .not. args%help .and. .not. args%version) then
+		if (.not. (args%syntran_file_arg .or. args%command_arg)) then
+			write(*,*) err_prefix//"--jit requires a <file.syntran> "// &
+				"or -c <cmd> argument"
+			error = .true.
+		end if
+		if (args%native .or. args%transpile .or. args%syntax_only .or. &
+			args%interactive) then
+			write(*,*) err_prefix//"--jit cannot be used with --native, "// &
+				"--transpile, --syntax-only, or --interactive"
+			error = .true.
+		end if
+		if (.not. native_available) then
+			write(*,*) err_prefix//"--jit requires a syntran that is built "// &
+				"with LLVM, i.e. with SYNTRAN_LLVM"
+			error = .true.
+		end if
+	end if
+
 	! It's an option of the transpiler, so it does nothing otherwise
 	if (args%keep_unused_fns .and. .not. args%transpile .and. .not. args%help .and. &
 		.not. args%version) then
@@ -363,13 +388,14 @@ function parse_args() result(args)
 				args%syntax_only      .or. &
 				args%transpile        .or. &
 				args%native           .or. &
+				args%jit              .or. &
 				args%version          .or. &
 				args%syntran_file_arg .or. &
 				args%help                  &
 			)
 
 		if (.not. args%command_arg .and. .not. args%syntax_only .and. &
-			.not. args%transpile .and. .not. args%native) then
+			.not. args%transpile .and. .not. args%native .and. .not. args%jit) then
 			write(*,*)
 			write(*,*) fg_bright_magenta//lang_name//' '//version//color_reset
 			write(*,*) fg_bright_magenta//url//color_reset
@@ -419,6 +445,7 @@ function parse_args() result(args)
 		write(*,*) "    --keep-unused-fns   With --transpile, also write fns that nothing calls"
 		write(*,*) "    -o --native <f>     Compile the program with LLVM to an executable <f>"
 		write(*,*) "                        (or an object <f>.o, or LLVM IR <f>.ll)"
+		write(*,*) "    -j --jit            Compile the program with LLVM and run it right away"
 		write(*,*) "    -- <args>...        Pass remaining arguments to script via std::args()"
 		write(*,*)
 

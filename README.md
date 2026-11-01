@@ -452,6 +452,8 @@ syntran --native fib fib.syntran
 This is new, and only a small part of the language is supported so far.  See
 [doc/native.md](doc/native.md) for what it is, and how to build syntran with it.
 
+To compile a program in memory and run it right away, use `--jit`.
+
 ### Other command-line arguments
 
 Run `syntran -h` to see a comprehensive listing of syntran command-line arguments:
@@ -485,6 +487,7 @@ Run `syntran -h` to see a comprehensive listing of syntran command-line argument
      --keep-unused-fns   With --transpile, also write fns that nothing calls
      -o --native <f>     Compile the program with LLVM to an executable <f>
                          (or an object <f>.o, or LLVM IR <f>.ll)
+     -j --jit            Compile the program with LLVM and run it right away
      -- <args>...        Pass remaining arguments to script via std::args()
 ```
 <!-- syntran-expect
@@ -513,6 +516,7 @@ Run `syntran -h` to see a comprehensive listing of syntran command-line argument
      --keep-unused-fns   With --transpile, also write fns that nothing calls
      -o --native <f>     Compile the program with LLVM to an executable <f>
                          (or an object <f>.o, or LLVM IR <f>.ll)
+     -j --jit            Compile the program with LLVM and run it right away
      -- <args>...        Pass remaining arguments to script via std::args()
 -->
 <!-- syntran-end -->

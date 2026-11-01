@@ -17,6 +17,21 @@ with `-c`.  What is written depends on the extension of the output:
 | `fib.o` | An object file, which is not linked |
 | `fib.ll` | The textual LLVM IR, for looking at what the compiler made of the program |
 
+To compile and run a program in one step, without writing a file, use `--jit`
+(or `-j`):
+
+```
+syntran --jit fib.syntran -- 30
+```
+
+The program is compiled in memory with LLVM's JIT and runs inside syntran's own
+process.  It prints, exits, and reads `std::args()` just as the executable
+would, so the output and exit status are the same.  It needs LLVM, but no C
+compiler.  The runtime that it uses is the one built into syntran, which is
+compiled with the flags of syntran, not `-ffp-contract=off`, and without BLAS.
+So float results, especially of `@` and `std::solve()`, can differ from an
+executable in the last digits.  Use `--native` if that matters.
+
 By default, the compiled program prints the value of the last statement of the
 program when it finishes, just like the interpreter does.  Use `--quiet` to leave
 that out.
