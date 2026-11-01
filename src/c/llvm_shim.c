@@ -229,10 +229,11 @@ static LLVMOrcThreadSafeModuleRef sy_jit_wrap(void *module, void *ctx)
     return tsm;
 }
 
-/* Compile `module` and run its main().  This takes ownership of the module, and of
- * the context that it is in.  The result is what sy_jit_call() says, or -1 if LLVM
+/* Compile `module` and look up its main().  This takes ownership of the module, and of
+ * the context that it is in.  The result is 0 and the JIT, which the caller disposes of
+ * after it is done with the code, and the address of main().  Or it is -1 if LLVM
  * couldn't compile it, in which case sy_llvm_jit_error() says why */
-int sy_llvm_jit_run(void *module, void *ctx)
+static int sy_jit_load(void *module, void *ctx, LLVMOrcLLJITRef *out, uint64_t *main_addr)
 {
     LLVMOrcLLJITRef jit = NULL;
     LLVMOrcJITDylibRef jd;
@@ -242,7 +243,6 @@ int sy_llvm_jit_run(void *module, void *ctx)
     LLVMOrcCSymbolMapPair *pairs;
     size_t i, n = sizeof(sy_syms) / sizeof(sy_syms[0]);
     uint64_t addr = 0;
-    int status;
 
     sy_jit_err[0] = '\0';
 
@@ -304,10 +304,67 @@ int sy_llvm_jit_run(void *module, void *ctx)
         return sy_jit_fail(e, "cannot compile the module");
     }
 
-    status = sy_jit_call((int (*)(int, char **))(uintptr_t)addr);
-    e = LLVMOrcDisposeLLJIT(jit);
+    *out = jit;
+    *main_addr = addr;
+    return 0;
+}
+
+static void sy_jit_dispose(LLVMOrcLLJITRef jit)
+{
+    LLVMErrorRef e = LLVMOrcDisposeLLJIT(jit);
+
     if (e != NULL) LLVMDisposeErrorMessage(LLVMGetErrorMessage(e));
+}
+
+/* Compile `module` and run its main(), for the test suite.  The result is what
+ * sy_jit_call() says, or -1 if LLVM couldn't compile it */
+int sy_llvm_jit_run(void *module, void *ctx)
+{
+    LLVMOrcLLJITRef jit = NULL;
+    uint64_t addr = 0;
+    int status;
+
+    if (sy_jit_load(module, ctx, &jit, &addr) < 0) return -1;
+
+    status = sy_jit_call((int (*)(int, char **))(uintptr_t)addr);
+    sy_jit_dispose(jit);
     return status;
+}
+
+/* Compile `module` and run its main() as an executable does, for `syntran --jit`.
+ * `args` is `nargs` strings, one after another, each with its NUL.  The runtime
+ * prints a result or an error and exits the process for itself, so this only returns
+ * if the program ran to the end, with what main() returned in `status`.  The result
+ * is 0, or -1 if LLVM couldn't compile it */
+int sy_llvm_jit_exec(void *module, void *ctx, int nargs, const char *args, int *status)
+{
+    static char name[] = "syntran";
+    LLVMOrcLLJITRef jit = NULL;
+    uint64_t addr = 0;
+    char **argv;
+    int i;
+
+    if (sy_jit_load(module, ctx, &jit, &addr) < 0) return -1;
+
+    argv = (char **)malloc((size_t)(nargs + 2) * sizeof(*argv));
+    if (argv == NULL) {
+        snprintf(sy_jit_err, sizeof(sy_jit_err), "out of memory");
+        sy_jit_dispose(jit);
+        return -1;
+    }
+    argv[0] = name;
+    for (i = 0; i < nargs; i++) {
+        argv[i + 1] = (char *)args;
+        args += strlen(args) + 1;
+    }
+    argv[nargs + 1] = NULL;
+
+    *status = ((int (*)(int, char **))(uintptr_t)addr)(nargs + 1, argv);
+    fflush(stdout);
+
+    free(argv);
+    sy_jit_dispose(jit);
+    return 0;
 }
 
 const char *sy_llvm_jit_error(void)

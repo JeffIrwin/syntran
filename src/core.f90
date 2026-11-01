@@ -37,13 +37,16 @@ module syntran__core_m
 	!    * build devx -- i don't like having openblas and llvm libs under
 	!      "build" dir because they get nuked on cleaning. maybe make a
 	!      gitignored "lib" dir?
-	!    * binary packaging? any llvm dll's? third party notice?
+	!      + maybe obviated by build.sh improvements like auto lib detection
+	!    * --cd apparently does not work with --jit. test any other sus combos
+	!      too
+	!    * run src/benchmarks with new aot/jit columns
+	!    * --version output should show build config, whether blas or llvm were
+	!      linked, whether blas is openblas or reference, etc.
+	!    * binary packaging? any llvm dll/so/dylib's? third party notice?
+	!    * optimization options? at least give consideration to what the default
+	!      should be
 	!    * parity with vm, not with transpiler
-	!    * '--native' should have a short option, maybe -o ?
-	!    * 'syntran -h' output is too wide in console, not just the new options
-	!      either
-	!    * what's going on with the sy_ipow_* implementations in syntran_crt.c?
-	!      looks like some repeated squaring algorithm, but is this optimal?
 	!    * remove transpiler backend? not sure its worth it if we have a
 	!      compiler (especially one which has even better parity with the vm).
 	!      maybe much later, the bytecode vm could also be removed

@@ -636,6 +636,21 @@ module syntran__llvm_c_m
 			integer(c_int) :: sy_llvm_jit_run
 		end function sy_llvm_jit_run
 
+		! Same, but as an executable runs: main() is called with the `nargs` arguments
+		! in `args`, which are NUL-terminated strings one after another.  The runtime
+		! prints and exits for itself, so this only returns if the program ran to the
+		! end, when `status` is what main() returned.  The result is 0, or -1 if LLVM
+		! failed
+		function sy_llvm_jit_exec(m, ctx, nargs, args, status) &
+				bind(c, name = "sy_llvm_jit_exec")
+			import :: c_ptr, c_int, c_char
+			type(c_ptr), value :: m, ctx
+			integer(c_int), value :: nargs
+			character(kind = c_char), intent(in) :: args(*)
+			integer(c_int), intent(out) :: status
+			integer(c_int) :: sy_llvm_jit_exec
+		end function sy_llvm_jit_exec
+
 		function sy_llvm_jit_error() bind(c, name = "sy_llvm_jit_error")
 			import :: c_ptr
 			type(c_ptr) :: sy_llvm_jit_error

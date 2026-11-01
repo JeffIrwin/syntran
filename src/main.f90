@@ -70,12 +70,14 @@ program main
 			call syntran_write_transpiled(transpile, args%transpile_out, io)
 		end if
 
-	else if (args%native) then
+	else if (args%native .or. args%jit) then
 		! Compile the program to machine code with LLVM, instead of running it.
+		! With --jit, run it right away in this process instead of writing a file.
 		! The value of the last statement is only printed by the compiled
 		! program if we're not --quiet, like the interpreter
 		native%print_result = .not. args%quiet
-		native%out = args%native_out
+		native%jit = args%jit
+		if (args%native) native%out = args%native_out
 
 		if (args%syntran_file_arg) then
 			res = syntran_interpret_file(args%syntran_file, &
@@ -85,6 +87,10 @@ program main
 			res = syntran_eval(args%command, script_args = args%script_args, &
 				native = native, io = io)
 		end if
+
+		! A jit'd program that ran to the end leaves its exit status here.  One that
+		! hit a runtime error or called std::exit() already exited the process
+		if (args%jit .and. io == EXIT_SUCCESS) io = native%exit_code
 
 	else if (args%interactive) then
 		! "Interactive" keeps running in the REPL with the same vars and fns
