@@ -105,9 +105,9 @@ On Windows, use MSYS2's ucrt64 LLVM (`pacman -S mingw-w64-ucrt-x86_64-llvm`),
 not the official installer, which targets MSVC.  `doc/native.md` has the exact
 commands.  The gotchas, each with a `_WIN32` branch in the source:
 
-- `C:\msys64\ucrt64\bin` must be first on the `PATH` for `libLLVM-22.dll`, but
+- `C:\msys64\ucrt64\bin` must be first on the `PATH` for `libLLVM-*.dll`, but
   `C:\msys64\ucrt64\lib` must **not** be on `-L` (its `libgfortran.a` shadows the
-  toolchain's).  Copy `libLLVM-22.dll.a` to `build/llvm-win/libLLVM.a` and use
+  toolchain's).  Copy `libLLVM-*.dll.a` to `build/llvm-win/libLLVM.a` and use
   `-Lbuild/llvm-win`
 - gfortran doesn't define `_WIN32` or `__MINGW32__` for the preprocessor, so
   `src/native.F90` checks `OS=Windows_NT` at run time (`is_windows()`), to quote
