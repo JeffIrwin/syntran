@@ -368,6 +368,7 @@ src/tests/test-src/struct/test-08.syntran
 src/tests/test-src/struct/test-09.syntran
 src/tests/test-src/struct/test-10.syntran
 src/tests/test-src/struct/test-11.syntran
+src/tests/test-src/struct/test-12.syntran
 src/tests/test-src/struct/test-methods.syntran
 src/tests/test-src/switch/switch_helper.syntran
 src/tests/test-src/switch/test-01.syntran

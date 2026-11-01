@@ -6806,6 +6806,7 @@ subroutine unit_test_struct_long(npass, nfail)
 			interpret_file(path//'test-09.syntran', quiet) == 'true', &
 			interpret_file(path//'test-10.syntran', quiet) == 'true', &
 			interpret_file(path//'test-11.syntran', quiet) == 'true', &
+			interpret_file(path//'test-12.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
