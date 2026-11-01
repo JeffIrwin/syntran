@@ -39,6 +39,9 @@ module syntran__core_m
 	!      update build.sh with args to enable llvm, blas, etc. (on by default?)
 	!    * windows ci/cd
 	!    * dockerfile, at least in the rocky one which ships the official binary
+	!    * build devx -- i don't like having openblas and llvm libs under
+	!      "build" dir because they get nuked on cleaning. maybe make a
+	!      gitignored "lib" dir?
 	!    * binary packaging? any llvm dll's? third party notice?
 	!    * parity with vm, not with transpiler
 	!    * '--native' should have a short option, maybe -o ?
