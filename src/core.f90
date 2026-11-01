@@ -38,13 +38,19 @@ module syntran__core_m
 	!    * fpm commands are getting unweildy with all these feature options.
 	!      update build.sh with args to enable llvm, blas, etc. (on by default?)
 	!    * windows ci/cd
-	!    * binary packaging? any llvm dll's?
+	!    * dockerfile, at least in the rocky one which ships the official binary
+	!    * binary packaging? any llvm dll's? third party notice?
 	!    * parity with vm, not with transpiler
 	!    * '--native' should have a short option, maybe -o ?
 	!    * 'syntran -h' output is too wide in console, not just the new options
 	!      either
 	!    * what's going on with the sy_ipow_* implementations in syntran_crt.c?
 	!      looks like some repeated squaring algorithm, but is this optimal?
+	!    * remove transpiler backend? not sure its worth it if we have a
+	!      compiler (especially one which has even better parity with the vm).
+	!      maybe much later, the bytecode vm could also be removed
+	!  - self-hosted compiler
+	!    * pre-req: need a way to interface and call c api libs
 	!  - massive old readme bug:
 	!    * "recursive functions are not possible currently"
 	!    * of course the sentence before is wrong too, which says fns need to be
