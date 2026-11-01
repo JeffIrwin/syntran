@@ -1,0 +1,77 @@
+
+// Stores to a member with a subscript that has subscripts of its own, like
+// `p.prog[p.prog[1]] = x`.  The inner subscripts must be evaluated, not
+// mistaken for the outer ones
+
+struct P
+{
+	prog: [i32; :],
+	ip: i32,
+
+	fn step()
+	{
+		// The intcode shape: both subscripts are members
+		prog[prog[ip + 1]] = 42;
+		ip += 2;
+	}
+}
+
+struct C
+{
+	n: i32,
+	fn bump() { n += 1; }
+	const fn get(): i32 { return n; }
+}
+
+struct Q
+{
+	cs: [C; :],
+	v: [i32; :],
+}
+
+let ok = true;
+
+let k = [2, 0];
+let p = P{prog = [0, 2, 0], ip = 0};
+
+p.prog[k[0]] = 45;
+ok = ok and all(p.prog == [0, 2, 45]);
+
+p.prog[p.prog[1]] = 42;
+ok = ok and all(p.prog == [0, 2, 42]);
+
+p.prog[k[1]] += 7;
+ok = ok and all(p.prog == [7, 2, 42]);
+
+p.prog[k[k[1]]] -= 2;
+ok = ok and all(p.prog == [7, 2, 40]);
+
+let s = P{prog = [0, 2, 0, 0], ip = 0};
+s.step();
+ok = ok and all(s.prog == [0, 2, 42, 0]) and s.ip == 2;
+
+let q = Q{cs = [C{n = 10}, C{n = 20}], v = [5, 6, 7]};
+let j = [1, 0];
+
+q.v[j[0]] += 100;
+ok = ok and all(q.v == [5, 106, 7]);
+
+q.cs[j[0]].n = 30;
+ok = ok and q.cs[0].n == 10 and q.cs[1].n == 30;
+
+q.cs[j[j[1]]].bump();
+ok = ok and q.cs[0].n == 10 and q.cs[1].n == 31;
+
+q.v[q.cs[j[1]].n - 9] = -1;
+ok = ok and all(q.v == [5, -1, 7]);
+
+// The index is made by a method call on a copied-back receiver
+let cs = [C{n = 1}, C{n = 2}];
+cs[j[0]].bump();
+ok = ok and cs[0].n == 1 and cs[1].n == 3;
+
+q.v[cs[j[0]].get() - 2] = 9;
+ok = ok and all(q.v == [5, 9, 7]);
+
+return ok;
+

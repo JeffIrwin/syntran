@@ -2143,8 +2143,10 @@ recursive function scalar_index(em, sub) result(i)
 
 	type(nval_t) :: v
 
+	integer :: n_saved
+
 	type(c_ptr) :: ignored
-	type(c_ptr), allocatable :: tmp(:)
+	type(c_ptr), allocatable :: tmp(:), saved(:)
 
 	if (em%idx_mode == 2) then
 		! Made already, before the value of the assignment
@@ -2153,7 +2155,24 @@ recursive function scalar_index(em, sub) result(i)
 		return
 	end if
 
-	v = emit_expr(em, sub)
+	if (em%idx_mode == 1) then
+		! The subscript expression is made outside of the recording, since the
+		! subscripts inside of it (`a.b[k[0]]`) are not the ones to be replayed.
+		! A copied-back method call in it also uses the slots
+		n_saved = em%idx_n
+		if (allocated(em%idx_slots)) then
+			saved = em%idx_slots
+		else
+			allocate(saved(0))
+		end if
+		em%idx_mode = 0
+		v = emit_expr(em, sub)
+		em%idx_mode = 1
+		em%idx_n = n_saved
+		call move_alloc(saved, em%idx_slots)
+	else
+		v = emit_expr(em, sub)
+	end if
 	if (v%ty /= i32_type .and. v%ty /= i64_type) then
 		call unsupported(em, 'a subscript of type `'//kind_name(v%ty)//'`')
 		v = dummy_val(em, i64_type)
