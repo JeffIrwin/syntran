@@ -237,7 +237,7 @@ function parse_args() result(args)
 			args%transpile = .true.
 			call get_next_arg(i, args%transpile_out)
 
-		case ("--native")
+		case ("-o", "--native")
 			args%native = .true.
 			call get_next_arg(i, args%native_out)
 
@@ -411,11 +411,14 @@ function parse_args() result(args)
 		write(*,*) "    -i --interactive    Interpret a file then start an interactive shell"
 		write(*,*) "    -q --quiet          Don't print the banner, only errors and println calls"
 		write(*,*) "    --permissive-return Downgrade missing-return errors to warnings"
-		write(*,*) "    --cd                Resolve the script's relative file paths against its own directory"
+		write(*,*) "    --cd                Resolve the script's relative file paths against"
+		write(*,*) "                        its own directory"
 		write(*,*) "    -s --syntax-only    Parse and type check without running the program"
-		write(*,*) "    -t --transpile <f>  Write the program as Fortran source to <f> ('-' for stdout) instead of running it"
-		write(*,*) "    --keep-unused-fns   With --transpile, also write the fns that nothing calls"
-		write(*,*) "    --native <f>        Compile the program with LLVM to an executable <f> (or an object <f>.o, or LLVM IR <f>.ll)"
+		write(*,*) "    -t --transpile <f>  Write the program as Fortran source to <f> ('-' for"
+		write(*,*) "                        stdout) instead of running it"
+		write(*,*) "    --keep-unused-fns   With --transpile, also write fns that nothing calls"
+		write(*,*) "    -o --native <f>     Compile the program with LLVM to an executable <f>"
+		write(*,*) "                        (or an object <f>.o, or LLVM IR <f>.ll)"
 		write(*,*) "    -- <args>...        Pass remaining arguments to script via std::args()"
 		write(*,*)
 

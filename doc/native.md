@@ -8,7 +8,7 @@ syntran --native fib fib.syntran
 ./fib
 ```
 
-`--native` takes the output file, then the input is a file, or a command string
+`--native` (or `-o`) takes the output file, then the input is a file, or a command string
 with `-c`.  What is written depends on the extension of the output:
 
 | Output | What it is |
