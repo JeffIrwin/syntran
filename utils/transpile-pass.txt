@@ -63,6 +63,7 @@ src/tests/test-src/array-i32/test-06.syntran
 src/tests/test-src/array-i32/test-07.syntran
 src/tests/test-src/array-i32/test-08.syntran
 src/tests/test-src/array-i32/test-09.syntran
+src/tests/test-src/array-i32/test-10.syntran
 src/tests/test-src/array-str/test-01.syntran
 src/tests/test-src/array-str/test-02.syntran
 src/tests/test-src/bitwise/test-01.syntran
