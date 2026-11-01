@@ -285,7 +285,7 @@
 				"run":
 				"
 					#export OMP_NUM_THREADS=1 \n
-					bash ./build.sh debug \n
+					bash ./build.sh debug --no-llvm \n
 					#ls -ltrh build/Debug \n
 				"
 			},
@@ -331,7 +331,7 @@
 				"name": "Test release",
 				"run":
 				"
-					bash ./build.sh release \n
+					bash ./build.sh release --no-llvm --blas \n
 					time ./build/Release/test \n
 				"
 			},
@@ -373,7 +373,7 @@
 					gfortran-14 --version \n
 					which gfortran-14 \n
 
-					bash ./build.sh release \n
+					bash ./build.sh release --no-llvm --blas \n
 
 					# TODO: copy to a subdir for easier upload \n
 
@@ -793,7 +793,7 @@
 					# fpm (see CMakeLists.txt), which also builds the core lib \n
 					# once for both the test and long exes, instead of fpm's \n
 					# separate rebuild per target. \n
-					SYNTRAN_INTEL=1 bash ./build.sh release \n
+					SYNTRAN_INTEL=1 bash ./build.sh release --no-llvm --blas \n
 					./build/Release/test \n
 
 					# Long/AOC suite is the CI bottleneck and runs single-threaded \n

@@ -140,6 +140,23 @@ Other `fpm` commands are available, such as `fpm test`, `fpm run`, `fpm
 install`, etc.  Most of the example commands in this documentation will assume
 that cmake was used, but there is usually an fpm alternative.
 
+`build.sh` can drive either build system with the same options, so you don't
+have to remember the `fpm --features` combinations:
+
+<!-- syntran-begin mode=skip reason="builds the interpreter itself; out of scope for output testing" -->
+```
+./build.sh                       # cmake, debug
+./build.sh release --fpm --test  # fpm, release, then run the short tests
+./build.sh --no-llvm --no-blas   # opt out of the optional libraries
+```
+<!-- syntran-end -->
+
+The native backend ([LLVM](doc/native.md)) and BLAS/LAPACK are both
+auto-detected, and the options `--llvm`/`--no-llvm` and `--blas`/`--no-blas`
+force them on or off.  `--blas-dir DIR` looks for BLAS/LAPACK in a nonstandard
+directory.  The fpm binaries are installed to `build/fpm/<Debug|Release>/bin/`.
+Run `./build.sh --help` for the full list.
+
 As an alternative to installing dependencies yourself, you can run syntran in a
 docker container using the included [Dockerfile](Dockerfile).  See the
 [instructions for docker](doc/docker.md).
@@ -176,8 +193,8 @@ slower for large matrices.  Nothing needs to be installed:
 
 <!-- syntran-begin mode=skip reason="builds the interpreter itself; out of scope for output testing" -->
 ```
-# cmake, via build.sh
-SYNTRAN_NO_BLAS=1 ./build.sh
+# cmake, via build.sh.  SYNTRAN_NO_BLAS=1 ./build.sh does the same
+./build.sh --no-blas
 
 # fpm, which needs version 0.13.0 or later
 fpm build --features release,noblas

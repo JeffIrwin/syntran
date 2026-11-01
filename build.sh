@@ -1,21 +1,86 @@
 #!/bin/bash
 
-set -exu
-set +u
+set -eu
+
+usage() {
+	cat <<'EOF'
+Usage: build.sh [debug|release] [options] [-- extra args]
+
+Builds syntran with cmake, or with fpm if --fpm is given.
+
+  debug, release       Build type (default: debug).  --debug/--release also work
+  --fpm                Build with fpm instead of cmake.  The binary is installed
+                       to build/fpm/<Debug|Release>/bin/
+  --llvm, --no-llvm    Build the native backend (`syntran --native`), which needs
+                       LLVM 17+.  Default: on if llvm-config is found
+  --blas, --no-blas    Link BLAS/LAPACK for `@`, std::solve(), etc., or use the
+                       portable Fortran fallbacks.  Default: on if the libraries
+                       are found and link.  SYNTRAN_NO_BLAS=1 means --no-blas
+  --blas-dir DIR       Look for BLAS/LAPACK in DIR instead of the usual places
+  --test               Run the short tests after building
+  -h, --help           Show this help
+
+Anything after `--` is passed on to the cmake configure step, or to `fpm install`
+EOF
+}
+
+die() {
+	echo "Error: $*" >&2
+	exit 1
+}
+
+# Echo a command, then run it
+run() {
+	printf '+' >&2
+	printf ' %q' "$@" >&2
+	echo >&2
+	"$@"
+}
 
 config=Debug
+use_fpm=
+llvm=auto
+blas=auto
+blas_dir_arg=
+run_tests=
+passthru=()
 
 # I used to use ${1,,} for lowercase conversion, but that's bash 4 which isn't
 # available on poor little macos :(
-if [[ "${1}" == "release" || "${1}" == "Release" ]]; then
-	config=Release
-elif [[ "${1}" == "debug" || "${1}" == "Debug" ]]; then
-	config=Debug
-elif [[ $# -gt 0 ]]; then
-	echo "Error: unrecognized cmd arg \"$1\""
-	exit -1
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+		release|Release|--release) config=Release;;
+		debug|Debug|--debug)       config=Debug;;
+		--fpm)                     use_fpm=1;;
+		--llvm)                    llvm=on;;
+		--no-llvm)                 llvm=off;;
+		--blas)                    blas=on;;
+		--no-blas)                 blas=off;;
+		--blas-dir)
+			[[ $# -gt 1 ]] || die "--blas-dir needs a directory"
+			blas_dir_arg="$2"
+			shift
+			;;
+		--blas-dir=*)              blas_dir_arg="${1#--blas-dir=}";;
+		--test)                    run_tests=1;;
+		-h|--help)                 usage; exit 0;;
+		--)
+			shift
+			passthru=("$@")
+			break
+			;;
+		*) echo "Error: unrecognized cmd arg \"$1\"" >&2; usage >&2; exit 1;;
+	esac
+	shift
+done
+
+if [[ "$blas" == auto && -n "${SYNTRAN_NO_BLAS:-}" ]]; then
+	blas=off
 fi
-set -u
+
+# Lowercase, for fpm's profiles
+config_lc=debug
+[[ "$config" == Release ]] && config_lc=release
 
 ## Uncomment to tell cmake to use ifort instead of gfortran
 #export SYNTRAN_INTEL=true
@@ -30,7 +95,7 @@ case "${unameOut}" in
 esac
 echo "machine = ${machine}"
 
-generator=""
+generator=()
 if [[ "$machine" == "MinGw" ]]; then
 	generator=(-G 'MSYS Makefiles')
 	if [[ -z "${SYNTRAN_INTEL:-}" ]]; then
@@ -76,22 +141,325 @@ if [[ "$machine" == "Mac" ]]; then
 
 fi
 
-#build=build
-build="build/$config"
+#===============================================================================
+# LLVM, for the native backend (`syntran --native`, see doc/native.md)
 
-# BLAS/LAPACK is required by default (for `@`, std::solve(), and
-# std::lu_factor()/std::lu_solve()).  This cmake
-# build still uses the portable fallbacks on Windows, since the runner has no
-# BLAS that find_package(LAPACK) knows about.  The shipped Windows binary comes
-# from the fpm build in CI, which links OpenBLAS (see main.yml).  Anyone can
-# also opt out on any platform with `SYNTRAN_NO_BLAS=1 bash build.sh`
-extra=()
-if [[ "$machine" == "MinGw" || -n "${SYNTRAN_NO_BLAS:-}" ]]; then
-	extra+=(-DSYNTRAN_NO_BLAS=ON)
+# Print the path of an llvm-config that is version 17 or later.  Homebrew's llvm
+# is keg-only, so it's not on the PATH
+find_llvm_config() {
+	local c v
+	for c in "$(command -v llvm-config || true)" \
+		/opt/homebrew/opt/llvm/bin/llvm-config \
+		/usr/local/opt/llvm/bin/llvm-config
+	do
+		[[ -n "$c" && -x "$c" ]] || continue
+		v="$("$c" --version 2>/dev/null | cut -d. -f1)"
+		if [[ "$v" =~ ^[0-9]+$ ]] && (( v >= 17 )); then
+			echo "$c"
+			return 0
+		fi
+	done
+	return 1
+}
+
+llvm_config=
+if [[ "$llvm" != off ]]; then
+	llvm_config="$(find_llvm_config || true)"
+	if [[ -n "$llvm_config" ]]; then
+		llvm=on
+	elif [[ "$llvm" == on ]]; then
+		die "--llvm needs llvm-config from LLVM 17 or later.  Try \`brew install llvm\` or \`sudo apt install llvm-dev\`"
+	else
+		llvm=off
+		llvm_desc="off (llvm-config 17+ not found)"
+	fi
+fi
+if [[ "$llvm" == on ]]; then
+	llvm_desc="on ($llvm_config, $("$llvm_config" --version))"
+elif [[ "$llvm" == off && -z "${llvm_desc:-}" ]]; then
+	llvm_desc="off (--no-llvm)"
 fi
 
-# The `${extra[@]+...}` form is for bash 3.2 on macOS, where expanding an empty
-# array under `set -u` is an "unbound variable" error
-cmake -S . -B "$build" "${generator[@]}" ${extra[@]+"${extra[@]}"} -DCMAKE_BUILD_TYPE=$config -DCMAKE_Fortran_COMPILER=$FC
-cmake --build "$build" --config $config --parallel
+#===============================================================================
+# BLAS/LAPACK for `@`, std::solve(), and std::lu_factor()/std::lu_solve()
+#
+# Looks for the libraries in the usual places, creates a shim dir if they're only
+# available as libopenblas, and then checks that a program can really link them
+# the same way that fpm.toml and CMakeLists.txt do (-llapack -lblas)
 
+blas_on=0
+blas_desc=
+blas_L=              # dir for -L (fpm) or CMAKE_LIBRARY_PATH (cmake), if needed
+
+# Is there a lib<name> in dir $1?  $2 is the name
+has_lib() {
+	local e
+	for e in so dylib a dll.a; do
+		[[ -e "$1/lib$2.$e" ]] && return 0
+	done
+	return 1
+}
+
+# Print the first existing lib<name> in dir $1, preferring a static library on
+# Windows where we link with -static
+first_lib() {
+	local e exts="so dylib a dll.a"
+	[[ "$machine" == MinGw ]] && exts="a dll.a so dylib"
+	for e in $exts; do
+		if [[ -e "$1/lib$2.$e" ]]; then
+			echo "$1/lib$2.$e"
+			return 0
+		fi
+	done
+	return 1
+}
+
+# Does dir $1 have OpenBLAS, or both reference BLAS and LAPACK?
+dir_has_blas() {
+	has_lib "$1" openblas || { has_lib "$1" blas && has_lib "$1" lapack; }
+}
+
+# Print the dirs to look in, in order of preference
+blas_candidates() {
+	local d
+	case "$machine" in
+		Mac)
+			echo /opt/homebrew/opt/openblas/lib
+			echo /usr/local/opt/openblas/lib
+			;;
+		Linux)
+			if command -v pkg-config >/dev/null 2>&1; then
+				pkg-config --variable=libdir openblas 2>/dev/null || true
+			fi
+			for d in \
+				/usr/lib/x86_64-linux-gnu/openblas-pthread /usr/lib/x86_64-linux-gnu \
+				/usr/lib/aarch64-linux-gnu/openblas-pthread /usr/lib/aarch64-linux-gnu \
+				/usr/lib64/openblas /usr/lib64 /usr/lib /usr/local/lib \
+				/opt/OpenBLAS/lib
+			do
+				echo "$d"
+			done
+			;;
+		MinGw)
+			echo build/openblas
+			echo /c/msys64/ucrt64/lib
+			echo /ucrt64/lib
+			;;
+	esac
+}
+
+# Try to link a tiny program against BLAS and LAPACK with the link flags in "$@".
+# Leaves the linker output in $probe_log
+probe_log=
+probe_blas() {
+	local d rc=0
+	d="$(mktemp -d)"
+	cat > "$d/probe.f90" <<'EOF'
+program probe
+	implicit none
+	external :: dgemm, dgesv
+	double precision :: a(1,1), b(1,1), c(1,1)
+	integer :: ipiv(1), info
+	a = 1.d0
+	b = 1.d0
+	c = 0.d0
+	call dgemm('N', 'N', 1, 1, 1, 1.d0, a, 1, b, 1, 0.d0, c, 1)
+	call dgesv(1, 1, a, 1, ipiv, b, 1, info)
+	print *, c, info
+end program probe
+EOF
+	"$FC" -o "$d/probe" "$d/probe.f90" "$@" -llapack -lblas > "$d/log" 2>&1 || rc=$?
+	probe_log="$(tail -n 5 "$d/log")"
+	rm -rf "$d"
+	return $rc
+}
+
+# Make build/openblas/lib{blas,lapack} from the libopenblas in dir $1, since
+# fpm.toml links -llapack -lblas but brew, MSYS2 and /opt/OpenBLAS only ship
+# libopenblas.  Windows has to copy because it can't symlink.  Sets blas_L
+make_blas_shim() {
+	local src ext shim=build/openblas
+	src="$(first_lib "$1" openblas)"
+	ext="${src##*/libopenblas.}"
+	mkdir -p "$shim"
+	if [[ "$machine" == MinGw ]]; then
+		cp -f "$src" "$shim/libblas.$ext"
+		cp -f "$src" "$shim/liblapack.$ext"
+	else
+		ln -sf "$src" "$shim/libblas.$ext"
+		ln -sf "$src" "$shim/liblapack.$ext"
+	fi
+	blas_L="$shim"
+}
+
+detect_blas() {
+	local d found= flags
+	flags=()
+
+	if [[ "$blas" == off ]]; then
+		blas_desc="off (--no-blas)"
+		return
+	fi
+	if [[ "$machine" == MinGw && -z "$use_fpm" && "$blas" == auto ]]; then
+		# CMakeLists.txt's find_package(LAPACK) doesn't find the MSYS2 libraries
+		blas_desc="off (cmake doesn't look for BLAS on Windows)"
+		return
+	fi
+
+	if [[ -n "$blas_dir_arg" ]]; then
+		dir_has_blas "$blas_dir_arg" || die "no libopenblas, or libblas and liblapack, in $blas_dir_arg"
+		found="$blas_dir_arg"
+	elif [[ "$machine" == Mac && -d /System/Library/Frameworks/Accelerate.framework ]]; then
+		# `-llapack -lblas` resolves to Accelerate with no -L
+		probe_blas && { blas_on=1; blas_desc="on (Accelerate)"; return; }
+	else
+		for d in $(blas_candidates); do
+			if dir_has_blas "$d"; then
+				found="$d"
+				break
+			fi
+		done
+	fi
+
+	# Only link as -llapack -lblas if the dir has those names, otherwise shim them
+	if [[ -n "$found" ]]; then
+		if ! has_lib "$found" openblas; then
+			echo "Note: reference BLAS in $found is much slower than OpenBLAS.  See README.md" >&2
+		fi
+		if has_lib "$found" blas && has_lib "$found" lapack; then
+			[[ -n "$blas_dir_arg" || "$found" == build/openblas ]] && blas_L="$found"
+		else
+			make_blas_shim "$found"
+			[[ "$machine" == Linux ]] && flags+=(-Wl,-rpath,"$found")
+		fi
+	fi
+
+	# First with nothing but the default search path, unless the dir is needed
+	if [[ -z "$blas_L" ]] && probe_blas; then
+		blas_on=1
+		blas_desc="on (default library path)"
+		[[ -n "$found" ]] && blas_desc="on ($found)"
+		return
+	elif [[ -n "$blas_L" ]] && probe_blas "-L$blas_L" ${flags[@]+"${flags[@]}"}; then
+		blas_on=1
+		blas_desc="on ($found)"
+		[[ "$found" != "$blas_L" ]] && blas_desc="on ($found, via $blas_L)"
+		blas_rpath=(${flags[@]+"${flags[@]}"})
+		return
+	fi
+
+	# Found a dir but the default path didn't work: try it explicitly.  Never put
+	# MSYS2's own lib dir on -L, because its libgfortran.a would shadow ours
+	if [[ "$machine" != MinGw && -z "$blas_L" && -n "$found" ]] && probe_blas "-L$found"; then
+		blas_on=1
+		blas_L="$found"
+		blas_desc="on ($found)"
+		return
+	fi
+
+	if [[ "$blas" == on ]]; then
+		# Forced.  Let the build fail loudly if the libraries are really missing
+		blas_on=1
+		blas_desc="on (forced by --blas, but a test link failed)"
+		return
+	fi
+
+	blas_L=
+	blas_rpath=()
+	if [[ -n "$found" ]]; then
+		echo "Warning: found BLAS/LAPACK in $found but a test program wouldn't link:" >&2
+		echo "$probe_log" | sed 's/^/    /' >&2
+		blas_desc="off (found $found, but it doesn't link.  Using the slower portable fallbacks)"
+	else
+		case "$machine" in
+			Mac)   hint="brew install openblas";;
+			Linux) hint="sudo apt-get install libopenblas-dev";;
+			*)     hint="see the BLAS section of README.md";;
+		esac
+		echo "Warning: no BLAS/LAPACK found.  Using the slower portable fallbacks.  Try: $hint" >&2
+		blas_desc="off (not found)"
+	fi
+}
+
+blas_rpath=()
+detect_blas
+
+#===============================================================================
+
+tool=cmake
+[[ -n "$use_fpm" ]] && tool=fpm
+echo "build: tool=$tool config=$config blas=$blas_desc llvm=$llvm_desc"
+
+if [[ -z "$use_fpm" ]]; then
+
+	build="build/$config"
+
+	# Always spell out the options.  Otherwise a value cached by an earlier
+	# `build.sh` in the same build dir would stick
+	extra=()
+	if [[ "$blas_on" == 1 ]]; then
+		extra+=(-DSYNTRAN_NO_BLAS=OFF)
+		[[ -n "$blas_L" ]] && extra+=(-DCMAKE_LIBRARY_PATH="$PWD/$blas_L")
+	else
+		extra+=(-DSYNTRAN_NO_BLAS=ON)
+	fi
+	if [[ "$llvm" == on ]]; then
+		extra+=(-DSYNTRAN_LLVM=ON -DCMAKE_PREFIX_PATH="$("$llvm_config" --prefix)")
+	else
+		extra+=(-DSYNTRAN_LLVM=OFF)
+	fi
+
+	# The `${extra[@]+...}` form is for bash 3.2 on macOS, where expanding an
+	# empty array under `set -u` is an "unbound variable" error
+	run cmake -S . -B "$build" ${generator[@]+"${generator[@]}"} ${extra[@]+"${extra[@]}"} \
+		-DCMAKE_BUILD_TYPE=$config -DCMAKE_Fortran_COMPILER=$FC \
+		${passthru[@]+"${passthru[@]}"}
+	run cmake --build "$build" --config $config --parallel
+
+	if [[ -n "$run_tests" ]]; then
+		run "./$build/test"
+	fi
+
+else
+
+	# Features take the place of --profile, and only one feature can link
+	# libraries, so BLAS + LLVM is its own feature.  See fpm.toml
+	features=()
+	if [[ "$blas_on" == 1 && "$llvm" == on ]]; then
+		features=(--features "$config_lc,llvm-blas")
+	elif [[ "$llvm" == on ]]; then
+		features=(--features "$config_lc,noblas,llvm")
+	elif [[ "$blas_on" == 1 ]]; then
+		features=(--profile "$config_lc")
+	else
+		features=(--features "$config_lc,noblas")
+	fi
+
+	# Same warning flags as cmake and utils/build.rsp
+	flags="-Wno-tabs"
+	[[ "$config" == Debug ]] && flags="$flags -DSYNTRAN_BOUNDS_CHECK"
+	[[ -n "$blas_L" ]] && flags="$flags -L$blas_L"
+	[[ ${#blas_rpath[@]} -gt 0 ]] && flags="$flags ${blas_rpath[*]}"
+	if [[ "$machine" == MinGw ]]; then
+		# See CLAUDE.md for why these are required on Windows
+		flags="$flags -static -fopenmp -Wl,--wrap=setlocale -Wl,--stack,67108864"
+		[[ "$llvm" == on && -d build/llvm-win ]] && flags="$flags -Lbuild/llvm-win"
+	fi
+
+	if [[ "$llvm" == on ]]; then
+		# fpm can't find the LLVM libraries by itself
+		export LIBRARY_PATH="$("$llvm_config" --libdir)${LIBRARY_PATH:+:$LIBRARY_PATH}"
+	fi
+	export FPM_FC="$FC"
+
+	# `fpm install` instead of `fpm build` gives a stable path to the binaries,
+	# instead of a build/gfortran_<hash>/ directory that changes with the flags
+	prefix="build/fpm/$config"
+	run fpm install --test "${features[@]}" --flag "$flags" --prefix "$prefix" \
+		${passthru[@]+"${passthru[@]}"}
+
+	if [[ -n "$run_tests" ]]; then
+		run "./$prefix/test/test"
+	fi
+
+fi

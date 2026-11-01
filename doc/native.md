@@ -28,11 +28,20 @@ same as the interpreter's.
 
 ## Building syntran with LLVM
 
-This is opt-in, because it needs LLVM (version 17 or later) installed.  Without
-it, syntran builds as always and `--native` is an error.
+This needs LLVM (version 17 or later) installed.  Without it, syntran builds as
+always and `--native` is an error.  `build.sh` turns the native backend on if it
+finds `llvm-config` (including Homebrew's keg-only one), and `--llvm` or
+`--no-llvm` overrides that:
 
 ```
 brew install llvm          # or: sudo apt install llvm-dev
+./build.sh                 # cmake
+./build.sh --fpm           # fpm, installed to build/fpm/Debug/bin/
+```
+
+The same thing, by hand with fpm:
+
+```
 export LIBRARY_PATH=$(llvm-config --libdir)
 fpm build --features debug,llvm-blas
 ```
