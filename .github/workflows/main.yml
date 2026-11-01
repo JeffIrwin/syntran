@@ -560,7 +560,8 @@
 			"matrix": {
 				"os": [
 					"ubuntu-24.04",
-					"macOS-latest"
+					"macOS-latest",
+					"windows-latest"
 				]
 			}
 		},
@@ -578,6 +579,26 @@
 				}
 			},
 			{
+				"if": "matrix.os == 'windows-latest'",
+				"name": "Install LLVM windows",
+				"run":
+				"
+					# MSYS2's ucrt64 LLVM targets the same C runtime and triple \n
+					# (x86_64-w64-windows-gnu) as the runner's mingw gfortran. \n
+					# The official LLVM installers target MSVC instead \n
+					C:\\msys64\\usr\\bin\\pacman.exe -Sy --noconfirm --needed mingw-w64-ucrt-x86_64-llvm mingw-w64-ucrt-x86_64-openblas \n
+
+					# Private dirs on -L, since C:\\msys64\\ucrt64\\lib itself would \n
+					# shadow the toolchain's libgfortran.a.  The LLVM one is an \n
+					# import library, so syntran loads libLLVM-22.dll from \n
+					# C:\\msys64\\ucrt64\\bin at run time \n
+					New-Item -ItemType Directory -Force build/openblas, build/llvm-win | Out-Null \n
+					Copy-Item C:\\msys64\\ucrt64\\lib\\libopenblas.a build/openblas/libblas.a \n
+					Copy-Item C:\\msys64\\ucrt64\\lib\\libopenblas.a build/openblas/liblapack.a \n
+					Copy-Item C:\\msys64\\ucrt64\\lib\\libLLVM-22.dll.a build/llvm-win/libLLVM.a \n
+				"
+			},
+			{
 				"if": "matrix.os == 'ubuntu-24.04'",
 				"name": "Install LLVM ubuntu",
 				"run": "sudo apt-get install gfortran-14 libopenblas-dev llvm-dev cmake"
@@ -588,6 +609,38 @@
 				"run": "brew install gcc@14 llvm"
 			},
 			{
+				"if": "matrix.os == 'windows-latest'",
+				"name": "Test fpm with LLVM windows",
+				"shell": "bash",
+				"run":
+				"
+					set -exu \n
+
+					# libLLVM-22.dll and the DLLs it needs, for this step only, so \n
+					# that they don't shadow the runner's gfortran \n
+					export PATH=\"/c/msys64/ucrt64/bin:$PATH\" \n
+					llvm-config --version \n
+
+					# The same flags as the \"Test fpm windows\" step, plus the \n
+					# private library dirs \n
+					flags=\"-Wno-tabs -static -fopenmp -Lbuild/openblas -Lbuild/llvm-win -Wl,--wrap=setlocale -Wl,--stack,67108864\" \n
+
+					fpm test test --features debug,llvm-blas --flag \"$flags\" \n
+
+					# Every program the tests evaluate, compiled and run in memory \n
+					fpm test test --features debug,llvm-blas --flag \"$flags\" -- --native \n
+
+					fpm install --features debug,llvm-blas --flag \"$flags\" --prefix ./build/native/ \n
+
+					# End to end.  A compiled program is linked with gcc, which \n
+					# needs the same flags as syntran to find BLAS \n
+					export CC=\"gcc -static -fopenmp -L$PWD/build/openblas\" \n
+					./build/native/bin/syntran --quiet --native hello.exe -c 'println(\"hello \", 6 * 7);' \n
+					[[ \"$(./hello.exe)\" == \"hello 42\" ]] \n
+				"
+			},
+			{
+				"if": "matrix.os != 'windows-latest'",
 				"name": "Test fpm with LLVM",
 				"shell": "bash",
 				"env": {

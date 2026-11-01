@@ -42,6 +42,40 @@ LLVM, and `--features debug,noblas,llvm` is LLVM without BLAS.  With CMake, pass
 `-DSYNTRAN_LLVM=ON`, and `-DCMAKE_PREFIX_PATH=$(llvm-config --prefix)` if it
 isn't found.
 
+### Windows
+
+Use the LLVM from [MSYS2](https://www.msys2.org)'s `ucrt64` environment, which
+targets the same C runtime (UCRT) and `x86_64-w64-windows-gnu` triple as a mingw
+gfortran.  The official LLVM installers target MSVC, which doesn't link with
+gcc.  You need fpm 0.13.0 or later for the `llvm` features.
+
+```powershell
+C:\msys64\usr\bin\pacman.exe -S --needed --noconfirm mingw-w64-ucrt-x86_64-llvm mingw-w64-ucrt-x86_64-openblas
+
+# Don't put C:\msys64\ucrt64\lib itself on -L, because its libgfortran.a would
+# shadow your toolchain's.  Copy the libraries that are needed into private dirs
+New-Item -ItemType Directory -Force build/llvm-win, build/openblas
+Copy-Item C:\msys64\ucrt64\lib\libLLVM-22.dll.a build/llvm-win/libLLVM.a
+Copy-Item C:\msys64\ucrt64\lib\libopenblas.a build/openblas/libblas.a
+Copy-Item C:\msys64\ucrt64\lib\libopenblas.a build/openblas/liblapack.a
+
+# libLLVM-22.dll is loaded when syntran starts, and needs the runtime DLLs next to it
+$env:PATH = "C:\msys64\ucrt64\bin;$env:PATH"
+
+fpm install --test --features debug,llvm-blas --prefix ./build/native/ --flag "-Wno-tabs -static -fopenmp -Lbuild/openblas -Lbuild/llvm-win -Wl,--wrap=setlocale -Wl,--stack,67108864"
+```
+
+(`libLLVM-22.dll.a` is named for the major version of LLVM that MSYS2 ships.)
+
+The flags other than the `-L`s are the same as for any Windows build of syntran.
+Compiling a program links it with `gcc`, or `$CC`.  A program which uses `@` or
+`std::solve()` links BLAS and LAPACK, so give `CC` the same flags:
+
+```powershell
+$env:CC = "gcc -static -fopenmp -L$PWD/build/openblas"
+build\native\bin\syntran --native hello.exe -c 'println(\"hello\");'
+```
+
 ## What is supported
 
 This is a subset of the language so far:

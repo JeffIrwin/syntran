@@ -7625,7 +7625,9 @@ subroutine finish(em, n, diags)
 	end block
 	close(ou)
 
+	! mingw has `gcc`, but no `cc`
 	cc = 'cc'
+	if (is_windows()) cc = 'gcc'
 	call get_environment_variable('CC', length = ln)
 	if (ln > 0) then
 		deallocate(cc)
@@ -7708,10 +7710,36 @@ end subroutine jit_run
 
 !===============================================================================
 
+function is_windows() result(r)
+
+	! gfortran doesn't define _WIN32 for the preprocessor, so ask the environment
+	! instead.  Windows sets OS for every process, including under Git Bash
+
+	logical :: r
+
+	character(len = 16) :: os
+
+	call get_environment_variable('OS', os)
+	r = trim(os) == 'Windows_NT'
+
+end function is_windows
+
+!===============================================================================
+
 function sh_quote(s) result(r)
+
+	! `execute_command_line()` runs the command in cmd.exe on Windows, which
+	! doesn't treat single quotes as quotes
+
 	character(len = *), intent(in) :: s
 	character(len = :), allocatable :: r
-	r = "'"//s//"'"
+
+	if (is_windows()) then
+		r = '"'//s//'"'
+	else
+		r = "'"//s//"'"
+	end if
+
 end function sh_quote
 
 !===============================================================================

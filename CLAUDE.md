@@ -101,6 +101,25 @@ too.  CMake spells it `-DSYNTRAN_LLVM=ON`.  The test suite must pass both with
 and without LLVM, since the latter is the default: the groups `native_rt` and
 `native` in `src/tests/test.f90` only exercise the backend if it's built in.
 
+On Windows, use MSYS2's ucrt64 LLVM (`pacman -S mingw-w64-ucrt-x86_64-llvm`),
+not the official installer, which targets MSVC.  `doc/native.md` has the exact
+commands.  The gotchas, each with a `_WIN32` branch in the source:
+
+- `C:\msys64\ucrt64\bin` must be first on the `PATH` for `libLLVM-22.dll`, but
+  `C:\msys64\ucrt64\lib` must **not** be on `-L` (its `libgfortran.a` shadows the
+  toolchain's).  Copy `libLLVM-22.dll.a` to `build/llvm-win/libLLVM.a` and use
+  `-Lbuild/llvm-win`
+- gfortran doesn't define `_WIN32` or `__MINGW32__` for the preprocessor, so
+  `src/native.F90` checks `OS=Windows_NT` at run time (`is_windows()`), to quote
+  with `"` and to default to `gcc`, since mingw has no `cc`
+- The UCRT's `printf` rounds ties away from zero, unlike glibc and libgfortran,
+  so `src/rt/syntran_crt.c` selects mingw's stdio with `__USE_MINGW_ANSI_STDIO`
+- The JIT can't `longjmp()` out of JIT'd frames on Windows (no SEH unwind info),
+  so the runtime uses `__builtin_setjmp`/`__builtin_longjmp`, and
+  `src/c/llvm_shim.c` defines the `__main` that LLVM calls on windows-gnu
+- Regenerate `src/native_rt.f90` with `CC=gcc bash src/gen_native_rt.sh`, since
+  there is no `cc`
+
 #### Getting a stable path to a built binary
 
 fpm puts its output in `build/gfortran_<HASH>/`, where the hash changes with
