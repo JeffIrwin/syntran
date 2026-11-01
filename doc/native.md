@@ -58,6 +58,10 @@ targets the same C runtime (UCRT) and `x86_64-w64-windows-gnu` triple as a mingw
 gfortran.  The official LLVM installers target MSVC, which doesn't link with
 gcc.  You need fpm 0.13.0 or later for the `llvm` features.
 
+From Git Bash, `bash build.sh --fpm` (or just `bash build.sh`) finds the MSYS2
+LLVM and OpenBLAS, makes the private dirs below, and passes the flags for you.
+To do it by hand:
+
 ```powershell
 C:\msys64\usr\bin\pacman.exe -S --needed --noconfirm mingw-w64-ucrt-x86_64-llvm mingw-w64-ucrt-x86_64-openblas
 
