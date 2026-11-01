@@ -460,11 +460,14 @@ Run `syntran -h` to see a comprehensive listing of syntran command-line argument
      -i --interactive    Interpret a file then start an interactive shell
      -q --quiet          Don't print the banner, only errors and println calls
      --permissive-return Downgrade missing-return errors to warnings
-     --cd                Resolve the script's relative file paths against its own directory
+     --cd                Resolve the script's relative file paths against
+                         its own directory
      -s --syntax-only    Parse and type check without running the program
-     -t --transpile <f>  Write the program as Fortran source to <f> ('-' for stdout) instead of running it
-     --keep-unused-fns   With --transpile, also write the fns that nothing calls
-     --native <f>        Compile the program with LLVM to an executable <f> (or an object <f>.o, or LLVM IR <f>.ll)
+     -t --transpile <f>  Write the program as Fortran source to <f> ('-' for
+                         stdout) instead of running it
+     --keep-unused-fns   With --transpile, also write fns that nothing calls
+     -o --native <f>     Compile the program with LLVM to an executable <f>
+                         (or an object <f>.o, or LLVM IR <f>.ll)
      -- <args>...        Pass remaining arguments to script via std::args()
 ```
 <!-- syntran-expect
@@ -485,11 +488,14 @@ Run `syntran -h` to see a comprehensive listing of syntran command-line argument
      -i --interactive    Interpret a file then start an interactive shell
      -q --quiet          Don't print the banner, only errors and println calls
      --permissive-return Downgrade missing-return errors to warnings
-     --cd                Resolve the script's relative file paths against its own directory
+     --cd                Resolve the script's relative file paths against
+                         its own directory
      -s --syntax-only    Parse and type check without running the program
-     -t --transpile <f>  Write the program as Fortran source to <f> ('-' for stdout) instead of running it
-     --keep-unused-fns   With --transpile, also write the fns that nothing calls
-     --native <f>        Compile the program with LLVM to an executable <f> (or an object <f>.o, or LLVM IR <f>.ll)
+     -t --transpile <f>  Write the program as Fortran source to <f> ('-' for
+                         stdout) instead of running it
+     --keep-unused-fns   With --transpile, also write fns that nothing calls
+     -o --native <f>     Compile the program with LLVM to an executable <f>
+                         (or an object <f>.o, or LLVM IR <f>.ll)
      -- <args>...        Pass remaining arguments to script via std::args()
 -->
 <!-- syntran-end -->
