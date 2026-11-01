@@ -189,7 +189,17 @@ run_one() {
 	(cd "$rundir" && with_timeout "$base.exe" > "$base.out" 2> "$base.err" < /dev/null)
 	out_status=$?
 
-	if [ "$out_status" -ne "$exp_status" ] || ! cmp -s "$base.out" "$base.exp"; then
+	# On Windows, the interpreter's Fortran writes a record ending with CR LF, but
+	# a newline inside a string that it writes (a multi-line error report, or
+	# `char(10)`) is just LF.  A C program has stdout in text mode and turns every
+	# LF into CR LF.  Both are right, so only compare the text
+	same=0
+	if [ "${OS:-}" = Windows_NT ]; then
+		cmp -s <(tr -d '\r' < "$base.out") <(tr -d '\r' < "$base.exp") && same=1
+	else
+		cmp -s "$base.out" "$base.exp" && same=1
+	fi
+	if [ "$out_status" -ne "$exp_status" ] || [ "$same" -eq 0 ]; then
 		{
 			echo "FAIL (output differs, status $out_status vs $exp_status): $f"
 			[ "$VERBOSE" -eq 1 ] && diff "$base.exp" "$base.out" | head -20 | cut -c1-200

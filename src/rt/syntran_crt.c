@@ -16,6 +16,14 @@
  * is a no-op.
  */
 
+/* On Windows, the printf of the UCRT rounds a tie away from zero (`%.0f` of 2.5 is
+ * "3"), while glibc, libgfortran, and the interpreter round it to even.  Floats are
+ * written with snprintf, so use mingw's own stdio, which rounds to even, for the
+ * output to be the same as the interpreter's.  This has to come before any include */
+#if defined(__MINGW32__) && !defined(__USE_MINGW_ANSI_STDIO)
+#define __USE_MINGW_ANSI_STDIO 1
+#endif
+
 #include <errno.h>
 #include <math.h>
 #include <stdint.h>
@@ -42,8 +50,20 @@
  * fns which start and end a run are at the end of this file */
 #include <setjmp.h>
 
-static int sy_jit = 0;
+#if defined(_WIN32) && defined(__GNUC__)
+/* longjmp() on Windows unwinds the stack with SEH tables, and the frames of JIT'd code
+ * have none registered, so it fails with STATUS_BAD_FUNCTION_TABLE.  The builtin only
+ * restores the registers and the stack pointer */
+static void *sy_jit_env[5];
+#define SY_SETJMP() __builtin_setjmp(sy_jit_env)
+#define SY_LONGJMP() __builtin_longjmp(sy_jit_env, 1)
+#else
 static jmp_buf sy_jit_env;
+#define SY_SETJMP() setjmp(sy_jit_env)
+#define SY_LONGJMP() longjmp(sy_jit_env, 1)
+#endif
+
+static int sy_jit = 0;
 static char *sy_jit_res = NULL;
 static char *sy_jit_msg = NULL;
 static int sy_jit_kind = 0, sy_jit_code = 0;
@@ -56,7 +76,7 @@ static void sy_jit_leave(int kind, int code, char *msg)
     sy_jit_msg = msg;
     sy_jit_kind = kind;
     sy_jit_code = code;
-    longjmp(sy_jit_env, 1);
+    SY_LONGJMP();
 }
 #endif
 
@@ -3238,7 +3258,7 @@ int sy_jit_call(int (*fn)(int, char **))
     memset(sy_unit_used, 0, sizeof(sy_unit_used));
 
     sy_jit = 1;
-    if (setjmp(sy_jit_env) == 0) fn(1, argv);
+    if (SY_SETJMP() == 0) fn(1, argv);
     sy_jit = 0;
     fflush(stdout);
 

@@ -60,7 +60,12 @@ void sy_llvm_init_native(void)
  * are stable.  A LLVMContextRef that the emitter made is handed over to the JIT
  * along with its module */
 
+#ifdef _WIN32
+#include <windows.h>
+#include <psapi.h>
+#else
 #include <dlfcn.h>
+#endif
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -138,6 +143,36 @@ static const struct {
 
 static char sy_jit_err[1024];
 
+#ifdef _WIN32
+/* On windows-gnu, LLVM starts main() with a call to `__main`, which libgcc provides to
+ * run the static constructors of a program.  A JIT'd module has none, and the process
+ * has already run its own, so it is a no-op */
+static void sy_jit_main_stub(void) {}
+#endif
+
+/* Look up a symbol by name in the process, like dlsym(RTLD_DEFAULT, name).  Windows has
+ * no such thing, so ask each module that is loaded.  That finds LLVM's fns whichever
+ * DLL it is in, without naming a version like libLLVM-22.dll here */
+static void *sy_dlsym(const char *name)
+{
+#ifdef _WIN32
+    HMODULE mods[1024];
+    DWORD need = 0;
+    size_t i;
+    void *p;
+
+    if (!K32EnumProcessModules(GetCurrentProcess(), mods, sizeof(mods), &need)) return NULL;
+    if (need > sizeof(mods)) need = sizeof(mods);
+    for (i = 0; i < need / sizeof(mods[0]); i++) {
+        p = (void *)GetProcAddress(mods[i], name);
+        if (p != NULL) return p;
+    }
+    return NULL;
+#else
+    return dlsym(RTLD_DEFAULT, name);
+#endif
+}
+
 static int sy_jit_fail(LLVMErrorRef e, const char *what)
 {
     char *m = LLVMGetErrorMessage(e);
@@ -160,7 +195,7 @@ static LLVMOrcThreadSafeModuleRef sy_jit_wrap(void *module, void *ctx)
     LLVMOrcThreadSafeModuleRef tsm;
     void *ctx2, *buf, *module2 = NULL;
 
-    *(void **)&from_ctx = dlsym(RTLD_DEFAULT, "LLVMOrcCreateNewThreadSafeContextFromLLVMContext");
+    *(void **)&from_ctx = sy_dlsym("LLVMOrcCreateNewThreadSafeContextFromLLVMContext");
     if (from_ctx != NULL) {
         /* Disposing of this reference after the module is handed over keeps the
          * context alive until the JIT is done */
@@ -170,7 +205,7 @@ static LLVMOrcThreadSafeModuleRef sy_jit_wrap(void *module, void *ctx)
         return tsm;
     }
 
-    *(void **)&get_ctx = dlsym(RTLD_DEFAULT, "LLVMOrcThreadSafeContextGetContext");
+    *(void **)&get_ctx = sy_dlsym("LLVMOrcThreadSafeContextGetContext");
     if (get_ctx == NULL) {
         snprintf(sy_jit_err, sizeof(sy_jit_err),
             "this LLVM has no way to run a module in its own context");
@@ -240,6 +275,14 @@ int sy_llvm_jit_run(void *module, void *ctx)
         pairs[i].Sym.Flags.GenericFlags = 1 | 4;
         pairs[i].Sym.Flags.TargetFlags = 0;
     }
+#ifdef _WIN32
+    pairs = (LLVMOrcCSymbolMapPair *)realloc(pairs, (n + 1) * sizeof(*pairs));
+    pairs[n].Name = LLVMOrcLLJITMangleAndIntern(jit, "__main");
+    pairs[n].Sym.Address = (uint64_t)(uintptr_t)&sy_jit_main_stub;
+    pairs[n].Sym.Flags.GenericFlags = 1 | 4;
+    pairs[n].Sym.Flags.TargetFlags = 0;
+    n++;
+#endif
     e = LLVMOrcJITDylibDefine(jd, LLVMOrcAbsoluteSymbols(pairs, n));
     free(pairs);
     if (e != NULL) {

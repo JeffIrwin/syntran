@@ -115,6 +115,8 @@ noblas.preprocess.cpp.macros = "SYNTRAN_NO_BLAS"
 #     fpm build --features debug,llvm-blas
 #     fpm build --features debug,noblas,llvm
 #
+# Windows needs MSYS2's LLVM and a few more flags, which doc/native.md lists
+#
 # Features replace --profile, so name debug/release here too.  fpm allows only
 # one feature to have a `build` table, so `llvm` can't be added to `blas`.
 # `llvm-blas` is both of them
