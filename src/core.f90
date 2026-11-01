@@ -32,9 +32,6 @@ module syntran__core_m
 
 	! TODO:
 	!  - llvm compiled backend
-	!      + can/should the repl use llvm jit?
-	!    * fpm commands are getting unweildy with all these feature options.
-	!      update build.sh with args to enable llvm, blas, etc. (on by default?)
 	!    * test (manually) all aoc solutions in its repo
 	!    * dockerfile, at least in the rocky one which ships the official binary
 	!    * build devx -- i don't like having openblas and llvm libs under
@@ -50,6 +47,9 @@ module syntran__core_m
 	!    * remove transpiler backend? not sure its worth it if we have a
 	!      compiler (especially one which has even better parity with the vm).
 	!      maybe much later, the bytecode vm could also be removed
+	!    * parked:
+	!      + can/should the repl use llvm jit? no, at least probably not until
+	!        we're ready to remove the bytecode vm entirely
 	!  - self-hosted compiler
 	!    * pre-req: need a way to interface and call c api libs
 	!  - massive old readme bug:

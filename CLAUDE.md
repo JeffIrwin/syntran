@@ -37,6 +37,19 @@ fpm run --profile debug -- file.syntran     # Run a syntran file
 yes | fpm clean             # Clean build artifacts
 ```
 
+#### build.sh
+
+`build.sh` wraps cmake, or fpm with `--fpm`, behind one set of options, so you
+don't have to assemble `--features`/`--flag`/`LIBRARY_PATH` by hand.  LLVM and
+BLAS are auto-detected (a link test, plus a search of the usual dirs), and
+forced with `--llvm`/`--no-llvm` and `--blas`/`--no-blas`.  fpm output goes to
+`build/fpm/<Debug|Release>/`.  `bash build.sh --help` lists everything.
+
+```bash
+bash build.sh --fpm --test     # fpm, debug, build + run the short tests
+bash build.sh release --no-llvm
+```
+
 #### Runtime bounds checking
 
 `-DSYNTRAN_BOUNDS_CHECK` turns an out-of-bounds `a[i]`/`s[i]`/slice/etc. into
