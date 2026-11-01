@@ -3592,6 +3592,9 @@ subroutine arr_slice_store(em, a, subs, ety, v)
 	type(c_ptr) :: valp, ignored
 
 	if (v%ty == array_type) then
+		! The runtime copies raw elements, so the rhs needs the type of the elements
+		! of the target, e.g. `a[:, i] = [x, y]` of an i32 array with i64 x and y
+		v = arr_cast(em, v, ety)
 		call rt_void(em, 'sy_arr_slice_set', [a, subs, v%v, LLVMConstNull(em%t_ptr)])
 	else
 		valp = entry_alloca(em, elem_ll(em, ety), 'fill')
@@ -3621,6 +3624,10 @@ subroutine place_store(em, pl, v)
 	type(c_ptr) :: a
 
 	if (.not. pl%has_subs) then
+		! An array member keeps the type of its elements, e.g. an i32 array that is
+		! assigned the i64 array `[x, y]`
+		if (pl%ty == array_type .and. v%ty == array_type .and. pl%elem /= unknown_type) &
+			v = arr_cast(em, v, pl%elem)
 		call elem_store(em, pl%p, pl%ty, v)
 		return
 	end if
