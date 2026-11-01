@@ -12,7 +12,8 @@ Builds syntran with cmake, or with fpm if --fpm is given.
   --fpm                Build with fpm instead of cmake.  The binary is installed
                        to build/fpm/<Debug|Release>/bin/
   --llvm, --no-llvm    Build the native backend (`syntran --native`), which needs
-                       LLVM 17+.  Default: on if llvm-config is found
+                       LLVM 17+.  Default: on if llvm-config is found, on the
+                       PATH or in the usual install dirs.  $LLVM_CONFIG names one
   --blas, --no-blas    Link BLAS/LAPACK for `@`, std::solve(), etc., or use the
                        portable Fortran fallbacks.  Default: on if the libraries
                        are found and link.  SYNTRAN_NO_BLAS=1 means --no-blas
@@ -144,22 +145,62 @@ fi
 #===============================================================================
 # LLVM, for the native backend (`syntran --native`, see doc/native.md)
 
-# Print the path of an llvm-config that is version 17 or later.  Homebrew's llvm
-# is keg-only, so it's not on the PATH
+# Print the major version of llvm-config $1, or nothing if it doesn't run
+llvm_major() {
+	local v
+	v="$("$1" --version 2>/dev/null | cut -d. -f1)"
+	[[ "$v" =~ ^[0-9]+$ ]] && echo "$v"
+	return 0
+}
+
+# Print the path of an llvm-config that is version 17 or later.  $LLVM_CONFIG
+# and then the PATH win.  Otherwise look in the places that a package manager
+# puts it when it's not on the PATH (Homebrew's llvm is keg-only, MSYS2's is
+# outside of Git Bash's PATH, and Debian versions its directories), and take
+# the newest
 find_llvm_config() {
-	local c v
-	for c in "$(command -v llvm-config || true)" \
-		/opt/homebrew/opt/llvm/bin/llvm-config \
-		/usr/local/opt/llvm/bin/llvm-config
-	do
+	local c v best= best_v=0 cands=()
+	for c in "${LLVM_CONFIG:-}" "$(command -v llvm-config || true)"; do
 		[[ -n "$c" && -x "$c" ]] || continue
-		v="$("$c" --version 2>/dev/null | cut -d. -f1)"
-		if [[ "$v" =~ ^[0-9]+$ ]] && (( v >= 17 )); then
+		v="$(llvm_major "$c")"
+		if [[ -n "$v" ]] && (( v >= 17 )); then
 			echo "$c"
 			return 0
 		fi
 	done
-	return 1
+
+	case "$machine" in
+		Mac)
+			cands=(/opt/homebrew/opt/llvm/bin/llvm-config /usr/local/opt/llvm/bin/llvm-config
+				/opt/homebrew/opt/llvm@*/bin/llvm-config /usr/local/opt/llvm@*/bin/llvm-config)
+			;;
+		Linux)
+			cands=(/usr/lib/llvm-*/bin/llvm-config /usr/lib64/llvm*/bin/llvm-config
+				/usr/bin/llvm-config-* /usr/local/bin/llvm-config-*)
+			;;
+		MinGw)
+			cands=(/c/msys64/ucrt64/bin/llvm-config.exe /ucrt64/bin/llvm-config.exe)
+			;;
+	esac
+	for c in ${cands[@]+"${cands[@]}"}; do
+		[[ -x "$c" ]] || continue
+		v="$(llvm_major "$c")"
+		if [[ -n "$v" ]] && (( v >= 17 && v > best_v )); then
+			best="$c"
+			best_v="$v"
+		fi
+	done
+	[[ -n "$best" ]] || return 1
+	echo "$best"
+}
+
+# llvm-config prints C:/... paths on Windows, and bash wants /c/...
+llvm_path() {
+	if [[ "$machine" == MinGw ]]; then
+		cygpath -u "$("$llvm_config" "$1")"
+	else
+		"$llvm_config" "$1"
+	fi
 }
 
 llvm_config=
@@ -168,17 +209,64 @@ if [[ "$llvm" != off ]]; then
 	if [[ -n "$llvm_config" ]]; then
 		llvm=on
 	elif [[ "$llvm" == on ]]; then
-		die "--llvm needs llvm-config from LLVM 17 or later.  Try \`brew install llvm\` or \`sudo apt install llvm-dev\`"
+		case "$machine" in
+			Mac)   hint="brew install llvm";;
+			Linux) hint="sudo apt install llvm-dev";;
+			MinGw) hint="pacman -S mingw-w64-ucrt-x86_64-llvm, in MSYS2";;
+			*)     hint="see doc/native.md";;
+		esac
+		die "--llvm needs llvm-config from LLVM 17 or later.  Try \`$hint\`, or set LLVM_CONFIG to the path of llvm-config"
 	else
 		llvm=off
 		llvm_desc="off (llvm-config 17+ not found)"
 	fi
 fi
+llvm_bindir=
 if [[ "$llvm" == on ]]; then
 	llvm_desc="on ($llvm_config, $("$llvm_config" --version))"
+	# libLLVM-*.dll is loaded when syntran starts, so its dir must be on the PATH
+	[[ "$machine" == MinGw ]] && llvm_bindir="$(llvm_path --bindir)"
 elif [[ "$llvm" == off && -z "${llvm_desc:-}" ]]; then
 	llvm_desc="off (--no-llvm)"
 fi
+
+# On Windows syntran loads libLLVM-*.dll when it starts, and Windows looks for
+# DLLs next to the exe before the PATH.  So put libLLVM and the DLLs that it needs
+# (libstdc++, zlib, etc.) next to the binaries in the dirs "$@", so that they run
+# without MSYS2 on the PATH.  They're hard links where possible, because libLLVM
+# is ~150 MB
+copy_llvm_dlls() {
+	local queue seen=" " f d dir
+	command -v objdump >/dev/null 2>&1 || {
+		echo "Warning: no objdump, so not copying libLLVM-*.dll next to the binaries." \
+			"Put $llvm_bindir on your PATH to run them" >&2
+		return 0
+	}
+
+	# The closure of the DLLs that libLLVM imports and that MSYS2 provides.  The
+	# rest are Windows system DLLs
+	queue="$(cd "$llvm_bindir" && ls libLLVM-*.dll 2>/dev/null | tail -n 1)"
+	[[ -n "$queue" ]] || die "no libLLVM-*.dll in $llvm_bindir"
+	while [[ -n "$queue" ]]; do
+		f="${queue%% *}"
+		[[ "$queue" == *" "* ]] && queue="${queue#* }" || queue=
+		[[ "$seen" == *" $f "* || ! -e "$llvm_bindir/$f" ]] && continue
+		seen="$seen$f "
+		for d in $(objdump -p "$llvm_bindir/$f" | awk '/DLL Name/ {print $3}'); do
+			queue="${queue:+$queue }$d"
+		done
+	done
+
+	for dir in "$@"; do
+		mkdir -p "$dir"
+		for f in $seen; do
+			[[ "$llvm_bindir/$f" -ef "$dir/$f" ]] && continue
+			cmp -s "$llvm_bindir/$f" "$dir/$f" && continue
+			rm -f "$dir/$f"
+			ln "$llvm_bindir/$f" "$dir/$f" 2>/dev/null || cp -f "$llvm_bindir/$f" "$dir/$f"
+		done
+	done
+}
 
 #===============================================================================
 # BLAS/LAPACK for `@`, std::solve(), and std::lu_factor()/std::lu_solve()
@@ -241,9 +329,11 @@ blas_candidates() {
 			done
 			;;
 		MinGw)
-			echo build/openblas
+			# The real install goes first, so that the copies in build/openblas
+			# get refreshed from it.  They're only a fallback (e.g. in CI)
 			echo /c/msys64/ucrt64/lib
 			echo /ucrt64/lib
+			echo build/openblas
 			;;
 	esac
 }
@@ -252,7 +342,10 @@ blas_candidates() {
 # Leaves the linker output in $probe_log
 probe_log=
 probe_blas() {
-	local d rc=0
+	local d rc=0 extra=()
+	# The same link flags as the builds below.  Without them OpenBLAS's static
+	# library has an undefined reference to omp_get_max_threads()
+	[[ "$machine" == MinGw ]] && extra=(-static -fopenmp)
 	d="$(mktemp -d)"
 	cat > "$d/probe.f90" <<'EOF'
 program probe
@@ -268,7 +361,7 @@ program probe
 	print *, c, info
 end program probe
 EOF
-	"$FC" -o "$d/probe" "$d/probe.f90" "$@" -llapack -lblas > "$d/log" 2>&1 || rc=$?
+	"$FC" -o "$d/probe" "$d/probe.f90" ${extra[@]+"${extra[@]}"} "$@" -llapack -lblas > "$d/log" 2>&1 || rc=$?
 	probe_log="$(tail -n 5 "$d/log")"
 	rm -rf "$d"
 	return $rc
@@ -283,8 +376,9 @@ make_blas_shim() {
 	ext="${src##*/libopenblas.}"
 	mkdir -p "$shim"
 	if [[ "$machine" == MinGw ]]; then
-		cp -f "$src" "$shim/libblas.$ext"
-		cp -f "$src" "$shim/liblapack.$ext"
+		# Only if changed, since cmake relinks when a library's timestamp does
+		cmp -s "$src" "$shim/libblas.$ext" || cp -f "$src" "$shim/libblas.$ext"
+		cmp -s "$src" "$shim/liblapack.$ext" || cp -f "$src" "$shim/liblapack.$ext"
 	else
 		ln -sf "$src" "$shim/libblas.$ext"
 		ln -sf "$src" "$shim/liblapack.$ext"
@@ -300,12 +394,6 @@ detect_blas() {
 		blas_desc="off (--no-blas)"
 		return
 	fi
-	if [[ "$machine" == MinGw && -z "$use_fpm" && "$blas" == auto ]]; then
-		# CMakeLists.txt's find_package(LAPACK) doesn't find the MSYS2 libraries
-		blas_desc="off (cmake doesn't look for BLAS on Windows)"
-		return
-	fi
-
 	if [[ -n "$blas_dir_arg" ]]; then
 		dir_has_blas "$blas_dir_arg" || die "no libopenblas, or libblas and liblapack, in $blas_dir_arg"
 		found="$blas_dir_arg"
@@ -400,6 +488,13 @@ if [[ -z "$use_fpm" ]]; then
 	if [[ "$blas_on" == 1 ]]; then
 		extra+=(-DSYNTRAN_NO_BLAS=OFF)
 		[[ -n "$blas_L" ]] && extra+=(-DCMAKE_LIBRARY_PATH="$PWD/$blas_L")
+		if [[ "$machine" == MinGw ]]; then
+			# FindBLAS tests its candidates with a link, which fails without
+			# OpenMP, and it would otherwise take libopenblas.dll.a from the
+			# MSYS2 prefix that LLVM puts on CMAKE_PREFIX_PATH, over our static
+			# libblas.a and liblapack.a
+			extra+=(-DBLA_VENDOR=Generic "-DCMAKE_REQUIRED_LINK_OPTIONS=-fopenmp;-static")
+		fi
 	else
 		extra+=(-DSYNTRAN_NO_BLAS=ON)
 	fi
@@ -415,6 +510,8 @@ if [[ -z "$use_fpm" ]]; then
 		-DCMAKE_BUILD_TYPE=$config -DCMAKE_Fortran_COMPILER=$FC \
 		${passthru[@]+"${passthru[@]}"}
 	run cmake --build "$build" --config $config --parallel
+
+	[[ -n "$llvm_bindir" ]] && copy_llvm_dlls "$build"
 
 	if [[ -n "$run_tests" ]]; then
 		run "./$build/test"
@@ -443,12 +540,23 @@ else
 	if [[ "$machine" == MinGw ]]; then
 		# See CLAUDE.md for why these are required on Windows
 		flags="$flags -static -fopenmp -Wl,--wrap=setlocale -Wl,--stack,67108864"
-		[[ "$llvm" == on && -d build/llvm-win ]] && flags="$flags -Lbuild/llvm-win"
 	fi
 
 	if [[ "$llvm" == on ]]; then
-		# fpm can't find the LLVM libraries by itself
-		export LIBRARY_PATH="$("$llvm_config" --libdir)${LIBRARY_PATH:+:$LIBRARY_PATH}"
+		if [[ "$machine" == MinGw ]]; then
+			# Link the import library through a private dir, because the MSYS2
+			# lib dir itself on the path would shadow our libgfortran.a.  Copy
+			# it only if changed, and since MSYS2 bumps LLVM's version, glob for
+			# its name
+			imp="$(ls "$(llvm_path --libdir)"/libLLVM-*.dll.a 2>/dev/null | tail -n 1)"
+			[[ -n "$imp" ]] || die "no libLLVM-*.dll.a import library in $(llvm_path --libdir)"
+			mkdir -p build/llvm-win
+			cmp -s "$imp" build/llvm-win/libLLVM.a || cp -f "$imp" build/llvm-win/libLLVM.a
+			flags="$flags -Lbuild/llvm-win"
+		else
+			# fpm can't find the LLVM libraries by itself
+			export LIBRARY_PATH="$("$llvm_config" --libdir)${LIBRARY_PATH:+:$LIBRARY_PATH}"
+		fi
 	fi
 	export FPM_FC="$FC"
 
@@ -457,6 +565,8 @@ else
 	prefix="build/fpm/$config"
 	run fpm install --test "${features[@]}" --flag "$flags" --prefix "$prefix" \
 		${passthru[@]+"${passthru[@]}"}
+
+	[[ -n "$llvm_bindir" ]] && copy_llvm_dlls "$prefix/bin" "$prefix/test"
 
 	if [[ -n "$run_tests" ]]; then
 		run "./$prefix/test/test"
