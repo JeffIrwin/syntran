@@ -60,6 +60,11 @@ void sy_llvm_init_native(void)
  * are stable.  A LLVMContextRef that the emitter made is handed over to the JIT
  * along with its module */
 
+/* glibc only declares RTLD_DEFAULT (in dlfcn.h) with _GNU_SOURCE, which a strict -std=
+ * doesn't imply.  This has to come before the first system header */
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
 #ifdef _WIN32
 #include <windows.h>
 #include <psapi.h>
@@ -132,12 +137,43 @@ int sy_jit_call(int (*fn)(int, char **));
 #include "../rt/syntran_syms.inc"
 #undef SY_SYM
 
+/* LLVM lowers `llvm.powi` (f64 or f32 ** i32) to these libgcc/compiler-rt fns.  They would
+ * be found in the process, except that libgcc.a is built with hidden visibility, so a
+ * syntran which links it statically (Dockerfile.rocky) doesn't export them.  These are
+ * libgcc's algorithm, so a program gives the same result as an executable which links
+ * libgcc */
+static double sy_jit_powidf2(double x, int m)
+{
+    unsigned int n = m < 0 ? -(unsigned int)m : (unsigned int)m;
+    double y = n % 2 ? x : 1;
+
+    while (n >>= 1) {
+        x = x * x;
+        if (n % 2) y = y * x;
+    }
+    return m < 0 ? 1 / y : y;
+}
+
+static float sy_jit_powisf2(float x, int m)
+{
+    unsigned int n = m < 0 ? -(unsigned int)m : (unsigned int)m;
+    float y = n % 2 ? x : 1;
+
+    while (n >>= 1) {
+        x = x * x;
+        if (n % 2) y = y * x;
+    }
+    return m < 0 ? 1 / y : y;
+}
+
 #define SY_SYM(n) {#n, (void *)&n},
 static const struct {
     const char *name;
     void *addr;
 } sy_syms[] = {
 #include "../rt/syntran_syms.inc"
+    {"__powidf2", (void *)&sy_jit_powidf2},
+    {"__powisf2", (void *)&sy_jit_powisf2},
 };
 #undef SY_SYM
 
@@ -150,7 +186,11 @@ static char sy_jit_err[1024];
 static void sy_jit_main_stub(void) {}
 #endif
 
-/* Look up a symbol by name in the process, like dlsym(RTLD_DEFAULT, name).  Windows has
+/* A syntran that links LLVM statically (Dockerfile.rocky) doesn't export LLVM's symbols,
+ * so each name passed to sy_dlsym() below must be a string literal, because the
+ * Dockerfile greps this file for them to make a --dynamic-list.
+ *
+ * Look up a symbol by name in the process, like dlsym(RTLD_DEFAULT, name).  Windows has
  * no such thing, so ask each module that is loaded.  That finds LLVM's fns whichever
  * DLL it is in, without naming a version like libLLVM-22.dll here */
 static void *sy_dlsym(const char *name)

@@ -128,7 +128,15 @@ RUN echo "PROFILE = $PROFILE"
 
 #ARG LINK_FLAG="-static-libgcc"
 #ARG LINK_FLAG="-static-libgcc -static-libgfortran"
-ARG LINK_FLAG="-L/opt/blas-static -L/opt/llvm-static -static-libgcc -static-libgfortran -static-libquadmath"
+# src/c/llvm_shim.c finds some of LLVM's fns with dlsym(), because which ones exist
+# depends on the version of LLVM.  A static LLVM doesn't export its symbols, so
+# dlsym() would never find them (the JIT would fail with "no way to run a module
+# in its own context").  Export just the names that the shim looks up
+RUN { echo '{'; grep -o 'sy_dlsym("[A-Za-z0-9_]*")' src/c/llvm_shim.c | sed 's/.*("\(.*\)")/\1;/'; echo '};'; } > /opt/llvm-static/dynamic-list.txt \
+	&& cat /opt/llvm-static/dynamic-list.txt \
+	&& [ "$(grep -c LLVM /opt/llvm-static/dynamic-list.txt)" -ge 2 ]
+
+ARG LINK_FLAG="-L/opt/blas-static -L/opt/llvm-static -Wl,--dynamic-list=/opt/llvm-static/dynamic-list.txt -static-libgcc -static-libgfortran -static-libquadmath"
 
 # Features can't be combined with --profile, so name the profile as a feature.
 # `llvm-blas` links BLAS/LAPACK and LLVM (fpm allows only one feature with a
