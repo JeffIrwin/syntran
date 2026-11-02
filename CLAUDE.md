@@ -114,6 +114,12 @@ too.  CMake spells it `-DSYNTRAN_LLVM=ON`.  The test suite must pass both with
 and without LLVM, since the latter is the default: the groups `native_rt` and
 `native` in `src/tests/test.f90` only exercise the backend if it's built in.
 
+`Dockerfile.rocky` builds the official Linux binary with the `llvm-blas` feature.
+It links LLVM statically, through `/opt/llvm-static/libLLVM.a`, which is a GNU ld
+linker script that groups the component archives (like `/opt/blas-static` does
+for OpenBLAS), and its `ldd` test fails the build if a shared LLVM/libstdc++
+sneaks back in.
+
 On Windows, use MSYS2's ucrt64 LLVM (`pacman -S mingw-w64-ucrt-x86_64-llvm`),
 not the official installer, which targets MSVC.  `doc/native.md` has the exact
 commands.  The gotchas, each with a `_WIN32` branch in the source:
