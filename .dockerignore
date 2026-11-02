@@ -1,0 +1,14 @@
+# The build context of `docker build .` for Dockerfile.rocky, Dockerfile, and
+# docker/Dockerfile.alpine.  Everything is excluded except what those copy in,
+# which keeps out build/ (several GB) and other local files.  If a Dockerfile
+# needs another file from the repo, add it here, or its COPY/ADD fails with
+# "not found"
+*
+!src
+!external
+!.git
+!CMakeLists.txt
+!fpm.toml
+!LICENSE
+!THIRD_PARTY_NOTICES.md
+!utils/gen-header.sh
