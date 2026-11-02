@@ -41,6 +41,14 @@ its instruction set, and is optimized with LLVM's `-O2` pipeline.  Floating
 point is not fast-math, and operations are not fused, so the results are the
 same as the interpreter's.
 
+## Official Linux binary
+
+The Linux binary from the releases page has the native backend built in, with
+LLVM linked statically, so `--jit` needs nothing else installed.  `--native`
+also needs a C compiler to link the executable (`cc`, or `$CC`), and a program
+that uses `@` or `std::solve()` needs BLAS and LAPACK for the linker too, e.g.
+`libopenblas-dev`.  `Dockerfile.rocky` builds it.
+
 ## Building syntran with LLVM
 
 This needs LLVM (version 17 or later) installed.  Without it, syntran builds as
