@@ -10326,6 +10326,30 @@ end subroutine unit_test_bounds_check
 
 !===============================================================================
 
+subroutine unit_test_blas_vendor(npass, nfail)
+
+	! blas_vendor() is shown by `--version`.  Which vendor it finds depends on the
+	! machine, so this only checks what is true for any of them
+
+	use syntran__linalg_m, only: blas_enabled, blas_vendor
+
+	integer, intent(inout) :: npass, nfail
+
+	character(len = *), parameter :: label = 'blas vendor'
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	call unit_test_coda( [ &
+		(blas_vendor() == 'not linked') .eqv. (.not. blas_enabled), &
+		len(blas_vendor()) > 0, &
+		len(blas_vendor()) < 256, &
+		index(blas_vendor(), achar(0)) == 0 &
+		], label, npass, nfail)
+
+end subroutine unit_test_blas_vendor
+
+!===============================================================================
+
 subroutine unit_test_runtime_traces(npass, nfail)
 
 	! Tests for append_rt_trace() (vm_exec.f90): the stack trace appended to a
@@ -12613,6 +12637,7 @@ subroutine unit_tests(iostat)
 	if (run_group('native')) call unit_test_native(npass, nfail)
 	if (run_group('runtime_errors')) call unit_test_runtime_errors(npass, nfail)
 	if (run_group('bounds_check')) call unit_test_bounds_check(npass, nfail)
+	if (run_group('blas_vendor')) call unit_test_blas_vendor(npass, nfail)
 	if (run_group('runtime_traces')) call unit_test_runtime_traces(npass, nfail)
 	if (run_group('syntax_only')) call unit_test_syntax_only(npass, nfail)
 	if (run_group('eval_api')) call unit_test_eval_api(npass, nfail)

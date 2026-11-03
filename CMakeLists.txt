@@ -194,6 +194,7 @@ set(SRC_DIR "src")
 # Core library, used by main interpreter and unit tests
 set(LIB "${PROJECT}")
 set(LIB_SRC
+	${SRC_DIR}/c/blas_info.c
 	${SRC_DIR}/c/isocline_wrap.c
 	${SRC_DIR}/c/llvm_shim.c
 	${SRC_DIR}/rt/syntran_crt.c

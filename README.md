@@ -524,14 +524,18 @@ Run `syntran -h` to see a comprehensive listing of syntran command-line argument
 Although the semantic version is always shown, `--version` shows more details:
 <!-- syntran-begin mode=skip reason="--version output embeds git commit and build date, inherently unstable" -->
 ```
- syntran 0.0.48
+ syntran 1.7.0
  https://github.com/JeffIrwin/syntran
- git commit = 6ab926d
- build date = Sep  7 2024
- fortran compiler = gfortran [11, 4, 0]
+
+   commit        6ab926d
+   built         Sep  7 2024
+   compiler      gfortran 11.4.0
+   bounds check  off
+   blas          OpenBLAS 0.3.20 NO_AFFINITY Haswell MAX_THREADS=64
+   llvm          linked
 ```
 <!-- syntran-end -->
-This can be helpful for binary installations.  If you built from source, most of the details are pointlessly redundant, and the `git commit` will not be shown.
+This can be helpful for binary installations.  It also shows whether BLAS and LLVM are linked, and if BLAS is, which one.  The `blas` row says `not linked` for a build with `SYNTRAN_NO_BLAS`, and `reference or unrecognized` if it's not OpenBLAS or Accelerate, since the reference BLAS can't be told from, say, MKL.  If you built from source, most of the details are pointlessly redundant, and the `commit` will not be shown.
 
 ## Calling syntran from Fortran
 
