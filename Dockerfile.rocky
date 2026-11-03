@@ -141,20 +141,43 @@ RUN { echo '{'; grep -o 'sy_dlsym("[A-Za-z0-9_]*")' src/c/llvm_shim.c | sed 's/.
 	&& cat /opt/llvm-static/dynamic-list.txt \
 	&& [ "$(grep -c LLVM /opt/llvm-static/dynamic-list.txt)" -ge 2 ]
 
-ARG LINK_FLAG="-L/opt/blas-static -L/opt/llvm-static -Wl,--dynamic-list=/opt/llvm-static/dynamic-list.txt -static-libgcc -static-libgfortran -static-libquadmath"
+# --gc-sections drops the functions and data that nothing references, from the
+# static LLVM and the rest.  It only works on a finer granularity than a whole
+# object file if the sections are split up, which LLVM's archives already are, and
+# SECTION_FLAGS below does for syntran's own code.  Symbols in the dynamic list
+# above are still kept, and so is .init_array, so the JIT's dlsym() lookups and
+# LLVM's static initializers survive
+ARG LINK_FLAG="-L/opt/blas-static -L/opt/llvm-static -Wl,--dynamic-list=/opt/llvm-static/dynamic-list.txt -Wl,--gc-sections -static-libgcc -static-libgfortran -static-libquadmath"
+
+# One section per function and per object, for the --gc-sections above.  fpm
+# needs it for Fortran (--flag) and C (--c-flag) separately.  Every fpm command
+# below must get the same flags, or fpm builds a second copy of everything in
+# another build/gfortran_<hash>/ dir
+ARG SECTION_FLAGS="-ffunction-sections -fdata-sections"
 
 # Features can't be combined with --profile, so name the profile as a feature.
 # `llvm-blas` links BLAS/LAPACK and LLVM (fpm allows only one feature with a
 # `build` table) and defines SYNTRAN_LLVM.  FPM_ARGS has no spaces within its
-# values, so it's expanded unquoted below; LINK_FLAG has some, so it's quoted
+# values, so it's expanded unquoted below; LINK_FLAG and SECTION_FLAGS have some,
+# so they're quoted
 ARG FPM_ARGS="--compiler gfortran --features $PROFILE,llvm-blas"
 
-RUN fpm build $FPM_ARGS --link-flag "$LINK_FLAG"
-RUN fpm test test $FPM_ARGS --link-flag "$LINK_FLAG"
+RUN fpm build $FPM_ARGS --flag "$SECTION_FLAGS" --c-flag "$SECTION_FLAGS" --link-flag "$LINK_FLAG"
+RUN fpm test test $FPM_ARGS --flag "$SECTION_FLAGS" --c-flag "$SECTION_FLAGS" --link-flag "$LINK_FLAG"
 # Also run every unit test program through the LLVM JIT
-RUN fpm test test $FPM_ARGS --link-flag "$LINK_FLAG" -- --native
-#RUN fpm test long $FPM_ARGS --link-flag "$LINK_FLAG"
-RUN fpm install --prefix . $FPM_ARGS --link-flag "$LINK_FLAG"
+RUN fpm test test $FPM_ARGS --flag "$SECTION_FLAGS" --c-flag "$SECTION_FLAGS" --link-flag "$LINK_FLAG" -- --native
+#RUN fpm test long $FPM_ARGS --flag "$SECTION_FLAGS" --c-flag "$SECTION_FLAGS" --link-flag "$LINK_FLAG"
+RUN fpm install --prefix . $FPM_ARGS --flag "$SECTION_FLAGS" --c-flag "$SECTION_FLAGS" --link-flag "$LINK_FLAG"
+
+# Strip the symbol table, which is ~15 MB of a ~110 MB binary.  The dynamic
+# symbols that the JIT needs for dlsym() are not part of it.  The test
+# executables keep theirs for debugging, but runtime error backtraces from this
+# one only have addresses.  The size is printed before and after, so a growth
+# in the shipped binary shows up in the log
+RUN ls -l ./bin/syntran \
+	&& strip --strip-all ./bin/syntran \
+	&& ls -l ./bin/syntran \
+	&& size ./bin/syntran
 
 ## Package other binary dependencies, if any
 #RUN cp /lib64/libquadmath.so.0 ./bin/
@@ -166,7 +189,7 @@ RUN fpm install --prefix . $FPM_ARGS --link-flag "$LINK_FLAG"
 ## notices accompany the binary
 RUN cp LICENSE THIRD_PARTY_NOTICES.md ./bin/
 
-RUN cd ./bin && tar czf syntran-linux.tgz *
+RUN cd ./bin && tar czf syntran-linux.tgz * && ls -l syntran-linux.tgz
 
 #****************
 # End installer packaging
