@@ -32,6 +32,11 @@ compiled with the flags of syntran, not `-ffp-contract=off`, and without BLAS.
 So float results, especially of `@` and `std::solve()`, can differ from an
 executable in the last digits.  Use `--native` if that matters.
 
+`--jit` honors `--cd`, so a program's relative file paths are resolved against
+the directory of its source file, as in the interpreter.  An executable made by
+`--native` doesn't, like one made by `--transpile`: its relative paths are
+resolved against the directory that it is run from.
+
 By default, the compiled program prints the value of the last statement of the
 program when it finishes, just like the interpreter does.  Use `--quiet` to leave
 that out.

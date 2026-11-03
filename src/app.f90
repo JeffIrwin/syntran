@@ -314,6 +314,19 @@ function parse_args() result(args)
 		error = .true.
 	end if
 
+	! --interactive would be ignored by these, which don't run the program in the REPL
+	if (args%transpile .and. args%interactive .and. .not. args%help .and. &
+		.not. args%version) then
+		write(*,*) err_prefix//"--transpile cannot be used with --interactive"
+		error = .true.
+	end if
+
+	if (args%syntax_only .and. args%interactive .and. .not. args%help .and. &
+		.not. args%version) then
+		write(*,*) err_prefix//"--syntax-only cannot be used with --interactive"
+		error = .true.
+	end if
+
 	! Same for --native, which also needs a program and a syntran with LLVM
 	if (args%native .and. .not. args%help .and. .not. args%version) then
 		if (.not. (args%syntran_file_arg .or. args%command_arg)) then
@@ -321,9 +334,9 @@ function parse_args() result(args)
 				"or -c <cmd> argument"
 			error = .true.
 		end if
-		if (args%transpile .or. args%syntax_only) then
-			write(*,*) err_prefix//"--native cannot be used with --transpile "// &
-				"or --syntax-only"
+		if (args%transpile .or. args%syntax_only .or. args%interactive) then
+			write(*,*) err_prefix//"--native cannot be used with --transpile, "// &
+				"--syntax-only, or --interactive"
 			error = .true.
 		end if
 		if (.not. native_available) then
@@ -364,6 +377,20 @@ function parse_args() result(args)
 				"with LLVM, i.e. with SYNTRAN_LLVM"
 			error = .true.
 		end if
+	end if
+
+	! The program is either the file or the command, and the one that is not used
+	! would be silently dropped
+	if (args%command_arg .and. args%syntran_file_arg .and. .not. args%help .and. &
+		.not. args%version) then
+		write(*,*) err_prefix//"--command cannot be used with a <file.syntran>"
+		error = .true.
+	end if
+
+	if (args%command_arg .and. args%interactive .and. .not. args%help .and. &
+		.not. args%version) then
+		write(*,*) err_prefix//"--command cannot be used with --interactive"
+		error = .true.
 	end if
 
 	! It's an option of the transpiler, so it does nothing otherwise

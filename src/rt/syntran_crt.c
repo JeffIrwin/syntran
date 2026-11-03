@@ -2225,6 +2225,35 @@ sy_file *sy_file_std(int32_t k)
     return f;
 }
 
+/* The directory that relative file paths are resolved against, with its trailing
+ * separator, or NULL for the working directory.  Only `syntran --jit --cd` sets it,
+ * because it runs in syntran's own process.  A compiled executable leaves it NULL */
+static char *sy_src_dir = NULL;
+
+void sy_set_src_dir(const char *dir)
+{
+    free(sy_src_dir);
+    sy_src_dir = NULL;
+    if (dir == NULL || dir[0] == '\0') return;
+    sy_src_dir = (char *)malloc(strlen(dir) + 1);
+    if (sy_src_dir != NULL) strcpy(sy_src_dir, dir);
+}
+
+/* Like resolve_path() of the interpreter.  The caller frees the result */
+static char *sy_resolve_path(const char *path)
+{
+    size_t nd, np = strlen(path);
+    int abs_ = path[0] == '/' || path[0] == '\\' || (np >= 2 && path[1] == ':');
+    char *r;
+
+    nd = (abs_ || sy_src_dir == NULL) ? 0 : strlen(sy_src_dir);
+    r = (char *)malloc(nd + np + 1);
+    if (r == NULL) sy_rt_error("R8", "out of memory resolving \"%s\"", path);
+    if (nd > 0) memcpy(r, sy_src_dir, nd);
+    memcpy(r + nd, path, np + 1);
+    return r;
+}
+
 /* open(), or std::try_open() if not `must`, which makes a closed handle where
  * open() would fail.  The mode is any of r, w, a (which writes at the end), and
  * b (binary).  Unlike Fortran, "w" truncates a file when it's opened, not when
@@ -2232,6 +2261,7 @@ sy_file *sy_file_std(int32_t k)
 sy_file *sy_file_open(const sy_str *name, const sy_str *mode, int32_t must)
 {
     char fm[4];
+    char *path;
     int64_t i;
     sy_file *f = sy_file_blank(name->data, name->len);
 
@@ -2261,12 +2291,17 @@ sy_file *sy_file_open(const sy_str *name, const sy_str *mode, int32_t must)
 
     strcpy(fm, f->rd ? "r" : f->app ? "a" : f->wr ? "w" : "a+");
     if (f->bin) strcat(fm, "b");
-    f->u->fp = fopen(name->data, fm);
+    path = sy_resolve_path(name->data);
+    f->u->fp = fopen(path, fm);
     if (f->u->fp == NULL) {
-        if (must) sy_rt_error("R8", "cannot open file \"%s\" (iostat = %d)", name->data, errno);
+        int err = errno;
+
+        if (must) sy_rt_error("R8", "cannot open file \"%s\" (iostat = %d)", path, err);
+        free(path);
         f->unit = -1;
         return f;
     }
+    free(path);
     f->is_open = 1;
     f->unit = sy_unit_alloc();
     return f;
@@ -2275,9 +2310,14 @@ sy_file *sy_file_open(const sy_str *name, const sy_str *mode, int32_t must)
 int8_t sy_exists(const sy_str *path)
 {
     struct stat st;
+    char *full;
+    int8_t found;
 
     if (path->len == 0) return 0;
-    return stat(path->data, &st) == 0;
+    full = sy_resolve_path(path->data);
+    found = stat(full, &st) == 0;
+    free(full);
+    return found;
 }
 
 void sy_file_close(sy_file *f)

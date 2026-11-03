@@ -677,6 +677,13 @@ module syntran__llvm_c_m
 			real(c_double) :: sy_jit_value_f64
 		end function sy_jit_value_f64
 
+		! In the C runtime.  The directory that the program's relative file paths are
+		! resolved against, for `--cd`.  Empty means the working directory
+		subroutine sy_set_src_dir(dir) bind(c, name = "sy_set_src_dir")
+			import :: c_char
+			character(kind = c_char), intent(in) :: dir(*)
+		end subroutine sy_set_src_dir
+
 		function sy_jit_exit_code() bind(c, name = "sy_jit_exit_code")
 			import :: c_int
 			integer(c_int) :: sy_jit_exit_code
