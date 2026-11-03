@@ -48,12 +48,13 @@ RUN gfortran --version
 # LLVM is linked statically too, so that the shipped binary has no
 # libLLVM/libstdc++ dependency.  Rocky has no static libzstd (which LLVM's
 # compression needs), so it's built from source, with -fPIC because the
-# executable is a PIE
+# executable is a PIE.  The tarball is a mirror of facebook/zstd's release
+# asset, in a release of JeffIrwin/zstd, so it has the same checksum
 RUN llvm-config --version
 
 ARG ZSTD_VERSION="1.5.7"
 ARG ZSTD_SHA256="eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3"
-ADD https://github.com/facebook/zstd/releases/download/v$ZSTD_VERSION/zstd-$ZSTD_VERSION.tar.gz /tmp/zstd.tar.gz
+ADD https://github.com/JeffIrwin/zstd/releases/download/v$ZSTD_VERSION/zstd-$ZSTD_VERSION.tar.gz /tmp/zstd.tar.gz
 # Checked here rather than with `ADD --checksum`, which needs BuildKit
 RUN echo "$ZSTD_SHA256  /tmp/zstd.tar.gz" | sha256sum -c - \
 	&& tar xzf /tmp/zstd.tar.gz -C /tmp \
