@@ -6,6 +6,7 @@ module syntran__app_m
 	use syntran
 	use syntran__core_m
 	use syntran__errors_m
+	use syntran__linalg_m, only: blas_vendor
 	use syntran__utils_m
 	use syntran__line_edit_m, only: enable_vt_processing, is_stdout_tty
 
@@ -150,6 +151,38 @@ subroutine set_ansi_colors(is_color_in)
 	warn_prefix    = fg_bold_yellow//'Warning'//fg_bold//': '
 
 end subroutine set_ansi_colors
+
+!===============================================================================
+
+function compiler_str() result(s)
+
+	! The Fortran compiler that built syntran, like "gfortran 15.2.0"
+
+	character(len = :), allocatable :: s
+
+	integer :: i
+
+	s = fort_compiler
+	do i = 1, size(fort_vers)
+		s = s//merge(" ", ".", i == 1)//str(fort_vers(i))
+	end do
+
+end function compiler_str
+
+!===============================================================================
+
+subroutine print_version_row(label, val)
+
+	! One detail of `--version`.  The values line up in a column
+
+	character(len = *), intent(in) :: label, val
+
+	integer, parameter :: width = 14
+
+	write(*,*) "  "//fg_bright_magenta//label//color_reset// &
+		repeat(" ", max(width - len(label), 1))//trim(val)
+
+end subroutine print_version_row
 
 !===============================================================================
 
@@ -427,12 +460,14 @@ function parse_args() result(args)
 			write(*,*) fg_bright_magenta//lang_name//' '//version//color_reset
 			write(*,*) fg_bright_magenta//url//color_reset
 			if (args%version) then
-				write(*,*) fg_bright_magenta//"git commit = "//git_commit//color_reset
-				write(*,*) fg_bright_magenta//"build date = "//build_date//color_reset
-				write(*,*) fg_bright_magenta//"fortran compiler = "//fort_compiler//" "// &
-					str(fort_vers)//color_reset
-				write(*,*) fg_bright_magenta//"bounds check = "// &
-					merge("on ", "off", bounds_check)//color_reset
+				write(*,*)
+				call print_version_row("commit"      , git_commit)
+				call print_version_row("built"       , build_date)
+				call print_version_row("compiler"    , compiler_str())
+				call print_version_row("bounds check", merge("on ", "off", bounds_check))
+				call print_version_row("blas"        , blas_vendor())
+				call print_version_row("llvm"        , merge("linked    ", "not linked", &
+					native_available))
 			end if
 			write(*,*)
 		end if

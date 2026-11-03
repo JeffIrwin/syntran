@@ -186,6 +186,11 @@
 					# or the binary won't run in a bare container \n
 					ldd ./syntran \n
 					if ldd ./syntran | grep -Eq 'blas|lapack|gfortran' ; then exit 1 ; fi \n
+
+					# ldd can't see a static BLAS, but --version can tell \n
+					# that it is OpenBLAS and not the slow reference BLAS \n
+					./syntran --version \n
+					./syntran --version | grep -Eq 'blas +OpenBLAS' \n
 					./syntran -c 'let A = [2.0, 1.0, 1.0, 3.0; 2, 2]; println(std::solve(A, [3.0, 5.0])); println(A @ A);' \n
 
 					dir_='src/tests/test-src/explorer/' \n
@@ -360,6 +365,10 @@
 					# statically, or the exe won't run without the toolchain \n
 					objdump -p .\\syntran.exe | Select-String \"DLL Name\" \n
 					if (objdump -p .\\syntran.exe | Select-String -Pattern \"openblas|libgomp|libgfortran\") { exit 1 } \n
+
+					# Same as the ldd check on Linux: a static BLAS is invisible to objdump \n
+					.\\syntran.exe --version \n
+					if (-not (.\\syntran.exe --version | Select-String -Pattern \"blas\\s+OpenBLAS\")) { exit 1 } \n
 				"
 			},
 			{

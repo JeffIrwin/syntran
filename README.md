@@ -526,12 +526,16 @@ Although the semantic version is always shown, `--version` shows more details:
 ```
  syntran 1.7.0
  https://github.com/JeffIrwin/syntran
- git commit = a62ce5b
- build date = Nov  6 2026
- fortran compiler = gfortran [14, 2, 0]
+
+   commit        a62ce5b
+   built         Nov  6 2026
+   compiler      gfortran 14.2.0
+   bounds check  off
+   blas          OpenBLAS 0.3.20 NO_AFFINITY Haswell MAX_THREADS=64
+   llvm          linked
 ```
 <!-- syntran-end -->
-This can be helpful for binary installations.  If you built from source, most of the details are pointlessly redundant, and the `git commit` will not be shown.
+This can be helpful for binary installations.  It also shows whether BLAS and LLVM are linked, and if BLAS is, which one.  The `blas` row says `not linked` for a build with `SYNTRAN_NO_BLAS`, and `reference or unrecognized` if it's not OpenBLAS or Accelerate, since the reference BLAS can't be told from, say, MKL.  If you built from source, most of the details are pointlessly redundant, and the `commit` will not be shown.
 
 ## Calling syntran from Fortran
 
