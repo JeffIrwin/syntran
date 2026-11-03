@@ -5119,6 +5119,9 @@ subroutine unit_test_io(npass, nfail)
 			interpret_file(path//'test-16.syntran', quiet) == 'true', &
 			interpret_file(path//'test-17.syntran', quiet) == 'true', &
 			interpret_file(path//'test-18.syntran', quiet) == 'true', &
+			! Relative paths are resolved against the script's directory, which
+			! the native backend has to do too
+			interpret_file(path//'test-19.syntran', quiet, chdir_ = .true.) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 

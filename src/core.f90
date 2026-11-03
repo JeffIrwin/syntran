@@ -38,15 +38,10 @@ module syntran__core_m
 	!      + aot takes 200+ (slower than transpiler but faster than vm)
 	!    * all aoc jit run fast enough that we might as well add as a submodule
 	!      and always run in ci (not bytecode though)
-	!    * fork zstd because the dockerfile is cloning facebook's tarball from
-	!      github. maybe fpm too but we've been depending on that for forever
-	!      + zstd done, dockerfile uses a release of JeffIrwin/zstd
 	!    * build devx -- i don't like having openblas and llvm libs under
 	!      "build" dir because they get nuked on cleaning. maybe make a
 	!      gitignored "lib" dir?
 	!      + maybe obviated by build.sh improvements like auto lib detection
-	!    * --cd apparently does not work with --jit. test any other sus combos
-	!      too
 	!    * run src/benchmarks with new aot/jit columns
 	!    * --version output should show build config, whether blas or llvm were
 	!      linked, whether blas is openblas or reference, etc.

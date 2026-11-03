@@ -222,6 +222,10 @@ module syntran__native_m
 		! The arguments of the program, if it is run in memory
 		type(string_vector_t) :: script_args
 
+		! The directory that its relative file paths are resolved against, if it is
+		! run in memory.  Empty is the working directory
+		character(len = :), allocatable :: src_dir
+
 		! Counter for the names of string literals
 		integer :: nstr = 0
 
@@ -379,6 +383,8 @@ subroutine native_tree(tree, state, n, diags)
 	em%capture = n%capture
 	em%trim_result  = n%trim_result
 	em%script_args = state%script_args
+	em%src_dir = ''
+	if (allocated(state%src_dir)) em%src_dir = state%src_dir
 	em%diags = new_string_vector()
 	em%fns => state%fns
 	em%vars => state%vars
@@ -7730,6 +7736,9 @@ subroutine jit_run(em, n, diags)
 	n%exit_code = 0
 	n%result = ''
 	n%message = ''
+
+	! Every run sets it, so that one never sees the directory of an earlier one
+	call sy_set_src_dir(cs(em%src_dir))
 
 	if (.not. n%capture) then
 		! Run it like an executable: the runtime prints and exits for itself, and

@@ -640,6 +640,8 @@
 					[[ \"$(./hello.exe)\" == \"hello 42\" ]] \n
 					# The same in memory, with no C compiler or file \n
 					[[ \"$(./build/native/bin/syntran --quiet --jit -c 'println(\"hello \", 6 * 7);')\" == \"hello 42\" ]] \n
+					# --cd resolves relative paths against the script's directory \n
+					[[ \"$(./build/native/bin/syntran --cd --jit src/tests/test-src/io/test-19.syntran | tr -d ' ')\" == \"true\" ]] \n
 				"
 			},
 			{
@@ -684,6 +686,8 @@
 					[[ \"$(./hello)\" == \"hello 42\" ]] \n
 					# The same in memory, with no C compiler or file \n
 					[[ \"$(./build/native/bin/syntran --quiet --jit -c 'println(\"hello \", 6 * 7);')\" == \"hello 42\" ]] \n
+					# --cd resolves relative paths against the script's directory \n
+					[[ \"$(./build/native/bin/syntran --cd --jit src/tests/test-src/io/test-19.syntran | tr -d ' ')\" == \"true\" ]] \n
 				"
 			},
 			{
@@ -714,6 +718,7 @@
 					[[ \"$(./hello-cmake)\" == \"hello 42\" ]] \n
 					# The same in memory, with no C compiler or file \n
 					[[ \"$(./build/llvm/syntran --quiet --jit -c 'println(\"hello \", 6 * 7);')\" == \"hello 42\" ]] \n
+					[[ \"$(./build/llvm/syntran --cd --jit src/tests/test-src/io/test-19.syntran | tr -d ' ')\" == \"true\" ]] \n
 					./build/llvm/test \n
 				"
 			}
