@@ -33,7 +33,14 @@ module syntran__core_m
 	! TODO:
 	!  - llvm compiled backend
 	!    * test (manually) all aoc solutions in its repo
-	!    * dockerfile, at least in the rocky one which ships the official binary
+	!      + done
+	!      + jit takes ~95 s total
+	!      + aot takes 200+ (slower than transpiler but faster than vm)
+	!    * all aoc jit run fast enough that we might as well add as a submodule
+	!      and always run in ci (not bytecode though)
+	!    * fork zstd because the dockerfile is cloning facebook's tarball from
+	!      github. maybe fpm too but we've been depending on that for forever
+	!      + zstd done, dockerfile uses a release of JeffIrwin/zstd
 	!    * build devx -- i don't like having openblas and llvm libs under
 	!      "build" dir because they get nuked on cleaning. maybe make a
 	!      gitignored "lib" dir?
@@ -44,6 +51,7 @@ module syntran__core_m
 	!    * --version output should show build config, whether blas or llvm were
 	!      linked, whether blas is openblas or reference, etc.
 	!    * binary packaging? any llvm dll/so/dylib's? third party notice?
+	!      + rocky done, mac/windows tbd
 	!    * optimization options? at least give consideration to what the default
 	!      should be
 	!    * parity with vm, not with transpiler
