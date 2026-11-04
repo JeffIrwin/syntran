@@ -10337,13 +10337,19 @@ subroutine unit_test_blas_vendor(npass, nfail)
 
 	character(len = *), parameter :: label = 'blas vendor'
 
+	! ifort 2021 rejects len(blas_vendor()) inside the array constructor as a
+	! non-constant "constant expression", so call it once up here
+	character(len = :), allocatable :: vendor
+
 	write(*,*) 'Unit testing '//label//' ...'
 
+	vendor = blas_vendor()
+
 	call unit_test_coda( [ &
-		(blas_vendor() == 'not linked') .eqv. (.not. blas_enabled), &
-		len(blas_vendor()) > 0, &
-		len(blas_vendor()) < 256, &
-		index(blas_vendor(), achar(0)) == 0 &
+		(vendor == 'not linked') .eqv. (.not. blas_enabled), &
+		len(vendor) > 0, &
+		len(vendor) < 256, &
+		index(vendor, achar(0)) == 0 &
 		], label, npass, nfail)
 
 end subroutine unit_test_blas_vendor
