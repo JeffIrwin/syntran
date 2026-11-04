@@ -61,6 +61,12 @@ with `./build.sh release --llvm --blas -- -DSYNTRAN_LLVM_STATIC=ON`, where
 --link-static` instead of `libLLVM.dylib`, so the package doesn't need LLVM,
 zstd, or z3 dylibs.
 
+The Windows binary has it too, also with LLVM linked statically, so the package
+is still just `syntran.exe` with no DLLs next to it.  `--native` links with `gcc`
+(or `$CC`), which Windows doesn't come with, so it needs a mingw gcc on the
+`PATH`.  `--jit` needs nothing.  It is built as in
+[Linking LLVM statically on Windows](#linking-llvm-statically-on-windows).
+
 ## Building syntran with LLVM
 
 This needs LLVM (version 17 or later) installed.  Without it, syntran builds as
@@ -124,6 +130,35 @@ Compiling a program links it with `gcc`, or `$CC`.  A program which uses `@` or
 $env:CC = "gcc -static -fopenmp -L$PWD/build/openblas"
 build\native\bin\syntran --native hello.exe -c 'println(\"hello\");'
 ```
+
+#### Linking LLVM statically on Windows
+
+The build above needs `libLLVM-*.dll` and the DLLs under it next to syntran.exe or
+on the `PATH`, which add up to ~150 MB.  The official binary links LLVM's component
+archives instead, like `Dockerfile.rocky` does on Linux.  MSYS2's `llvm` package
+has them in `C:\msys64\ucrt64\lib` as well as the DLL.  There is no single
+`libLLVM.a`, so `utils/gen-llvm-static-win.sh` writes one in a private dir, as a
+linker script which groups the archives that syntran uses with zlib and zstd
+(its output also needs MSYS2's `llvm-nm`).  Run it from Git Bash or MSYS2:
+
+```bash
+export PATH="/c/msys64/ucrt64/bin:$PATH"
+bash utils/gen-llvm-static-win.sh build/llvm-static
+```
+
+It also writes `build/llvm-static/syntran.def`, which makes syntran.exe export
+the few LLVM fns that `src/c/llvm_shim.c` finds at run time with
+`GetProcAddress()`, because the fns that exist depend on the version of LLVM.
+A static LLVM exports nothing by default, so without this `--jit` would fail.
+Then build as above, but with `-Lbuild/llvm-static -Wl,build/llvm-static/syntran.def`
+in place of `-Lbuild/llvm-win`, and without MSYS2 on the `PATH`.  `--gc-sections`
+and `-s` shrink it from 157 MB to 106 MB:
+
+```powershell
+fpm install --features release,llvm-blas --prefix ./build/native/ --flag "-static -fopenmp -Lbuild/openblas -Lbuild/llvm-static -Wl,build/llvm-static/syntran.def -Wl,--wrap=setlocale -Wl,--stack,67108864 -Wl,--gc-sections -Wl,-s"
+```
+
+The result imports only Windows system DLLs, which CI checks with `objdump -p`.
 
 ## What is supported
 

@@ -122,6 +122,13 @@ linker script that groups the component archives (like `/opt/blas-static` does
 for OpenBLAS), and its `ldd` test fails the build if a shared LLVM/libstdc++
 sneaks back in.
 
+The official Windows binary links LLVM statically too, so it has no DLLs to ship.
+`utils/gen-llvm-static-win.sh` writes `build/llvm-static/libLLVM.a` (a linker
+script over MSYS2's component archives, like `/opt/llvm-static` above) and
+`syntran.def`, which exports the LLVM fns that `src/c/llvm_shim.c` finds with
+`GetProcAddress()` (like the `--dynamic-list` above).  CI's `Pack Windows` step fails
+if `syntran.exe` imports anything but system DLLs.
+
 On Windows, use MSYS2's ucrt64 LLVM (`pacman -S mingw-w64-ucrt-x86_64-llvm`),
 not the official installer, which targets MSVC.  `doc/native.md` has the exact
 commands.  The gotchas, each with a `_WIN32` branch in the source:
