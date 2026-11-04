@@ -282,7 +282,7 @@
 			{
 				"if": "matrix.os == 'macOS-latest'",
 				"run": "
-					brew install gcc@14 &&
+					brew install gcc@14 llvm &&
 					brew reinstall gcc@14"
 			},
 			{
@@ -382,7 +382,9 @@
 					gfortran-14 --version \n
 					which gfortran-14 \n
 
-					bash ./build.sh release --no-llvm --blas \n
+					# LLVM is linked statically, so the package has no libLLVM, \n
+					# zstd, or z3 dylib to ship \n
+					bash ./build.sh release --llvm --blas -- -DSYNTRAN_LLVM_STATIC=ON \n
 
 					# TODO: copy to a subdir for easier upload \n
 
@@ -403,8 +405,14 @@
 						\"@executable_path/libgomp.1.dylib\"
 						\"./syntran\" \n
 
+					# Same as the ldd check in Dockerfile.rocky.  Only libgomp \n
+					# may come from outside of the system \n
+					otool -L ./syntran \n
+					if otool -L ./syntran | grep -E 'LLVM|zstd|z3|/opt/homebrew|/usr/local' | grep -v libgomp ; then exit 1 ; fi \n
+
 					chmod +x ./syntran \n
 					./syntran --version \n
+					[[ \"$(./syntran --jit -c 'sum([0:101]);' | tr -d '[:space:]')\" == \"5050\" ]] \n
 					#cat ./src/compiler.F90 \n
 				"
 			},
@@ -1068,6 +1076,11 @@
 					./syntran -c '1 + 2 * 3;' \n
 					./syntran -c '4 + 5 * [6: 10];' \n
 					./syntran -c 'sum([0: 101]);' \n
+
+					# The native backend, with Homebrew's LLVM hidden \n
+					[[ \"$(./syntran --jit -c 'sum([0:101]);' | tr -d '[:space:]')\" == \"5050\" ]] \n
+					./syntran --native /tmp/hello -c 'println(\"hello native\");' \n
+					[[ \"$(/tmp/hello | tr -d '[:space:]')\" == \"hellonative\" ]] \n
 
 					otool -L ./syntran \n
 				"

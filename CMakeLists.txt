@@ -58,6 +58,11 @@ if(SYNTRAN_LLVM)
 	add_compile_definitions(SYNTRAN_LLVM)
 endif()
 
+# Link LLVM from its static component archives instead of libLLVM.dylib/.so, so
+# that the shipped binary has no LLVM, zstd, or z3 dependency (the macOS release
+# package, like Dockerfile.rocky does for Linux).  Needs SYNTRAN_LLVM
+option(SYNTRAN_LLVM_STATIC "Link LLVM statically" OFF)
+
 if(DEFINED ENV{SYNTRAN_INTEL})
 	# ifort-specific flags must NOT reach the C compiler (icx doesn't
 	# understand -fpp/etc), so gate them to Fortran only.
@@ -292,7 +297,40 @@ set(LINK_LIBS "${LIB}")
 if(SYNTRAN_LLVM)
 	find_package(LLVM REQUIRED CONFIG)
 	message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
-	if(TARGET LLVM)
+	if(SYNTRAN_LLVM_STATIC)
+		# Not the LLVM* targets: Homebrew's LLVMExports.cmake gives LLVMSupport
+		# the interface libs libz3.dylib and zstd::libzstd_shared, which would
+		# bring those dylibs back.  Ask llvm-config for the component archives
+		# instead, like Dockerfile.rocky.  z3 (only for clang's analyzer) and
+		# xml2 (for merging Windows manifests) are left out, since syntran uses
+		# neither and a static archive member is only linked if it's referenced
+		find_program(SYNTRAN_LLVM_CONFIG llvm-config
+			HINTS "${LLVM_TOOLS_BINARY_DIR}" NO_DEFAULT_PATH)
+		if(NOT SYNTRAN_LLVM_CONFIG)
+			message(FATAL_ERROR "SYNTRAN_LLVM_STATIC needs llvm-config in ${LLVM_TOOLS_BINARY_DIR}")
+		endif()
+		execute_process(
+			COMMAND "${SYNTRAN_LLVM_CONFIG}" --link-static --libfiles
+				core analysis passes target native orcjit bitreader bitwriter
+			OUTPUT_VARIABLE LLVM_ARCHIVES
+			OUTPUT_STRIP_TRAILING_WHITESPACE
+			COMMAND_ERROR_IS_FATAL ANY)
+		separate_arguments(LLVM_ARCHIVES)
+		# LLVM's compression support needs zstd, and the shared one is what a
+		# plain -lzstd finds first
+		find_library(SYNTRAN_ZSTD_STATIC NAMES libzstd.a
+			HINTS "${LLVM_LIBRARY_DIR}/../../zstd/lib" "${CMAKE_PREFIX_PATH}")
+		if(NOT SYNTRAN_ZSTD_STATIC)
+			message(FATAL_ERROR "SYNTRAN_LLVM_STATIC needs a static libzstd.a")
+		endif()
+		list(APPEND LINK_LIBS ${LLVM_ARCHIVES} "${SYNTRAN_ZSTD_STATIC}" z)
+		if(APPLE)
+			# gfortran drives the link, so it doesn't add the C++ runtime
+			list(APPEND LINK_LIBS c++)
+		else()
+			list(APPEND LINK_LIBS stdc++)
+		endif()
+	elseif(TARGET LLVM)
 		# A shared libLLVM, which is the usual install
 		list(APPEND LINK_LIBS LLVM)
 	else()

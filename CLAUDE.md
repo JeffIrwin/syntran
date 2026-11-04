@@ -110,7 +110,9 @@ fpm install --test --features debug,llvm-blas --prefix ./build/native/
 
 fpm allows only one feature with a `build` table, so `blas` + `llvm` can't be
 combined and `llvm-blas` is both.  The C macro `SYNTRAN_LLVM` reaches C files
-too.  CMake spells it `-DSYNTRAN_LLVM=ON`.  The test suite must pass both with
+too.  CMake spells it `-DSYNTRAN_LLVM=ON`, and the official macOS binary adds
+`-DSYNTRAN_LLVM_STATIC=ON` to link LLVM's archives instead of `libLLVM.dylib`
+(CI's `Pack macOS` step fails if an LLVM/zstd/z3 dylib sneaks back in).  The test suite must pass both with
 and without LLVM, since the latter is the default: the groups `native_rt` and
 `native` in `src/tests/test.f90` only exercise the backend if it's built in.
 
