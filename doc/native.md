@@ -54,6 +54,13 @@ also needs a C compiler to link the executable (`cc`, or `$CC`), and a program
 that uses `@` or `std::solve()` needs BLAS and LAPACK for the linker too, e.g.
 `libopenblas-dev`.  `Dockerfile.rocky` builds it.
 
+The macOS binary has it too, also with LLVM linked statically.  `--native` links
+with `cc` from Xcode's command line tools, and `@` links Accelerate.  It is built
+with `./build.sh release --llvm --blas -- -DSYNTRAN_LLVM_STATIC=ON`, where
+`SYNTRAN_LLVM_STATIC` takes LLVM's component archives from `llvm-config
+--link-static` instead of `libLLVM.dylib`, so the package doesn't need LLVM,
+zstd, or z3 dylibs.
+
 ## Building syntran with LLVM
 
 This needs LLVM (version 17 or later) installed.  Without it, syntran builds as
