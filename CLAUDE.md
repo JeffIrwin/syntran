@@ -127,7 +127,9 @@ The official Windows binary links LLVM statically too, so it has no DLLs to ship
 script over MSYS2's component archives, like `/opt/llvm-static` above) and
 `syntran.def`, which exports the LLVM fns that `src/c/llvm_shim.c` finds with
 `GetProcAddress()` (like the `--dynamic-list` above).  CI's `Pack Windows` step fails
-if `syntran.exe` imports anything but system DLLs.
+if `syntran.exe` imports anything but system DLLs.  The build uses MSYS2's own
+gfortran, since the runner's older libstdc++ and mingw-w64 lack fns that MSYS2's
+LLVM archives need (`std::__get_once_callable`, `__imp__setjmp`).
 
 On Windows, use MSYS2's ucrt64 LLVM (`pacman -S mingw-w64-ucrt-x86_64-llvm`),
 not the official installer, which targets MSVC.  `doc/native.md` has the exact

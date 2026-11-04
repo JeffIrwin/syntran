@@ -151,8 +151,15 @@ the few LLVM fns that `src/c/llvm_shim.c` finds at run time with
 `GetProcAddress()`, because the fns that exist depend on the version of LLVM.
 A static LLVM exports nothing by default, so without this `--jit` would fail.
 Then build as above, but with `-Lbuild/llvm-static -Wl,build/llvm-static/syntran.def`
-in place of `-Lbuild/llvm-win`, and without MSYS2 on the `PATH`.  `--gc-sections`
-and `-s` shrink it from 157 MB to 106 MB:
+in place of `-Lbuild/llvm-win`.  `--gc-sections` and `-s` shrink it from 157 MB to
+106 MB.
+
+Build with MSYS2's own gfortran (`pacman -S mingw-w64-ucrt-x86_64-gcc-fortran`, with
+`C:\msys64\ucrt64\bin` first on the `PATH`), because the archives were compiled by
+a newer GCC and mingw-w64 than other mingw distributions might have.  GCC 15.2 and
+mingw-w64 v13 fail to link with undefined references to
+`std::__get_once_callable()`, `std::__get_once_call()`, and `__imp__setjmp`.  The
+result is still static, so it doesn't need MSYS2 to run:
 
 ```powershell
 fpm install --features release,llvm-blas --prefix ./build/native/ --flag "-static -fopenmp -Lbuild/openblas -Lbuild/llvm-static -Wl,build/llvm-static/syntran.def -Wl,--wrap=setlocale -Wl,--stack,67108864 -Wl,--gc-sections -Wl,-s"

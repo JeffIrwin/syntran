@@ -262,7 +262,13 @@
 					# package has LLVM's component archives as well as the DLL, and \n
 					# the release binary links the former, so that it has no DLLs to \n
 					# ship.  Same as /opt/llvm-static in Dockerfile.rocky \n
-					/c/msys64/usr/bin/pacman.exe -Sy --noconfirm --needed mingw-w64-ucrt-x86_64-llvm \n
+					# The release binary is built with MSYS2's own gfortran, not the runner's.  \n
+					# MSYS2's LLVM is built with a newer GCC and mingw-w64 than the runner \n
+					# has (GCC 15.2, mingw-w64 v13), and its archives need fns that only \n
+					# the newer libstdc++.a (std::__get_once_callable) and the newer \n
+					# libucrt.a (__imp__setjmp) have, so linking against the runner's \n
+					# fails with undefined references \n
+					/c/msys64/usr/bin/pacman.exe -Sy --noconfirm --needed mingw-w64-ucrt-x86_64-llvm mingw-w64-ucrt-x86_64-gcc-fortran \n
 
 					# MSYS2 is on the PATH for this step only, for llvm-config and \n
 					# llvm-nm.  This writes build/llvm-static/libLLVM.a and syntran.def \n
@@ -297,7 +303,9 @@
 					# built with OpenMP, so `-fopenmp` pulls in libgomp \n
 					# \n
 					# LLVM is linked statically from the \"Install static LLVM windows\" \n
-					# step, found through `-Lbuild/llvm-static`, with no MSYS2 on the PATH.  \n
+					# step, found through `-Lbuild/llvm-static`.  MSYS2's gfortran is first on \n
+					# the PATH (see that step for why), but it is all linked statically, so the \n
+					# exe has no MSYS2 DLLs, which \"Pack Windows\" checks.  \n
 					# syntran.def exports the few fns of LLVM that src/c/llvm_shim.c \n
 					# looks up at run time with GetProcAddress().  The unit tests include \n
 					# the groups that need LLVM, which are skipped without it \n
@@ -306,6 +314,8 @@
 					# They are here and not just in \"Pack Windows\", so that the tests run \n
 					# on the same binary that ships, and so that fpm reuses this build \n
 					$flags = \"-static -fopenmp -Lbuild/openblas -Lbuild/llvm-static -Wl,build/llvm-static/syntran.def -Wl,--wrap=setlocale -Wl,--stack,67108864 -Wl,--gc-sections -Wl,-s\" \n
+					$env:PATH = \"C:\\msys64\\ucrt64\\bin;$env:PATH\" \n
+					gfortran --version \n
 					fpm test test --features release,llvm-blas --flag $flags \n
 					fpm test long --features release,llvm-blas --flag $flags \n
 				"
@@ -389,6 +399,7 @@
 					# of rebuilding from scratch with cmake.  --prefix places \n
 					# it in a predictable location for packaging \n
 					$flags = \"-static -fopenmp -Lbuild/openblas -Lbuild/llvm-static -Wl,build/llvm-static/syntran.def -Wl,--wrap=setlocale -Wl,--stack,67108864 -Wl,--gc-sections -Wl,-s\" \n
+					$env:PATH = \"C:\\msys64\\ucrt64\\bin;$env:PATH\" \n
 					fpm install --features release,llvm-blas --flag $flags --prefix ./build/ \n
 
 					copy .\\build\\bin\\syntran.exe .\\ \n
