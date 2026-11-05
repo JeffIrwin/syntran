@@ -38,18 +38,21 @@ module syntran__core_m
 	!      + aot takes 200+ (slower than transpiler but faster than vm)
 	!    * all aoc jit run fast enough that we might as well add as a submodule
 	!      and always run in ci (not bytecode though)
+	!    * improve performance on array/vector heavy operations like stencil
+	!      benchmark:
+	!      + "stencil is still about 6x slower than gfortran's 0.055s. Closing
+	!        that gap needs slice views, which skip the copy for read-only
+	!        unit-stride slices, and fusing chains of elementwise ops into one
+	!        loop. That's a bigger design change, so I left it alone."
 	!    * build devx -- i don't like having openblas and llvm libs under
 	!      "build" dir because they get nuked on cleaning. maybe make a
 	!      gitignored "lib" dir?
 	!      + maybe obviated by build.sh improvements like auto lib detection
-	!    * run src/benchmarks with new aot/jit columns
-	!    * --version output should show build config, whether blas or llvm were
-	!      linked, whether blas is openblas or reference, etc.
-	!    * binary packaging? any llvm dll/so/dylib's? third party notice?
-	!      + rocky done, mac/windows tbd
 	!    * optimization options? at least give consideration to what the default
 	!      should be
-	!    * parity with vm, not with transpiler
+	!      + default is -O2
+	!      + this is clang and rustc's release builds use
+	!      + could expose later
 	!    * remove transpiler backend? not sure its worth it if we have a
 	!      compiler (especially one which has even better parity with the vm).
 	!      maybe much later, the bytecode vm could also be removed
