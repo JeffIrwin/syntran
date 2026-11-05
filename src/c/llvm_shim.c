@@ -186,6 +186,15 @@ static char sy_jit_err[1024];
 static void sy_jit_main_stub(void) {}
 #endif
 
+#ifdef _WIN64
+/* LLVM probes the stack of a fn whose frame is bigger than a page with a call to libgcc's
+ * `___chkstk_ms`, e.g. main() of a long program with many slices.  The JIT can't find it
+ * in the process, because it is a static symbol of libgcc.a, not an export of a DLL.  It
+ * is not a C fn (it takes its size in rax and preserves every register), so only its
+ * address is used */
+extern char ___chkstk_ms;
+#endif
+
 /* A syntran that links LLVM statically (Dockerfile.rocky) doesn't export LLVM's symbols,
  * so each name passed to sy_dlsym() below must be a string literal, because the
  * Dockerfile greps this file for them to make a --dynamic-list.
@@ -319,6 +328,14 @@ static int sy_jit_load(void *module, void *ctx, LLVMOrcLLJITRef *out, uint64_t *
     pairs = (LLVMOrcCSymbolMapPair *)realloc(pairs, (n + 1) * sizeof(*pairs));
     pairs[n].Name = LLVMOrcLLJITMangleAndIntern(jit, "__main");
     pairs[n].Sym.Address = (uint64_t)(uintptr_t)&sy_jit_main_stub;
+    pairs[n].Sym.Flags.GenericFlags = 1 | 4;
+    pairs[n].Sym.Flags.TargetFlags = 0;
+    n++;
+#endif
+#ifdef _WIN64
+    pairs = (LLVMOrcCSymbolMapPair *)realloc(pairs, (n + 1) * sizeof(*pairs));
+    pairs[n].Name = LLVMOrcLLJITMangleAndIntern(jit, "___chkstk_ms");
+    pairs[n].Sym.Address = (uint64_t)(uintptr_t)&___chkstk_ms;
     pairs[n].Sym.Flags.GenericFlags = 1 | 4;
     pairs[n].Sym.Flags.TargetFlags = 0;
     n++;
