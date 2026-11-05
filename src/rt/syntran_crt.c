@@ -778,8 +778,10 @@ static void *sy_eptr_dup(int32_t e, void *p)
     return sy_struct_dup((const sy_struct *)p);
 }
 
-/* A zeroed array of the given shape */
-sy_arr *sy_arr_new(int32_t elem, int32_t rank, const int64_t *sizes)
+/* An array of the given shape.  The elements are zeroed (and a str is empty), unless the
+ * caller is about to overwrite all of them and says `zero` is 0.  That only applies to
+ * elements that are not heap objects, since those must always be valid to free */
+static sy_arr *sy_arr_alloc(int32_t elem, int32_t rank, const int64_t *sizes, int zero)
 {
     int64_t len = 1, i;
     sy_arr *a = (sy_arr *)malloc(sizeof(sy_arr) + (size_t)rank * sizeof(int64_t));
@@ -792,12 +794,21 @@ sy_arr *sy_arr_new(int32_t elem, int32_t rank, const int64_t *sizes)
     a->len = len;
     a->rank = rank;
     a->elem = elem;
-    a->data = (char *)calloc(len > 0 ? (size_t)len : 1, sy_esize(elem));
+    if (zero || sy_eptr(elem))
+        a->data = (char *)calloc(len > 0 ? (size_t)len : 1, sy_esize(elem));
+    else
+        a->data = (char *)malloc((len > 0 ? (size_t)len : 1) * sy_esize(elem));
     if (a->data == NULL) sy_fatal("out of memory");
     if (elem == SY_STR) {
         for (i = 0; i < len; i++) ((sy_str **)a->data)[i] = SY_EMPTY;
     }
     return a;
+}
+
+/* A zeroed array of the given shape */
+sy_arr *sy_arr_new(int32_t elem, int32_t rank, const int64_t *sizes)
+{
+    return sy_arr_alloc(elem, rank, sizes, 1);
 }
 
 static sy_arr *sy_arr_new1(int32_t elem, int64_t n)
@@ -824,7 +835,7 @@ sy_arr *sy_arr_dup(const sy_arr *a)
     int64_t i;
 
     if (a == NULL) return NULL;
-    r = sy_arr_new(a->elem, a->rank, a->size);
+    r = sy_arr_alloc(a->elem, a->rank, a->size, 0);
     if (sy_eptr(a->elem)) {
         for (i = 0; i < a->len; i++) {
             sy_eptr_free(a->elem, ((void **)r->data)[i]);
@@ -882,10 +893,11 @@ int8_t sy_arr_eq(const sy_arr *a, const sy_arr *b)
     return 1;
 }
 
-/* A zeroed array of the shape of `a`, of another element type */
+/* An array of the shape of `a`, of another element type.  Its numeric elements are NOT
+ * zeroed, because the generated code overwrites every one of them right away */
 sy_arr *sy_arr_like(const sy_arr *a, int32_t elem)
 {
-    return sy_arr_new(elem, a->rank, a->size);
+    return sy_arr_alloc(elem, a->rank, a->size, 0);
 }
 
 /* The extents of an array as "3 x 2", for the messages */
@@ -1252,38 +1264,70 @@ static int64_t *sy_sub_idx(const sy_sub *s, int64_t n, int64_t *count, int32_t d
 }
 
 /* Walks the elements that a subscript of each dimension of an array selects, in
- * column-major order.  The position of the t-th one in the array is `lin` */
+ * column-major order.  A scalar, a range, or `:` selects consecutive indices, which are
+ * not listed, only `lo[k]` and the count.  A stepped or vector subscript has a list in
+ * `idx[k]`.  `mul[k]` is the distance in elements between neighbors along dimension k */
 typedef struct {
     int32_t rank;
     int64_t *idx[SY_MAX_RANK];
-    int64_t cnt[SY_MAX_RANK], pos[SY_MAX_RANK], ext[SY_MAX_RANK];
+    int64_t lo[SY_MAX_RANK];
+    int64_t cnt[SY_MAX_RANK], pos[SY_MAX_RANK], ext[SY_MAX_RANK], mul[SY_MAX_RANK];
     int64_t total;
 } sy_walk;
 
 static void sy_walk_init(sy_walk *w, const sy_arr *a, const sy_sub *subs)
 {
     int32_t k;
+    int64_t mult = 1;
 
     if (a->rank > SY_MAX_RANK) sy_fatal("array rank is too big");
     w->rank = a->rank;
     w->total = 1;
     for (k = 0; k < a->rank; k++) {
-        w->idx[k] = sy_sub_idx(&subs[k], a->size[k], &w->cnt[k], k + 1, a->rank);
-        w->ext[k] = a->size[k];
+        const sy_sub *s = &subs[k];
+        int64_t n = a->size[k], hi;
+
+        if (s->kind == SUB_SCALAR || s->kind == SUB_RANGE || s->kind == SUB_ALL) {
+            /* The same as sy_sub_idx_raw() and sy_sub_idx(), without the list */
+            if (s->kind == SUB_SCALAR) {
+                w->lo[k] = s->lo;
+                w->cnt[k] = 1;
+            } else {
+                w->lo[k] = (s->kind == SUB_ALL || (s->omit & 1)) ? 0 : s->lo;
+                hi = (s->kind == SUB_ALL || (s->omit & 2)) ? n : s->hi;
+                w->cnt[k] = hi > w->lo[k] ? hi - w->lo[k] : 0;
+            }
+            w->idx[k] = NULL;
+            if (sy_bounds && w->cnt[k] > 0) {
+                int64_t last = w->lo[k] + w->cnt[k] - 1;
+
+                if (w->lo[k] < 0 || w->lo[k] >= n) sy_oob(w->lo[k], k + 1, a->rank, n);
+                if (last < 0 || last >= n) sy_oob(last, k + 1, a->rank, n);
+            }
+        } else {
+            w->idx[k] = sy_sub_idx(s, n, &w->cnt[k], k + 1, a->rank);
+            w->lo[k] = 0;
+        }
+        w->ext[k] = n;
+        w->mul[k] = mult;
+        mult *= n;
         w->pos[k] = 0;
         w->total *= w->cnt[k];
     }
 }
 
+/* The index along dimension k of its p-th selected element */
+static inline int64_t sy_walk_at(const sy_walk *w, int32_t k, int64_t p)
+{
+    return w->idx[k] != NULL ? w->idx[k][p] : w->lo[k] + p;
+}
+
 static int64_t sy_walk_next(sy_walk *w)
 {
     int32_t k;
-    int64_t lin = 0, mult = 1;
+    int64_t lin = 0;
 
-    for (k = 0; k < w->rank; k++) {
-        lin += w->idx[k][w->pos[k]] * mult;
-        mult *= w->ext[k];
-    }
+    for (k = 0; k < w->rank; k++) lin += sy_walk_at(w, k, w->pos[k]) * w->mul[k];
     for (k = 0; k < w->rank; k++) {
         if (++w->pos[k] < w->cnt[k]) break;
         w->pos[k] = 0;
@@ -1298,13 +1342,46 @@ static void sy_walk_free(sy_walk *w)
     for (k = 0; k < w->rank; k++) free(w->idx[k]);
 }
 
+/* Do the selected elements come in runs of consecutive ones in storage?  If so, `*run`
+ * is the length of each, and `*d` is the first dimension that is not part of one, so
+ * dimensions 0 to d - 1 are walked all at once.  Dimension 0 has to be consecutive,
+ * and so does each one that is merged into the run, which needs all of the dimensions
+ * before it to be whole.  So `a[:, 1:3]` is a single run, and `a[1:3, :]` is not */
+static int sy_walk_runs(const sy_walk *w, int64_t *run, int32_t *d)
+{
+    if (w->total <= 0 || w->rank == 0 || w->idx[0] != NULL) return 0;
+    *run = w->cnt[0];
+    *d = 1;
+    while (*d < w->rank && w->idx[*d] == NULL
+            && w->lo[*d - 1] == 0 && w->cnt[*d - 1] == w->ext[*d - 1]) {
+        *run *= w->cnt[*d];
+        ++*d;
+    }
+    return 1;
+}
+
+/* Where the next run starts, then step the outer dimensions (from d) on to the one after */
+static int64_t sy_walk_run_next(sy_walk *w, int32_t d)
+{
+    int32_t k;
+    int64_t lin = 0;
+
+    for (k = 0; k < d; k++) lin += w->lo[k] * w->mul[k];
+    for (k = d; k < w->rank; k++) lin += sy_walk_at(w, k, w->pos[k]) * w->mul[k];
+    for (k = d; k < w->rank; k++) {
+        if (++w->pos[k] < w->cnt[k]) break;
+        w->pos[k] = 0;
+    }
+    return lin;
+}
+
 /* a[subs], where at least one subscript is not a single element.  The
  * dimensions of single elements are dropped from the shape of the result */
 sy_arr *sy_arr_slice(const sy_arr *a, const sy_sub *subs)
 {
     sy_walk w;
-    int64_t sizes[SY_MAX_RANK], t, lin;
-    int32_t k, rr = 0;
+    int64_t sizes[SY_MAX_RANK], t, lin, run;
+    int32_t k, d, rr = 0;
     size_t es = sy_esize(a->elem);
     sy_arr *out;
 
@@ -1312,7 +1389,16 @@ sy_arr *sy_arr_slice(const sy_arr *a, const sy_sub *subs)
     for (k = 0; k < a->rank; k++) {
         if (subs[k].kind != SUB_SCALAR) sizes[rr++] = w.cnt[k];
     }
-    out = sy_arr_new(a->elem, rr, sizes);
+    out = sy_arr_alloc(a->elem, rr, sizes, 0);
+
+    if (!sy_eptr(a->elem) && sy_walk_runs(&w, &run, &d)) {
+        for (t = 0; t < w.total; t += run) {
+            lin = sy_walk_run_next(&w, d);
+            memcpy(out->data + (size_t)t * es, a->data + (size_t)lin * es, (size_t)run * es);
+        }
+        sy_walk_free(&w);
+        return out;
+    }
 
     for (t = 0; t < out->len; t++) {
         lin = sy_walk_next(&w);
@@ -1327,12 +1413,33 @@ sy_arr *sy_arr_slice(const sy_arr *a, const sy_sub *subs)
     return out;
 }
 
+/* Fill n elements of size es from `dst` with the value that `src` points to */
+static void sy_fill(char *dst, const void *src, int64_t n, size_t es)
+{
+    int64_t i;
+
+    switch (es) {
+    case 1:
+        memset(dst, *(const char *)src, (size_t)n);
+        break;
+    case 4:
+        for (i = 0; i < n; i++) ((uint32_t *)dst)[i] = *(const uint32_t *)src;
+        break;
+    case 8:
+        for (i = 0; i < n; i++) ((uint64_t *)dst)[i] = *(const uint64_t *)src;
+        break;
+    default:
+        for (i = 0; i < n; i++) memcpy(dst + (size_t)i * es, src, es);
+    }
+}
+
 /* a[subs] = rhs, or a[subs] = *scalar if rhs is NULL, where `scalar` points to
  * a value of the element type */
 void sy_arr_slice_set(sy_arr *a, const sy_sub *subs, const sy_arr *rhs, const void *scalar)
 {
     sy_walk w;
-    int64_t t, lin;
+    int64_t t, lin, run;
+    int32_t d;
     size_t es = sy_esize(a->elem);
     sy_arr *tmp = NULL;
 
@@ -1342,6 +1449,19 @@ void sy_arr_slice_set(sy_arr *a, const sy_sub *subs, const sy_arr *rhs, const vo
         sy_rt_error("R21", "size of RHS does not match size of LHS slice");
     }
     if (rhs == a) rhs = tmp = sy_arr_dup(a);
+
+    if (!sy_eptr(a->elem) && sy_walk_runs(&w, &run, &d)) {
+        for (t = 0; t < w.total; t += run) {
+            lin = sy_walk_run_next(&w, d);
+            if (rhs != NULL)
+                memcpy(a->data + (size_t)lin * es, rhs->data + (size_t)t * es, (size_t)run * es);
+            else
+                sy_fill(a->data + (size_t)lin * es, scalar, run, es);
+        }
+        sy_arr_free(tmp);
+        sy_walk_free(&w);
+        return;
+    }
 
     for (t = 0; t < w.total; t++) {
         lin = sy_walk_next(&w);

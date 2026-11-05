@@ -2075,6 +2075,21 @@ end function elem_ptr
 
 !===============================================================================
 
+function elem_at(em, d, ety, lin) result(p)
+	! The address of the element at position `lin` of an array whose data pointer
+	! `d` was loaded already.  Loops load it once before they start, because the
+	! stores in the loop might alias the array header, which would otherwise make
+	! LLVM reload `d` in every iteration and stop it from vectorizing.  An array
+	! never gets new data in its lifetime
+	type(nemitter_t), intent(inout) :: em
+	type(c_ptr), intent(in) :: d, lin
+	integer, intent(in) :: ety
+	type(c_ptr) :: p
+	p = LLVMBuildGEP2(em%bld, elem_ll(em, ety), d, [lin], 1, cs(''))
+end function elem_at
+
+!===============================================================================
+
 function elem_load(em, ety, p) result(r)
 
 	! Read an element, which a string only lends
@@ -4311,7 +4326,7 @@ recursive function emit_unary(em, node) result(r)
 
 	integer :: ety
 
-	type(c_ptr) :: out, p, q
+	type(c_ptr) :: out, p, q, xd, od
 
 	type(loop_t) :: lp
 
@@ -4331,10 +4346,12 @@ recursive function emit_unary(em, node) result(r)
 			return
 		end if
 		out = rt_call(em, 'sy_arr_like', em%t_ptr, [x%v, ci32(em, elem_code(ety))])
+		xd = arr_data(em, x%v)
+		od = arr_data(em, out)
 		call loop_begin(em, arr_len(em, x%v), lp, q)
-		el = elem_load(em, x%elem, elem_ptr(em, x%v, x%elem, q))
+		el = elem_load(em, x%elem, elem_at(em, xd, x%elem, q))
 		y = unary_val(em, node%op%kind, node%op%text, el)
-		call elem_store(em, elem_ptr(em, out, ety, q), ety, y)
+		call elem_store(em, elem_at(em, od, ety, q), ety, y)
 		call loop_end(em, lp)
 		call dispose(em, x)
 		r = arr_val(out, .true., node%val)
@@ -4563,7 +4580,7 @@ function arr_binop_vals(em, op, op_text, l, rr, res_val) result(r)
 
 	integer :: ety
 
-	type(c_ptr) :: out, q, shape_src
+	type(c_ptr) :: out, q, shape_src, ld, rd, od
 
 	type(loop_t) :: lp
 
@@ -4588,23 +4605,27 @@ function arr_binop_vals(em, op, op_text, l, rr, res_val) result(r)
 
 	out = rt_call(em, 'sy_arr_like', em%t_ptr, [shape_src, ci32(em, elem_code(ety))])
 
+	od = arr_data(em, out)
+	if (l%ty == array_type) ld = arr_data(em, l%v)
+	if (rr%ty == array_type) rd = arr_data(em, rr%v)
+
 	call loop_begin(em, arr_len(em, shape_src), lp, q)
 	if (l%ty == array_type) then
-		x = elem_load(em, l%elem, elem_ptr(em, l%v, l%elem, q))
+		x = elem_load(em, l%elem, elem_at(em, ld, l%elem, q))
 		x%sk = l%sk
 	else
 		x = l
 		x%owned = .false.
 	end if
 	if (rr%ty == array_type) then
-		y = elem_load(em, rr%elem, elem_ptr(em, rr%v, rr%elem, q))
+		y = elem_load(em, rr%elem, elem_at(em, rd, rr%elem, q))
 		y%sk = rr%sk
 	else
 		y = rr
 		y%owned = .false.
 	end if
 	z = binop_vals(em, op, x, y, op_text)
-	call elem_store(em, elem_ptr(em, out, ety, q), ety, z)
+	call elem_store(em, elem_at(em, od, ety, q), ety, z)
 	call loop_end(em, lp)
 
 	call dispose(em, l)
@@ -4630,7 +4651,7 @@ recursive function emit_reduce(em, base, a, rtype) result(r)
 
 	integer :: ety
 
-	type(c_ptr) :: acc, q, ignored, init
+	type(c_ptr) :: acc, q, ignored, init, ad
 
 	type(loop_t) :: lp
 
@@ -4698,8 +4719,9 @@ recursive function emit_reduce(em, base, a, rtype) result(r)
 	end if
 	ignored = LLVMBuildStore(em%bld, init, acc)
 
+	ad = arr_data(em, a%v)
 	call loop_begin(em, arr_len(em, a%v), lp, q)
-	x = elem_load(em, ety, elem_ptr(em, a%v, ety, q))
+	x = elem_load(em, ety, elem_at(em, ad, ety, q))
 
 	select case (base)
 	case ('sum', 'product', 'minval', 'maxval')
@@ -5326,7 +5348,7 @@ function arr_cast(em, a, ety) result(r)
 
 	!********
 
-	type(c_ptr) :: out, q
+	type(c_ptr) :: out, q, ad, od
 
 	type(loop_t) :: lp
 
@@ -5338,10 +5360,12 @@ function arr_cast(em, a, ety) result(r)
 	end if
 
 	out = rt_call(em, 'sy_arr_like', em%t_ptr, [a%v, ci32(em, elem_code(ety))])
+	ad = arr_data(em, a%v)
+	od = arr_data(em, out)
 	call loop_begin(em, arr_len(em, a%v), lp, q)
-	x = elem_load(em, a%elem, elem_ptr(em, a%v, a%elem, q))
+	x = elem_load(em, a%elem, elem_at(em, ad, a%elem, q))
 	y = convert(em, x, ety)
-	call elem_store(em, elem_ptr(em, out, ety, q), ety, y)
+	call elem_store(em, elem_at(em, od, ety, q), ety, y)
 	call loop_end(em, lp)
 
 	call dispose(em, a)
@@ -5368,7 +5392,7 @@ recursive function emit_intr_map(em, base, a, node) result(r)
 
 	integer :: ety
 
-	type(c_ptr) :: out, q
+	type(c_ptr) :: out, q, ad, od
 
 	type(loop_t) :: lp
 
@@ -5389,11 +5413,13 @@ recursive function emit_intr_map(em, base, a, node) result(r)
 	end if
 
 	out = rt_call(em, 'sy_arr_like', em%t_ptr, [a%v, ci32(em, elem_code(ety))])
+	ad = arr_data(em, a%v)
+	od = arr_data(em, out)
 	call loop_begin(em, arr_len(em, a%v), lp, q)
-	x = elem_load(em, a%elem, elem_ptr(em, a%v, a%elem, q))
+	x = elem_load(em, a%elem, elem_at(em, ad, a%elem, q))
 	x%sk = a%sk
 	y = intr_scalar(em, base, x, ety, node%identifier%pos)
-	call elem_store(em, elem_ptr(em, out, ety, q), ety, y)
+	call elem_store(em, elem_at(em, od, ety, q), ety, y)
 	call loop_end(em, lp)
 
 	call dispose(em, a)

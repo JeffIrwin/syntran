@@ -4198,6 +4198,10 @@ subroutine unit_test_nd_i32(npass, nfail)
 			! Reductions along a dim, and sum() with a mask
 			interpret_file(path//'reduce-dim.syntran', quiet) == 'true', &
 			interpret_file(path//'reduce-mask.syntran', quiet) == 'true', &
+
+			! Slices that are copied in runs of consecutive elements, and the
+			! ones that aren't (steps, vectors, strs)
+			interpret_file(path//'slices.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
