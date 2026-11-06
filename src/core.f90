@@ -38,13 +38,11 @@ module syntran__core_m
 	!      + aot takes 200+ (slower than transpiler but faster than vm)
 	!    * all aoc jit run fast enough that we might as well add as a submodule
 	!      and always run in ci (not bytecode though)
-	!    * improve performance on array/vector heavy operations like stencil
-	!      benchmark:
-	!      + done for --native: TBAA tags + fused elementwise loops with slice
-	!        views, stencil is 0.06s vs gfortran's 0.055s
-	!      + still to do: fuse elementwise intrinsics (sqrt, exp, ... for the
-	!        elem benchmark), write into the destination slice/variable in place
-	!        (small), multi-d slices, reductions of fused expressions
+	!    * fuse elementwise intrinsics (sqrt, exp, ... for the elem benchmark),
+	!      write into the destination slice/variable in place (small), multi-d
+	!      slices, reductions of fused expressions
+	!      + related TBAA work is finished for primitive array operations which
+	!        were slowing the stencil benchmark
 	!    * build devx -- i don't like having openblas and llvm libs under
 	!      "build" dir because they get nuked on cleaning. maybe make a
 	!      gitignored "lib" dir?
