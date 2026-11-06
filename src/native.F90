@@ -1161,6 +1161,141 @@ end function dup_fn
 
 !===============================================================================
 
+recursive function may_clobber(node) result(c)
+
+	! Whether evaluating an expression can write to a variable: it calls a user fn,
+	! a method, or a fn pointer, or it assigns something.  A str or array that is
+	! only borrowed from a variable (load_var()) is not safe to hold across that,
+	! because the variable may be reassigned, which frees what it held.  The
+	! interpreter copies an operand as it evaluates it, so it never sees this
+
+	type(syntax_node_t), intent(in) :: node
+	logical :: c
+
+	integer :: i
+
+	c = .true.
+	select case (node%kind)
+	case (fn_call_expr, method_call_expr, fn_call_ptr_expr, assignment_expr)
+		return
+	end select
+
+	c = .false.
+	if (allocated(node%left))   c = may_clobber(node%left)
+	if (c) return
+	if (allocated(node%right))  c = may_clobber(node%right)
+	if (c) return
+	if (allocated(node%member)) c = may_clobber(node%member)
+	if (c) return
+	if (allocated(node%lbound_)) c = may_clobber(node%lbound_)
+	if (c) return
+	if (allocated(node%step))    c = may_clobber(node%step)
+	if (c) return
+	if (allocated(node%ubound_)) c = may_clobber(node%ubound_)
+	if (c) return
+	if (allocated(node%len_))    c = may_clobber(node%len_)
+	if (c) return
+
+	if (allocated(node%args)) then
+		do i = 1, size(node%args)
+			if (may_clobber(node%args(i))) c = .true.
+		end do
+	end if
+	if (c) return
+	if (allocated(node%elems)) then
+		do i = 1, size(node%elems)
+			if (may_clobber(node%elems(i))) c = .true.
+		end do
+	end if
+	if (c) return
+	if (allocated(node%members)) then
+		do i = 1, size(node%members)
+			if (may_clobber(node%members(i))) c = .true.
+		end do
+	end if
+	if (c) return
+	if (allocated(node%lsubscripts)) then
+		do i = 1, size(node%lsubscripts)
+			if (may_clobber(node%lsubscripts(i))) c = .true.
+		end do
+	end if
+
+end function may_clobber
+
+!===============================================================================
+
+function lent_unsafe(node, i, any_ref) result(u)
+
+	! Whether the by-value argument `i` of a call, which a variable only lends to
+	! the callee, can change before the callee is done with it.  That's so if the
+	! callee can assign the variable (a global), if a by-reference argument can
+	! be the same variable, or if a later argument is evaluated by something that
+	! can write to it
+
+	type(syntax_node_t), intent(in) :: node
+	integer, intent(in) :: i
+	logical, intent(in) :: any_ref
+	logical :: u
+
+	u = any_ref .or. .not. node%args(i)%is_loc .or. later_clobbers(node, i)
+
+end function lent_unsafe
+
+!===============================================================================
+
+function later_clobbers(node, i) result(c)
+
+	! Whether any argument of a call after the `i`th can write to a variable
+
+	type(syntax_node_t), intent(in) :: node
+	integer, intent(in) :: i
+	logical :: c
+
+	integer :: j
+
+	c = .false.
+	do j = i + 1, size(node%args)
+		if (may_clobber(node%args(j))) c = .true.
+	end do
+
+end function later_clobbers
+
+!===============================================================================
+
+subroutine own_if_borrowed(em, v)
+
+	! Copy a str or array that is only lent by a variable, so that it stays as it
+	! is while later operands or arguments are evaluated.  Then `v` is owned, and
+	! whatever consumes it frees the copy
+
+	type(nemitter_t), intent(inout) :: em
+	type(nval_t), intent(inout) :: v
+
+	if (.not. ptr_type(v%ty) .or. v%owned) return
+	v%v = rt_call(em, dup_fn(v%ty), em%t_ptr, [v%v])
+	v%owned = .true.
+
+end subroutine own_if_borrowed
+
+!===============================================================================
+
+recursive function emit_arg(em, node, i) result(r)
+
+	! The `i`th argument of a call, as emit_expr() makes it, but owned if a later
+	! argument can write to the variable that it's lent by, c.f. may_clobber()
+
+	type(nemitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	integer, intent(in) :: i
+	type(nval_t) :: r
+
+	r = emit_expr(em, node%args(i))
+	if (later_clobbers(node, i)) call own_if_borrowed(em, r)
+
+end function emit_arg
+
+!===============================================================================
+
 function elem_code(ty) result(c)
 
 	! The runtime's code for the type of an array's elements, c.f. the enum in
@@ -4076,6 +4211,7 @@ recursive function emit_binary(em, node) result(r)
 	end if
 
 	l  = emit_expr(em, node%left)
+	if (may_clobber(node%right)) call own_if_borrowed(em, l)
 	rr = emit_expr(em, node%right)
 	r  = binop_vals(em, node%op%kind, l, rr, node%op%text)
 
@@ -4587,6 +4723,7 @@ recursive function emit_array_binary(em, node) result(r)
 
 	if (node%op%kind == matmul_token) then
 		l  = emit_expr(em, node%left)
+		if (may_clobber(node%right)) call own_if_borrowed(em, l)
 		rr = emit_expr(em, node%right)
 		r  = matmul_vals(em, l, rr, node%val)
 		return
@@ -4602,6 +4739,7 @@ recursive function emit_array_binary(em, node) result(r)
 	end if
 
 	l  = emit_expr(em, node%left)
+	if (may_clobber(node%right)) call own_if_borrowed(em, l)
 	rr = emit_expr(em, node%right)
 	r  = arr_binop_vals(em, node%op%kind, node%op%text, l, rr, node%val)
 
@@ -4724,6 +4862,9 @@ function fuse_wanted(node) result(w)
 
 	w = .false.
 	if (fuse_kind(node) /= fk_bin .and. fuse_kind(node) /= fk_neg) return
+
+	! The operands are read in place, so a call among them could change them
+	if (may_clobber(node)) return
 
 	nops = 0
 	nleaf = 0
@@ -5254,7 +5395,7 @@ recursive function emit_reduce_ext(em, base, node) result(r)
 	has_dim  = node%args(2)%val%type /= array_type
 	has_mask = n == 3 .or. .not. has_dim
 
-	a = emit_expr(em, node%args(1))
+	a = emit_arg(em, node, 1)
 	if (a%ty /= array_type) then
 		call unsupported(em, 'the intrinsic fn `'//base//'` of a value of type `'// &
 			kind_name(a%ty)//'`', node%identifier%pos)
@@ -5301,12 +5442,12 @@ recursive function emit_reduce_ext(em, base, node) result(r)
 	! program gives is checked by the runtime
 	dimv = ci64(em, -huge(0_8) - 1_8)
 	if (has_dim) then
-		d = convert(em, emit_expr(em, node%args(2)), i64_type)
+		d = convert(em, emit_arg(em, node, 2), i64_type)
 		dimv = d%v
 	end if
 	maskv = LLVMConstNull(em%t_ptr)
 	if (has_mask) then
-		m = emit_expr(em, node%args(n))
+		m = emit_arg(em, node, n)
 		maskv = m%v
 	end if
 
@@ -5373,7 +5514,7 @@ recursive function emit_intr_call(em, node) result(r)
 		acc%owned = .false.
 		acc%v = str_literal(em, '')
 		do i = 1, size(node%args)
-			piece = str_of(em, emit_expr(em, node%args(i)))
+			piece = str_of(em, emit_arg(em, node, i))
 			if (i == 1) then
 				acc = piece
 			else
@@ -5391,8 +5532,8 @@ recursive function emit_intr_call(em, node) result(r)
 		r = emit_format(em, node, 1)
 
 	case ('dot')
-		a = emit_expr(em, node%args(1))
-		b = emit_expr(em, node%args(2))
+		a = emit_arg(em, node, 1)
+		b = emit_arg(em, node, 2)
 		r%ty = node%val%type
 		r%owned = .false.
 		r%v = rt_call(em, 'sy_dot_'//type_sfx(r%ty), ll_type(em, r%ty), &
@@ -5401,7 +5542,7 @@ recursive function emit_intr_call(em, node) result(r)
 		call dispose(em, b)
 
 	case ('norm2')
-		a = emit_expr(em, node%args(1))
+		a = emit_arg(em, node, 1)
 		r%ty = node%val%type
 		r%owned = .false.
 		r%v = rt_call(em, 'sy_norm2_'//type_sfx(r%ty), ll_type(em, r%ty), &
@@ -5409,20 +5550,20 @@ recursive function emit_intr_call(em, node) result(r)
 		call dispose(em, a)
 
 	case ('shape')
-		a = emit_expr(em, node%args(1))
+		a = emit_arg(em, node, 1)
 		r = arr_val(rt_call(em, 'sy_shape', em%t_ptr, [a%v]), .true., node%val)
 		call dispose(em, a)
 
 	case ('transpose')
-		a = emit_expr(em, node%args(1))
+		a = emit_arg(em, node, 1)
 		r = arr_val(rt_call(em, 'sy_transpose', em%t_ptr, [a%v]), .true., node%val)
 		r%sk = a%sk
 		call dispose(em, a)
 
 	case ('solve')
 		em%uses_blas = .true.
-		a = emit_expr(em, node%args(1))
-		b = emit_expr(em, node%args(2))
+		a = emit_arg(em, node, 1)
+		b = emit_arg(em, node, 2)
 		r = arr_val(rt_call(em, 'sy_solve', em%t_ptr, [a%v, b%v]), .true., node%val)
 		call dispose(em, a)
 		call dispose(em, b)
@@ -5431,7 +5572,7 @@ recursive function emit_intr_call(em, node) result(r)
 		! The matrix is changed in place, through the array that the variable holds,
 		! and so is `info`, which is a variable
 		em%uses_blas = .true.
-		a = emit_expr(em, node%args(1))
+		a = emit_arg(em, node, 1)
 		if (n >= 2) then
 			valp = var_ptr(em, node%args(2), i32_type)
 		else
@@ -5442,9 +5583,9 @@ recursive function emit_intr_call(em, node) result(r)
 
 	case ('lu_solve')
 		em%uses_blas = .true.
-		a = emit_expr(em, node%args(1))
-		b = emit_expr(em, node%args(2))
-		piece = emit_expr(em, node%args(3))
+		a = emit_arg(em, node, 1)
+		b = emit_arg(em, node, 2)
+		piece = emit_arg(em, node, 3)
 		call rt_void(em, 'sy_lu_solve', [a%v, b%v, piece%v])
 		call dispose(em, a)
 		call dispose(em, b)
@@ -5453,7 +5594,7 @@ recursive function emit_intr_call(em, node) result(r)
 
 	case ('len')
 		! The length is the first field of a string
-		a = emit_expr(em, node%args(1))
+		a = emit_arg(em, node, 1)
 		r%ty = i64_type
 		r%owned = .false.
 		r%v = LLVMBuildLoad2(em%bld, em%t_i64, a%v, cs(''))
@@ -5462,7 +5603,7 @@ recursive function emit_intr_call(em, node) result(r)
 
 	case ('size')
 		! The number of elements, or the extent along a dimension
-		a = emit_expr(em, node%args(1))
+		a = emit_arg(em, node, 1)
 		r%ty = i64_type
 		r%owned = .false.
 		if (a%ty /= array_type) then
@@ -5472,7 +5613,7 @@ recursive function emit_intr_call(em, node) result(r)
 		else if (n == 1) then
 			r%v = arr_len(em, a%v)
 		else
-			b = convert(em, emit_expr(em, node%args(2)), i64_type)
+			b = convert(em, emit_arg(em, node, 2), i64_type)
 			r%v = rt_call(em, 'sy_size_dim', em%t_i64, [a%v, b%v])
 		end if
 		call dispose(em, a)
@@ -5483,7 +5624,7 @@ recursive function emit_intr_call(em, node) result(r)
 		if (n /= 1) then
 			r = emit_reduce_ext(em, base, node)
 		else
-			a = emit_expr(em, node%args(1))
+			a = emit_arg(em, node, 1)
 			if (a%ty /= array_type) then
 				call unsupported(em, 'the intrinsic fn `'//base//'` of a value of type `'// &
 					kind_name(a%ty)//'`', node%identifier%pos)
@@ -5494,7 +5635,7 @@ recursive function emit_intr_call(em, node) result(r)
 		end if
 
 	case ('parse_i32', 'parse_i64', 'parse_f32', 'parse_f64', 'parse_bool')
-		a = emit_expr(em, node%args(1))
+		a = emit_arg(em, node, 1)
 		r%owned = .false.
 		select case (base)
 		case ('parse_i32')
@@ -5519,8 +5660,8 @@ recursive function emit_intr_call(em, node) result(r)
 	case ('reshape')
 		! The same elements in the shape that an array of extents says.  The rank
 		! of the result is known to the parser
-		a = emit_expr(em, node%args(1))
-		b = emit_expr(em, node%args(2))
+		a = emit_arg(em, node, 1)
+		b = emit_arg(em, node, 2)
 		r = dummy_val(em, array_type)
 		if (a%ty /= array_type .or. b%ty /= array_type .or. .not. allocated(node%val%array)) then
 			call unsupported(em, 'the intrinsic fn `reshape` of a value of type `'// &
@@ -5546,8 +5687,8 @@ recursive function emit_intr_call(em, node) result(r)
 
 	case ('open', 'try_open')
 		! A new handle, which is owned like a string is
-		a = emit_expr(em, node%args(1))
-		b = emit_expr(em, node%args(2))
+		a = emit_arg(em, node, 1)
+		b = emit_arg(em, node, 2)
 		r%ty = file_type
 		r%owned = .true.
 		r%v = rt_call(em, 'sy_file_open', em%t_ptr, &
@@ -5562,7 +5703,7 @@ recursive function emit_intr_call(em, node) result(r)
 		if (n == 0) then
 			r%v = rt_call(em, 'sy_stdin_readln', em%t_ptr, [c_ptr ::])
 		else
-			a = emit_expr(em, node%args(1))
+			a = emit_arg(em, node, 1)
 			r%v = rt_call(em, 'sy_file_readln', em%t_ptr, [a%v])
 			call dispose(em, a)
 		end if
@@ -5573,7 +5714,7 @@ recursive function emit_intr_call(em, node) result(r)
 		if (n == 0) then
 			r%v = rt_call(em, 'sy_stdin_at_eof', em%t_i8, [c_ptr ::])
 		else
-			a = emit_expr(em, node%args(1))
+			a = emit_arg(em, node, 1)
 			r%v = rt_call(em, 'sy_file_eof', em%t_i8, [a%v])
 			call dispose(em, a)
 		end if
@@ -5583,14 +5724,14 @@ recursive function emit_intr_call(em, node) result(r)
 		r = arr_val(rt_call(em, 'sy_args', em%t_ptr, none), .true., node%val)
 
 	case ('getenv')
-		a = emit_expr(em, node%args(1))
+		a = emit_arg(em, node, 1)
 		r%ty = str_type
 		r%owned = .true.
 		r%v = rt_call(em, 'sy_getenv', em%t_ptr, [a%v])
 		call dispose(em, a)
 
 	case ('hasenv')
-		a = emit_expr(em, node%args(1))
+		a = emit_arg(em, node, 1)
 		r%ty = bool_type
 		r%owned = .false.
 		r%v = LLVMBuildICmp(em%bld, LLVM_INT_NE, rt_call(em, 'sy_hasenv', em%t_i8, [a%v]), &
@@ -5598,7 +5739,7 @@ recursive function emit_intr_call(em, node) result(r)
 		call dispose(em, a)
 
 	case ('exists')
-		a = emit_expr(em, node%args(1))
+		a = emit_arg(em, node, 1)
 		r%ty = bool_type
 		r%owned = .false.
 		r%v = LLVMBuildICmp(em%bld, LLVM_INT_NE, rt_call(em, 'sy_exists', em%t_i8, [a%v]), &
@@ -5607,10 +5748,10 @@ recursive function emit_intr_call(em, node) result(r)
 
 	case ('read', 'read_i32', 'read_i64', 'read_f32', 'read_f64')
 		! std::read_i32() etc. of a value, or of `n` of them as an array
-		a = emit_expr(em, node%args(1))
+		a = emit_arg(em, node, 1)
 		if (node%val%type == array_type .and. allocated(node%val%array)) then
 			iu = node%val%array%type
-			b = convert(em, emit_expr(em, node%args(2)), i64_type)
+			b = convert(em, emit_arg(em, node, 2), i64_type)
 			r = arr_val(rt_call(em, 'sy_file_read_arr', em%t_ptr, [a%v, ci32(em, elem_code(iu)), &
 				b%v]), .true., node%val)
 		else
@@ -5630,15 +5771,15 @@ recursive function emit_intr_call(em, node) result(r)
 		call dispose(em, a)
 
 	case ('repeat')
-		a = emit_expr(em, node%args(1))
-		b = convert(em, emit_expr(em, node%args(2)), i64_type)
+		a = emit_arg(em, node, 1)
+		b = convert(em, emit_arg(em, node, 2), i64_type)
 		r%ty = str_type
 		r%owned = .true.
 		r%v = rt_call(em, 'sy_str_repeat', em%t_ptr, [a%v, b%v])
 		call dispose(em, a)
 
 	case ('char')
-		a = convert(em, emit_expr(em, node%args(1)), i32_type)
+		a = convert(em, emit_arg(em, node, 1), i32_type)
 		r%ty = str_type
 		r%owned = .true.
 		r%v = rt_call(em, 'sy_str_char', em%t_ptr, [a%v])
@@ -5647,7 +5788,7 @@ recursive function emit_intr_call(em, node) result(r)
 			'acos', 'asin', 'atan', 'log2', 'abs', 'sind', 'cosd', 'tand', 'asind', 'acosd', &
 			'atand')
 		! Of a number, or of each element of an array
-		a = emit_expr(em, node%args(1))
+		a = emit_arg(em, node, 1)
 		if (a%ty == array_type) then
 			r = emit_intr_map(em, base, a, node)
 		else
@@ -5659,7 +5800,7 @@ recursive function emit_intr_call(em, node) result(r)
 		! leave out, or the depth: 1 by default for std::caller(), the fn that called
 		! this one
 		if (n >= 1) then
-			a = convert(em, emit_expr(em, node%args(1)), i32_type)
+			a = convert(em, emit_arg(em, node, 1), i32_type)
 			valp = a%v
 		else
 			valp = ci32(em, merge(1, 0, base == 'caller'))
@@ -5671,9 +5812,9 @@ recursive function emit_intr_call(em, node) result(r)
 	case ('min', 'max')
 		! Of any number of arguments, as a chain.  A NaN loses to a number, like
 		! it does in Fortran
-		acc = emit_expr(em, node%args(1))
+		acc = emit_arg(em, node, 1)
 		do i = 2, n
-			b = emit_expr(em, node%args(i))
+			b = emit_arg(em, node, i)
 			acc = min_max(em, base == 'min', acc, b)
 		end do
 		r = acc
@@ -6371,6 +6512,7 @@ recursive subroutine emit_call_stmt(em, node)
 		allocate(pieces(max(n, 1)))
 		do i = 1, n
 			pieces(i) = str_of(em, emit_expr(em, node%args(i)))
+			if (later_clobbers(node, i)) call own_if_borrowed(em, pieces(i))
 		end do
 
 		parts = entry_alloca(em, LLVMArrayType2(em%t_ptr, int(max(n, 1), c_int64_t)), &
@@ -6594,6 +6736,7 @@ recursive subroutine emit_file_write(em, node, is_writeln)
 	allocate(vals(max(n, 1)))
 	do i = 1, n
 		vals(i) = emit_expr(em, node%args(i + 1))
+		if (later_clobbers(node, i + 1)) call own_if_borrowed(em, vals(i))
 	end do
 
 	call rt_void(em, 'sy_file_wcheck', [f%v, ci32(em, merge(1, 0, is_writeln))])
@@ -7268,7 +7411,7 @@ recursive function emit_user_call(em, node) result(r)
 
 	integer :: i, n, id, off, saved_n
 
-	logical :: copy_back, ok
+	logical :: any_ref, copy_back, ok
 
 	type(c_ptr) :: fn, ignored, recv_slot
 	type(c_ptr), allocatable :: args(:), saved(:)
@@ -7293,6 +7436,13 @@ recursive function emit_user_call(em, node) result(r)
 	if (allocated(node%args)) n = size(node%args)
 	allocate(args(max(n, 1)), pending(max(n, 1)))
 	args = em%t_ptr
+
+	! Whether any argument but the receiver is by reference, which could be the same
+	! variable as a by-value argument
+	any_ref = .false.
+	do i = 1 + off, n
+		if (param_is_ref(em, id, i)) any_ref = .true.
+	end do
 
 	do i = 1, n
 		associate (arg => node%args(i))
@@ -7357,6 +7507,7 @@ recursive function emit_user_call(em, node) result(r)
 
 			else
 				v = emit_expr(em, arg)
+				if (lent_unsafe(node, i, any_ref)) call own_if_borrowed(em, v)
 				if (is_numeric_type(v%ty) .and. is_numeric_type( &
 						em%fns%fns(id)%params(i - off)%type)) then
 					pending(i) = v
@@ -7491,6 +7642,7 @@ recursive function emit_ptr_call(em, node) result(r)
 
 	do i = 1, n
 		v = emit_expr(em, node%args(i))
+		if (lent_unsafe(node, i, .false.)) call own_if_borrowed(em, v)
 		pending(i) = v
 		args(i) = v%v
 		if (v%ty /= null_type) ptys(i) = ll_type(em, v%ty)
@@ -8113,6 +8265,13 @@ subroutine finish(em, n, diags)
 		return
 	end if
 
+	! cmd.exe has no way to quote a double quote, c.f. sh_quote()
+	if (is_windows() .and. index(out, '"') > 0) then
+		call diags%push(err_prefix//'the output file name `'//out// &
+			'` cannot have a double quote'//color_reset)
+		return
+	end if
+
 	ln = len(out)
 	is_ll  = ln > 3 .and. out(max(ln-2,1):) == '.ll'
 	is_obj = ln > 2 .and. out(max(ln-1,1):) == '.o'
@@ -8287,7 +8446,9 @@ end function is_windows
 function sh_quote(s) result(r)
 
 	! `execute_command_line()` runs the command in cmd.exe on Windows, which
-	! doesn't treat single quotes as quotes
+	! doesn't treat single quotes as quotes.  A path can't have a double quote
+	! there, and finish() rejects one.  In a POSIX shell a single quote ends the
+	! quoted string, so it's closed, escaped, and opened again: 'it'\''s'
 
 	character(len = *), intent(in) :: s
 	character(len = :), allocatable :: r
@@ -8295,7 +8456,7 @@ function sh_quote(s) result(r)
 	if (is_windows()) then
 		r = '"'//s//'"'
 	else
-		r = "'"//s//"'"
+		r = "'"//replace_all(s, "'", "'\''")//"'"
 	end if
 
 end function sh_quote
