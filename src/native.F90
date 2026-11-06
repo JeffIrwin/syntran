@@ -142,10 +142,39 @@ module syntran__native_m
 
 	!********
 
+	! How a node of a fused elementwise expression is made, c.f. fuse_kind(): an
+	! operator on each element, a scalar that is evaluated once, a slice that is
+	! read in place, an array variable, or any other array, which is made first
+	integer, parameter :: fk_bin = 1, fk_neg = 2, fk_scalar = 3, fk_view = 4, fk_arr = 5, &
+		fk_mat = 6
+
+	type fleaf_t
+
+		! An operand of a fused expression, evaluated once before its loop: a
+		! scalar value, or an array whose elements are read in the loop.  `data` is
+		! where the elements are, `off` the position of the first one, which is the
+		! start of a slice, and `cnt` how many there are.  A slice is not an array
+		! of its own, so it can only be compared with another by its length
+
+		type(nval_t) :: v
+		logical :: is_arr = .false., view = .false.
+		type(c_ptr) :: data = c_null_ptr, off = c_null_ptr, cnt = c_null_ptr
+		integer :: ety = unknown_type
+
+	end type fleaf_t
+
+	!********
+
 	type fnret_t
 		! What a fn pointer variable returns, for the subscripts of a call of it
 		type(value_t), allocatable :: v
 	end type fnret_t
+
+	!********
+
+	! The TBAA types that tbaa() tags loads and stores with: the location of the
+	! running statement, the header of an array, and each type of its elements
+	integer, parameter :: tb_loc = 1, tb_hdr = 2, tb_i32 = 3, tb_i64 = 4, tb_f32 = 5, tb_f64 = 6
 
 	!********
 
@@ -211,6 +240,12 @@ module syntran__native_m
 		type(c_ptr) :: ablk = c_null_ptr, body = c_null_ptr
 
 		type(c_ptr) :: t_void, t_i1, t_i8, t_i32, t_i64, t_f32, t_f64, t_ptr
+
+		! The TBAA access tags, made at first use, and the id of the metadata kind.
+		! See tbaa().  They let LLVM tell that a store to an element can't change
+		! the header of an array or the location of the statement
+		type(c_ptr) :: tbaa_root = c_null_ptr, tbaa_tag(6) = c_null_ptr
+		integer :: tbaa_kind = -1
 
 		logical :: print_result = .true., trim_result = .false.
 
@@ -773,10 +808,72 @@ subroutine set_loc(em, force)
 	end if
 
 	ignored = LLVMBuildStore(em%bld, ci32(em, em%cur_loc), rt_global(em, 'sy_loc', em%t_i32))
+	call tbaa(em, ignored, tb_loc)
 	em%last_loc = em%cur_loc
 	em%last_bb = bb
 
 end subroutine set_loc
+
+!===============================================================================
+
+subroutine tbaa(em, inst, k)
+
+	! Tag a load or store with the TBAA type `k`, one of the `tb_*`.  Two accesses
+	! of different types never alias, e.g. a store of an `f64` element and a load of
+	! the data pointer of an array.  That is what lets LLVM hoist the loads of an
+	! array's header out of a loop that writes its elements, and so vectorize it.
+	! Only tag memory that is always accessed with the tagged type: an access
+	! without a tag may alias anything, so it is always safe to leave one out
+
+	type(nemitter_t), intent(inout) :: em
+	type(c_ptr), intent(in) :: inst
+	integer, intent(in) :: k
+
+	!********
+
+	character(len = 4), parameter :: names(6) = ['loc ', 'hdr ', 'i32 ', 'i64 ', 'f32 ', 'f64 ']
+
+	type(c_ptr) :: zero, root_name, ty, tag
+
+	if (k < 1 .or. k > size(names)) return
+
+	if (em%tbaa_kind < 0) em%tbaa_kind = LLVMGetMDKindIDInContext(em%ctx, cs('tbaa'), 4)
+
+	if (.not. c_associated(em%tbaa_tag(k))) then
+		if (.not. c_associated(em%tbaa_root)) then
+			root_name = LLVMMDStringInContext2(em%ctx, cs('syntran'), 7_c_size_t)
+			em%tbaa_root = LLVMMDNodeInContext2(em%ctx, [root_name], 1_c_size_t)
+		end if
+		zero = LLVMValueAsMetadata(ci64(em, 0_8))
+		ty = LLVMMDNodeInContext2(em%ctx, [ &
+			LLVMMDStringInContext2(em%ctx, cs(trim(names(k))), int(len_trim(names(k)), c_size_t)), &
+			em%tbaa_root, zero], 3_c_size_t)
+		tag = LLVMMDNodeInContext2(em%ctx, [ty, ty, zero], 3_c_size_t)
+		em%tbaa_tag(k) = LLVMMetadataAsValue(em%ctx, tag)
+	end if
+
+	call LLVMSetMetadata(inst, em%tbaa_kind, em%tbaa_tag(k))
+
+end subroutine tbaa
+
+!===============================================================================
+
+function tbaa_elem(ety) result(k)
+
+	! The TBAA type of the elements of type `ety`, or 0 for the ones that aren't tagged
+
+	integer, intent(in) :: ety
+	integer :: k
+
+	select case (ety)
+	case (i32_type);  k = tb_i32
+	case (i64_type);  k = tb_i64
+	case (f32_type);  k = tb_f32
+	case (f64_type);  k = tb_f64
+	case default;     k = 0
+	end select
+
+end function tbaa_elem
 
 !===============================================================================
 
@@ -1967,6 +2064,7 @@ function arr_data(em, a) result(d)
 
 	g = LLVMBuildGEP2(em%bld, em%t_i8, a, [ci64(em, 16_8)], 1, cs(''))
 	d = LLVMBuildLoad2(em%bld, em%t_ptr, g, cs(''))
+	call tbaa(em, d, tb_hdr)
 
 end function arr_data
 
@@ -1978,6 +2076,7 @@ function arr_len(em, a) result(n)
 	type(c_ptr), intent(in) :: a
 	type(c_ptr) :: n
 	n = LLVMBuildLoad2(em%bld, em%t_i64, a, cs(''))
+	call tbaa(em, n, tb_hdr)
 end function arr_len
 
 !===============================================================================
@@ -1997,6 +2096,7 @@ function arr_dim(em, a, k) result(n)
 		ci64(em, 24_8), cs(''))
 	g = LLVMBuildGEP2(em%bld, em%t_i8, a, [off], 1, cs(''))
 	n = LLVMBuildLoad2(em%bld, em%t_i64, g, cs(''))
+	call tbaa(em, n, tb_hdr)
 
 end function arr_dim
 
@@ -2106,6 +2206,7 @@ function elem_load(em, ety, p) result(r)
 			LLVMConstInt(em%t_i8, 0_c_int64_t, 0), cs(''))
 	else
 		r%v = LLVMBuildLoad2(em%bld, ll_type(em, ety), p, cs(''))
+		call tbaa(em, r%v, tbaa_elem(ety))
 	end if
 
 end function elem_load
@@ -2138,6 +2239,7 @@ subroutine elem_store(em, p, ety, v)
 	else if (is_numeric_type(ety) .and. is_numeric_type(v%ty)) then
 		cv = convert(em, v, ety)
 		ignored = LLVMBuildStore(em%bld, cv%v, p)
+		call tbaa(em, ignored, tbaa_elem(ety))
 
 	else if (ety == enum_type .and. v%ty == enum_type) then
 		ignored = LLVMBuildStore(em%bld, v%v, p)
@@ -4333,6 +4435,11 @@ recursive function emit_unary(em, node) result(r)
 	type(nval_t) :: x, el, y
 
 	if (is_arr(node%right%val)) then
+		if (fuse_wanted(node)) then
+			r = fuse_array(em, node)
+			return
+		end if
+
 		! Each element
 		x = emit_expr(em, node%right)
 		r = dummy_val(em, array_type)
@@ -4489,11 +4596,365 @@ recursive function emit_array_binary(em, node) result(r)
 		return
 	end if
 
+	if (fuse_wanted(node)) then
+		r = fuse_array(em, node)
+		return
+	end if
+
 	l  = emit_expr(em, node%left)
 	rr = emit_expr(em, node%right)
 	r  = arr_binop_vals(em, node%op%kind, node%op%text, l, rr, node%val)
 
 end function emit_array_binary
+
+!===============================================================================
+
+function fuse_kind(node) result(k)
+
+	! How a node of a fused expression is made, as an `fk_*`.  An operator that
+	! is made for each element has to be one that the elements of the result can
+	! be of a number type, and its operands arrays or numbers.  A slice is only
+	! read in place if it's of an array of rank 1 and its range is consecutive.
+	! Anything else of an array is made first, as `fk_mat`
+
+	type(syntax_node_t), intent(in) :: node
+	integer :: k
+
+	k = fk_scalar
+	if (.not. is_arr(node%val)) return
+
+	k = fk_mat
+	if (.not. allocated(node%val%array)) return
+
+	select case (node%kind)
+
+	case (binary_expr)
+		if (.not. is_numeric_type(node%val%array%type)) return
+		select case (node%op%kind)
+		case (plus_token, minus_token, star_token, slash_token)
+			if (fuse_operand_ok(node%left%val) .and. fuse_operand_ok(node%right%val)) k = fk_bin
+		end select
+
+	case (unary_expr)
+		if (.not. is_numeric_type(node%val%array%type)) return
+		if (node%op%kind == minus_token .and. is_arr(node%right%val)) k = fk_neg
+
+	case (name_expr)
+		if (allocated(node%member)) return
+		if (.not. allocated(node%lsubscripts)) then
+			k = fk_arr
+		else if (size(node%lsubscripts) == 1 .and. node%val%array%rank == 1 .and. &
+				is_numeric_type(node%val%array%type)) then
+			if (node%lsubscripts(1)%sub_kind == range_sub .or. &
+					node%lsubscripts(1)%sub_kind == all_sub) k = fk_view
+		end if
+
+	end select
+
+end function fuse_kind
+
+!===============================================================================
+
+function fuse_operand_ok(val) result(ok)
+
+	! Whether a value can be the operand of a fused operator: an array, or a number
+
+	type(value_t), intent(in) :: val
+	logical :: ok
+
+	ok = is_arr(val) .or. is_numeric_type(val%type)
+
+end function fuse_operand_ok
+
+!===============================================================================
+
+recursive subroutine fuse_scan(node, nops, nleaf, nview, maxrank)
+
+	! Count the operators, operands, and slices of an expression, and find the
+	! greatest rank of its arrays, which is 99 if it's not known
+
+	type(syntax_node_t), intent(in) :: node
+	integer, intent(inout) :: nops, nleaf, nview, maxrank
+
+	select case (fuse_kind(node))
+
+	case (fk_bin)
+		nops = nops + 1
+		call fuse_scan(node%left, nops, nleaf, nview, maxrank)
+		call fuse_scan(node%right, nops, nleaf, nview, maxrank)
+
+	case (fk_neg)
+		nops = nops + 1
+		call fuse_scan(node%right, nops, nleaf, nview, maxrank)
+
+	case (fk_view)
+		nleaf = nleaf + 1
+		nview = nview + 1
+		maxrank = max(maxrank, 1)
+
+	case (fk_arr, fk_mat)
+		nleaf = nleaf + 1
+		if (allocated(node%val%array)) then
+			maxrank = max(maxrank, node%val%array%rank)
+		else
+			maxrank = 99
+		end if
+
+	case default
+		nleaf = nleaf + 1
+
+	end select
+
+end subroutine fuse_scan
+
+!===============================================================================
+
+function fuse_wanted(node) result(w)
+
+	! Whether an operator on arrays is made in one loop, with the operators in
+	! its operands and without copying the slices of them.  One operator on
+	! whole arrays is the same as arr_binop_vals(), so that is left to it.  A
+	! slice has no shape of its own, so the arrays have to be of rank 1 if there
+	! is one
+
+	type(syntax_node_t), intent(in) :: node
+	logical :: w
+
+	integer :: nops, nleaf, nview, maxrank
+
+	w = .false.
+	if (fuse_kind(node) /= fk_bin .and. fuse_kind(node) /= fk_neg) return
+
+	nops = 0
+	nleaf = 0
+	nview = 0
+	maxrank = 0
+	call fuse_scan(node, nops, nleaf, nview, maxrank)
+
+	w = (nops >= 2 .or. nview >= 1) .and. (nview == 0 .or. maxrank <= 1)
+
+end function fuse_wanted
+
+!===============================================================================
+
+recursive function fuse_collect(em, node, leaves, nl) result(rep)
+
+	! Evaluate the operands of a fused expression, in the order that they are
+	! written, and check that their shapes agree.  `rep` is the first array of
+	! the node, which the others have the shape of, or 0 if there is none
+
+	type(nemitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	type(fleaf_t), intent(inout) :: leaves(:)
+	integer, intent(inout) :: nl
+	integer :: rep
+
+	!********
+
+	integer :: lrep, rrep, vty, ety, rank_
+
+	type(c_ptr) :: ps, a, subs, offp, cntp
+
+	type(nval_t) :: v
+	type(nval_t), allocatable :: pending(:)
+
+	rep = 0
+
+	select case (fuse_kind(node))
+
+	case (fk_bin)
+		lrep = fuse_collect(em, node%left, leaves, nl)
+		rrep = fuse_collect(em, node%right, leaves, nl)
+		if (lrep > 0 .and. rrep > 0) &
+			call fuse_shape_check(em, leaves(lrep), leaves(rrep), node%op%text)
+		rep = merge(lrep, rrep, lrep > 0)
+
+	case (fk_neg)
+		rep = fuse_collect(em, node%right, leaves, nl)
+
+	case (fk_view)
+		nl = nl + 1
+		leaves(nl)%ety = node%val%array%type
+		if (.not. ref_info(em, node, ps, vty, ety, rank_)) then
+			leaves(nl)%v = dummy_val(em, leaves(nl)%ety)
+			return
+		end if
+
+		a = LLVMBuildLoad2(em%bld, em%t_ptr, ps, cs(''))
+		subs = build_subs(em, node, pending)
+		offp = entry_alloca(em, em%t_i64, 'voff')
+		cntp = entry_alloca(em, em%t_i64, 'vcnt')
+		call rt_void(em, 'sy_slice_view', [a, subs, offp, cntp])
+		call dispose_all(em, pending)
+
+		leaves(nl)%is_arr = .true.
+		leaves(nl)%view = .true.
+		leaves(nl)%data = arr_data(em, a)
+		leaves(nl)%off = LLVMBuildLoad2(em%bld, em%t_i64, offp, cs(''))
+		leaves(nl)%cnt = LLVMBuildLoad2(em%bld, em%t_i64, cntp, cs(''))
+		rep = nl
+
+	case (fk_arr, fk_mat)
+		nl = nl + 1
+		v = emit_expr(em, node)
+		leaves(nl)%v = v
+		leaves(nl)%ety = v%elem
+		if (v%ty /= array_type .or. .not. is_numeric_type(v%elem)) then
+			call unsupported(em, 'an operation on an array of type `'//kind_name(v%elem)//'`')
+			leaves(nl)%v = dummy_val(em, f64_type)
+			leaves(nl)%ety = f64_type
+			return
+		end if
+		leaves(nl)%is_arr = .true.
+		leaves(nl)%data = arr_data(em, v%v)
+		leaves(nl)%off = ci64(em, 0_8)
+		leaves(nl)%cnt = arr_len(em, v%v)
+		rep = nl
+
+	case default
+		nl = nl + 1
+		leaves(nl)%v = emit_expr(em, node)
+		leaves(nl)%v%owned = .false.
+
+	end select
+
+end function fuse_collect
+
+!===============================================================================
+
+subroutine fuse_shape_check(em, a, b, op_text)
+
+	! The operands of an operator have to be the same shape, which is only their
+	! length if one is a slice, since they are all of rank 1 then
+
+	type(nemitter_t), intent(inout) :: em
+	type(fleaf_t), intent(in) :: a, b
+	character(len = *), intent(in) :: op_text
+
+	if (a%view .or. b%view) then
+		call rt_void(em, 'sy_binop_len', [a%cnt, b%cnt, c_string(em, op_text)])
+	else
+		call rt_void(em, 'sy_binop_shape', [a%v%v, b%v%v, c_string(em, op_text)])
+	end if
+
+end subroutine fuse_shape_check
+
+!===============================================================================
+
+recursive function fuse_elem(em, node, leaves, k, q) result(r)
+
+	! The element `q` of a fused expression, made from the elements of its
+	! operands with the scalar operators, which `fuse_collect` made, in the same
+	! order that `k` counts.  An operator gives the type of the elements of its
+	! array, as it would if it were stored in one
+
+	type(nemitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: node
+	type(fleaf_t), intent(in) :: leaves(:)
+	integer, intent(inout) :: k
+	type(c_ptr), intent(in) :: q
+	type(nval_t) :: r
+
+	!********
+
+	integer :: ety
+
+	type(c_ptr) :: idx
+
+	type(nval_t) :: x, y
+
+	select case (fuse_kind(node))
+
+	case (fk_bin)
+		x = fuse_elem(em, node%left, leaves, k, q)
+		y = fuse_elem(em, node%right, leaves, k, q)
+		r = binop_vals(em, node%op%kind, x, y, node%op%text)
+		ety = node%val%array%type
+		if (r%ty /= ety .and. is_numeric_type(r%ty)) r = convert(em, r, ety)
+
+	case (fk_neg)
+		x = fuse_elem(em, node%right, leaves, k, q)
+		r = unary_val(em, node%op%kind, node%op%text, x)
+		ety = node%val%array%type
+		if (r%ty /= ety .and. is_numeric_type(r%ty)) r = convert(em, r, ety)
+
+	case default
+		k = k + 1
+		if (leaves(k)%is_arr) then
+			idx = q
+			if (leaves(k)%view) idx = LLVMBuildAdd(em%bld, q, leaves(k)%off, cs(''))
+			r = elem_load(em, leaves(k)%ety, elem_at(em, leaves(k)%data, leaves(k)%ety, idx))
+		else
+			r = leaves(k)%v
+			r%owned = .false.
+		end if
+
+	end select
+
+end function fuse_elem
+
+!===============================================================================
+
+function fuse_array(em, root) result(r)
+
+	! An elementwise expression of arrays, which is the operators of the node and
+	! of its operands, in one loop that reads the elements of the operands.  A
+	! slice is read in place, and nothing is made for the operators in between
+
+	type(nemitter_t), intent(inout) :: em
+	type(syntax_node_t), intent(in) :: root
+	type(nval_t) :: r
+
+	!********
+
+	integer :: i, nops, nleaf, nview, maxrank, nl, rep, ety, k
+
+	type(c_ptr) :: out, q, od, n
+
+	type(loop_t) :: lp
+
+	type(fleaf_t), allocatable :: leaves(:)
+
+	type(nval_t) :: z
+
+	nops = 0
+	nleaf = 0
+	nview = 0
+	maxrank = 0
+	call fuse_scan(root, nops, nleaf, nview, maxrank)
+
+	allocate(leaves(nleaf))
+	nl = 0
+	rep = fuse_collect(em, root, leaves, nl)
+
+	ety = root%val%array%type
+	r = dummy_val(em, array_type)
+	if (rep < 1) then
+		call unsupported(em, 'an operation on an array')
+		return
+	end if
+
+	n = leaves(rep)%cnt
+	if (leaves(rep)%view) then
+		out = rt_call(em, 'sy_arr_vec', em%t_ptr, [ci32(em, elem_code(ety)), n])
+	else
+		out = rt_call(em, 'sy_arr_like', em%t_ptr, [leaves(rep)%v%v, ci32(em, elem_code(ety))])
+	end if
+	od = arr_data(em, out)
+
+	call loop_begin(em, n, lp, q)
+	k = 0
+	z = fuse_elem(em, root, leaves, k, q)
+	call elem_store(em, elem_at(em, od, ety, q), ety, z)
+	call loop_end(em, lp)
+
+	do i = 1, nleaf
+		call dispose(em, leaves(i)%v)
+	end do
+
+	r = arr_val(out, .true., root%val)
+
+end function fuse_array
 
 !===============================================================================
 

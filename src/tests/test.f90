@@ -4202,6 +4202,10 @@ subroutine unit_test_nd_i32(npass, nfail)
 			! Slices that are copied in runs of consecutive elements, and the
 			! ones that aren't (steps, vectors, strs)
 			interpret_file(path//'slices.syntran', quiet) == 'true', &
+
+			! Elementwise expressions of arrays, which the native backend makes in
+			! one loop that reads the slices in place
+			interpret_file(path//'fusion.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -9820,6 +9824,17 @@ subroutine unit_test_runtime_errors(npass, nfail)
 				RC_BINOP_SHAPE_MISMATCH) == 1, &
 			diag_has_code(get_diags('println([1, 2, 3] + [1, 2]);'), RC_BINOP_SHAPE_MISMATCH), &
 			diag_has_code(get_diags('println([1, 2, 3] * [1, 2]);'), RC_BINOP_SHAPE_MISMATCH), &
+
+			! The same in an expression of several operators, or of slices, which is
+			! one loop in the native backend
+			diag_has_code(get_diags( &
+				'let u = 1.0 * [0: 10]; println(u[0: 5] + u[1: 4] * 2.0);'), RC_BINOP_SHAPE_MISMATCH), &
+			diag_has_code(get_diags( &
+				'let u = 1.0 * [0: 10]; let w = 1.0 * [0: 4]; println(w * 2.0 + u[0: 5]);'), &
+				RC_BINOP_SHAPE_MISMATCH), &
+			diag_has_code(get_diags( &
+				'let a = 1.0 * [0: 3]; let b = 1.0 * [0: 2]; println(a * 2.0 + b * 3.0);'), &
+				RC_BINOP_SHAPE_MISMATCH), &
 			diag_has_code(get_diags('println([1.0, 2.0] + [1, 2, 3]);'), RC_BINOP_SHAPE_MISMATCH), &
 			diag_has_code(get_diags('println([1, 2, 3] == [1, 2]);'), RC_BINOP_SHAPE_MISMATCH), &
 			diag_has_code(get_diags('println([1, 2, 3] < [1, 2]);'), RC_BINOP_SHAPE_MISMATCH), &
@@ -12428,6 +12443,15 @@ subroutine unit_test_native(npass, nfail)
 				'@sy_arr_like') > 0, &
 			index(native_ir('let a = [1, 2, 3, 4, 5]; println(a[1: 3]);'), &
 				'@sy_arr_slice') > 0, &
+
+			! Operators on arrays are one loop, which reads a slice in place instead
+			! of copying it.  A slice is never copied, and whole arrays have no views
+			index(native_ir('let u = 1.0 * [0: 9]; let v = u[1: 8] * 2.0 + u[0: 7]; println(v);'), &
+				'@sy_slice_view') > 0, &
+			index(native_ir('let u = 1.0 * [0: 9]; let v = u[1: 8] * 2.0 + u[0: 7]; println(v);'), &
+				'@sy_arr_slice(') == 0, &
+			index(native_ir('let u = 1.0 * [0: 9]; let v = u * 2.0 + u; println(v);'), &
+				'@sy_slice_view') == 0, &
 
 			! A fn can take and return an array, which it owns a copy of
 			index(native_ir('fn f(a: [i32; :]): [i32; :] { a[0] = 1; return a; } ' &

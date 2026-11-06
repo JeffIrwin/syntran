@@ -1,0 +1,109 @@
+// An elementwise expression of arrays, like a stencil, is one loop in the native backend,
+// which reads the slices in place and makes no array for the operators in between.  Each
+// is checked against a loop of scalar operations or a known answer, so the results don't
+// depend on how the expression is compiled
+
+let ok = true;
+
+fn near(a: [f64; :], b: [f64; :]): bool
+{
+	return maxval(abs(a - b)) < 1.0e-12;
+}
+
+fn twice(a: [f64; :]): [f64; :]
+{
+	return 2.0 * a;
+}
+
+// A 1D heat equation step, where the slices of the one array overlap, and the result
+// is only stored once all of it is read
+{
+	let n = 50;
+	let u = 1.0e-1 * [0: n];
+	u = u * (1.0 - u);
+	let want = u;
+	for k in [0: 7] {
+		let t = want;
+		for i in [1: n-1] {
+			t[i] = want[i] + 0.25 * (want[i-1] - 2.0 * want[i] + want[i+1]);
+		}
+		want = t;
+		u[1: n-1] = u[1: n-1] + 0.25 * (u[0: n-2] - 2.0 * u[1: n-1] + u[2: n]);
+	}
+	ok = ok and near(u, want);
+}
+
+// Slices and whole arrays and scalars, and a unary minus
+{
+	let a = 1.0 * [1: 9];
+	let b = 2.0 * a;
+	ok = ok and all(a[0: 4] + b[4: 8] * 2.0 == [21.0, 26.0, 31.0, 36.0]);
+	ok = ok and all(-(a[1: 5] + b[:4]) * 0.5 == [-2.0, -3.5, -5.0, -6.5]);
+	ok = ok and all(a[:] * 2.0 - b == 0.0 * a);
+	ok = ok and all(a * a - a[:] * b[:] / 2.0 == 0.0 * a);
+	ok = ok and all(a + a[0] * b == 3.0 * a);
+	ok = ok and sum(a[1:] + a[:7] * 1.0) == 63.0;
+}
+
+// Empty slices
+{
+	let a = 1.0 * [1: 6];
+	ok = ok and size(a[2: 2] + a[3: 3] * 2.0, 0) == 0;
+	ok = ok and size(a[3: 1] * 2.0 + a[1: 1], 0) == 0;
+}
+
+// Compound assignment to a slice, where the operand overlaps it
+{
+	let u = 1.0 * [1: 7];
+	u[1: 5] += u[0: 4] * 2.0 + 1.0;
+	ok = ok and all(u == [1.0, 5.0, 8.0, 11.0, 14.0, 6.0]);
+	u[2:] *= u[:4] + u[1: 5];
+	ok = ok and all(u == [1.0, 5.0, 48.0, 143.0, 266.0, 150.0]);
+}
+
+// The elements are converted between the operators, as when they are stored
+{
+	let i = [1, 2, 3, 4];
+	ok = ok and all(i * 2 + 1 == [3, 5, 7, 9]);
+	ok = ok and all(i * 0.5 + 1.0 == [1.5, 2.0, 2.5, 3.0]);
+	ok = ok and all((i + 1) / 2 - i / 2 == [1, 0, 1, 0]);
+	let l = [1'i64, 2'i64, 3'i64];
+	ok = ok and all(l * l + l == [2'i64, 6'i64, 12'i64]);
+	let f = [1.5f, 2.5f];
+	ok = ok and all(f * f - f == [0.75f, 3.75f]);
+	ok = ok and all(i[1:] * 10 - i[:3] == [19, 28, 37]);
+}
+
+// Operands that are made first: literals, calls, and operations that are not fused
+{
+	let a = [1.0, 2.0, 3.0, 4.0];
+	ok = ok and all([10.0, 20.0, 30.0, 40.0] + a * a == [11.0, 24.0, 39.0, 56.0]);
+	ok = ok and all(a + twice(a) * a == [3.0, 10.0, 21.0, 36.0]);
+	ok = ok and all(a[:2:] * 2.0 + a[1: 2: 4] == [4.0, 10.0]);
+	ok = ok and all(a ** 2.0 + a * 2.0 == [3.0, 8.0, 15.0, 24.0]);
+	ok = ok and all((a * 2.0 - 1.0 > 3.0) == [false, false, true, true]);
+}
+
+// Arrays of higher rank
+{
+	let m = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0; 2, 3];
+	let r = m * 2.0 - m + m * m;
+	ok = ok and all(r == [2.0, 6.0, 12.0, 20.0, 30.0, 42.0; 2, 3]);
+	ok = ok and size(r, 0) == 2 and size(r, 1) == 3;
+}
+
+// A variable that is read while it is assigned
+{
+	let x = [0.0, 0.0, 0.0];
+	let v = [1.0, 2.0, 3.0];
+	let g = [0.0, -10.0, 0.0];
+	let dt = 0.5;
+	for k in [0: 4] {
+		v = v + dt * g;
+		x = x + dt * v;
+	}
+	ok = ok and all(v == [1.0, -18.0, 3.0]);
+	ok = ok and all(x == [2.0, -21.0, 6.0]);
+}
+
+return ok;

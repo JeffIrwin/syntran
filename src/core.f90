@@ -40,10 +40,11 @@ module syntran__core_m
 	!      and always run in ci (not bytecode though)
 	!    * improve performance on array/vector heavy operations like stencil
 	!      benchmark:
-	!      + "stencil is still about 6x slower than gfortran's 0.055s. Closing
-	!        that gap needs slice views, which skip the copy for read-only
-	!        unit-stride slices, and fusing chains of elementwise ops into one
-	!        loop. That's a bigger design change, so I left it alone."
+	!      + done for --native: TBAA tags + fused elementwise loops with slice
+	!        views, stencil is 0.06s vs gfortran's 0.055s
+	!      + still to do: fuse elementwise intrinsics (sqrt, exp, ... for the
+	!        elem benchmark), write into the destination slice/variable in place
+	!        (small), multi-d slices, reductions of fused expressions
 	!    * build devx -- i don't like having openblas and llvm libs under
 	!      "build" dir because they get nuked on cleaning. maybe make a
 	!      gitignored "lib" dir?

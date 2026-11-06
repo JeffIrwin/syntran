@@ -175,7 +175,11 @@ This is a subset of the language so far:
   rank
 - Variables and assignment, including compound assignment.  Scopes and shadowing
 - Operators: arithmetic, comparison, logical, bitwise, and shifts.  Strings are
-  joined with `+`.  Operators apply to each element of an array
+  joined with `+`.  Operators apply to each element of an array.  A chain of
+  `+ - * /` on arrays and numbers, like a stencil
+  `u[1: n-1] += 0.25 * (u[0: n-2] - 2.0 * u[1: n-1] + u[2: n])`, is one loop that
+  reads a consecutive slice of a rank-1 array in place, so it copies no slice and
+  makes no array between the operators
 - `if`, `while`, `for` (over a range, an array, or a string), `switch`, `break`,
   `continue`, and `return`
 - Functions, including recursion and `&` and `&const` parameters, which can take
