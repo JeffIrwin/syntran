@@ -1413,6 +1413,33 @@ sy_arr *sy_arr_slice(const sy_arr *a, const sy_sub *subs)
     return out;
 }
 
+/* The elements of a[subs] in place, where `a` has rank 1 and the one subscript is a range or
+ * `:`, so they are consecutive: the first is at `*off` and there are `*cnt`.  This is the
+ * checks of sy_arr_slice() without its copy */
+void sy_slice_view(const sy_arr *a, const sy_sub *subs, int64_t *off, int64_t *cnt)
+{
+    sy_walk w;
+
+    sy_walk_init(&w, a, subs);
+    *off = w.lo[0];
+    *cnt = w.cnt[0];
+    sy_walk_free(&w);
+}
+
+/* A new rank-1 array of n elements of a number type, which the caller overwrites */
+sy_arr *sy_arr_vec(int32_t elem, int64_t n)
+{
+    return sy_arr_alloc(elem, 1, &n, 0);
+}
+
+/* sy_binop_shape() for the operands that are views of rank 1, which only have a length */
+void sy_binop_len(int64_t a, int64_t b, const char *op)
+{
+    if (a == b) return;
+    sy_rt_error("R37", "array shape mismatch for binary operator `%s`: %lld and %lld", op,
+        (long long)a, (long long)b);
+}
+
 /* Fill n elements of size es from `dst` with the value that `src` points to */
 static void sy_fill(char *dst, const void *src, int64_t n, size_t es)
 {

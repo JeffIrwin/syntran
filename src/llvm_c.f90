@@ -397,6 +397,49 @@ module syntran__llvm_c_m
 			type(c_ptr) :: LLVMBuildStore
 		end function LLVMBuildStore
 
+		function LLVMGetMDKindIDInContext(ctx, nm, n) bind(c, name = "LLVMGetMDKindIDInContext")
+			import :: c_ptr, c_char, c_int
+			type(c_ptr), value :: ctx
+			character(kind = c_char), intent(in) :: nm(*)
+			integer(c_int), value :: n
+			integer(c_int) :: LLVMGetMDKindIDInContext
+		end function LLVMGetMDKindIDInContext
+
+		function LLVMMDStringInContext2(ctx, s, n) bind(c, name = "LLVMMDStringInContext2")
+			import :: c_ptr, c_char, c_size_t
+			type(c_ptr), value :: ctx
+			character(kind = c_char), intent(in) :: s(*)
+			integer(c_size_t), value :: n
+			type(c_ptr) :: LLVMMDStringInContext2
+		end function LLVMMDStringInContext2
+
+		function LLVMMDNodeInContext2(ctx, mds, n) bind(c, name = "LLVMMDNodeInContext2")
+			import :: c_ptr, c_size_t
+			type(c_ptr), value :: ctx
+			type(c_ptr), intent(in) :: mds(*)
+			integer(c_size_t), value :: n
+			type(c_ptr) :: LLVMMDNodeInContext2
+		end function LLVMMDNodeInContext2
+
+		function LLVMValueAsMetadata(v) bind(c, name = "LLVMValueAsMetadata")
+			import :: c_ptr
+			type(c_ptr), value :: v
+			type(c_ptr) :: LLVMValueAsMetadata
+		end function LLVMValueAsMetadata
+
+		function LLVMMetadataAsValue(ctx, md) bind(c, name = "LLVMMetadataAsValue")
+			import :: c_ptr
+			type(c_ptr), value :: ctx, md
+			type(c_ptr) :: LLVMMetadataAsValue
+		end function LLVMMetadataAsValue
+
+		subroutine LLVMSetMetadata(inst, kind_, node) bind(c, name = "LLVMSetMetadata")
+			import :: c_ptr, c_int
+			type(c_ptr), value :: inst
+			integer(c_int), value :: kind_
+			type(c_ptr), value :: node
+		end subroutine LLVMSetMetadata
+
 		function LLVMBuildGEP2(b, ty, p, idx, n, nm) bind(c, name = "LLVMBuildGEP2")
 			import :: c_ptr, c_char, c_int
 			type(c_ptr), value :: b, ty, p
