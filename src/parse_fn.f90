@@ -748,7 +748,7 @@ recursive module subroutine parse_qualified_expr(parser, expr)
 			! Struct not found
 			span = new_span(fn_identifier%pos, len(fn_identifier%text))
 			call parser%diagnostics%push( &
-				err_undeclare_var(parser%context(), span, fn_name, &
+				err_undeclare_var(parser%contexts%v(fn_identifier%unit_), span, fn_name, &
 				parser%vars%closest(fn_name)))
 		end if
 
@@ -759,7 +759,7 @@ recursive module subroutine parse_qualified_expr(parser, expr)
 		if (iostat /= exit_success) then
 			span = new_span(fn_identifier%pos, len(fn_identifier%text))
 			call parser%diagnostics%push( &
-				err_undeclare_var(parser%context(), span, fn_name, &
+				err_undeclare_var(parser%contexts%v(fn_identifier%unit_), span, fn_name, &
 				parser%vars%closest(fn_name)))
 			return
 		end if

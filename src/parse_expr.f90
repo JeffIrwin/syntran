@@ -285,7 +285,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			if (search_io /= exit_success) then
 				span = new_span(identifier%pos, len(identifier%text))
 				call parser%diagnostics%push( &
-					err_undeclare_var(parser%context(), span, identifier%text, &
+					err_undeclare_var(parser%contexts%v(identifier%unit_), span, identifier%text, &
 					parser%vars%closest(identifier%text)))
 			end if
 
@@ -336,7 +336,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			if (search_io /= exit_success .and. .not. allocated(expr%member)) then
 				span = new_span(identifier%pos, len(identifier%text))
 				call parser%diagnostics%push( &
-					err_undeclare_var(parser%context(), span, identifier%text, &
+					err_undeclare_var(parser%contexts%v(identifier%unit_), span, identifier%text, &
 					parser%vars%closest(identifier%text)))
 			end if
 
@@ -501,7 +501,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			if (search_io /= exit_success .and. .not. allocated(expr%member)) then
 				span = new_span(identifier%pos, len(identifier%text))
 				call parser%diagnostics%push( &
-					err_undeclare_var(parser%context(), &
+					err_undeclare_var(parser%contexts%v(identifier%unit_), &
 					span, identifier%text, &
 					parser%vars%closest(identifier%text)))
 			end if
@@ -573,7 +573,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			if (search_io /= exit_success) then
 				span = new_span(identifier%pos, len(identifier%text))
 				call parser%diagnostics%push( &
-					err_undeclare_var(parser%context(), &
+					err_undeclare_var(parser%contexts%v(identifier%unit_), &
 					span, identifier%text, &
 					parser%vars%closest(identifier%text)))
 				!print *, "undeclared var 2"
@@ -1165,7 +1165,7 @@ recursive module subroutine parse_name_expr(parser, expr)
 
 			span = new_span(identifier%pos, len(identifier%text))
 			call parser%diagnostics%push( &
-				err_undeclare_var(parser%context(), &
+				err_undeclare_var(parser%contexts%v(identifier%unit_), &
 				span, identifier%text, suggest))
 		end if
 	end if

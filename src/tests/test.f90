@@ -11429,6 +11429,12 @@ subroutine unit_test_fuzz_regressions(npass, nfail)
 			diag_has_code(get_diags_file(P//'fuzz-fn-member-dot.syntran'), &
 				EC_NON_STRUCT_DOT), &
 
+			! An undeclared name that ends an #include'd file was located in the
+			! includer's text, since the current token is already the includer's.
+			! The includer's leading blank line made underline() read text(0:0)
+			diag_loc_ok(get_diags_file(P//'fuzz-include-eof-name.syntran'), &
+				EC_UNDECLARE_VAR, P//'fuzz-include-eof-name-inc.syntran', 1, 1, 1), &
+
 			! A for loop over an explicit array literal copied the stale array of a
 			! reused stack slot onto its loop var, so the next array literal
 			! allocated an already allocated `val`
