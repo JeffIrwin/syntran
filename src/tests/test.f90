@@ -11172,6 +11172,82 @@ end subroutine unit_test_dir_unreadable_errors
 
 !===============================================================================
 
+subroutine unit_test_fuzz_regressions(npass, nfail)
+
+	! Inputs that utils/fuzz.c found to crash the interpreter (a Fortran runtime
+	! error, a signal, or `Fatal error`) instead of stopping with a coded
+	! diagnostic.  The contract is that any input either runs or reports an
+	! E##/R## code, so each row only needs to see the code and get back at all.
+	!
+	! The bad programs live in test-src/errors/fuzz-*.syntran, which keeps them
+	! out of the transpile/native test scripts (they skip errors/)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'fuzz regressions'
+	character(len = *), parameter :: P = 'src/tests/test-src/errors/'
+
+	logical, allocatable :: tests(:)
+
+	type(string_vector_t) :: diags_empty, diags_comment, diags_ws
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! An empty program is valid, and used to compile an uninitialized node
+	diags_empty   = get_diags('')
+	diags_comment = get_diags('// just a comment')
+	diags_ws      = get_diags('  '//char(10)//char(10))
+
+	tests = &
+		[   &
+			diags_empty%len_   == 0, &
+			diags_comment%len_ == 0, &
+			diags_ws%len_      == 0, &
+
+			! parse_dot() didn't set the member's name before parse_subscripts()
+			! read it for E36
+			diag_loc_ok(get_diags_file(P//'fuzz-struct-member-sub-count.syntran'), &
+				EC_BAD_SUB_COUNT, P//'fuzz-struct-member-sub-count.syntran', 10, 19, 2), &
+			diag_count_code(get_diags_file(P//'fuzz-struct-member-sub-count.syntran'), &
+				EC_BAD_SUB_COUNT) == 1, &
+			diag_has_code(get_diags( &
+				'struct C {v: [i32; :],} let c = C{v = [1, 2]}; c.v[0, 0] = 1;'), &
+				EC_BAD_SUB_COUNT), &
+
+			! A `+=` with no rhs has no lsubscripts for the E111 check to size
+			diag_has_code(get_diags_file(P//'fuzz-compound-no-rhs.syntran'), &
+				EC_UNEXPECTED_TOKEN), &
+
+			! Mutually recursive parse procs that weren't `recursive`
+			diag_has_code(get_diags_file(P//'fuzz-nested-size.syntran'), &
+				EC_UNEXPECTED_TOKEN), &
+
+			! #include operand that isn't a string literal, and the eof case
+			diag_has_code(get_diags_file(P//'fuzz-include-eof.syntran'), &
+				EC_UNEXPECTED_TOKEN), &
+			diag_has_code(get_diags_file(P//'fuzz-include-not-str.syntran'), &
+				EC_UNEXPECTED_TOKEN), &
+			diag_has_code(get_diags('#include('), EC_UNEXPECTED_TOKEN), &
+
+			! A `"` as the very last char read and sliced past the end
+			diag_loc_ok(get_diags_file(P//'fuzz-include-unterminated.syntran'), &
+				EC_UNTERMINATED_STR, P//'fuzz-include-unterminated.syntran', 4, 10, 1), &
+
+			! A closed string ending exactly at the end of the input is not
+			! unterminated, it is just missing its `;`
+			.not. diag_has_code(get_diags('"a"'), EC_UNTERMINATED_STR), &
+			diag_has_code(get_diags('"a"'), EC_UNEXPECTED_TOKEN) &
+		]
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_fuzz_regressions
+
+!===============================================================================
+
 subroutine unit_test_transpile(npass, nfail)
 
 	! The Fortran backend.  These only check the generated source and the
@@ -12681,6 +12757,7 @@ subroutine unit_tests(iostat)
 	if (run_group('eval_api')) call unit_test_eval_api(npass, nfail)
 	if (run_group('error_locations')) call unit_test_error_locations(npass, nfail)
 	if (run_group('dir_unreadable_errors')) call unit_test_dir_unreadable_errors(npass, nfail)
+	if (run_group('fuzz_regressions')) call unit_test_fuzz_regressions(npass, nfail)
 	if (run_group('assignment')) call unit_test_assignment(npass, nfail)
 	if (run_group('comments')) call unit_test_comments(npass, nfail)
 	if (run_group('blocks')) call unit_test_blocks(npass, nfail)

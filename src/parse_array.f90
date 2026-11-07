@@ -1101,7 +1101,7 @@ end function is_zero_literal
 
 !===============================================================================
 
-module subroutine parse_size(parser, size)
+recursive module subroutine parse_size(parser, size)
 
 	class(parser_t) :: parser
 

@@ -14,7 +14,7 @@ contains
 
 !===============================================================================
 
-module subroutine parse_return_statement(parser, statement)
+recursive module subroutine parse_return_statement(parser, statement)
 
 	class(parser_t) :: parser
 	type(syntax_node_t), intent(out) :: statement
@@ -932,7 +932,7 @@ end subroutine parse_while_statement
 
 !===============================================================================
 
-logical function at_case_body_start(parser) result(at_body)
+recursive logical function at_case_body_start(parser) result(at_body)
 
 	! True when the parser is sitting at the start of a `case` arm's body
 	! statement rather than another match-value expression.  Used to allow a

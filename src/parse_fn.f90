@@ -776,7 +776,7 @@ end subroutine parse_qualified_expr
 
 !===============================================================================
 
-module subroutine parse_fn_declaration(parser, decl, no_fn_kw)
+recursive module subroutine parse_fn_declaration(parser, decl, no_fn_kw)
 
 	class(parser_t) :: parser
 	type(syntax_node_t), intent(out) :: decl
