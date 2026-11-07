@@ -391,6 +391,17 @@ function parse_args() result(args)
 		end if
 	end if
 
+	! Unlike --transpile, "-" is not stdout, and would be a file named "-"
+	if (args%native .and. .not. args%help .and. .not. args%version) then
+		if (allocated(args%native_out)) then
+			if (args%native_out == "-") then
+				write(*,*) err_prefix//"--native needs an output file name, " &
+					//"it cannot write to stdout"
+				error = .true.
+			end if
+		end if
+	end if
+
 	! --jit compiles with LLVM like --native, but runs the program instead of
 	! writing it
 	if (args%jit .and. .not. args%help .and. .not. args%version) then

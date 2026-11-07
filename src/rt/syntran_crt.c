@@ -606,8 +606,8 @@ static const char *sy_blanks(const char *p)
 
 static int sy_end_ok(const char *p)
 {
-    p = sy_blanks(p);
-    return *p == '\0' || *p == ',' || *p == '/';
+    /* A blank ends the value, like in a list-directed read, and anything may follow it */
+    return *p == '\0' || *p == ' ' || *p == '\t' || *p == ',' || *p == '/';
 }
 
 static void sy_parse_fail(const char *fn, const sy_str *s)

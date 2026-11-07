@@ -208,8 +208,10 @@ This is a subset of the language so far:
   `std::norm2()`, `std::solve()`, `std::lu_factor()`, and `std::lu_solve()`.
   If syntran was built with BLAS and LAPACK, a program which multiplies
   matrices of floats or solves is linked with them (`-llapack -lblas`), so that
-  the results are the same as the interpreter's.  Otherwise, and for integers,
-  the runtime does the same operations in the same order itself
+  the results are the same as the interpreter's, so BLAS and LAPACK must be
+  installed where the program is compiled, or the link fails.  If syntran was
+  built without them, and for integers, the runtime does the same operations in
+  the same order itself
 - `std::print_trace()`, `std::stack_trace()`, and `std::caller()`, which look at the
   stack of calls, as a runtime error does
 - `std::args()`, which is the arguments that the compiled program is run with,
