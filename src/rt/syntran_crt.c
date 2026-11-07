@@ -485,10 +485,16 @@ sy_str *sy_str_char(int32_t c)
     return sy_str_from(&ch, 1);
 }
 
-/* i32(s) of a string, the code of its first character */
-int32_t sy_str_code(const sy_str *s)
+/* i32(s) or i64(s) (`is64`) of a string, the code of its one character.  Any other
+ * length has no integer value, which is R49 */
+int32_t sy_str_code(const sy_str *s, int32_t is64)
 {
-    return s->len > 0 ? (int32_t)(unsigned char)s->data[0] : 0;
+    if (s->len != 1) {
+        sy_rt_error("R49", "cannot cast a string of length %lld with `%s()`: only "
+            "single-character strings can be cast.  Use `parse_%s()` to parse a number",
+            (long long)s->len, is64 ? "i64" : "i32", is64 ? "i64" : "i32");
+    }
+    return (int32_t)(unsigned char)s->data[0];
 }
 
 /*============================================================================*/
@@ -911,6 +917,34 @@ static void sy_dims_str(char *buf, size_t cap, int32_t rank, const int64_t *size
         n += (size_t)snprintf(buf + n, cap - n, k > 0 ? " x %lld" : "%lld", (long long)size[k]);
 }
 
+/* An array whose extents come from the program can't have a negative one, or more than 2^40
+ * elements in all, which is the interpreter's limit too.  An empty array is fine no matter
+ * how big its other extents are */
+static void sy_arr_len_check(int32_t rank, const int64_t *sizes)
+{
+    char dims[256];
+    int64_t len = 1;
+    int32_t k;
+    int bad = 0;
+
+    for (k = 0; k < rank; k++) {
+        if (sizes[k] < 0) bad = 1;
+    }
+    if (!bad) {
+        for (k = 0; k < rank; k++) {
+            if (sizes[k] == 0) return;
+        }
+        for (k = 0; k < rank && !bad; k++) {
+            if (len > ((int64_t)1 << 40) / sizes[k]) bad = 1;
+            else len *= sizes[k];
+        }
+    }
+    if (!bad) return;
+    sy_dims_str(dims, sizeof dims, rank, sizes);
+    sy_rt_error("R48", "invalid array size %s: extents must not be negative, and the array "
+        "must have at most 2^40 elements", dims);
+}
+
 /* std::reshape() needs as many elements in the new shape as there are */
 void sy_reshape_check(const sy_arr *a, int32_t rank, const int64_t *sizes)
 {
@@ -975,10 +1009,12 @@ sy_arr *sy_arr_reshape(sy_arr *a, int32_t rank, const int64_t *sizes)
 /* [v; n, m].  `val` points to a value of the element type.  A str is copied */
 sy_arr *sy_arr_fill(int32_t elem, int32_t rank, const int64_t *sizes, const void *val)
 {
-    sy_arr *a = sy_arr_new(elem, rank, sizes);
+    sy_arr *a;
     size_t es = sy_esize(elem);
     int64_t i;
 
+    sy_arr_len_check(rank, sizes);
+    a = sy_arr_new(elem, rank, sizes);
     for (i = 0; i < a->len; i++) {
         if (sy_eptr(elem)) {
             sy_eptr_free(elem, ((void **)a->data)[i]);
@@ -1040,8 +1076,10 @@ sy_arr *sy_arr_range_i32(int32_t lb, int32_t ub)
 sy_arr *sy_arr_range_i64(int64_t lb, int64_t ub)
 {
     int64_t n = ub > lb ? ub - lb : 0, i;
-    sy_arr *a = sy_arr_new1(SY_I64, n);
+    sy_arr *a;
 
+    sy_arr_len_check(1, &n);
+    a = sy_arr_new1(SY_I64, n);
     for (i = 0; i < n; i++) ((int64_t *)a->data)[i] = lb + i;
     return a;
 }
@@ -1130,20 +1168,24 @@ sy_arr *sy_arr_step_f64(double lb, double step, double ub)
 /* [lb: ub; n], n evenly spaced values including both ends */
 sy_arr *sy_arr_linspace_f32(float lb, float ub, int64_t n)
 {
-    sy_arr *a = sy_arr_new1(SY_F32, n);
+    sy_arr *a;
     float dx = (ub - lb) / (float)(n - 1);
     int64_t i;
 
+    sy_arr_len_check(1, &n);
+    a = sy_arr_new1(SY_F32, n);
     for (i = 0; i < a->len; i++) ((float *)a->data)[i] = lb + (float)i * dx;
     return a;
 }
 
 sy_arr *sy_arr_linspace_f64(double lb, double ub, int64_t n)
 {
-    sy_arr *a = sy_arr_new1(SY_F64, n);
+    sy_arr *a;
     double dx = (ub - lb) / (double)(n - 1);
     int64_t i;
 
+    sy_arr_len_check(1, &n);
+    a = sy_arr_new1(SY_F64, n);
     for (i = 0; i < a->len; i++) ((double *)a->data)[i] = lb + (double)i * dx;
     return a;
 }

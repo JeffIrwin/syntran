@@ -633,6 +633,10 @@ recursive module subroutine parse_subscripts(parser, expr)
 
 	call parser%match(lbracket_token, lbracket)
 
+	! With empty brackets, `a[]`, the loop below never sets span0 but the
+	! diagnostics after it still read it
+	span0 = parser%current_pos()
+
 	do while ( &
 		parser%current_kind() /= rbracket_token .and. &
 		parser%current_kind() /= eof_token)

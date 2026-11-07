@@ -5850,7 +5850,7 @@ function intr_scalar(em, base, a, rtype, pos) result(r)
 			! The code of a single character
 			r%ty = i32_type
 			r%owned = .false.
-			r%v = rt_call(em, 'sy_str_code', em%t_i32, [a%v])
+			r%v = rt_call(em, 'sy_str_code', em%t_i32, [a%v, ci32(em, merge(1, 0, base == 'i64'))])
 			call dispose(em, a)
 			r = convert(em, r, merge(i32_type, i64_type, base == 'i32'))
 		else if (a%ty == enum_type) then
