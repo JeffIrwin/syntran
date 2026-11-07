@@ -1084,42 +1084,46 @@ sy_arr *sy_arr_range_i64(int64_t lb, int64_t ub)
     return a;
 }
 
-/* [lb: step: ub].  The bound is exclusive and the step may be negative.  This is
- * the same algorithm as the interpreter's, including its loop condition */
+/* The number of elements of [lb: step: ub], like the interpreter's slice_len().  The empty
+ * and reversed cases come first, and the count is (ub - lb - sign) / step + 1 rather than
+ * (ub - lb + step - sign) / step, so that a big step doesn't overflow.  An i64 range that
+ * is wider than an i64 is reported as INT64_MAX, which sy_arr_len_check() rejects */
+static int64_t sy_step_len(int64_t lb, int64_t step, int64_t ub)
+{
+    int64_t d;
+
+    if ((step > 0 && lb >= ub) || (step < 0 && lb <= ub)) return 0;
+    d = (int64_t)((uint64_t)ub - (uint64_t)lb);
+    if ((d > 0) != (step > 0)) return INT64_MAX;
+    return (d - (step < 0 ? -1 : 1)) / step + 1;
+}
+
+/* [lb: step: ub].  The bound is exclusive and the step may be negative.  Every element is
+ * within the bounds, so lb + j * step can't overflow, but it is done unsigned anyway */
 sy_arr *sy_arr_step_i32(int32_t lb, int32_t step, int32_t ub)
 {
-    int64_t cap, j = 0;
-    int32_t i;
+    int64_t n, j;
     sy_arr *a;
 
     if (step == 0) sy_rt_error("R25", "array step is 0");
-    cap = ((int64_t)ub - lb + step - (step < 0 ? -1 : 1)) / step;
-    a = sy_arr_new1(SY_I32, cap > 0 ? cap : 0);
-    i = lb;
-    if ((lb < ub) != (0 < step)) i = ub;
-    while (((i < ub) == (lb < ub)) && i != ub) {
-        ((int32_t *)a->data)[j++] = i;
-        i += step;
-    }
-    a->len = a->size[0] = j;
+    n = sy_step_len(lb, step, ub);
+    sy_arr_len_check(1, &n);
+    a = sy_arr_new1(SY_I32, n);
+    for (j = 0; j < n; j++) ((int32_t *)a->data)[j] = (int32_t)((int64_t)lb + j * (int64_t)step);
     return a;
 }
 
 sy_arr *sy_arr_step_i64(int64_t lb, int64_t step, int64_t ub)
 {
-    int64_t cap, j = 0, i;
+    int64_t n, j;
     sy_arr *a;
 
     if (step == 0) sy_rt_error("R25", "array step is 0");
-    cap = (ub - lb + step - (step < 0 ? -1 : 1)) / step;
-    a = sy_arr_new1(SY_I64, cap > 0 ? cap : 0);
-    i = lb;
-    if ((lb < ub) != (0 < step)) i = ub;
-    while (((i < ub) == (lb < ub)) && i != ub) {
-        ((int64_t *)a->data)[j++] = i;
-        i += step;
-    }
-    a->len = a->size[0] = j;
+    n = sy_step_len(lb, step, ub);
+    sy_arr_len_check(1, &n);
+    a = sy_arr_new1(SY_I64, n);
+    for (j = 0; j < n; j++)
+        ((int64_t *)a->data)[j] = (int64_t)((uint64_t)lb + (uint64_t)j * (uint64_t)step);
     return a;
 }
 
@@ -1207,7 +1211,7 @@ typedef struct {
 /* The zero-based indices that a subscript selects out of a dimension that has
  * the extent n, in a list that the caller frees.  A range's upper bound is
  * exclusive.  An omitted bound of a stepped subscript depends on the sign of
- * the step, and the loop is the one of sy_arr_step_i64() */
+ * the step, and the count is the one of sy_arr_step_i64() */
 /* Is a subscript out of bounds an error?  Only if the compiler that made the program
  * was built with SYNTRAN_BOUNDS_CHECK, like the interpreter, and says so */
 static int sy_bounds = 0;
@@ -1234,7 +1238,7 @@ void sy_oob(int64_t sub, int32_t dim, int32_t rank, int64_t size)
 
 static int64_t *sy_sub_idx_raw(const sy_sub *s, int64_t n, int64_t *count)
 {
-    int64_t lo, hi, st, i, j = 0, cnt;
+    int64_t lo, hi, st, i, cnt;
     int64_t *idx;
 
     switch (s->kind) {
@@ -1259,15 +1263,11 @@ static int64_t *sy_sub_idx_raw(const sy_sub *s, int64_t n, int64_t *count)
         if (st == 0) sy_rt_error("R27", "subscript step is 0");
         lo = (s->omit & 1) ? (st < 0 ? n - 1 : 0) : s->lo;
         hi = (s->omit & 2) ? (st < 0 ? -1 : n) : s->hi;
-        cnt = (hi - lo + st - (st < 0 ? -1 : 1)) / st;
+        cnt = sy_step_len(lo, st, hi);
+        sy_arr_len_check(1, &cnt);
         idx = (int64_t *)malloc((size_t)(cnt > 0 ? cnt : 1) * sizeof(int64_t));
-        i = lo;
-        if ((lo < hi) != (0 < st)) i = hi;
-        while (((i < hi) == (lo < hi)) && i != hi) {
-            idx[j++] = i;
-            i += st;
-        }
-        *count = j;
+        for (i = 0; i < cnt; i++) idx[i] = (int64_t)((uint64_t)lo + (uint64_t)i * (uint64_t)st);
+        *count = cnt;
         return idx;
 
     default:
