@@ -1123,11 +1123,11 @@ module syntran__errors_m
 			character(len = *), intent(in) :: range
 		end function err_non_int_range
 
-		module function err_het_array(context, span, elem) result(err)
+		module function err_het_array(context, span, elem, expect, actual) result(err)
 			type(text_context_t) :: context
 			type(text_span_t), intent(in) :: span
 			character(len = :), allocatable :: err
-			character(len = *), intent(in) :: elem
+			character(len = *), intent(in) :: elem, expect, actual
 		end function err_het_array
 
 		module function err_unset_member(context, span, mem_name, struct_name) result(err)

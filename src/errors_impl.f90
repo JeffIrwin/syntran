@@ -1859,7 +1859,7 @@ module procedure err_het_array
 
 	err = err_pre(EC_HET_ARRAY) &
 		//'array is heterogeneous.  Element `'//elem  &
-		//"` does not match the first element's type" &
+		//'` has type `'//actual//'` but the first element has type `'//expect//'`' &
 		//underline(context, span) &
 		//" heterogeneous array element"//color_reset
 
