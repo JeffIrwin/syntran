@@ -610,8 +610,9 @@ let prime = 0;
 // This check is O(n**2) time, which might be the best we can do without
 // arrays
 
-// If we had while loops or `break` statements, we could loop from n downards
-// and stop as soon as we find the first prime
+// This example sticks to the features covered so far.  With `while` loops or
+// `break` statements (see below), we could loop from n downwards and stop as
+// soon as we find the first prime
 for i in [0: n]
 {
     // Check if i is composite, i.e. not prime
