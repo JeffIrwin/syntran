@@ -209,6 +209,25 @@ end subroutine store_move
 
 !===============================================================================
 
+subroutine store_keep_array(prog, ip, tos, slot)
+	! `(a = 1)` of a scalar onto an array `a` broadcasts it, and the parser
+	! types that expression as `a`.  But the scalar is still on TOS after the
+	! store, so give the expression's reader the array that was stored.  Nobody
+	! reads TOS when the next op is OP_POP, which skips the copy for the usual
+	! statement `a = 1;`
+	type(program_t), intent(in) :: prog
+	integer, intent(in) :: ip
+	type(value_t), intent(inout) :: tos
+	type(value_t), intent(in) :: slot
+
+	if (slot%type /= array_type .or. tos%type == array_type) return
+	if (next_op_is_pop(prog, ip)) return
+	call value_copy(tos, slot)
+
+end subroutine store_keep_array
+
+!===============================================================================
+
 subroutine vm_stack_grow(stack)
 	! Grow the operand stack when len_ > cap.  Called from the typed-load fast
 	! path which increments len_ before checking capacity.
@@ -997,6 +1016,7 @@ module subroutine vm_run(prog, state, res)
 				state%vars%vals(instr%a) = stack%v(stack%len_)
 			else
 				call assign_(state%vars%vals(instr%a), stack%v(stack%len_), '=')
+				call store_keep_array(prog, ip, stack%v(stack%len_), state%vars%vals(instr%a))
 			end if
 
 		case (OP_STORE_LOCAL)
@@ -1006,6 +1026,7 @@ module subroutine vm_run(prog, state, res)
 				state%locs%vals(instr%a) = stack%v(stack%len_)
 			else
 				call assign_(state%locs%vals(instr%a), stack%v(stack%len_), '=')
+				call store_keep_array(prog, ip, stack%v(stack%len_), state%locs%vals(instr%a))
 			end if
 
 		! --- binary operation ---

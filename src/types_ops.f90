@@ -572,6 +572,16 @@ module logical function is_binary_op_allowed(left, op, right, left_arr, right_ar
 				! of the whole values are matched
 				allowed = .true.
 
+			else if (left == array_type .and. right == array_type) then
+				! The elements have to agree like scalars do.  Otherwise
+				! `ints = [true]` got through to the evaluator, which has no such
+				! conversion (I34)
+				allowed = &
+					left_arr == unknown_type .or. right_arr == unknown_type .or. &
+					(is_float_type(left_arr) .and. is_float_type(right_arr)) .or. &
+					(is_int_type  (left_arr) .and. is_int_type  (right_arr)) .or. &
+					(left_arr == right_arr)
+
 			else if (left == array_type) then
 				allowed = &
 					(is_float_type(left_arr) .and. is_float_type(right)) .or. &

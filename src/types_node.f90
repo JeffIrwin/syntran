@@ -258,7 +258,9 @@ module subroutine new_unary_expr(op, right, expr)
 	! all unary operators result in the same type as their operand, hence there
 	! is a get_binary_op_kind() fn but no get_unary_op_kind() fn
 
-	expr%val = expr%right%val
+	! Not `expr%val = expr%right%val`: both sides are in expr, so gfortran copies
+	! through a temporary that double-frees a fn value's fn_ret
+	call value_copy(expr%val, expr%right%val)
 
 	if (debug > 1) print *, 'new_unary_expr = ', expr%to_str()
 	if (debug > 1) print *, 'done new_unary_expr'

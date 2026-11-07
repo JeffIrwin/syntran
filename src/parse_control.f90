@@ -840,6 +840,11 @@ recursive module subroutine parse_for_statement(parser, statement)
 		! Array iterator type could be i32 or i64, and lbound type might not
 		! match ubound type!
 		dummy%type = array%val%array%type
+
+		! `[[1]; n]` is an error (E57), but its element type is still an array,
+		! which has no array_t behind this scalar loop var to subscript
+		if (dummy%type == array_type) dummy%type = unknown_type
+
 		if (dummy%type == enum_type) then
 			! Propagate the enum identity so uses of the loop var (e.g. `s ==
 			! Suit.Clubs` inside the body) don't misfire the cross-enum

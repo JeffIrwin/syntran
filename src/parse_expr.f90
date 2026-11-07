@@ -307,6 +307,11 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			! re-parse the same tokens and re-push them, causing duplicates
 			parser%pos = pos0
 			parser%diagnostics%len_ = ndiag0
+
+			! The discarded diagnostics included an E20 whose position is
+			! remembered for de-duping in match().  Forget it, or the re-parse
+			! is a "second" failure at that position and its E20 is dropped
+			parser%last_e20_pos = 0
 		else
 			! It's a qualified assignment
 
@@ -526,6 +531,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			! re-parses the same tokens and would otherwise re-push them,
 			! causing duplicates
 			parser%diagnostics%len_ = ndiag0
+			parser%last_e20_pos = 0  ! see the rewind above
 			call parser%parse_expr(expr=expr)
 			return
 		end if
@@ -1680,7 +1686,7 @@ recursive module subroutine parse_dot(parser, expr)
 	call parser%parse_subscripts(expr%member)
 	pos1 = parser%current_pos()
 	if (allocated(expr%member%lsubscripts)) then
-		expr%val = expr%member%val
+		call value_copy(expr%val, expr%member%val)
 	end if
 
 	if (parser%current_kind() == lparen_token) then
@@ -1735,7 +1741,7 @@ recursive module subroutine parse_dot(parser, expr)
 	! I think this needs a recursive call to `parse_dot()` right here to handle
 	! things like `a.b.c`
 	if (parser%peek_kind(0) == dot_token) then
-		expr%member%val = expr%val
+		call value_copy(expr%member%val, expr%val)
 		expr%member%identifier = identifier  ! set for diags in recursed parse_dot()
 
 		! Save the current expr (e.g. y.b) before the recursive call can turn
@@ -1744,7 +1750,7 @@ recursive module subroutine parse_dot(parser, expr)
 		receiver_cand = expr
 
 		call parser%parse_dot(expr%member)
-		expr%val = expr%member%val
+		call value_copy(expr%val, expr%member%val)
 
 		! If the recursive call resolved a method call or a fn-typed member
 		! call, possibly with more members or calls chained after it (e.g.
@@ -2127,15 +2133,15 @@ recursive subroutine parse_file_member(parser, expr, identifier)
 	! it (a bool member gets the standard E39 "scalar cannot have subscripts")
 	call parser%parse_subscripts(expr%member)
 	if (allocated(expr%member%lsubscripts)) then
-		expr%val = expr%member%val
+		call value_copy(expr%val, expr%member%val)
 	end if
 
 	! f.name.foo -- keep the parser in sync; the recursive parse_dot() call
 	! will report E62 (dot on a non-struct str/bool value)
 	if (parser%peek_kind(0) == dot_token) then
-		expr%member%val = expr%val
+		call value_copy(expr%member%val, expr%val)
 		call parser%parse_dot(expr%member)
-		expr%val = expr%member%val
+		call value_copy(expr%val, expr%member%val)
 	end if
 
 end subroutine parse_file_member

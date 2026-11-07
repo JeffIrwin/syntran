@@ -1,0 +1,6 @@
+let mat = [0; 3];
+
+// The element of a uniform array has to be a scalar (E57), and the loop var
+// then had no array to subscript
+for i in [[1]; 2]
+	println(mat[i]);
