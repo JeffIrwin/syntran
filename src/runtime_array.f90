@@ -1049,6 +1049,26 @@ end subroutine get_subscript_range
 
 !===============================================================================
 
+pure function at_last_step(sub, ssub, usub) result(last)
+
+	! Whether sub is the last index visited by a range with step ssub and
+	! exclusive end usub, i.e. the next step would reach or pass usub.  This
+	! is `sub >= usub - 1` for ssub == 1, but a stepped or reversed range
+	! doesn't end at usub - 1
+
+	integer(kind = 8), intent(in) :: sub, ssub, usub
+	logical :: last
+
+	if (ssub > 0) then
+		last = sub + ssub >= usub
+	else
+		last = sub + ssub <= usub
+	end if
+
+end function at_last_step
+
+!===============================================================================
+
 module subroutine get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
 
 	! This is like a bignum += 1 algorithm but in an arbitrary mixed radix.  It
@@ -1068,7 +1088,7 @@ module subroutine get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
 		n = size(asubs(j)%v)
 		carry = j < size(subs) .and. subs(j) == asubs(j)%v(n)
 	else
-		carry = j < size(subs) .and. subs(j) >= usubs(j) - 1
+		carry = j < size(subs) .and. at_last_step(subs(j), ssubs(j), usubs(j))
 	end if
 
 	do while (carry)
@@ -1082,7 +1102,7 @@ module subroutine get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
 			n = size(asubs(j)%v)
 			carry = j < size(subs) .and. subs(j) == asubs(j)%v(n)
 		else
-			carry = j < size(subs) .and. subs(j) >= usubs(j) - 1
+			carry = j < size(subs) .and. at_last_step(subs(j), ssubs(j), usubs(j))
 		end if
 	end do
 

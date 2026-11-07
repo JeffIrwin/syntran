@@ -63,6 +63,7 @@ src/tests/test-src/array-i32/test-06.syntran
 src/tests/test-src/array-i32/test-07.syntran
 src/tests/test-src/array-i32/test-08.syntran
 src/tests/test-src/array-i32/test-09.syntran
+src/tests/test-src/array-i32/test-10.syntran
 src/tests/test-src/array-str/test-01.syntran
 src/tests/test-src/array-str/test-02.syntran
 src/tests/test-src/bitwise/test-01.syntran
@@ -208,6 +209,7 @@ src/tests/test-src/io/test-15.syntran
 src/tests/test-src/io/test-16.syntran
 src/tests/test-src/io/test-17.syntran
 src/tests/test-src/io/test-18.syntran
+src/tests/test-src/io/test-19.syntran
 src/tests/test-src/linear-algebra/test-01.syntran
 src/tests/test-src/linear-algebra/test-02.syntran
 src/tests/test-src/linear-algebra/test-03.syntran
@@ -332,6 +334,9 @@ src/tests/test-src/transpile/test-12.syntran
 src/tests/test-src/transpile/test-13.syntran
 src/tests/test-src/transpile/test-14.syntran
 src/tests/test-src/transpile/test-15.syntran
+src/tests/test-src/transpile/test-16.syntran
+src/tests/test-src/transpile/test-17.syntran
+src/tests/test-src/transpile/test-18.syntran
 src/tests/test-src/var-scopes/test-01.syntran
 src/tests/test-src/var-scopes/test-02.syntran
 src/tests/test-src/var-scopes/test-03.syntran

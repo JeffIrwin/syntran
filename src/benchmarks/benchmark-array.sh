@@ -15,6 +15,13 @@
 # slow, so it runs only once.  All times are wall-clock seconds, including
 # process startup (and the numpy import)
 #
+# The syntran programs are run through three backends.  "syntran vm" is the
+# bytecode interpreter.  The other two need LLVM in $SYNTRAN: "syntran native" is
+# an executable made once by `syntran --native` (compile time not counted, like
+# fortran), and "syntran jit" is `syntran --jit` (compile time counted).  The
+# fortran column is hand-written, not `syntran --transpile` output.
+# Linking the native executables needs a C compiler, `cc` or $CC
+#
 # Environment variables:
 #   SYNTRAN           syntran binary         (default: build/Release/syntran)
 #   FC                fortran compiler       (default: gfortran)
@@ -24,7 +31,8 @@
 #   OUT               markdown output file   (default: src/benchmarks/README.md)
 #   SKIP_PURE_PYTHON  set to 1 to skip the slow pure python column (~2 min)
 #
-# If numpy is not importable from $PYTHON, its column is n/a.  This script
+# If $SYNTRAN was built without LLVM, the syntran native and jit columns are n/a.  If
+# numpy is not importable from $PYTHON, its column is n/a.  This script
 # never installs anything.  Try a throwaway venv:
 #
 #   python3 -m venv /tmp/venv && /tmp/venv/bin/pip install numpy
@@ -67,6 +75,12 @@ HAVE_NUMPY=1
 "$PYTHON" -c 'import numpy' 2> /dev/null || HAVE_NUMPY=0
 if [ "$HAVE_NUMPY" = 0 ] ; then
 	echo "note: numpy not importable from '$PYTHON'.  Its column will be n/a" >&2
+fi
+
+HAVE_LLVM=1
+"$SYNTRAN" -q --jit -c 'let x = 1;' > /dev/null 2>&1 || HAVE_LLVM=0
+if [ "$HAVE_LLVM" = 0 ] ; then
+	echo "note: '$SYNTRAN' has no LLVM.  The syntran native and jit columns will be n/a" >&2
 fi
 
 TMP=$(mktemp -d)
@@ -143,6 +157,15 @@ for f in $BENCHES sweep ; do
 	"$FC" $FFLAGS "$SRC/$f.f90" -o "$BIN/$f" || exit 1
 done
 
+if [ "$HAVE_LLVM" = 1 ] ; then
+	echo "Compiling syntran benchmarks with: $SYNTRAN --native" >&2
+	for f in $BENCHES sweep ; do
+		rm -f "$BIN/${f}_native"
+		"$SYNTRAN" -q --native "$BIN/${f}_native" "$SRC/$f.syntran" \
+			|| echo "warning: --native failed for $f.  Its native column will be ERR" >&2
+	done
+fi
+
 # Run all four implementations of benchmark $1 and append a row to $TMP/main.md.
 # $2... is an optional argument list passed to every implementation
 run_bench()
@@ -155,6 +178,15 @@ run_bench()
 
 	time_best "$SYNTRAN" -q "$SRC/$name.syntran" -- "$@"
 	local ts=$T cs=$CK
+
+	local tnat=n/a cnat= tjit=n/a cjit=
+	if [ "$HAVE_LLVM" = 1 ] ; then
+		time_best "$BIN/${name}_native" "$@"
+		tnat=$T cnat=$CK
+
+		time_best "$SYNTRAN" -q --jit "$SRC/$name.syntran" -- "$@"
+		tjit=$T cjit=$CK
+	fi
 
 	time_best "$BIN/$name" "$@"
 	local tf=$T cf=$CK
@@ -172,38 +204,43 @@ run_bench()
 	fi
 
 	local check
-	check=$(cks_agree "${cs:-0}" "$cf" "$cn" "$cp")
+	check=$(cks_agree "${cs:-0}" "$cf" "$cn" "$cp" "$cnat" "$cjit")
 	[ -z "$cs" ] && check=MISMATCH
+	# A failed run has an empty checksum, which cks_agree skips
+	[ "$tnat" = ERR ] || [ "$tjit" = ERR ] && check=MISMATCH
 
 	ROW_LABEL=$label ; ROW_TS=$ts ; ROW_TF=$tf ; ROW_TN=$tn ; ROW_TP=$tp
+	ROW_TNAT=$tnat ; ROW_TJIT=$tjit
 	ROW_CHECK=$check
 }
 
 {
-	echo "| benchmark | syntran | gfortran | numpy | python | syntran / gfortran | syntran / numpy | checksums |"
-	echo "|---|--:|--:|--:|--:|--:|--:|:-:|"
+	echo "| benchmark | syntran vm | syntran native | syntran jit | gfortran | numpy | python | syntran vm / gfortran | syntran vm / numpy | checksums |"
+	echo "|---|--:|--:|--:|--:|--:|--:|--:|--:|:-:|"
 } > "$TMP/main.md"
 
 echo "Running benchmarks (best of $RUNS) ..." >&2
 for b in $BENCHES ; do
 	run_bench "$b"
-	printf '| %s | %s | %s | %s | %s | %s | %s | %s |\n' \
-		"$ROW_LABEL" "$(fmt_t "$ROW_TS")" "$(fmt_t "$ROW_TF")" \
+	printf '| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n' \
+		"$ROW_LABEL" "$(fmt_t "$ROW_TS")" "$(fmt_t "$ROW_TNAT")" "$(fmt_t "$ROW_TJIT")" \
+		"$(fmt_t "$ROW_TF")" \
 		"$(fmt_t "$ROW_TN")" "$(fmt_t "$ROW_TP")" \
 		"$(fmt_ratio "$ROW_TS" "$ROW_TF")" "$(fmt_ratio "$ROW_TS" "$ROW_TN")" \
 		"$ROW_CHECK" >> "$TMP/main.md"
 done
 
 {
-	echo "| array size n | syntran | gfortran | numpy | python | syntran / gfortran | syntran / numpy | checksums |"
-	echo "|--:|--:|--:|--:|--:|--:|--:|:-:|"
+	echo "| array size n | syntran vm | syntran native | syntran jit | gfortran | numpy | python | syntran vm / gfortran | syntran vm / numpy | checksums |"
+	echo "|--:|--:|--:|--:|--:|--:|--:|--:|--:|:-:|"
 } > "$TMP/sweep.md"
 
 echo "Running size sweep ..." >&2
 for n in $SWEEP_NS ; do
 	run_bench sweep "$n"
-	printf '| %s | %s | %s | %s | %s | %s | %s | %s |\n' \
-		"$n" "$(fmt_t "$ROW_TS")" "$(fmt_t "$ROW_TF")" \
+	printf '| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n' \
+		"$n" "$(fmt_t "$ROW_TS")" "$(fmt_t "$ROW_TNAT")" "$(fmt_t "$ROW_TJIT")" \
+		"$(fmt_t "$ROW_TF")" \
 		"$(fmt_t "$ROW_TN")" "$(fmt_t "$ROW_TP")" \
 		"$(fmt_ratio "$ROW_TS" "$ROW_TF")" "$(fmt_ratio "$ROW_TS" "$ROW_TN")" \
 		"$ROW_CHECK" >> "$TMP/sweep.md"
@@ -223,8 +260,17 @@ np_ver=n/a
 	echo "# Whole-array benchmarks"
 	echo
 	echo "Generated by \`src/benchmarks/benchmark-array.sh\` on $(date '+%Y-%m-%d').  Times are"
-	echo "wall-clock seconds (lower is better), including process startup.  syntran,"
-	echo "gfortran, and numpy are the best of $RUNS runs; pure python is a single run."
+	echo "wall-clock seconds (lower is better), including process startup.  The syntran"
+	echo "columns, gfortran, and numpy are the best of $RUNS runs; pure python is a single run."
+	echo
+	echo "There are three syntran columns, one per backend, all running the same"
+	echo ".syntran programs.  syntran vm is the bytecode interpreter, which is the default."
+	echo "syntran native is an executable made once by \`syntran --native\`, whose compile"
+	echo "time is not counted, like gfortran's.  syntran jit is \`syntran --jit\`, which"
+	echo "compiles in memory on every run, so its time includes the compile."
+	echo
+	echo "The gfortran column is hand-written Fortran (\`array/<name>.f90\`), not the output"
+	echo "of \`syntran --transpile\`."
 	echo
 	echo "- CPU: $cpu"
 	echo "- syntran: $syn_ver (\`$SYNTRAN\`)"
@@ -239,7 +285,7 @@ np_ver=n/a
 	echo "| elem | \`b = b + sqrt(abs(a)) + exp(-a*a)\`, 5M elements, 20 iterations |"
 	echo "| stencil | 1D heat equation via slices \`u[1:n-1] += 0.25*(u[0:n-2] - 2*u[1:n-1] + u[2:n])\`, 1M elements, 200 iterations |"
 	echo "| reduce | \`sum(a*b) + a @ b + maxval(a-b)\`, 10M elements, 50 iterations |"
-	echo "| matmul | \`c = 1e-3 * (m @ c)\`, 300x300, 20 iterations.  Native code finishes in tens of milliseconds here, so this row is dominated by process startup and its ratios are not meaningful |"
+	echo "| matmul | \`c = 1e-3 * (m @ c)\`, 300x300, 20 iterations.  The compiled implementations (syntran native and gfortran) finish in tens of milliseconds here, so this row is dominated by process startup and its ratios are not meaningful |"
 	echo "| small | \`v = v + dt*g; x = x + dt*v\` on 3-element vectors, 2M steps |"
 	echo
 	cat "$TMP/main.md"

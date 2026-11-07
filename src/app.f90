@@ -6,6 +6,7 @@ module syntran__app_m
 	use syntran
 	use syntran__core_m
 	use syntran__errors_m
+	use syntran__linalg_m, only: blas_vendor
 	use syntran__utils_m
 	use syntran__line_edit_m, only: enable_vt_processing, is_stdout_tty
 
@@ -18,7 +19,7 @@ module syntran__app_m
 
 	type args_t
 
-		character(len = :), allocatable :: syntran_file, command, color, transpile_out
+		character(len = :), allocatable :: syntran_file, command, color, transpile_out, native_out
 
 		integer :: maxerr
 
@@ -26,7 +27,9 @@ module syntran__app_m
 			chdir              = .false., &
 			command_arg        = .false., &
 			interactive        = .false., &
+			jit                = .false., &
 			keep_unused_fns    = .false., &
+			native             = .false., &
 			permissive_return  = .false., &
 			quiet              = .false., &
 			syntax_only        = .false., &
@@ -151,6 +154,38 @@ end subroutine set_ansi_colors
 
 !===============================================================================
 
+function compiler_str() result(s)
+
+	! The Fortran compiler that built syntran, like "gfortran 15.2.0"
+
+	character(len = :), allocatable :: s
+
+	integer :: i
+
+	s = fort_compiler
+	do i = 1, size(fort_vers)
+		s = s//merge(" ", ".", i == 1)//str(fort_vers(i))
+	end do
+
+end function compiler_str
+
+!===============================================================================
+
+subroutine print_version_row(label, val)
+
+	! One detail of `--version`.  The values line up in a column
+
+	character(len = *), intent(in) :: label, val
+
+	integer, parameter :: width = 14
+
+	write(*,*) "  "//fg_bright_magenta//label//color_reset// &
+		repeat(" ", max(width - len(label), 1))//trim(val)
+
+end subroutine print_version_row
+
+!===============================================================================
+
 function parse_args() result(args)
 
 	! This argument parser is based on http://docopt.org/
@@ -236,6 +271,13 @@ function parse_args() result(args)
 			args%transpile = .true.
 			call get_next_arg(i, args%transpile_out)
 
+		case ("-o", "--native")
+			args%native = .true.
+			call get_next_arg(i, args%native_out)
+
+		case ("-j", "--jit")
+			args%jit = .true.
+
 		case ("--keep-unused-fns")
 			args%keep_unused_fns = .true.
 
@@ -305,6 +347,96 @@ function parse_args() result(args)
 		error = .true.
 	end if
 
+	! --interactive would be ignored by these, which don't run the program in the REPL
+	if (args%transpile .and. args%interactive .and. .not. args%help .and. &
+		.not. args%version) then
+		write(*,*) err_prefix//"--transpile cannot be used with --interactive"
+		error = .true.
+	end if
+
+	if (args%syntax_only .and. args%interactive .and. .not. args%help .and. &
+		.not. args%version) then
+		write(*,*) err_prefix//"--syntax-only cannot be used with --interactive"
+		error = .true.
+	end if
+
+	! Same for --native, which also needs a program and a syntran with LLVM
+	if (args%native .and. .not. args%help .and. .not. args%version) then
+		if (.not. (args%syntran_file_arg .or. args%command_arg)) then
+			write(*,*) err_prefix//"--native requires a <file.syntran> "// &
+				"or -c <cmd> argument"
+			error = .true.
+		end if
+		if (args%transpile .or. args%syntax_only .or. args%interactive) then
+			write(*,*) err_prefix//"--native cannot be used with --transpile, "// &
+				"--syntax-only, or --interactive"
+			error = .true.
+		end if
+		if (.not. native_available) then
+			write(*,*) err_prefix//"--native requires a syntran that is built "// &
+				"with LLVM, i.e. with SYNTRAN_LLVM"
+			error = .true.
+		end if
+	end if
+
+	! `syntran --native a.syntran a.syntran` would replace the program with its binary
+	if (args%native .and. args%syntran_file_arg .and. .not. args%help .and. &
+		.not. args%version) then
+		if (allocated(args%native_out) .and. allocated(args%syntran_file)) then
+			if (args%native_out == args%syntran_file) then
+				write(*,*) err_prefix//"--native output file `"//args%native_out// &
+					"` is also the input file"
+				error = .true.
+			end if
+		end if
+	end if
+
+	! Unlike --transpile, "-" is not stdout, and would be a file named "-"
+	if (args%native .and. .not. args%help .and. .not. args%version) then
+		if (allocated(args%native_out)) then
+			if (args%native_out == "-") then
+				write(*,*) err_prefix//"--native needs an output file name, " &
+					//"it cannot write to stdout"
+				error = .true.
+			end if
+		end if
+	end if
+
+	! --jit compiles with LLVM like --native, but runs the program instead of
+	! writing it
+	if (args%jit .and. .not. args%help .and. .not. args%version) then
+		if (.not. (args%syntran_file_arg .or. args%command_arg)) then
+			write(*,*) err_prefix//"--jit requires a <file.syntran> "// &
+				"or -c <cmd> argument"
+			error = .true.
+		end if
+		if (args%native .or. args%transpile .or. args%syntax_only .or. &
+			args%interactive) then
+			write(*,*) err_prefix//"--jit cannot be used with --native, "// &
+				"--transpile, --syntax-only, or --interactive"
+			error = .true.
+		end if
+		if (.not. native_available) then
+			write(*,*) err_prefix//"--jit requires a syntran that is built "// &
+				"with LLVM, i.e. with SYNTRAN_LLVM"
+			error = .true.
+		end if
+	end if
+
+	! The program is either the file or the command, and the one that is not used
+	! would be silently dropped
+	if (args%command_arg .and. args%syntran_file_arg .and. .not. args%help .and. &
+		.not. args%version) then
+		write(*,*) err_prefix//"--command cannot be used with a <file.syntran>"
+		error = .true.
+	end if
+
+	if (args%command_arg .and. args%interactive .and. .not. args%help .and. &
+		.not. args%version) then
+		write(*,*) err_prefix//"--command cannot be used with --interactive"
+		error = .true.
+	end if
+
 	! It's an option of the transpiler, so it does nothing otherwise
 	if (args%keep_unused_fns .and. .not. args%transpile .and. .not. args%help .and. &
 		.not. args%version) then
@@ -326,23 +458,27 @@ function parse_args() result(args)
 				args%command_arg      .or. &
 				args%syntax_only      .or. &
 				args%transpile        .or. &
+				args%native           .or. &
+				args%jit              .or. &
 				args%version          .or. &
 				args%syntran_file_arg .or. &
 				args%help                  &
 			)
 
 		if (.not. args%command_arg .and. .not. args%syntax_only .and. &
-			.not. args%transpile) then
+			.not. args%transpile .and. .not. args%native .and. .not. args%jit) then
 			write(*,*)
 			write(*,*) fg_bright_magenta//lang_name//' '//version//color_reset
 			write(*,*) fg_bright_magenta//url//color_reset
 			if (args%version) then
-				write(*,*) fg_bright_magenta//"git commit = "//git_commit//color_reset
-				write(*,*) fg_bright_magenta//"build date = "//build_date//color_reset
-				write(*,*) fg_bright_magenta//"fortran compiler = "//fort_compiler//" "// &
-					str(fort_vers)//color_reset
-				write(*,*) fg_bright_magenta//"bounds check = "// &
-					merge("on ", "off", bounds_check)//color_reset
+				write(*,*)
+				call print_version_row("commit"      , git_commit)
+				call print_version_row("built"       , build_date)
+				call print_version_row("compiler"    , compiler_str())
+				call print_version_row("bounds check", merge("on ", "off", bounds_check))
+				call print_version_row("blas"        , blas_vendor())
+				call print_version_row("llvm"        , merge("linked    ", "not linked", &
+					native_available))
 			end if
 			write(*,*)
 		end if
@@ -374,10 +510,15 @@ function parse_args() result(args)
 		write(*,*) "    -i --interactive    Interpret a file then start an interactive shell"
 		write(*,*) "    -q --quiet          Don't print the banner, only errors and println calls"
 		write(*,*) "    --permissive-return Downgrade missing-return errors to warnings"
-		write(*,*) "    --cd                Resolve the script's relative file paths against its own directory"
+		write(*,*) "    --cd                Resolve the script's relative file paths against"
+		write(*,*) "                        its own directory"
 		write(*,*) "    -s --syntax-only    Parse and type check without running the program"
-		write(*,*) "    -t --transpile <f>  Write the program as Fortran source to <f> ('-' for stdout) instead of running it"
-		write(*,*) "    --keep-unused-fns   With --transpile, also write the fns that nothing calls"
+		write(*,*) "    -t --transpile <f>  Write the program as Fortran source to <f> ('-' for"
+		write(*,*) "                        stdout) instead of running it"
+		write(*,*) "    --keep-unused-fns   With --transpile, also write fns that nothing calls"
+		write(*,*) "    -o --native <f>     Compile the program with LLVM to an executable <f>"
+		write(*,*) "                        (or an object <f>.o, or LLVM IR <f>.ll)"
+		write(*,*) "    -j --jit            Compile the program with LLVM and run it right away"
 		write(*,*) "    -- <args>...        Pass remaining arguments to script via std::args()"
 		write(*,*)
 

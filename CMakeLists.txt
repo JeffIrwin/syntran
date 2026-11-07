@@ -50,6 +50,19 @@ if(SYNTRAN_NO_BLAS)
 	add_compile_definitions(SYNTRAN_NO_BLAS)
 endif()
 
+# Build the native backend (`syntran --native`), which compiles through LLVM.
+# Only src/native.F90, src/c/llvm_shim.c, and src/rt/syntran_crt.c read this macro.  fpm builds spell
+# it `--features debug,blas,llvm` (see [features] in fpm.toml)
+option(SYNTRAN_LLVM "Build the native backend, which needs LLVM" OFF)
+if(SYNTRAN_LLVM)
+	add_compile_definitions(SYNTRAN_LLVM)
+endif()
+
+# Link LLVM from its static component archives instead of libLLVM.dylib/.so, so
+# that the shipped binary has no LLVM, zstd, or z3 dependency (the macOS release
+# package, like Dockerfile.rocky does for Linux).  Needs SYNTRAN_LLVM
+option(SYNTRAN_LLVM_STATIC "Link LLVM statically" OFF)
+
 if(DEFINED ENV{SYNTRAN_INTEL})
 	# ifort-specific flags must NOT reach the C compiler (icx doesn't
 	# understand -fpp/etc), so gate them to Fortran only.
@@ -186,7 +199,10 @@ set(SRC_DIR "src")
 # Core library, used by main interpreter and unit tests
 set(LIB "${PROJECT}")
 set(LIB_SRC
+	${SRC_DIR}/c/blas_info.c
 	${SRC_DIR}/c/isocline_wrap.c
+	${SRC_DIR}/c/llvm_shim.c
+	${SRC_DIR}/rt/syntran_crt.c
 	# Compiled here (once), instead of duplicated into each of
 	# EXE_SRC/TEST_SRC/LONG_SRC below, to avoid recompiling it 3x per config.
 	${SRC_DIR}/app.f90
@@ -213,6 +229,7 @@ set(LIB_SRC
 	${SRC_DIR}/lex.f90
 	${SRC_DIR}/line_edit.f90
 	${SRC_DIR}/linalg.F90
+	${SRC_DIR}/llvm_c.f90
 	${SRC_DIR}/math.f90
 	${SRC_DIR}/math_bin_add.f90
 	${SRC_DIR}/math_bin_div.f90
@@ -226,6 +243,8 @@ set(LIB_SRC
 	${SRC_DIR}/math_bit_or.f90
 	${SRC_DIR}/math_bit_right_shift.f90
 	${SRC_DIR}/math_bit_xor.f90
+	${SRC_DIR}/native.F90
+	${SRC_DIR}/native_rt.f90
 	${SRC_DIR}/parse.f90
 	${SRC_DIR}/parse_array.f90
 	${SRC_DIR}/parse_control.f90
@@ -274,6 +293,54 @@ else()
 endif()
 
 set(LINK_LIBS "${LIB}")
+
+if(SYNTRAN_LLVM)
+	find_package(LLVM REQUIRED CONFIG)
+	message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+	if(SYNTRAN_LLVM_STATIC)
+		# Not the LLVM* targets: Homebrew's LLVMExports.cmake gives LLVMSupport
+		# the interface libs libz3.dylib and zstd::libzstd_shared, which would
+		# bring those dylibs back.  Ask llvm-config for the component archives
+		# instead, like Dockerfile.rocky.  z3 (only for clang's analyzer) and
+		# xml2 (for merging Windows manifests) are left out, since syntran uses
+		# neither and a static archive member is only linked if it's referenced
+		find_program(SYNTRAN_LLVM_CONFIG llvm-config
+			HINTS "${LLVM_TOOLS_BINARY_DIR}" NO_DEFAULT_PATH)
+		if(NOT SYNTRAN_LLVM_CONFIG)
+			message(FATAL_ERROR "SYNTRAN_LLVM_STATIC needs llvm-config in ${LLVM_TOOLS_BINARY_DIR}")
+		endif()
+		execute_process(
+			COMMAND "${SYNTRAN_LLVM_CONFIG}" --link-static --libfiles
+				core analysis passes target native orcjit bitreader bitwriter
+			OUTPUT_VARIABLE LLVM_ARCHIVES
+			OUTPUT_STRIP_TRAILING_WHITESPACE
+			COMMAND_ERROR_IS_FATAL ANY)
+		separate_arguments(LLVM_ARCHIVES)
+		# LLVM's compression support needs zstd, and the shared one is what a
+		# plain -lzstd finds first
+		find_library(SYNTRAN_ZSTD_STATIC NAMES libzstd.a
+			HINTS "${LLVM_LIBRARY_DIR}/../../zstd/lib" "${CMAKE_PREFIX_PATH}")
+		if(NOT SYNTRAN_ZSTD_STATIC)
+			message(FATAL_ERROR "SYNTRAN_LLVM_STATIC needs a static libzstd.a")
+		endif()
+		list(APPEND LINK_LIBS ${LLVM_ARCHIVES} "${SYNTRAN_ZSTD_STATIC}" z)
+		if(APPLE)
+			# gfortran drives the link, so it doesn't add the C++ runtime
+			list(APPEND LINK_LIBS c++)
+		else()
+			list(APPEND LINK_LIBS stdc++)
+		endif()
+	elseif(TARGET LLVM)
+		# A shared libLLVM, which is the usual install
+		list(APPEND LINK_LIBS LLVM)
+	else()
+		# The same components as the static link above.  src/c/llvm_shim.c calls
+		# the ORC JIT, and the bitcode reader and writer, directly
+		llvm_map_components_to_libnames(LLVM_LIBS core analysis passes target
+			native orcjit bitreader bitwriter)
+		list(APPEND LINK_LIBS ${LLVM_LIBS})
+	endif()
+endif()
 
 if(NOT SYNTRAN_NO_BLAS)
 	# Accelerate on Apple, otherwise whatever BLAS/LAPACK the system provides

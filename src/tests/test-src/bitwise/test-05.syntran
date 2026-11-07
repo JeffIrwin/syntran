@@ -1,0 +1,54 @@
+
+// A shift by a count that is as wide as the integer or wider is 0, and the count
+// is otherwise masked to the width, so a negative one wraps around.  What a
+// float that is out of range converts to depends on the machine, but a program
+// has to get the same from a constant as from a variable.  Returns the number
+// of failures
+
+fn sh(x: i32, k: i32): i32 { return x << k; }
+fn shr(x: i32, k: i32): i32 { return x >> k; }
+fn sh64(x: i64, k: i64): i64 { return x << k; }
+fn shr64(x: i64, k: i64): i64 { return x >> k; }
+fn cv(x: f64): i32 { return i32(x); }
+fn cv64(x: f64): i64 { return i64(x); }
+fn cvf(x: f32): i32 { return i32(x); }
+
+let fails = 0;
+fn check(ok: bool)
+{
+	if not ok { fails += 1; }
+}
+
+let one = 1;
+check(one << 31 == -2147483648);
+check(one << 32 == 0);
+check(one << 33 == 0);
+check(one << -1 == -2147483648);
+check(-8 >> 1 == 2147483644);
+check(-8 >> 40 == 0);
+check(sh(1, 31) == one << 31 and sh(1, 32) == one << 32 and sh(1, -1) == one << -1);
+check(shr(-8, 1) == -8 >> 1 and shr(-8, 40) == -8 >> 40 and shr(8, -1) == 8 >> -1);
+
+let big = i64(1);
+check(big << 63 == -9223372036854775807 - 1);
+check(big << 64 == 0);
+check(big << -1 == big << 63);
+let m1 = i64(-1);
+let m8 = i64(-8);
+check(sh64(big, i64(64)) == 0 and sh64(big, m1) == big << m1 and shr64(m8, m1) == m8 >> m1);
+
+let xs = [8, -8];
+check(all(xs >> -1 == [xs[0] >> 31, xs[1] >> 31]));
+check(all(xs << 40 == [0, 0]));
+
+check(i32(1.0e20) == cv(1.0e20));
+check(i32(-1.0e20) == cv(-1.0e20));
+check(i32(0.0 / 0.0) == cv(0.0 / 0.0));
+check(i64(1.0e30) == cv64(1.0e30));
+check(i64(-1.0e30) == cv64(-1.0e30));
+check(i32(f32(1.0e20)) == cvf(f32(1.0e20)));
+check(i32(2147483647.5) == 2147483647);
+check(i32(-2147483648.5) == -2147483648);
+check(cv(2.9) == 2 and cv(-2.9) == -2);
+
+return fails;

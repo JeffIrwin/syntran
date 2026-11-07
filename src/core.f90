@@ -31,6 +31,40 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - llvm compiled backend
+	!    * test (manually) all aoc solutions in its repo
+	!      + done
+	!      + jit takes ~95 s total
+	!      + aot takes 200+ (slower than transpiler but faster than vm)
+	!    * all aoc jit run fast enough that we might as well add as a submodule
+	!      and always run in ci (not bytecode though)
+	!    * fuse elementwise intrinsics (sqrt, exp, ... for the elem benchmark),
+	!      write into the destination slice/variable in place (small), multi-d
+	!      slices, reductions of fused expressions
+	!      + related TBAA work is finished for primitive array operations which
+	!        were slowing the stencil benchmark
+	!    * build devx -- i don't like having openblas and llvm libs under
+	!      "build" dir because they get nuked on cleaning. maybe make a
+	!      gitignored "lib" dir?
+	!      + maybe obviated by build.sh improvements like auto lib detection
+	!    * optimization options? at least give consideration to what the default
+	!      should be
+	!      + default is -O2
+	!      + this is clang and rustc's release builds use
+	!      + could expose later
+	!    * remove transpiler backend? not sure its worth it if we have a
+	!      compiler (especially one which has even better parity with the vm).
+	!      maybe much later, the bytecode vm could also be removed
+	!    * parked:
+	!      + can/should the repl use llvm jit? no, at least probably not until
+	!        we're ready to remove the bytecode vm entirely
+	!  - self-hosted compiler
+	!    * pre-req: need a way to interface and call c api libs
+	!  - massive old readme bug:
+	!    * "recursive functions are not possible currently"
+	!    * of course the sentence before is wrong too, which says fns need to be
+	!      declared above their call site
+	!    * i did that pre-ai :/
 	!  - transpiler improvements:
 	!    * cover more OS's and intel in addition to gnu in testing. currently
 	!      only gnu on ubuntu
@@ -57,12 +91,6 @@ module syntran__core_m
 	!      not worth the overhead or the complications of re-formating without
 	!      introducing edge cases like unterminated pre-processor breaking
 	!      comments
-	!    * eventually (long away) shoot for a full syntran compiler using LLVM
-	!      + maybe a good fable task
-	!      + claude estimates compiler would be 3x more code than transpiler
-	!      + initial transpiler pr is about 15 kloc code
-	!      + considering claude did the transpiler in one day, a full compiler
-	!        could still be very achievable
 	!  - split or streamline ci/cd:
 	!    * "build on ubuntu-24" stage is now the slowest. i believe this just
 	!      changed after ast removal. previously, windows and intel-compiler

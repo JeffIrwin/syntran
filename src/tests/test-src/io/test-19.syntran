@@ -1,0 +1,18 @@
+fn main(): bool
+{
+	// Run with `--cd` / chdir_, so that these relative paths are resolved against
+	// the directory of this file instead of the working directory.  Both the VM and
+	// the native backend (`--jit`) have to do it
+
+	let f = open("startup-cd.syntran", "r");
+	let blank = readln(f);
+	let line = readln(f);
+	close(f);
+
+	return blank == "" and
+		std::exists("test-01.syntran") and
+		not std::exists("src/tests/test-src/io/test-01.syntran") and
+		line == "// Startup file for the REPL `chdir_` test in unit_test_repl_directives(), and";
+}
+
+return main();

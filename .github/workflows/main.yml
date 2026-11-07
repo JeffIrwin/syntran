@@ -50,6 +50,11 @@
 			},
 			{
 				"if": "matrix.os == 'ubuntu-24.04'",
+				"name": "Check embedded native runtime is up to date",
+				"run": "bash src/gen_native_rt.sh && git diff --exit-code src/native_rt.f90 src/rt/syntran_syms.inc"
+			},
+			{
+				"if": "matrix.os == 'ubuntu-24.04'",
 				"name": "Set ubuntu PATH",
 				"run": "echo \"$HOME/bin\" >> $GITHUB_PATH"
 			},
@@ -181,6 +186,11 @@
 					# or the binary won't run in a bare container \n
 					ldd ./syntran \n
 					if ldd ./syntran | grep -Eq 'blas|lapack|gfortran' ; then exit 1 ; fi \n
+
+					# ldd can't see a static BLAS, but --version can tell \n
+					# that it is OpenBLAS and not the slow reference BLAS \n
+					./syntran --version \n
+					./syntran --version | grep -Eq 'blas +OpenBLAS' \n
 					./syntran -c 'let A = [2.0, 1.0, 1.0, 3.0; 2, 2]; println(std::solve(A, [3.0, 5.0])); println(A @ A);' \n
 
 					dir_='src/tests/test-src/explorer/' \n
@@ -242,6 +252,32 @@
 			},
 			{
 				"if": "matrix.os == 'windows-latest'",
+				"name": "Install static LLVM windows",
+				"shell": "bash",
+				"run":
+				"
+					set -exu \n
+
+					# For the native backend (`--native` and `--jit`).  The MSYS2 \n
+					# package has LLVM's component archives as well as the DLL, and \n
+					# the release binary links the former, so that it has no DLLs to \n
+					# ship.  Same as /opt/llvm-static in Dockerfile.rocky \n
+					# The release binary is built with MSYS2's own gfortran, not the runner's.  \n
+					# MSYS2's LLVM is built with a newer GCC and mingw-w64 than the runner \n
+					# has (GCC 15.2, mingw-w64 v13), and its archives need fns that only \n
+					# the newer libstdc++.a (std::__get_once_callable) and the newer \n
+					# libucrt.a (__imp__setjmp) have, so linking against the runner's \n
+					# fails with undefined references \n
+					/c/msys64/usr/bin/pacman.exe -Sy --noconfirm --needed mingw-w64-ucrt-x86_64-llvm mingw-w64-ucrt-x86_64-gcc-fortran \n
+
+					# MSYS2 is on the PATH for this step only, for llvm-config and \n
+					# llvm-nm.  This writes build/llvm-static/libLLVM.a and syntran.def \n
+					export PATH=\"/c/msys64/ucrt64/bin:$PATH\" \n
+					bash utils/gen-llvm-static-win.sh build/llvm-static \n
+				"
+			},
+			{
+				"if": "matrix.os == 'windows-latest'",
 				"name": "Test fpm windows",
 				"run":
 				"
@@ -265,14 +301,29 @@
 					# BLAS/LAPACK is OpenBLAS from the \"Install OpenBLAS \n
 					# windows\" step, found through `-Lbuild/openblas`.  It's \n
 					# built with OpenMP, so `-fopenmp` pulls in libgomp \n
-					fpm test test --profile release --flag \"-static -fopenmp -Lbuild/openblas -Wl,--wrap=setlocale -Wl,--stack,67108864\" \n
-					fpm test long --profile release --flag \"-static -fopenmp -Lbuild/openblas -Wl,--wrap=setlocale -Wl,--stack,67108864\" \n
+					# \n
+					# LLVM is linked statically from the \"Install static LLVM windows\" \n
+					# step, found through `-Lbuild/llvm-static`.  MSYS2's gfortran is first on \n
+					# the PATH (see that step for why), but it is all linked statically, so the \n
+					# exe has no MSYS2 DLLs, which \"Pack Windows\" checks.  \n
+					# syntran.def exports the few fns of LLVM that src/c/llvm_shim.c \n
+					# looks up at run time with GetProcAddress().  The unit tests include \n
+					# the groups that need LLVM, which are skipped without it \n
+					# \n
+					# `--gc-sections` and `-s` (strip) take the exe from 157 MB to 106 MB. \n
+					# They are here and not just in \"Pack Windows\", so that the tests run \n
+					# on the same binary that ships, and so that fpm reuses this build \n
+					$flags = \"-static -fopenmp -Lbuild/openblas -Lbuild/llvm-static -Wl,build/llvm-static/syntran.def -Wl,--wrap=setlocale -Wl,--stack,67108864 -Wl,--gc-sections -Wl,-s\" \n
+					$env:PATH = \"C:\\msys64\\ucrt64\\bin;$env:PATH\" \n
+					gfortran --version \n
+					fpm test test --features release,llvm-blas --flag $flags \n
+					fpm test long --features release,llvm-blas --flag $flags \n
 				"
 			},
 			{
 				"if": "matrix.os == 'macOS-latest'",
 				"run": "
-					brew install gcc@14 &&
+					brew install gcc@14 llvm &&
 					brew reinstall gcc@14"
 			},
 			{
@@ -280,7 +331,7 @@
 				"run":
 				"
 					#export OMP_NUM_THREADS=1 \n
-					bash ./build.sh debug \n
+					bash ./build.sh debug --no-llvm \n
 					#ls -ltrh build/Debug \n
 				"
 			},
@@ -326,7 +377,7 @@
 				"name": "Test release",
 				"run":
 				"
-					bash ./build.sh release \n
+					bash ./build.sh release --no-llvm --blas \n
 					time ./build/Release/test \n
 				"
 			},
@@ -347,14 +398,28 @@
 					# release binary from the \"Test fpm windows\" step instead \n
 					# of rebuilding from scratch with cmake.  --prefix places \n
 					# it in a predictable location for packaging \n
-					fpm install --profile release --flag \"-static -fopenmp -Lbuild/openblas -Wl,--wrap=setlocale -Wl,--stack,67108864\" --prefix ./build/ \n
+					$flags = \"-static -fopenmp -Lbuild/openblas -Lbuild/llvm-static -Wl,build/llvm-static/syntran.def -Wl,--wrap=setlocale -Wl,--stack,67108864 -Wl,--gc-sections -Wl,-s\" \n
+					$env:PATH = \"C:\\msys64\\ucrt64\\bin;$env:PATH\" \n
+					fpm install --features release,llvm-blas --flag $flags --prefix ./build/ \n
 
 					copy .\\build\\bin\\syntran.exe .\\ \n
 
-					# OpenBLAS, libgomp and libgfortran must be linked in \n
-					# statically, or the exe won't run without the toolchain \n
+					# OpenBLAS, LLVM, libgomp, libgfortran, libstdc++, etc. must be \n
+					# linked in statically, or the exe won't run without the toolchain \n
+					# or a pile of DLLs.  Only Windows system DLLs may be imported, and \n
+					# unlike the mingw ones (libLLVM-*, libstdc++-6, libwinpthread-1, \n
+					# libgcc_s_seh-1, libzstd, etc.) they don't start with \"lib\" \n
 					objdump -p .\\syntran.exe | Select-String \"DLL Name\" \n
-					if (objdump -p .\\syntran.exe | Select-String -Pattern \"openblas|libgomp|libgfortran\") { exit 1 } \n
+					if (objdump -p .\\syntran.exe | Select-String -Pattern \"DLL Name: (lib|zlib)\") { exit 1 } \n
+
+					# Same as the ldd check on Linux: a static BLAS is invisible to objdump \n
+					.\\syntran.exe --version \n
+					if (-not (.\\syntran.exe --version | Select-String -Pattern \"blas\\s+OpenBLAS\")) { exit 1 } \n
+
+					# Likewise for LLVM, which is invisible to objdump, and then run \n
+					# something through it, in memory \n
+					if (-not (.\\syntran.exe --version | Select-String -Pattern \"llvm\\s+linked\")) { exit 1 } \n
+					if (-not (.\\syntran.exe --jit -c \"sum([0: 101]);\" | Select-String -Pattern \"5050\")) { exit 1 } \n
 				"
 			},
 			{
@@ -368,7 +433,9 @@
 					gfortran-14 --version \n
 					which gfortran-14 \n
 
-					bash ./build.sh release \n
+					# LLVM is linked statically, so the package has no libLLVM, \n
+					# zstd, or z3 dylib to ship \n
+					bash ./build.sh release --llvm --blas -- -DSYNTRAN_LLVM_STATIC=ON \n
 
 					# TODO: copy to a subdir for easier upload \n
 
@@ -389,8 +456,14 @@
 						\"@executable_path/libgomp.1.dylib\"
 						\"./syntran\" \n
 
+					# Same as the ldd check in Dockerfile.rocky.  Only libgomp \n
+					# may come from outside of the system \n
+					otool -L ./syntran \n
+					if otool -L ./syntran | grep -E 'LLVM|zstd|z3|/opt/homebrew|/usr/local' | grep -v libgomp ; then exit 1 ; fi \n
+
 					chmod +x ./syntran \n
 					./syntran --version \n
+					[[ \"$(./syntran --jit -c 'sum([0:101]);' | tr -d '[:space:]')\" == \"5050\" ]] \n
 					#cat ./src/compiler.F90 \n
 				"
 			},
@@ -544,6 +617,181 @@
 			}
 		]
 	},
+	# The native backend (`syntran --native`) is opt-in, because it needs LLVM, so
+	# the jobs above never build it.  This one does, and checks it against the
+	# interpreter.  Ubuntu's llvm-dev is LLVM 18, and Homebrew's is the latest, so
+	# together they bracket the versions that src/llvm_c.f90 has to work with
+	"test-llvm": {
+		"name": "Test native backend on ${{ matrix.os }}",
+		"runs-on": "${{ matrix.os }}",
+		"strategy": {
+			"matrix": {
+				"os": [
+					"ubuntu-24.04",
+					"macOS-latest",
+					"windows-latest"
+				]
+			}
+		},
+		"steps": [
+			{
+				"uses": "actions/checkout@v7",
+				"with": {
+					"submodules": true
+				}
+			},
+			{
+				"uses": "fortran-lang/setup-fpm@v10",
+				"with": {
+					"github-token": "${{ secrets.GITHUB_TOKEN }}"
+				}
+			},
+			{
+				"if": "matrix.os == 'windows-latest'",
+				"name": "Install LLVM windows",
+				"run":
+				"
+					# MSYS2's ucrt64 LLVM targets the same C runtime and triple \n
+					# (x86_64-w64-windows-gnu) as the runner's mingw gfortran. \n
+					# The official LLVM installers target MSVC instead \n
+					C:\\msys64\\usr\\bin\\pacman.exe -Sy --noconfirm --needed mingw-w64-ucrt-x86_64-llvm mingw-w64-ucrt-x86_64-openblas \n
+
+					# Private dirs on -L, since C:\\msys64\\ucrt64\\lib itself would \n
+					# shadow the toolchain's libgfortran.a.  The LLVM one is an \n
+					# import library (its name has the major version of LLVM, which \n
+# MSYS2 bumps), so syntran loads libLLVM-*.dll from \n
+					# C:\\msys64\\ucrt64\\bin at run time \n
+					New-Item -ItemType Directory -Force build/openblas, build/llvm-win | Out-Null \n
+					Copy-Item C:\\msys64\\ucrt64\\lib\\libopenblas.a build/openblas/libblas.a \n
+					Copy-Item C:\\msys64\\ucrt64\\lib\\libopenblas.a build/openblas/liblapack.a \n
+					Copy-Item (Get-Item C:\\msys64\\ucrt64\\lib\\libLLVM-*.dll.a).FullName build/llvm-win/libLLVM.a \n
+				"
+			},
+			{
+				"if": "matrix.os == 'ubuntu-24.04'",
+				"name": "Install LLVM ubuntu",
+				"run": "sudo apt-get install gfortran-14 libopenblas-dev llvm-dev cmake"
+			},
+			{
+				"if": "matrix.os == 'macOS-latest'",
+				"name": "Install LLVM macOS",
+				"run": "brew install gcc@14 llvm"
+			},
+			{
+				"if": "matrix.os == 'windows-latest'",
+				"name": "Test fpm with LLVM windows",
+				"shell": "bash",
+				"run":
+				"
+					set -exu \n
+
+					# libLLVM-*.dll and the DLLs it needs, for this step only, so \n
+					# that they don't shadow the runner's gfortran \n
+					export PATH=\"/c/msys64/ucrt64/bin:$PATH\" \n
+					llvm-config --version \n
+
+					# The same flags as the \"Test fpm windows\" step, plus the \n
+					# private library dirs \n
+					flags=\"-Wno-tabs -static -fopenmp -Lbuild/openblas -Lbuild/llvm-win -Wl,--wrap=setlocale -Wl,--stack,67108864\" \n
+
+					fpm test test --features debug,llvm-blas --flag \"$flags\" \n
+
+					# Every program the tests evaluate, compiled and run in memory \n
+					fpm test test --features debug,llvm-blas --flag \"$flags\" -- --native \n
+
+					fpm install --features debug,llvm-blas --flag \"$flags\" --prefix ./build/native/ \n
+
+					# End to end.  A compiled program is linked with gcc, which \n
+					# needs the same flags as syntran to find BLAS \n
+					export CC=\"gcc -static -fopenmp -L$PWD/build/openblas\" \n
+					./build/native/bin/syntran --quiet --native hello.exe -c 'println(\"hello \", 6 * 7);' \n
+					[[ \"$(./hello.exe)\" == \"hello 42\" ]] \n
+					# The same in memory, with no C compiler or file \n
+					[[ \"$(./build/native/bin/syntran --quiet --jit -c 'println(\"hello \", 6 * 7);')\" == \"hello 42\" ]] \n
+					# --cd resolves relative paths against the script's directory \n
+					[[ \"$(./build/native/bin/syntran --cd --jit src/tests/test-src/io/test-19.syntran | tr -d ' ')\" == \"true\" ]] \n
+				"
+			},
+			{
+				"if": "matrix.os != 'windows-latest'",
+				"name": "Test fpm with LLVM",
+				"shell": "bash",
+				"env": {
+					"FPM_FC": "gfortran-14"
+				},
+				"run":
+				"
+					set -exu \n
+
+					# setup-fpm's macOS fpm is linked against gcc@12's \n
+					# libgfortran, but only gcc@14 is installed.  The \n
+					# libgfortran.5 ABI is the same \n
+					if [[ \"$(uname)\" == Darwin ]]; then \n
+						export DYLD_FALLBACK_LIBRARY_PATH=\"$(brew --prefix gcc@14)/lib/gcc/14\" \n
+					fi \n
+
+					# Homebrew's llvm is keg-only, so it's not on the PATH \n
+					llvm_config=\"$(command -v llvm-config || echo $(brew --prefix llvm)/bin/llvm-config)\" \n
+					$llvm_config --version \n
+
+					# fpm can't find the libraries by itself \n
+					export LIBRARY_PATH=\"$($llvm_config --libdir)\" \n
+
+					# Not just the short tests: the groups that need LLVM check the \n
+					# diagnostics and the IR of the native backend \n
+					fpm test test --features debug,llvm-blas --flag -Wno-tabs \n
+
+					# The same tests again, with every program they evaluate compiled \n
+					# by the native backend and run in memory, not on the VM \n
+					fpm test test --features debug,llvm-blas --flag -Wno-tabs -- --native \n
+
+					# A stable path to the binary, which would otherwise be in a \n
+					# directory named by a hash of the flags \n
+					fpm install --features debug,llvm-blas --flag -Wno-tabs --prefix ./build/native/ \n
+
+					# End to end, with the C compiler that links the program \n
+					./build/native/bin/syntran --quiet --native hello -c 'println(\"hello \", 6 * 7);' \n
+					[[ \"$(./hello)\" == \"hello 42\" ]] \n
+					# The same in memory, with no C compiler or file \n
+					[[ \"$(./build/native/bin/syntran --quiet --jit -c 'println(\"hello \", 6 * 7);')\" == \"hello 42\" ]] \n
+					# --cd resolves relative paths against the script's directory \n
+					[[ \"$(./build/native/bin/syntran --cd --jit src/tests/test-src/io/test-19.syntran | tr -d ' ')\" == \"true\" ]] \n
+				"
+			},
+			{
+				# Only on x86, where the interpreter doesn't fuse multiply-adds.  On
+				# an arm64 mac it does, and a compiled program doesn't, so the last
+				# digits of some samples would differ for no reason
+				"if": "matrix.os == 'ubuntu-24.04'",
+				"name": "Test native backend",
+				"shell": "bash",
+				"run":
+				"
+					set -exu \n
+					# Compile every test program and sample, run it, and compare \n
+					# its output with the interpreter's \n
+					bash ./utils/test-transpile.sh --backend native ./build/native/bin/syntran \n
+				"
+			},
+			{
+				"if": "matrix.os == 'ubuntu-24.04'",
+				"name": "Test cmake with LLVM",
+				"shell": "bash",
+				"run":
+				"
+					set -exu \n
+					cmake -S . -B build/llvm -DCMAKE_BUILD_TYPE=Debug -DSYNTRAN_LLVM=ON -DCMAKE_Fortran_COMPILER=gfortran-14 -DCMAKE_PREFIX_PATH=\"$(llvm-config --prefix)\" \n
+					cmake --build build/llvm -j 4 \n
+					./build/llvm/syntran --quiet --native hello-cmake -c 'println(\"hello \", 6 * 7);' \n
+					[[ \"$(./hello-cmake)\" == \"hello 42\" ]] \n
+					# The same in memory, with no C compiler or file \n
+					[[ \"$(./build/llvm/syntran --quiet --jit -c 'println(\"hello \", 6 * 7);')\" == \"hello 42\" ]] \n
+					[[ \"$(./build/llvm/syntran --cd --jit src/tests/test-src/io/test-19.syntran | tr -d ' ')\" == \"true\" ]] \n
+					./build/llvm/test \n
+				"
+			}
+		]
+	},
 	"test-compilers": {
 		"name": "Test with ${{ matrix.toolchain.compiler }}-${{ matrix.toolchain.version }}",
 		"timeout-minutes": 120,
@@ -624,7 +872,7 @@
 					# fpm (see CMakeLists.txt), which also builds the core lib \n
 					# once for both the test and long exes, instead of fpm's \n
 					# separate rebuild per target. \n
-					SYNTRAN_INTEL=1 bash ./build.sh release \n
+					SYNTRAN_INTEL=1 bash ./build.sh release --no-llvm --blas \n
 					./build/Release/test \n
 
 					# Long/AOC suite is the CI bottleneck and runs single-threaded \n
@@ -793,7 +1041,7 @@
 					# Test this to run syntran without the runner image's \n
 					# pre-installed mingw64/strawberry/git toolchain DLLs.  Skip dirs \n
 					# that a given runner image doesn't have \n
-					foreach ($d in @('C:\\mingw64', 'C:\\Strawberry', 'C:\\Program Files\\Git\\mingw64')) { \n
+					foreach ($d in @('C:\\mingw64', 'C:\\Strawberry', 'C:\\Program Files\\Git\\mingw64', 'C:\\Program Files\\Git\\ucrt64')) { \n
 						if (Test-Path $d) { Move-Item $d \"$d-BACKUP\"; echo \"hid $d\" } \n
 						else { echo \"not found: $d\" } \n
 					} \n
@@ -829,6 +1077,10 @@
 					.\\syntran.exe -c \"1 + 2 * 3;\" \n
 					.\\syntran.exe -c \"4 + 5 * [6: 10];\" \n
 					.\\syntran.exe -c \"sum([0: 101]);\" \n
+
+					# LLVM is linked into the exe, so this needs no DLLs either \n
+					if (-not (.\\syntran.exe --version | Select-String -Pattern \"llvm\\s+linked\")) { exit 1 } \n
+					if (-not (.\\syntran.exe --jit -c \"sum([0: 101]);\" | Select-String -Pattern \"5050\")) { exit 1 } \n
 				"
 			},
 		]
@@ -879,6 +1131,11 @@
 					./syntran -c '1 + 2 * 3;' \n
 					./syntran -c '4 + 5 * [6: 10];' \n
 					./syntran -c 'sum([0: 101]);' \n
+
+					# The native backend, with Homebrew's LLVM hidden \n
+					[[ \"$(./syntran --jit -c 'sum([0:101]);' | tr -d '[:space:]')\" == \"5050\" ]] \n
+					./syntran --native /tmp/hello -c 'println(\"hello native\");' \n
+					[[ \"$(/tmp/hello | tr -d '[:space:]')\" == \"hellonative\" ]] \n
 
 					otool -L ./syntran \n
 				"

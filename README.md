@@ -140,6 +140,23 @@ Other `fpm` commands are available, such as `fpm test`, `fpm run`, `fpm
 install`, etc.  Most of the example commands in this documentation will assume
 that cmake was used, but there is usually an fpm alternative.
 
+`build.sh` can drive either build system with the same options, so you don't
+have to remember the `fpm --features` combinations:
+
+<!-- syntran-begin mode=skip reason="builds the interpreter itself; out of scope for output testing" -->
+```
+./build.sh                       # cmake, debug
+./build.sh release --fpm --test  # fpm, release, then run the short tests
+./build.sh --no-llvm --no-blas   # opt out of the optional libraries
+```
+<!-- syntran-end -->
+
+The native backend ([LLVM](doc/native.md)) and BLAS/LAPACK are both
+auto-detected, and the options `--llvm`/`--no-llvm` and `--blas`/`--no-blas`
+force them on or off.  `--blas-dir DIR` looks for BLAS/LAPACK in a nonstandard
+directory.  The fpm binaries are installed to `build/fpm/<Debug|Release>/bin/`.
+Run `./build.sh --help` for the full list.
+
 As an alternative to installing dependencies yourself, you can run syntran in a
 docker container using the included [Dockerfile](Dockerfile).  See the
 [instructions for docker](doc/docker.md).
@@ -176,8 +193,8 @@ slower for large matrices.  Nothing needs to be installed:
 
 <!-- syntran-begin mode=skip reason="builds the interpreter itself; out of scope for output testing" -->
 ```
-# cmake, via build.sh
-SYNTRAN_NO_BLAS=1 ./build.sh
+# cmake, via build.sh.  SYNTRAN_NO_BLAS=1 ./build.sh does the same
+./build.sh --no-blas
 
 # fpm, which needs version 0.13.0 or later
 fpm build --features release,noblas
@@ -420,6 +437,23 @@ file I/O, and function pointers.  The interpreter's call stack
 for what is supported, and for how the generated program differs from
 interpreting.
 
+### Compiling natively with LLVM
+
+A syntran which is built with LLVM can also compile a program straight to a
+native executable, with no Fortran compiler involved:
+
+<!-- syntran-begin mode=skip reason="shell invocation example" -->
+```
+syntran --native fib fib.syntran
+./fib
+```
+<!-- syntran-end -->
+
+See [doc/native.md](doc/native.md) for what it supports, and how to build
+syntran with it.
+
+To compile a program in memory and run it right away, use `--jit`.
+
 ### Other command-line arguments
 
 Run `syntran -h` to see a comprehensive listing of syntran command-line arguments:
@@ -445,10 +479,15 @@ Run `syntran -h` to see a comprehensive listing of syntran command-line argument
      -i --interactive    Interpret a file then start an interactive shell
      -q --quiet          Don't print the banner, only errors and println calls
      --permissive-return Downgrade missing-return errors to warnings
-     --cd                Resolve the script's relative file paths against its own directory
+     --cd                Resolve the script's relative file paths against
+                         its own directory
      -s --syntax-only    Parse and type check without running the program
-     -t --transpile <f>  Write the program as Fortran source to <f> ('-' for stdout) instead of running it
-     --keep-unused-fns   With --transpile, also write the fns that nothing calls
+     -t --transpile <f>  Write the program as Fortran source to <f> ('-' for
+                         stdout) instead of running it
+     --keep-unused-fns   With --transpile, also write fns that nothing calls
+     -o --native <f>     Compile the program with LLVM to an executable <f>
+                         (or an object <f>.o, or LLVM IR <f>.ll)
+     -j --jit            Compile the program with LLVM and run it right away
      -- <args>...        Pass remaining arguments to script via std::args()
 ```
 <!-- syntran-expect
@@ -469,10 +508,15 @@ Run `syntran -h` to see a comprehensive listing of syntran command-line argument
      -i --interactive    Interpret a file then start an interactive shell
      -q --quiet          Don't print the banner, only errors and println calls
      --permissive-return Downgrade missing-return errors to warnings
-     --cd                Resolve the script's relative file paths against its own directory
+     --cd                Resolve the script's relative file paths against
+                         its own directory
      -s --syntax-only    Parse and type check without running the program
-     -t --transpile <f>  Write the program as Fortran source to <f> ('-' for stdout) instead of running it
-     --keep-unused-fns   With --transpile, also write the fns that nothing calls
+     -t --transpile <f>  Write the program as Fortran source to <f> ('-' for
+                         stdout) instead of running it
+     --keep-unused-fns   With --transpile, also write fns that nothing calls
+     -o --native <f>     Compile the program with LLVM to an executable <f>
+                         (or an object <f>.o, or LLVM IR <f>.ll)
+     -j --jit            Compile the program with LLVM and run it right away
      -- <args>...        Pass remaining arguments to script via std::args()
 -->
 <!-- syntran-end -->
@@ -480,14 +524,18 @@ Run `syntran -h` to see a comprehensive listing of syntran command-line argument
 Although the semantic version is always shown, `--version` shows more details:
 <!-- syntran-begin mode=skip reason="--version output embeds git commit and build date, inherently unstable" -->
 ```
- syntran 0.0.48
+ syntran 1.7.0
  https://github.com/JeffIrwin/syntran
- git commit = 6ab926d
- build date = Sep  7 2024
- fortran compiler = gfortran [11, 4, 0]
+
+   commit        6ab926d
+   built         Sep  7 2024
+   compiler      gfortran 11.4.0
+   bounds check  off
+   blas          OpenBLAS 0.3.20 NO_AFFINITY Haswell MAX_THREADS=64
+   llvm          linked
 ```
 <!-- syntran-end -->
-This can be helpful for binary installations.  If you built from source, most of the details are pointlessly redundant, and the `git commit` will not be shown.
+This can be helpful for binary installations.  It also shows whether BLAS and LLVM are linked, and if BLAS is, which one.  The `blas` row says `not linked` for a build with `SYNTRAN_NO_BLAS`, and `reference or unrecognized` if it's not OpenBLAS or Accelerate, since the reference BLAS can't be told from, say, MKL.  If you built from source, most of the details are pointlessly redundant, and the `commit` will not be shown.
 
 ## Calling syntran from Fortran
 

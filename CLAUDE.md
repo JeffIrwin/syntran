@@ -37,6 +37,19 @@ fpm run --profile debug -- file.syntran     # Run a syntran file
 yes | fpm clean             # Clean build artifacts
 ```
 
+#### build.sh
+
+`build.sh` wraps cmake, or fpm with `--fpm`, behind one set of options, so you
+don't have to assemble `--features`/`--flag`/`LIBRARY_PATH` by hand.  LLVM and
+BLAS are auto-detected (a link test, plus a search of the usual dirs), and
+forced with `--llvm`/`--no-llvm` and `--blas`/`--no-blas`.  fpm output goes to
+`build/fpm/<Debug|Release>/`.  `bash build.sh --help` lists everything.
+
+```bash
+bash build.sh --fpm --test     # fpm, debug, build + run the short tests
+bash build.sh release --no-llvm
+```
+
 #### Runtime bounds checking
 
 `-DSYNTRAN_BOUNDS_CHECK` turns an out-of-bounds `a[i]`/`s[i]`/slice/etc. into
@@ -79,6 +92,63 @@ fpm test test --features debug,noblas
 A project that *depends* on syntran links BLAS too, but can't select its
 features, so it opts out with `--flag "-DSYNTRAN_NO_BLAS"`, which still links
 the libraries.  See `doc/api.md`.
+
+#### LLVM (the native backend)
+
+`syntran --native` (see `doc/native.md`) compiles through LLVM.  It's opt-in:
+without LLVM installed, syntran builds as always and `--native` is an error.
+Everything that calls LLVM is inside `#ifdef SYNTRAN_LLVM` in `src/native.F90`
+(an uppercase `.F90`) and `src/c/llvm_shim.c`.  `src/llvm_c.f90` is only
+interfaces to the LLVM-C API, so it always compiles.
+
+```bash
+brew install llvm                       # or: sudo apt install llvm-dev
+export LIBRARY_PATH=$(llvm-config --libdir)
+fpm build --features debug,llvm-blas    # or debug,noblas,llvm
+fpm install --test --features debug,llvm-blas --prefix ./build/native/
+```
+
+fpm allows only one feature with a `build` table, so `blas` + `llvm` can't be
+combined and `llvm-blas` is both.  The C macro `SYNTRAN_LLVM` reaches C files
+too.  CMake spells it `-DSYNTRAN_LLVM=ON`, and the official macOS binary adds
+`-DSYNTRAN_LLVM_STATIC=ON` to link LLVM's archives instead of `libLLVM.dylib`
+(CI's `Pack macOS` step fails if an LLVM/zstd/z3 dylib sneaks back in).  The test suite must pass both with
+and without LLVM, since the latter is the default: the groups `native_rt` and
+`native` in `src/tests/test.f90` only exercise the backend if it's built in.
+
+`Dockerfile.rocky` builds the official Linux binary with the `llvm-blas` feature.
+It links LLVM statically, through `/opt/llvm-static/libLLVM.a`, which is a GNU ld
+linker script that groups the component archives (like `/opt/blas-static` does
+for OpenBLAS), and its `ldd` test fails the build if a shared LLVM/libstdc++
+sneaks back in.
+
+The official Windows binary links LLVM statically too, so it has no DLLs to ship.
+`utils/gen-llvm-static-win.sh` writes `build/llvm-static/libLLVM.a` (a linker
+script over MSYS2's component archives, like `/opt/llvm-static` above) and
+`syntran.def`, which exports the LLVM fns that `src/c/llvm_shim.c` finds with
+`GetProcAddress()` (like the `--dynamic-list` above).  CI's `Pack Windows` step fails
+if `syntran.exe` imports anything but system DLLs.  The build uses MSYS2's own
+gfortran, since the runner's older libstdc++ and mingw-w64 lack fns that MSYS2's
+LLVM archives need (`std::__get_once_callable`, `__imp__setjmp`).
+
+On Windows, use MSYS2's ucrt64 LLVM (`pacman -S mingw-w64-ucrt-x86_64-llvm`),
+not the official installer, which targets MSVC.  `doc/native.md` has the exact
+commands.  The gotchas, each with a `_WIN32` branch in the source:
+
+- `C:\msys64\ucrt64\bin` must be first on the `PATH` for `libLLVM-*.dll`, but
+  `C:\msys64\ucrt64\lib` must **not** be on `-L` (its `libgfortran.a` shadows the
+  toolchain's).  Copy `libLLVM-*.dll.a` to `build/llvm-win/libLLVM.a` and use
+  `-Lbuild/llvm-win`
+- gfortran doesn't define `_WIN32` or `__MINGW32__` for the preprocessor, so
+  `src/native.F90` checks `OS=Windows_NT` at run time (`is_windows()`), to quote
+  with `"` and to default to `gcc`, since mingw has no `cc`
+- The UCRT's `printf` rounds ties away from zero, unlike glibc and libgfortran,
+  so `src/rt/syntran_crt.c` selects mingw's stdio with `__USE_MINGW_ANSI_STDIO`
+- The JIT can't `longjmp()` out of JIT'd frames on Windows (no SEH unwind info),
+  so the runtime uses `__builtin_setjmp`/`__builtin_longjmp`, and
+  `src/c/llvm_shim.c` defines the `__main` that LLVM calls on windows-gnu
+- Regenerate `src/native_rt.f90` with `CC=gcc bash src/gen_native_rt.sh`, since
+  there is no `cc`
 
 #### Getting a stable path to a built binary
 
@@ -154,6 +224,19 @@ bash utils/test-transpile.sh --only 'fns/'    # a subset, by path regex
 bash utils/test-transpile.sh --update-pass-list  # after coverage grows
 ```
 Every file in `utils/transpile-pass.txt` must keep passing.
+
+### Testing the native (LLVM) backend
+`unit_test_native` only checks diagnostics and the LLVM IR.  To compile and link
+every test program and sample and diff their output against the interpreter's,
+which needs a syntran built with LLVM and a C compiler:
+```bash
+bash utils/test-transpile.sh --backend native build/native/bin/syntran
+bash utils/test-transpile.sh --backend native --update-pass-list build/native/bin/syntran
+```
+Every file in `utils/native-pass.txt` must keep passing.  Pass `--ref` with an
+FMA-free interpreter, as for the Fortran backend.  Add `--long` to test the
+programs that `src/tests/long.f90` runs instead, which are listed in
+`utils/native-pass-long.txt` (set `TIMEOUT=<seconds>` if the interpreter is slow).
 
 ### Testing README.md code blocks
 `README.md`'s code blocks are annotated with hidden `<!-- syntran-begin -->`
@@ -237,6 +320,27 @@ Fortran intrinsic or a name that the emitter makes up.  Those are emitted as
 block scopes and shadowing never need to be mirrored in Fortran (see
 `collect_names()` and `bare_ok()`).  The emitter reads types from `node%val`, and
 fn signatures from `state%fns`, since a `fn_declaration` node only has slots.
+
+### Native Backend (`--native`)
+Compiles the typed AST straight to machine code with LLVM, calling the LLVM-C
+API from Fortran.  User docs are in `doc/native.md`.
+- `src/llvm_c.f90` - bind(c) interfaces to the LLVM-C functions that are used.
+  Add an interface here when the emitter needs another one
+- `src/native.F90` - `syntran__native_m`: the public `native_t` options/result
+  type, the `nemitter_t` state, and `native_tree()`.  Everything that calls LLVM
+  is under `#ifdef SYNTRAN_LLVM`
+- `src/c/llvm_shim.c` - initializes LLVM for the host architecture, because
+  `LLVMInitializeNativeTarget()` is a static inline in a header
+- `src/rt/syntran_crt.c` - the C runtime that compiled programs link with
+  (`sy_` prefix).  **Use spaces, not tabs**, and keep lines under 100 chars.
+  It is also compiled into the library, so `unit_test_native_rt` can compare its
+  float formatting to `src/rt/syntran_rt.f90`
+- `src/native_rt.f90` - **Generated**, never edit by hand.  The C runtime as a
+  table of string literals.  Regenerate with `bash src/gen_native_rt.sh`
+- Diagnostic `E130` is reported for constructs that aren't supported yet
+
+A value that the emitter builds is an `nval_t`.  A `str` is a heap object that
+whoever made it owns, until it is moved into a variable or `dispose()`d.
 
 ### Math Operations (auto-generated)
 Binary arithmetic operations are generated from `src/math_bin_template.f90` via `src/gen_math.sh`:

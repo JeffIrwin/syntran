@@ -1,0 +1,67 @@
+
+// The receiver of a method that is an element of an array is passed like any
+// other `&` argument: the method gets a copy that is put back when it returns.
+// So a fn that the method calls sees the receiver as it was before the call,
+// and a subscript with a side effect is made once
+
+struct S
+{
+	x: i32,
+	seen: i32,
+
+	fn bump()
+	{
+		x = 5;
+		peek();
+		x = 6;
+	}
+
+	fn inc(): i32
+	{
+		x += 1;
+		return x;
+	}
+
+	const fn get(): i32
+	{
+		return x;
+	}
+}
+
+struct W
+{
+	s: S,
+	t: [S; :],
+}
+
+let a = [S{x = 1, seen = 0}, S{x = 2, seen = 0}];
+let seen = 0;
+
+fn peek()
+{
+	seen = a[1].x;
+}
+
+a[1].bump();
+let ok = seen == 2 and a[1].x == 6 and a[1].get() == 6 and a[0].x == 1;
+
+let w = W{s = S{x = 0, seen = 0}, t = [S{x = 1, seen = 0}, S{x = 2, seen = 0}]};
+w.s.bump();
+w.t[1].bump();
+ok = ok and w.s.x == 6 and w.t[1].x == 6 and w.t[0].x == 1;
+
+let t = 0;
+for i in [0: 2]
+{
+	t += w.t[i].inc();
+}
+ok = ok and t == 2 + 7 and w.t[0].x == 2 and w.t[1].x == 7;
+
+fn f(): i32
+{
+	let b = [S{x = 10, seen = 0}];
+	return b[0].inc() + b[0].inc();
+}
+ok = ok and f() == 11 + 12;
+
+return ok;

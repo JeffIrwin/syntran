@@ -33,6 +33,15 @@
 #   -v, --verbose        print a diff for each FAIL
 #   -k, --keep           keep the temporary directory of generated programs
 #   --only <regex>       only test files whose path matches this extended regex
+#   --long               test the programs that the long tests (src/tests/long.f90)
+#                        run, instead of samples and unit tests.  They run from their
+#                        own directories, and have their own pass list, e.g.
+#                        utils/native-pass-long.txt.  Set $TIMEOUT (seconds, 60 by
+#                        default) for slow ones; a timeout is a SKIP
+#   --backend <name>     fortran (the default) tests `--transpile`.  native tests
+#                        `--native`, which needs a syntran built with LLVM, a C
+#                        compiler instead of a Fortran one, and has its own pass
+#                        list, utils/native-pass.txt.  Skips are E130, not E115
 #   --ref <binary>       interpreter to produce the expected output with, if
 #                        not the same binary.  Don't use a build with -Ofast,
 #                        because fast-math changes floating point results
@@ -40,7 +49,7 @@
 #
 # Defaults:
 #   syntran_binary   = build/v1/bin/syntran     (see: fpm install --prefix ./build/v1/)
-#   fortran_compiler = gfortran, honoring $FC
+#   fortran_compiler = gfortran, honoring $FC.  Not used by --backend native
 #   $FFLAGS          = -fcheck=all -w, or -check all -w for ifx and ifort.  Set
 #                      it, even to empty, to use other options for compiling
 #
@@ -58,11 +67,11 @@ cd "$ROOT"
 # `timeout`, but Homebrew coreutils installs `gtimeout`, and perl is always there
 with_timeout() {
 	if command -v timeout > /dev/null 2>&1; then
-		timeout 60 "$@"
+		timeout "${TIMEOUT:-60}" "$@"
 	elif command -v gtimeout > /dev/null 2>&1; then
-		gtimeout 60 "$@"
+		gtimeout "${TIMEOUT:-60}" "$@"
 	elif command -v perl > /dev/null 2>&1; then
-		perl -e 'alarm 60; exec @ARGV' -- "$@"
+		perl -e 'alarm shift; exec @ARGV' -- "${TIMEOUT:-60}" "$@"
 	else
 		"$@"
 	fi
@@ -71,26 +80,35 @@ with_timeout() {
 #===============================================================================
 # Worker: test one file, and write the verdict to "$base.result".  This runs in
 # a subprocess of the driver below, several at once.  The environment has CUR,
-# REF, FC, FFLAGS, and VERBOSE
+# REF, FC, FFLAGS, VERBOSE, and BACKEND
 
 run_one() {
 	local f="$1" base="$2"
 	local dir exp_status out_status rundir
 	dir="$(dirname "$f")"
 
-	# Transpile.  Both unsupported constructs and an invalid program are
-	# reported as diagnostics with a nonzero status
-	if ! "$CUR" --color off --cd -t "$base.f90" "$f" > "$base.tp.log" 2>&1 < /dev/null; then
-		# Remember why, to see what the transpiler should learn next
-		grep -o 'E115\]: .* is not supported by the Fortran transpiler yet' "$base.tp.log" \
-			| sed -e 's/^E115\]: //' -e 's/ is not supported by.*$//' > "$base.reasons"
+	# Transpile, or compile natively, which also links.  Both unsupported
+	# constructs and an invalid program are reported as diagnostics with a
+	# nonzero status
+	if [ "$BACKEND" = native ]; then
+		code=E130
+		"$CUR" --color off --cd --native "$base.exe" "$f" > "$base.tp.log" 2>&1 < /dev/null
+	else
+		code=E115
+		"$CUR" --color off --cd -t "$base.f90" "$f" > "$base.tp.log" 2>&1 < /dev/null
+	fi
+	# shellcheck disable=SC2181  # the status is of the if/else above
+	if [ $? -ne 0 ]; then
+		# Remember why, to see what the backend should learn next
+		grep -o "$code\]: .* is not supported by the .* yet" "$base.tp.log" \
+			| sed -e "s/^$code\]: //" -e 's/ is not supported by.*$//' > "$base.reasons"
 		if [ -s "$base.reasons" ]; then
 			echo "SKIP unsupported" > "$base.result"
 		elif "$REF" --color off --cd -s "$f" > "$base.syn.log" 2>&1 < /dev/null; then
-			# The syntax check accepts it, so the transpiler should have too.
+			# The syntax check accepts it, so the backend should have too.
 			# This is a crash or a spurious diagnostic
 			{
-				echo "FAIL (transpiler rejected a valid program): $f"
+				echo "FAIL (backend rejected a valid program): $f"
 				[ "$VERBOSE" -eq 1 ] && head -20 "$base.tp.log" | cut -c1-200
 			} > "$base.result"
 		else
@@ -108,40 +126,80 @@ run_one() {
 	# write to paths like build/test-01.txt.  One that can't open a path from
 	# there is run again from its own directory with `--cd`, for those that read
 	# files next to themselves
+	#
+	# The long tests always run from their own directory, where their input.txt is
 	rundir="$ROOT"
-	with_timeout "$REF" --color off "$f" > "$base.exp.raw" 2> "$base.exp.err" < /dev/null
+	if [ "$LONG" -eq 1 ]; then
+		rundir="$dir"
+		with_timeout "$REF" --color off --cd "$f" > "$base.exp.raw" 2> "$base.exp.err" < /dev/null
+	else
+		with_timeout "$REF" --color off "$f" > "$base.exp.raw" 2> "$base.exp.err" < /dev/null
+	fi
 	exp_status=$?
-	if grep -q 'Runtime error\[R8\]' "$base.exp.raw" "$base.exp.err" 2> /dev/null; then
+	if [ "$LONG" -eq 0 ] && grep -q 'Runtime error\[R8\]' "$base.exp.raw" "$base.exp.err" 2> /dev/null; then
 		rundir="$dir"
 		with_timeout "$REF" --color off --cd "$f" > "$base.exp.raw" 2> "$base.exp.err" < /dev/null
 		exp_status=$?
 	fi
 	tail -n +6 "$base.exp.raw" > "$base.exp"
 
-	if grep -q 'Runtime error' "$base.exp.raw" "$base.exp.err" 2> /dev/null \
-			|| [ "$exp_status" -eq 124 ] || [ "$exp_status" -eq 142 ]; then
+	if [ "$exp_status" -eq 124 ] || [ "$exp_status" -eq 142 ]; then
+		echo "SKIP timeout $f" > "$base.result"
+		return
+	fi
+	# A file that can't be opened depends on the machine, and the interpreter's
+	# message has the path it resolved when it is run with `--cd`.  Only the
+	# repro of the error itself is compared
+	if [ "$BACKEND" = native ] && grep -q 'Runtime error\[R8\]' "$base.exp.raw" 2> /dev/null \
+			&& [[ "$f" != */errors/* ]]; then
+		echo "SKIP runtime-error $f" > "$base.result"
+		return
+	fi
+	# An interpreter without bounds checking (see SYNTRAN_BOUNDS_CHECK in CLAUDE.md)
+	# aborts with a raw Fortran error on an out of bounds subscript, which is
+	# undefined behavior, so there is no result of it to compare with
+	if [ "$BACKEND" = native ] && grep -q 'Fortran runtime error' "$base.exp.raw" "$base.exp.err" 2> /dev/null; then
+		echo "SKIP out-of-bounds $f" > "$base.result"
+		return
+	fi
+	# A compiled native program reports a runtime error like the interpreter, with
+	# the same message, source line, and trace, so those are compared too.  The
+	# Fortran backend does not
+	if [ "$BACKEND" != native ] && grep -q 'Runtime error' "$base.exp.raw" "$base.exp.err" 2> /dev/null; then
 		echo "SKIP runtime-error $f" > "$base.result"
 		return
 	fi
 
-	# The compiler writes the .mod files of the program's modules in the working
-	# directory, so each file gets its own for them to not clash when running
-	# several at once
-	mkdir -p "$base.d"
-	# shellcheck disable=SC2086  # FFLAGS is several words
-	if ! (cd "$base.d" && "$FC" $FFLAGS -o "$base.exe" "$base.f90") > "$base.fc.log" 2>&1; then
-		{
-			echo "FAIL (does not compile): $f"
-			[ "$VERBOSE" -eq 1 ] && head -20 "$base.fc.log"
-		} > "$base.result"
-		return
+	if [ "$BACKEND" != native ]; then
+		# The compiler writes the .mod files of the program's modules in the
+		# working directory, so each file gets its own for them to not clash when
+		# running several at once
+		mkdir -p "$base.d"
+		# shellcheck disable=SC2086  # FFLAGS is several words
+		if ! (cd "$base.d" && "$FC" $FFLAGS -o "$base.exe" "$base.f90") > "$base.fc.log" 2>&1; then
+			{
+				echo "FAIL (does not compile): $f"
+				[ "$VERBOSE" -eq 1 ] && head -20 "$base.fc.log"
+			} > "$base.result"
+			return
+		fi
 	fi
 
 	# Run where the interpreter did
 	(cd "$rundir" && with_timeout "$base.exe" > "$base.out" 2> "$base.err" < /dev/null)
 	out_status=$?
 
-	if [ "$out_status" -ne "$exp_status" ] || ! cmp -s "$base.out" "$base.exp"; then
+	# On Windows, the interpreter's Fortran writes a record ending with CR LF, but
+	# a newline inside a string that it writes (a multi-line error report, or
+	# `char(10)`) is just LF.  A C program has stdout in text mode and turns every
+	# LF into CR LF.  Both are right, so only compare the text
+	same=0
+	if [ "${OS:-}" = Windows_NT ]; then
+		cmp -s <(tr -d '\r' < "$base.out") <(tr -d '\r' < "$base.exp") && same=1
+	else
+		cmp -s "$base.out" "$base.exp" && same=1
+	fi
+	if [ "$out_status" -ne "$exp_status" ] || [ "$same" -eq 0 ]; then
 		{
 			echo "FAIL (output differs, status $out_status vs $exp_status): $f"
 			[ "$VERBOSE" -eq 1 ] && diff "$base.exp" "$base.out" | head -20 | cut -c1-200
@@ -166,6 +224,8 @@ keep=0
 only=""
 ref=""
 jobs=""
+BACKEND=fortran
+LONG=0
 positional=()
 while [ $# -gt 0 ]; do
 	case "$1" in
@@ -174,6 +234,8 @@ while [ $# -gt 0 ]; do
 		-k|--keep) keep=1 ;;
 		--only) shift; only="$1" ;;
 		--ref) shift; ref="$1" ;;
+		--backend) shift; BACKEND="$1" ;;
+		--long) LONG=1 ;;
 		-j) shift; jobs="$1" ;;
 		*) positional+=("$1") ;;
 	esac
@@ -188,6 +250,15 @@ case "$(basename "$FC")" in
 esac
 FFLAGS="${FFLAGS-$default_fflags}"
 PASS_LIST="utils/transpile-pass.txt"
+case "$BACKEND" in
+	fortran) ;;
+	native)  PASS_LIST="utils/native-pass.txt" ;;
+	*)
+		echo "error: --backend must be fortran or native, not $BACKEND" >&2
+		exit 1
+		;;
+esac
+[ "$LONG" -eq 1 ] && PASS_LIST="${PASS_LIST%.txt}-long.txt"
 REF="${ref:-$CUR}"
 
 if [ ! -x "$CUR" ]; then
@@ -198,7 +269,7 @@ if [ ! -x "$REF" ]; then
 	echo "error: reference binary not found or not executable: $REF" >&2
 	exit 1
 fi
-if ! command -v "$FC" > /dev/null 2>&1; then
+if [ "$BACKEND" = fortran ] && ! command -v "$FC" > /dev/null 2>&1; then
 	echo "error: fortran compiler not found: $FC" >&2
 	exit 1
 fi
@@ -225,23 +296,61 @@ excluded=(
 	samples/wordle.syntran
 )
 
+# These pin down edge cases of the interpreter that only the native backend
+# matches: shifts by more than the width or a negative count, float -> int of
+# NaN and out of range values, and copy-in/copy-out of a method receiver that
+# is an array element, and an operand or argument that a later one reassigns
+# (`s + f()` where f() assigns `s`), which the interpreter copies as it
+# evaluates.  Fortran rejects the shifts and the NaN at compile time, and the
+# transpiled program gets a different answer for the receiver and the operands
+if [ "$BACKEND" != native ]; then
+	excluded+=(
+		src/tests/test-src/bitwise/test-05.syntran
+		src/tests/test-src/ref/test-10.syntran
+		src/tests/test-src/ref/test-11.syntran
+	)
+fi
+
 # Error repro files are designed to be invalid, and the stack trace tests depend
-# on the interpreter's own runtime error output
-files=$(
-	{
-		find samples -name '*.syntran'
-		find src/tests/test-src -name '*.syntran' \
-			-not -path 'src/tests/test-src/errors/*' \
-			-not -path 'src/tests/test-src/stacktrace/*'
-	} | grep -vxF "$(printf '%s\n' "${excluded[@]}")" | sort
-)
+# on the interpreter's own runtime error output.  The native backend reports
+# runtime errors the same way, so it tests the runtime ones (R*) and the stack
+# traces too
+if [ "$LONG" -eq 1 ]; then
+	# The programs that src/tests/long.f90 runs: each call of chk() has a path
+	# relative to the most recent `path = '...'`
+	files=$(
+		awk '
+			/^[ \t]*path *= *\x27/ { split($0, q, "\x27"); base = q[2] }
+			/call chk\(path\/\/"/ { split($0, q, "\""); print base q[2] }
+		' src/tests/long.f90 | sort
+	)
+else
+	files=$(
+		{
+			find samples -name '*.syntran'
+			if [ "$BACKEND" = native ]; then
+				# implicit-ret.syntran needs a build with SYNTRAN_BOUNDS_CHECK, and
+				# is about an alias of the interpreter's that a compiled program
+				# doesn't have
+				find src/tests/test-src -name '*.syntran' \
+					-not -path 'src/tests/test-src/errors/*' \
+					-not -name 'implicit-ret.syntran'
+				find src/tests/test-src/errors -name 'R*.syntran'
+			else
+				find src/tests/test-src -name '*.syntran' \
+					-not -path 'src/tests/test-src/errors/*' \
+					-not -path 'src/tests/test-src/stacktrace/*'
+			fi
+		} | grep -vxF "$(printf '%s\n' "${excluded[@]}")" | sort
+	)
+fi
 if [ -n "$only" ]; then
 	files=$(echo "$files" | grep -E "$only")
 fi
 
 # Test each file in a subprocess, `jobs` at a time.  A file's working files are
 # all named "$TMP/t<index>.*"
-export CUR REF FC FFLAGS ROOT VERBOSE
+export CUR REF FC FFLAGS ROOT VERBOSE BACKEND LONG TIMEOUT
 # (No path in the repo has a space in it)
 echo "$files" | awk -v tmp="$TMP" 'NF { print $0; print tmp "/t" NR }' \
 	| xargs -n 2 -P "$jobs" bash "${BASH_SOURCE[0]}" --worker
@@ -296,7 +405,7 @@ if [ "$VERBOSE" -eq 1 ] && [ "${#other_skips[@]}" -gt 0 ]; then
 fi
 
 echo
-echo "transpile: $npass passed, $nskip skipped (unsupported or not comparable), $nfail failed"
+echo "${BACKEND/fortran/transpile}: $npass passed, $nskip skipped (unsupported or not comparable), $nfail failed"
 
 status=0
 [ "$nfail" -gt 0 ] && status=1
