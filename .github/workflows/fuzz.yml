@@ -1,0 +1,76 @@
+{
+# Nightly fuzzing, kept out of main.yml so that a crash that the fuzzer finds
+# never blocks an unrelated push.  See "Fuzzing" in CLAUDE.md.
+"name": "Fuzz",
+"on": {
+	"schedule": [
+		{"cron": "17 5 * * *"}
+	],
+	"workflow_dispatch": {
+		"inputs": {
+			"seconds": {
+				"description": "Seconds to fuzz",
+				"default": "300"
+			}
+		}
+	}
+},
+"jobs": {
+	"fuzz": {
+		"name": "Fuzz syntran",
+		"runs-on": "ubuntu-24.04",
+		"steps": [
+			{
+				"uses": "actions/checkout@v7",
+				"with": {
+					"submodules": true
+				}
+			},
+			{
+				"uses": "fortran-lang/setup-fpm@v10",
+				"with": {
+					"github-token": "${{ secrets.GITHUB_TOKEN }}"
+				}
+			},
+			{
+				"name": "Install gfortran",
+				"run": "sudo apt-get install gfortran-14"
+			},
+			{
+				# BLAS isn't what is being fuzzed, so use the portable fallbacks
+				"name": "Build syntran with runtime checks",
+				"run":
+				"
+					fpm install --features debug,noblas
+						--flag '-DSYNTRAN_BOUNDS_CHECK -fcheck=all -g'
+						--prefix ./build/fuzz/ \n
+				"
+			},
+			{
+				"name": "Build the fuzzer",
+				"run": "cc -O2 -Wall -o build/fuzz/fuzz utils/fuzz.c"
+			},
+			{
+				# Exits 1 if it found a new crash, which fails the job and emails the
+				# author of the workflow.  The run number makes each night different
+				"name": "Fuzz",
+				"run":
+				"
+					build/fuzz/fuzz --bin build/fuzz/bin/syntran --jobs 4
+						--seed ${{ github.run_number }}
+						--time ${{ github.event.inputs.seconds || 300 }} \n
+				"
+			},
+			{
+				"if": "always()",
+				"uses": "actions/upload-artifact@v7",
+				"with": {
+					"name": "fuzz-crashes",
+					"path": "build/fuzz/crashes/",
+					"if-no-files-found": "ignore"
+				}
+			},
+		]
+	},
+}
+}
