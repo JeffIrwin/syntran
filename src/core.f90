@@ -381,7 +381,6 @@ module syntran__core_m
 	!      it's in the ternary dict first.
 	!    * any use cases for #let? i probably don't want to get into general
 	!      expression parsing like `#let x = 1 + 2;` during preprocessing
-	!  - fuzz testing
 	!  - compound assignment: logical &=, |=, etc.
 	!    * maybe make &&= to avoid confusion with bitwise compound assignment &=
 	!    * +=, -=, *=, /=, %=, **= done
