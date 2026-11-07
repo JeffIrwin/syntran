@@ -324,6 +324,11 @@ static int classify(const char *out, int timed_out, int status, char *sig, size_
     return RES_OK;
 }
 
+/* Address-space limit for each run, in MB, or 0 for none.  A mutant like `[0; 2147483647]` is
+ * a valid program that wants 8 GB, and several of them at once can get the whole job
+ * OOM-killed.  RLIMIT_AS is enforced on Linux but ignored on macOS */
+static long mem_mb = 2048;
+
 /* Runs `bin -q case.syntran` in `workdir` and classifies the result.  `out` gets
  * the (truncated) combined stdout and stderr, and must be MAXCAP + 1 long */
 static int run_case(const char *bin, const char *workdir, int timeout_s, char *sig,
@@ -344,6 +349,10 @@ static int run_case(const char *bin, const char *workdir, int timeout_s, char *s
         close(pfd[1]);
         struct rlimit rl = {(rlim_t)timeout_s + 2, (rlim_t)timeout_s + 2};
         setrlimit(RLIMIT_CPU, &rl);
+        if (mem_mb > 0) {
+            rl.rlim_cur = rl.rlim_max = (rlim_t)mem_mb * 1024 * 1024;
+            setrlimit(RLIMIT_AS, &rl);
+        }
         rl.rlim_cur = rl.rlim_max = 0;
         setrlimit(RLIMIT_CORE, &rl);
         setenv("ASAN_OPTIONS", "detect_leaks=0", 1);
@@ -800,6 +809,7 @@ static void usage(void)
         "  --jobs <n>         parallel workers        (4)\n"
         "  --seed <n>         RNG seed                (the clock)\n"
         "  --timeout <s>      per-run timeout         (5)\n"
+        "  --mem-mb <n>       per-run memory limit    (2048, 0 for none; Linux only)\n"
         "  --only-dir <str>   only seed files whose path contains str\n"
         "  --reduce <file>    shrink a crasher to <file>.min and exit\n"
         "seed dirs default to src/tests/test-src samples src/tests/long\n", stderr);
@@ -824,6 +834,7 @@ int main(int argc, char **argv)
         else if (!strcmp(a, "--jobs") && more) jobs = atoi(argv[++i]);
         else if (!strcmp(a, "--seed") && more) seed = strtoull(argv[++i], NULL, 10);
         else if (!strcmp(a, "--timeout") && more) timeout_s = atoi(argv[++i]);
+        else if (!strcmp(a, "--mem-mb") && more) mem_mb = atol(argv[++i]);
         else if (!strcmp(a, "--only-dir") && more) only_dir = argv[++i];
         else if (!strcmp(a, "--reduce") && more) red = argv[++i];
         else if (a[0] != '-' && ndirs < 63) dirs[ndirs++] = a;

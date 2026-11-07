@@ -261,7 +261,10 @@ build/fuzz/fuzz --time 300 --jobs 4           # or --iters 5000; --seed N to rep
 build/fuzz/fuzz --reduce build/fuzz/crashes/<signature>.syntran    # writes <file>.min
 ```
 It saves one reproducer and its output per crash signature to
-`build/fuzz/crashes/`, and exits 1 if it found any.  A signature is the kind of
+`build/fuzz/crashes/`, and exits 1 if it found a signature that isn't already
+there (delete that directory to re-check a fixed bug).  Each run is capped at
+2 GB of address space on Linux, since a valid mutant like `[0; 2147483647]` wants
+8 GB; `--mem-mb <n>` changes it.  A signature is the kind of
 failure plus where: the Fortran `At line N of file F` when there is one, else the
 frame addresses (their low 12 bits, since macOS backtraces have no symbol names).
 So the same bug can still show up under a few signatures, and a fixed one stops
