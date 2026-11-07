@@ -1753,9 +1753,9 @@ recursive function emit_binary_lvl(em, node, lvl) result(s)
 			return
 		end if
 
-		! The shift is done in the width of the left operand, then widened if
-		! the right operand is an i64.  Both are logical shifts, so a `>>` doesn't
-		! extend the sign bit
+		! The result is in the width of the left operand, even if the right
+		! operand is an i64 (so the convert() below is a no-op).  Both are logical
+		! shifts, so a `>>` doesn't extend the sign bit
 		if (node%op%kind == lless_token) then
 			s = convert('shiftl('//unparen(l)//', '//unparen(r)//')', lt, restype)
 		else
