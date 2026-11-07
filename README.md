@@ -460,7 +460,7 @@ Run `syntran -h` to see a comprehensive listing of syntran command-line argument
 
 <!-- syntran-begin mode=help group=help-usage -->
 ```
- syntran 1.4.0
+ syntran 1.7.0
  https://github.com/JeffIrwin/syntran
 
  Usage:
@@ -527,9 +527,9 @@ Although the semantic version is always shown, `--version` shows more details:
  syntran 1.7.0
  https://github.com/JeffIrwin/syntran
 
-   commit        6ab926d
-   built         Sep  7 2024
-   compiler      gfortran 11.4.0
+   commit        a62ce5b
+   built         Nov  6 2026
+   compiler      gfortran 14.2.0
    bounds check  off
    blas          OpenBLAS 0.3.20 NO_AFFINITY Haswell MAX_THREADS=64
    llvm          linked
@@ -1571,7 +1571,44 @@ let c = add(a + 1, b + 2);
 ```
 <!-- syntran-end -->
 
-Functions must be defined before they are called.  That means that recursive functions are not possible currently, neither with a function directly calling itself, nor with two functions which both call each other.
+Functions can be called before they are defined, so recursive functions are
+possible, whether a function calls itself directly or two functions call each
+other (mutual recursion):
+
+<!-- syntran-begin mode=file group=fn-recursive -->
+```rust
+fn factorial(n: i32): i32
+{
+    if n <= 1
+        return 1;
+    return n * factorial(n - 1);
+}
+
+println(factorial(6));
+
+fn is_even(n: i32): bool
+{
+    if n == 0
+        return true;
+    return is_odd(n - 1);  // is_odd is defined below, after is_even
+}
+
+fn is_odd(n: i32): bool
+{
+    if n == 0
+        return false;
+    return is_even(n - 1);
+}
+
+println(is_even(10));
+println(is_odd(10));
+```
+<!-- syntran-expect
+720
+true
+false
+-->
+<!-- syntran-end -->
 
 Here's a function that performs matrix-vector multiplication:
 <!-- syntran-begin mode=file group=fn-mulmatvec -->
@@ -2667,8 +2704,9 @@ nowhere to persist and be silently discarded.  Also, a method cannot share
 its name with one of the struct's data members.
 
 Structs can be nested arbitrarily.  You can make structs of arrays and arrays of
-structs.  One noteable missing feature currently is that structs of arrays (and
-arrays of structs) cannot be sliced, only scalar subscripts are supported.
+structs.  Array members of a struct can be sliced like any other array, on
+either side of an assignment.  One noteable missing feature currently is that
+arrays of structs cannot be sliced, only scalar subscripts are supported.
 
 Here is a contrived example of a high-order struct, including arrays at various
 levels:
