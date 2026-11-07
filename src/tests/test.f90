@@ -11488,7 +11488,11 @@ subroutine unit_test_fuzz_regressions(npass, nfail)
 			eval('let a = [5: 1: 0]; size(a, 0);') == '0', &
 			eval('let a = [0: 3: 10]; size(a, 0);') == '4', &
 			eval('let a = [10: -3: 0]; a[3];') == '1', &
-			eval('let a = [-0x7fffffff: 0x7fffffff]; size(a, 0);') == '4294967294', &
+
+			! The unstepped `[lb: ub]` of two i32 bounds counts in i64, since
+			! ub - lb overflows an i32 at 2**31 elements.  That isn't tested
+			! here, because any input that overflows allocates >= 8 GB, which
+			! gets the Linux CI jobs OOM-killed
 			diag_has_code(get_diags('let a = [0: 1: 0x7fffffffffffffff];'), RC_BAD_ARRAY_SIZE), &
 
 			! The same count sets the number of iterations of a for loop
