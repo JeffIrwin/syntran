@@ -634,7 +634,10 @@ module procedure value_array_copy
 	allocate(dst( size(src) ))
 
 	do i = 1, size(src)
-		dst(i) = src(i)  ! scalar assignment -> value_copy() defined assignment
+		! Not `dst(i) = src(i)`: Intel has no defined assignment(=), see value.f90,
+		! and would copy the stale array of a reused stack slot that value_copy()
+		! skips
+		call value_copy(dst(i), src(i))
 	end do
 
 end procedure value_array_copy

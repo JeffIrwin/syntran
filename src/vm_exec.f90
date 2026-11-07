@@ -2134,7 +2134,7 @@ module subroutine vm_run(prog, state, res)
 						for_iters(fi)%len8 = for_iters(fi)%len8 * stack%v(k_)%to_i64()
 					end do
 					k_ = k_ + 1
-					for_iters(fi)%lbound_ = stack%v(k_)
+					call value_copy(for_iters(fi)%lbound_, stack%v(k_))  ! not `=`, for Intel
 
 				case default
 					write(*,*) err_int(IC_FOR_ARRAY_KIND, 'for loop: unknown array kind')
