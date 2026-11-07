@@ -460,7 +460,8 @@ recursive module subroutine parse_array_expr(parser, expr)
 		if (io /= TYPE_MATCH .and. io /= TYPE_RANK_MISMATCH) then
 			span = new_span(span_beg, span_end - span_beg + 1)
 			call parser%diagnostics%push(err_het_array( &
-				parser%context(), span, parser%text(span_beg, span_end)))
+				parser%context(), span, parser%text(span_beg, span_end), &
+				type_name(lbound_%val), type_name(elem%val)))
 		end if
 
 		if (elem%val%type == array_type) then

@@ -8583,6 +8583,15 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_has_code(get_diags('let b=[1,2,3]; let a = [b; 5];'), EC_NON_SCA_VAL), &
 			diag_has_code(get_diags('let a = [1.0: 5.0];'), EC_NON_INT_RANGE), &
 			diag_has_code(get_diags('let a = [1, "a"];'), EC_HET_ARRAY), &
+			diag_has_text(get_diags('let a = [1, "a"];'), &
+				'has type `str` but the first element has type `i32`'), &
+			diag_has_text(get_diags( &
+				'let a = ["a","b"]; let b = [1,2]; let c = [a, a, b];'), &
+				'has type `[i32; :]` but the first element has type `[str; :]`'), &
+			diag_has_text(get_diags( &
+				'struct A{x:i32} struct B{x:i32} ' // &
+				'let c = [A{x=1}, B{x=1}];'), &
+				'has type `B` but the first element has type `A`'), &
 			! Regression: cat'ing arrays of mismatched element types used to
 			! skip this check entirely (only top-level `array_type` was
 			! compared, never the element type inside), crashing at runtime

@@ -31,10 +31,6 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
-	!  - heterogeneous array error should say what the actual and expected types
-	!    are:
-	!    * "Error[E59]: array is heterogeneous.  Element `xn` does not match the first
-	!      element's type"
 	!  - llvm compiled backend
 	!    * test (manually) all aoc solutions in its repo
 	!      + done

@@ -372,7 +372,7 @@ An implicit unit-step range's bounds (`[lo: hi]`) are of a uniform but non-integ
 
 ### E59 -- het-array
 
-An array literal is heterogeneous: an element's type doesn't match the first element's type.
+An array literal is heterogeneous: an element's type doesn't match the first element's type.  The message names both types.
 
 [Example](../src/tests/test-src/errors/E59-het-array.syntran)
 
