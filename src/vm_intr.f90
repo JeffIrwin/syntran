@@ -41,7 +41,7 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 	integer :: env_len, env_stat
 	integer :: red_inner, red_n, red_outer, red_op
 	integer :: solve_n, solve_nrhs, solve_info
-	integer(kind = 8) :: ir, ic, ncopies
+	integer(kind = 8) :: ir, ic, ncopies, bad_len
 
 	logical :: exists_, red_ok, ok_
 
@@ -540,18 +540,38 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 		res%str%s = achar(args(1)%sca%i32)
 
 	case (INTR_I32_SCA)
+		bad_len = bad_str_cast_len(args(1))
+		if (bad_len >= 0) then
+			call rt_throw(state, err_rt_cast_str_len("i32", bad_len))
+			return
+		end if
 		res%type = i32_type
 		res%sca%i32 = args(1)%to_i32()
 
 	case (INTR_I32_ARR)
+		bad_len = bad_str_cast_len(args(1))
+		if (bad_len >= 0) then
+			call rt_throw(state, err_rt_cast_str_len("i32", bad_len))
+			return
+		end if
 		res%type = array_type
 		res%array = args(1)%to_i32_array()
 
 	case (INTR_I64_SCA)
+		bad_len = bad_str_cast_len(args(1))
+		if (bad_len >= 0) then
+			call rt_throw(state, err_rt_cast_str_len("i64", bad_len))
+			return
+		end if
 		res%type = i64_type
 		res%sca%i64 = args(1)%to_i64()
 
 	case (INTR_I64_ARR)
+		bad_len = bad_str_cast_len(args(1))
+		if (bad_len >= 0) then
+			call rt_throw(state, err_rt_cast_str_len("i64", bad_len))
+			return
+		end if
 		res%type = array_type
 		res%array = args(1)%to_i64_array()
 
@@ -1342,6 +1362,41 @@ function reduce_name(op) result(name)
 	end select
 
 end function reduce_name
+
+!===============================================================================
+
+function bad_str_cast_len(v) result(len_)
+
+	! The length of the first string in v that i32() or i64() can't cast, or -1
+	! if there is none.  Only a string of exactly 1 character has an integer
+	! value, and v might be a scalar string, a string array, or neither
+
+	type(value_t), intent(in) :: v
+	integer(kind = 8) :: len_
+
+	integer(kind = 8) :: i8
+
+	len_ = -1
+
+	if (v%type == str_type) then
+		if (.not. allocated(v%str)) then
+			len_ = 0
+		else if (len(v%str%s) /= 1) then
+			len_ = len(v%str%s, 8)
+		end if
+
+	else if (v%type == array_type) then
+		if (.not. allocated(v%array)) return
+		if (v%array%type /= str_type) return
+		do i8 = 1, v%array%len_
+			if (len(v%array%str(i8)%s) /= 1) then
+				len_ = len(v%array%str(i8)%s, 8)
+				return
+			end if
+		end do
+	end if
+
+end function bad_str_cast_len
 
 !===============================================================================
 

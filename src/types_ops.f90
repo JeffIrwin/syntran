@@ -676,6 +676,15 @@ module logical function is_binary_op_allowed_val(left, op, right) &
 	allowed = is_binary_op_allowed(left%type, op, right%type, larrtype, rarrtype)
 	if (.not. allowed) return
 
+	! A compound assignment can't grow a scalar into an array, same as the plain
+	! `=` (which is_binary_op_allowed() already rejects).  `i += [1]` would
+	! otherwise get through to the evaluator, which has no such operation
+	if (is_assignment_op(op) .and. op /= equals_token .and. &
+		left%type /= array_type .and. right%type == array_type) then
+		allowed = .false.
+		return
+	end if
+
 	! Only an optional (`?Struct`) can be assigned null.  `x == null` is fine for
 	! any struct, though
 	if (op == equals_token .and. right%type == null_type .and. &

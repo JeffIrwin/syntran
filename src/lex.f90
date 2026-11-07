@@ -77,7 +77,7 @@ subroutine lex_impl(lexer, token)
 
 	!********
 
-	if (lexer%get_text(0,2) == "0x") then
+	if (lexer%get_text(0,2) == "0x" .and. has_radix_digit(lexer, "x")) then
 		! Hex literal
 		lexer%pos = lexer%pos + 2  ! skip "0x"
 
@@ -151,7 +151,7 @@ subroutine lex_impl(lexer, token)
 
 	!********
 
-	if (lexer%get_text(0,2) == "0o") then
+	if (lexer%get_text(0,2) == "0o" .and. has_radix_digit(lexer, "o")) then
 		! Octal literal
 		lexer%pos = lexer%pos + 2
 
@@ -225,7 +225,7 @@ subroutine lex_impl(lexer, token)
 
 	!********
 
-	if (lexer%get_text(0,2) == "0b") then
+	if (lexer%get_text(0,2) == "0b" .and. has_radix_digit(lexer, "b")) then
 		! Binary literal
 		lexer%pos = lexer%pos + 2
 
@@ -844,6 +844,39 @@ subroutine lex_wrap(lexer, token)
 	token%unit_ = lexer%unit_
 
 end subroutine lex_wrap
+
+!===============================================================================
+
+logical function has_radix_digit(lexer, radix)
+
+	! Is the `0x`/`0o`/`0b` prefix at the lexer's position followed by at least
+	! one digit of that radix (not counting `_` separators)?  A bare prefix has
+	! no value, so it isn't lexed as a prefixed literal.  The `0` is a decimal
+	! literal and the rest is lexed on its own, which the parser reports
+
+	class(lexer_t) :: lexer
+
+	character, intent(in) :: radix
+
+	!********
+
+	character :: c
+	integer :: i
+
+	i = 2
+	do
+		c = lexer%peek(i)
+		if (c /= "_") exit
+		i = i + 1
+	end do
+
+	select case (radix)
+	case ("x");  has_radix_digit = is_hex_under(c)
+	case ("o");  has_radix_digit = is_oct_under(c)
+	case default; has_radix_digit = is_bin_under(c)
+	end select
+
+end function has_radix_digit
 
 !===============================================================================
 

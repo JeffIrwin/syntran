@@ -2781,6 +2781,28 @@ subroutine unit_test_bitwise(npass, nfail)
 			eval("!1'i64  == -2;") == "true", &
 			eval("all(![0: 4] == [-1, -2, -3, -4]);") == "true", &
 			eval("all(!i64([0: 4]) == [-1, -2, -3, -4]);") == "true", &
+
+			! A shift is in the width of the left operand, whatever the width of
+			! the count.  A count of that width or more is 0, and a negative count
+			! is masked, which used to abort with -fcheck=all.  An i64 count is
+			! truncated to the left operand's width first, like the native backend
+			eval("let one = 1; one << 31 == -2147483648;") == "true", &
+			eval("let one = 1; one << 32 == 0;") == "true", &
+			eval("let one = 1; one << -1 == -2147483648;") == "true", &
+			eval("let one = 1; one << -6 == 67108864;") == "true", &
+			eval("let one = 1; one << 33'i64 == 0;") == "true", &
+			eval("let one = 1; one << 4294967297'i64 == 2;") == "true", &
+			eval("let m = -8; m >> 40 == 0;") == "true", &
+			eval("let m = -8; m >> 1'i64 == 2147483644;") == "true", &
+			eval("let one = 1'i64; one << 64 == 0;") == "true", &
+			eval("let one = 1'i64; one << 100'i64 == 0;") == "true", &
+			eval("let one = 1'i64; one << -1 == one << 63;") == "true", &
+			eval("let one = 1'i64; one >> 64 == 0;") == "true", &
+			eval("all([1, 2, 4] << 33 == [0, 0, 0]);") == "true", &
+			eval("all([1, 2, 4] << [1, 2, 33] == [2, 8, 0]);") == "true", &
+			eval("all(1 << [1, 33, -1] == [2, 0, -2147483647 - 1]);") == "true", &
+			eval("let a = 1; a <<= 40; a == 0;") == "true", &
+			eval("let a = 16; a >>= 33; a == 0;") == "true", &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -10246,7 +10268,44 @@ subroutine unit_test_runtime_errors(npass, nfail)
 
 			! R39 again, for the i64 overload of repeat()
 			diag_has_code(get_diags("println(repeat(""ab"", -1'i64));"), RC_REPEAT_NEGATIVE), &
-			.not. diag_has_code(get_diags("println(repeat(""ab"", 2'i64));"), RC_REPEAT_NEGATIVE) &
+			.not. diag_has_code(get_diags("println(repeat(""ab"", 2'i64));"), RC_REPEAT_NEGATIVE), &
+
+			! R48: an array with a negative extent, or too many elements to allocate
+			rt_code_both_file(P//'R48-bad-array-size.syntran', RC_BAD_ARRAY_SIZE), &
+			diag_count_code(get_diags_file(P//'R48-bad-array-size.syntran'), &
+				RC_BAD_ARRAY_SIZE) == 1, &
+			diag_has_code(get_diags('let n = -1; let a = [0; n];'), RC_BAD_ARRAY_SIZE), &
+			diag_has_code(get_diags('let n = -2; let a = [0; 3, n];'), RC_BAD_ARRAY_SIZE), &
+			diag_has_code(get_diags("let n = -1'i64; let a = [0.5; n];"), RC_BAD_ARRAY_SIZE), &
+			diag_has_code(get_diags('let a = [1.5; 9223372036854775807];'), RC_BAD_ARRAY_SIZE), &
+			diag_has_code(get_diags('let a = [0; 4611686018427387904, 4];'), RC_BAD_ARRAY_SIZE), &
+			diag_has_code(get_diags('let a = [0: 9223372036854775807];'), RC_BAD_ARRAY_SIZE), &
+			.not. diag_has_code(get_diags('let n = 0; let a = [0; n]; println(size(a, 0));'), &
+				RC_BAD_ARRAY_SIZE), &
+			.not. diag_has_code(get_diags('let a = [0; 0, 9223372036854775807];'), &
+				RC_BAD_ARRAY_SIZE), &
+			.not. diag_has_code(get_diags('let a = [7: 3]; println(size(a, 0));'), &
+				RC_BAD_ARRAY_SIZE), &
+
+			! The negative array used to be stored with a size of -1, and then
+			! crashed when it was returned into an existing variable.  The error
+			! ends the program, so there is no return to check
+			diag_has_code(get_diags( &
+				'fn f(): [i32; :] { let n = 0; n -= 1; let a = [0; n]; return a; } ' &
+				//'let b = [0]; b = f(); println(b);'), RC_BAD_ARRAY_SIZE), &
+
+			! R49: i32() or i64() of a string that is not 1 character long
+			rt_code_both_file(P//'R49-cast-str-len.syntran', RC_CAST_STR_LEN), &
+			diag_count_code(get_diags_file(P//'R49-cast-str-len.syntran'), &
+				RC_CAST_STR_LEN) == 1, &
+			diag_has_code(get_diags('println(i32("ab"));'), RC_CAST_STR_LEN), &
+			diag_has_code(get_diags('println(i32(""));'), RC_CAST_STR_LEN), &
+			diag_has_code(get_diags('println(i64("ab"));'), RC_CAST_STR_LEN), &
+			diag_has_code(get_diags('println(i32(["a", "bc"]));'), RC_CAST_STR_LEN), &
+			diag_has_code(get_diags('println(i64(["a", "", "c"]));'), RC_CAST_STR_LEN), &
+			.not. diag_has_code(get_diags('println(i32("A"));'), RC_CAST_STR_LEN), &
+			.not. diag_has_code(get_diags('println(i64("A"));'), RC_CAST_STR_LEN), &
+			.not. diag_has_code(get_diags('println(i32(["a", "b"]));'), RC_CAST_STR_LEN) &
 		]
 
 	! R33: out-of-bounds subscript.  Only reachable in builds compiled with
@@ -10342,6 +10401,32 @@ subroutine unit_test_bounds_check(npass, nfail)
 			RC_SUBSCRIPT_OOB), &
 		diag_has_code(get_diags( &
 			'let v = ["abc", "def"]; println(v[1, [0, 9]]);'), &
+			RC_SUBSCRIPT_OOB), &
+
+		! The character position of a string array element assignment
+		! (`v[i, j] = c`) was never checked, for a global or a local
+		diag_has_code(get_diags('let v = ["abc"]; v[0, 5] = "x";'), &
+			RC_SUBSCRIPT_OOB), &
+		diag_has_code(get_diags('let v = ["abc"]; v[0, -1] = "x";'), &
+			RC_SUBSCRIPT_OOB), &
+		diag_has_code(get_diags('let q = ["abc"]; q[0, 2147483647] = "x";'), &
+			RC_SUBSCRIPT_OOB), &
+		diag_has_code(get_diags( &
+			'fn f() { let v = ["abc"]; v[0, 5] = "x"; } f();'), &
+			RC_SUBSCRIPT_OOB), &
+
+		! Subscripts of the result of a call, and a member of its element
+		diag_has_code(get_diags( &
+			'fn g(): [i32; :] { return [1, 2]; } println(g()[5]);'), &
+			RC_SUBSCRIPT_OOB), &
+		diag_has_code(get_diags( &
+			'fn g(): [i32; :] { return [1, 2]; } println(g()[-1]);'), &
+			RC_SUBSCRIPT_OOB), &
+		diag_has_code(get_diags( &
+			'struct S {x: i32,} fn g(): [S; :] { return [S{x = 1}]; } println(g()[-1].x);'), &
+			RC_SUBSCRIPT_OOB), &
+		diag_has_code(get_diags( &
+			'struct S {x: i32,} fn g(): [S; :] { return [S{x = 1}]; } println(g()[1].x);'), &
 			RC_SUBSCRIPT_OOB) &
 		], label, npass, nfail)
 
@@ -11193,7 +11278,7 @@ subroutine unit_test_fuzz_regressions(npass, nfail)
 
 	logical, allocatable :: tests(:)
 
-	type(string_vector_t) :: diags_empty, diags_comment, diags_ws
+	type(string_vector_t) :: diags_empty, diags_comment, diags_ws, diags_radix, diags_compound
 
 	write(*,*) 'Unit testing '//label//' ...'
 
@@ -11201,6 +11286,8 @@ subroutine unit_test_fuzz_regressions(npass, nfail)
 	diags_empty   = get_diags('')
 	diags_comment = get_diags('// just a comment')
 	diags_ws      = get_diags('  '//char(10)//char(10))
+	diags_radix    = get_diags('let x = 0x_1F; let y = 0o17; let z = 0b_101; let w = 0xff;')
+	diags_compound = get_diags('let a = [1]; a += 1; a += [2]; let i = 0; i += 1;')
 
 	tests = &
 		[   &
@@ -11240,7 +11327,44 @@ subroutine unit_test_fuzz_regressions(npass, nfail)
 			! A closed string ending exactly at the end of the input is not
 			! unterminated, it is just missing its `;`
 			.not. diag_has_code(get_diags('"a"'), EC_UNTERMINATED_STR), &
-			diag_has_code(get_diags('"a"'), EC_UNEXPECTED_TOKEN) &
+			diag_has_code(get_diags('"a"'), EC_UNEXPECTED_TOKEN), &
+
+			! The qualified-name copy of the E111 check also called size() on an
+			! lsubscripts that wasn't allocated, for a `::` with no name after
+			diag_has_code(get_diags('let s = 1; s :: += 2;'), EC_UNEXPECTED_TOKEN), &
+			diag_has_code(get_diags('let s = "a"; s :: += "e";'), EC_UNEXPECTED_TOKEN), &
+
+			! A fn declaration with no parens returned without a diagnostic, and
+			! the compiler got a kind-0 node
+			diag_has_code(get_diags('fn f'), EC_UNEXPECTED_TOKEN), &
+			diag_has_code(get_diags('fn f { }'), EC_UNEXPECTED_TOKEN), &
+			diag_has_code(get_diags('fn f: i32 { return 1; }'), EC_UNEXPECTED_TOKEN), &
+			.not. diag_has_code(get_diags('fn f(): i32 { return 1; } println(f());'), &
+				EC_UNEXPECTED_TOKEN), &
+
+			! Recovery after a malformed struct left values with no struct name, and
+			! call nodes with no receiver
+			diag_has_code(get_diags_file(P//'fuzz-struct-no-name.syntran'), &
+				EC_UNEXPECTED_TOKEN), &
+			diag_has_code(get_diags_file(P//'fuzz-call-chain-no-recv.syntran'), &
+				EC_UNEXPECTED_TOKEN), &
+
+			! A bare `0x`, `0o`, or `0b` has no digits, so it is not a literal.  It
+			! used to read past the end of an empty string in rm_leading_zeros().
+			! The literals that do have digits are unchanged
+			diag_has_code(get_diags('let x = 0x;'), EC_UNEXPECTED_TOKEN), &
+			diag_has_code(get_diags('let x = 0o;'), EC_UNEXPECTED_TOKEN), &
+			diag_has_code(get_diags('let x = 0b;'), EC_UNEXPECTED_TOKEN), &
+			diag_has_code(get_diags('0x'), EC_UNEXPECTED_TOKEN), &
+			diag_has_code(get_diags('let x = 0x_;'), EC_UNEXPECTED_TOKEN), &
+			diags_radix%len_ == 0, &
+
+			! A compound assignment can't make a scalar into an array, same as `=`
+			diag_has_code(get_diags('let i = 0; i += [1];'), EC_BINARY_TYPES), &
+			diag_has_code(get_diags('let i = 0; i -= [1, 2];'), EC_BINARY_TYPES), &
+			diag_has_code(get_diags('let i = 0; i <<= [1];'), EC_BINARY_TYPES), &
+			diag_has_code(get_diags('let s = "a"; s += ["b"];'), EC_BINARY_TYPES), &
+			diags_compound%len_ == 0 &
 		]
 	call unit_test_coda(tests, label, npass, nfail)
 

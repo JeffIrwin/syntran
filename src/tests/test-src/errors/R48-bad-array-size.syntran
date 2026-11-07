@@ -1,0 +1,6 @@
+// R48: bad-array-size
+// An array was built with a negative extent, or with too many elements
+
+let n = 3;
+let m = n - 5;
+let a = [0; m];

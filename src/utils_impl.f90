@@ -817,7 +817,10 @@ module procedure rm_leading_zeros
 	integer :: i
 
 	i = 1
-	do while (i < len(str_) .and. str_(i:i) == "0")
+	! Fortran doesn't short-circuit `.and.`, so str_(i:i) can't share a
+	! condition with the length check, or it reads past an empty str_
+	do while (i < len(str_))
+		if (str_(i:i) /= "0") exit
 		i = i + 1
 	end do
 	str_out = str_(i:)

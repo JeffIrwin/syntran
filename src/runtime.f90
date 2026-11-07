@@ -228,6 +228,12 @@ module syntran__runtime_m
 			integer(kind = 8), intent(in) :: cap
 		end subroutine
 
+		module subroutine check_array_len(state, sizes, len_)
+			type(state_t), intent(inout) :: state
+			integer(kind = 8), intent(in) :: sizes(:)
+			integer(kind = 8), intent(out) :: len_
+		end subroutine
+
 		module function new_array(type, cap) result(vector)
 			integer, intent(in) :: type
 			integer, intent(in), optional :: cap

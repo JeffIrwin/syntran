@@ -1353,6 +1353,18 @@ A member was read or assigned through an optional struct (`?Node`) that is `null
 
 [Example](../src/tests/test-src/errors/R47-null-member.syntran)
 
+### R48 -- bad-array-size
+
+An array was built with a negative extent, like `[0; n]` with `n = -1`, or with more than 2^40 elements, which is too many to allocate.  An extent of zero is fine, and gives an empty array.  A range like `[7: 3]` whose upper bound is below its lower bound is also fine, and is empty.  The sizes can come from the program, so they aren't known until runtime.
+
+[Example](../src/tests/test-src/errors/R48-bad-array-size.syntran)
+
+### R49 -- cast-str-len
+
+[`i32()`](intrinsics.md#i32) or [`i64()`](intrinsics.md#i64) was given a string that doesn't have exactly 1 character, or an array with such an element.  Only a single character has an integer value, its ASCII code.  To read a number from a string, use `parse_i32()` or `parse_i64()` instead.
+
+[Example](../src/tests/test-src/errors/R49-cast-str-len.syntran)
+
 ## Warnings
 
 ### W1 -- missing-return
