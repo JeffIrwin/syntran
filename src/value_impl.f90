@@ -5,6 +5,11 @@ submodule (syntran__value_m) syntran__value_impl_m
 
 	implicit none
 
+	! A bare array of value_t, for value_destroy()'s worklist
+	type value_list_t
+		type(value_t), allocatable :: v(:)
+	end type value_list_t
+
 contains
 
 
@@ -542,7 +547,66 @@ module procedure value_destroy
 	! deallocation of a value_t (or an array of value_t) to correctly walk
 	! a deeply-nested allocatable tree (struct(:) of struct(:) of array_t
 	! containing str(:) of string_t, etc.) in one shot.  See array_destroy()
+	!
+	! struct(:) is walked with a worklist instead of by recursion, because a
+	! linked list like `head = Node{val = v, next = head}` nests one level per
+	! node, and recursing that deep overflows the stack at ~30k nodes.  A
+	! child's struct(:) is moved onto the worklist after the rest of the child
+	! is freed, so by the time a struct(:) is deallocated, none of its
+	! elements has an allocated component left to walk
 
+
+	!********
+
+	integer :: i, nstack
+
+	type(value_list_t) :: cur
+	type(value_list_t), allocatable :: stack(:)
+
+	call value_destroy_flat(val)
+	if (.not. allocated(val%struct)) return
+
+	! Fast path for a struct of non-struct members, which is most of them
+	nstack = 0
+	do i = 1, size(val%struct)
+		call value_destroy_flat(val%struct(i))
+		if (allocated(val%struct(i)%struct)) nstack = nstack + 1
+	end do
+	if (nstack == 0) then
+		deallocate(val%struct)
+		return
+	end if
+
+	allocate(stack(16))
+	nstack = 1
+	call move_alloc(val%struct, stack(1)%v)
+
+	do while (nstack > 0)
+		call move_alloc(stack(nstack)%v, cur%v)
+		nstack = nstack - 1
+
+		do i = 1, size(cur%v)
+			call value_destroy_flat(cur%v(i))
+			if (.not. allocated(cur%v(i)%struct)) cycle
+			if (nstack == size(stack)) call grow_value_stack(stack)
+			nstack = nstack + 1
+			call move_alloc(cur%v(i)%struct, stack(nstack)%v)
+		end do
+
+		deallocate(cur%v)
+	end do
+
+end procedure value_destroy
+
+!===============================================================================
+
+recursive subroutine value_destroy_flat(val)
+
+	! Everything value_destroy() frees except struct(:).  fn_params and fn_ret
+	! describe a fn type, not a data structure, so they are shallow and still
+	! recurse
+
+	type(value_t), intent(inout) :: val
 
 	!********
 
@@ -561,13 +625,6 @@ module procedure value_destroy
 		deallocate(val%array)
 	end if
 
-	if (allocated(val%struct)) then
-		do i = 1, size(val%struct)
-			call value_destroy(val%struct(i))
-		end do
-		deallocate(val%struct)
-	end if
-
 	if (allocated(val%fn_params)) then
 		do i = 1, size(val%fn_params)
 			call value_destroy(val%fn_params(i))
@@ -580,7 +637,30 @@ module procedure value_destroy
 		deallocate(val%fn_ret)
 	end if
 
-end procedure value_destroy
+end subroutine value_destroy_flat
+
+!===============================================================================
+
+subroutine grow_value_stack(stack)
+
+	! Double the worklist of value_destroy().  Only the allocation status of
+	! each slot matters, so move_alloc() keeps this shallow
+
+	type(value_list_t), allocatable, intent(inout) :: stack(:)
+
+	!********
+
+	integer :: i
+
+	type(value_list_t), allocatable :: grown(:)
+
+	allocate(grown(2 * size(stack)))
+	do i = 1, size(stack)
+		if (allocated(stack(i)%v)) call move_alloc(stack(i)%v, grown(i)%v)
+	end do
+	call move_alloc(grown, stack)
+
+end subroutine grow_value_stack
 
 
 !===============================================================================

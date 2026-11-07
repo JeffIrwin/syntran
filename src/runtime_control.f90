@@ -619,24 +619,22 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 				return
 			end if
 
-			array%cap = (ubound_%sca%i32 - lbound_%sca%i32 &
-				+ step%sca%i32 - sign(1,step%sca%i32)) / step%sca%i32
+			! The count is computed in i64 so that a wide range with a big
+			! step, like [0: 0x7fffffff: 0x40000000], doesn't overflow
+			array%len_ = slice_len(int(lbound_%sca%i32, 8), &
+				int(step%sca%i32, 8), int(ubound_%sca%i32, 8))
+			call check_array_len(state, [array%len_], array%len_)
+			if (state%rt_halt) return
+			array%cap = array%len_
 
 			!print *, 'cap = ', array%cap
 			allocate(array%i32( array%cap ))
 
-			j = 1
-			i = lbound_%sca%i32
-			if (lbound_%sca%i32 < ubound_%sca%i32 .neqv. 0 < step%sca%i32) i = ubound_%sca%i32
-
-			! Step may be negative
-			do while ((i  < ubound_%sca%i32 .eqv. lbound_%sca%i32 < ubound_%sca%i32) &
-			     .and. i /= ubound_%sca%i32)
-				array%i32(j) = i
-				i = i + step%sca%i32
-				j = j + 1
+			! Step may be negative.  Every element is within the bounds, so
+			! the int() can't overflow
+			do j8 = 1, array%len_
+				array%i32(j8) = int(lbound_%sca%i32 + (j8 - 1) * int(step%sca%i32, 8))
 			end do
-			array%len_ = j - 1
 
 		else if (array%type == i64_type) then
 
@@ -645,25 +643,17 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 				return
 			end if
 
-			array%cap = (ubound_%sca%i64 - lbound_%sca%i64 &
-				+ step%sca%i64 - sign(int(1,8), step%sca%i64)) / step%sca%i64
+			array%len_ = slice_len(lbound_%sca%i64, step%sca%i64, ubound_%sca%i64)
+			call check_array_len(state, [array%len_], array%len_)
+			if (state%rt_halt) return
+			array%cap = array%len_
 
 			allocate(array%i64( array%cap ))
 
-			j = 1
-			i8 = lbound_%sca%i64
-			if (lbound_%sca%i64 < ubound_%sca%i64 .neqv. 0 < step%sca%i64) then
-				i8 = ubound_%sca%i64
-			end if
-
 			! Step may be negative
-			do while ((i8  < ubound_%sca%i64 .eqv. lbound_%sca%i64 < ubound_%sca%i64) &
-			     .and. i8 /= ubound_%sca%i64)
-				array%i64(j) = i8
-				i8 = i8 + step%sca%i64
-				j = j + 1
+			do j8 = 1, array%len_
+				array%i64(j8) = lbound_%sca%i64 + (j8 - 1) * step%sca%i64
 			end do
-			array%len_ = j - 1
 
 		else if (array%type == f32_type) then
 
@@ -943,7 +933,7 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 		end if
 
 		if (res%array%type == i32_type) then
-			res%array%len_ = max(0_8, int(ubound_%sca%i32 - lbound_%sca%i32, 8))
+			res%array%len_ = max(0_8, int(ubound_%sca%i32, 8) - int(lbound_%sca%i32, 8))
 		else !if (res%array%type == i64_type) then
 			res%array%len_ = max(0_8, ubound_%sca%i64 - lbound_%sca%i64)
 		end if

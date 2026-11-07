@@ -11295,7 +11295,8 @@ subroutine unit_test_fuzz_regressions(npass, nfail)
 	logical, allocatable :: tests(:)
 
 	type(string_vector_t) :: diags_empty, diags_comment, diags_ws, diags_radix, diags_compound, &
-		diags_unif, diags_shadow, diags_stale, diags_stale2, diags_arr_assign
+		diags_unif, diags_shadow, diags_stale, diags_stale2, diags_arr_assign, &
+		diags_fn_shadow, diags_deep_list
 
 	write(*,*) 'Unit testing '//label//' ...'
 
@@ -11311,6 +11312,8 @@ subroutine unit_test_fuzz_regressions(npass, nfail)
 	diags_stale2   = get_diags('let a = [0]; for i in [0, 1] { let r = [1, 2]; }')
 	diags_arr_assign = get_diags( &
 		'let f = [0]; f = [1, 2]; f = 7; let g = [1.0]; g = [2.0, 3.0]; let h = [1''i64]; h = [2];')
+	diags_fn_shadow = get_diags('fn sq(x: i32): i32 { return x * x; } let sq = sq;')
+	diags_deep_list = get_diags_file(P//'fuzz-deep-list.syntran')
 
 	tests = &
 		[   &
@@ -11466,7 +11469,39 @@ subroutine unit_test_fuzz_regressions(npass, nfail)
 			diag_has_code(get_diags('let f = [0]; f = [1.5];'), EC_BINARY_TYPES), &
 			diag_has_code(get_diags('let f = [0]; f = ["a"];'), EC_BINARY_TYPES), &
 			diag_has_code(get_diags('let f = [0]; let g = [true]; f = g;'), EC_BINARY_TYPES), &
-			diags_arr_assign%len_ == 0 &
+			diags_arr_assign%len_ == 0, &
+
+			! A global named after a fn, on its own rhs, took the fn ref that pass 0
+			! had typed it with, and allocated its fn_params a second time
+			diags_fn_shadow%len_ == 0, &
+			eval('fn sq(x: i32): i32 { return x * x; } let sq = sq; sq(3);') == '9', &
+
+			! The element count of a stepped array was (u - l + s - sign(1,s)) / s,
+			! which overflowed for a big step and allocated too few elements
+			eval('let s = 0x7fffffff; let a = [0: s: 5]; size(a, 0);') == '1', &
+			eval('let a = [10: 0x7fffffff: 20]; a[0];') == '10', &
+			eval('let a = [5: -0x7fffffff: 0]; a[0];') == '5', &
+			eval('let a = [0: 0x40000000: 0x7fffffff]; a[1];') == '1073741824', &
+			eval('let a = [0: -0x40000000: -0x7fffffff]; a[1];') == '-1073741824', &
+			eval('let a = [0: 0x7fffffffffffffff: 5''i64]; size(a, 0);') == '1', &
+			eval('let a = [0: 0x4000000000000000: 0x7fffffffffffffff]; size(a, 0);') == '2', &
+			eval('let a = [5: 1: 0]; size(a, 0);') == '0', &
+			eval('let a = [0: 3: 10]; size(a, 0);') == '4', &
+			eval('let a = [10: -3: 0]; a[3];') == '1', &
+			eval('let a = [-0x7fffffff: 0x7fffffff]; size(a, 0);') == '4294967294', &
+			diag_has_code(get_diags('let a = [0: 1: 0x7fffffffffffffff];'), RC_BAD_ARRAY_SIZE), &
+
+			! The same count sets the number of iterations of a for loop
+			eval('let n = 0; for i in [0: 0x7fffffff: 5] { n += 1; } n;') == '1', &
+			eval('let n = 0; for i in [0: 0x40000000: 0x7fffffff] { n += i; } n;') == '1073741824', &
+			eval('let n = 0; for i in [0: -0x40000000: -0x7fffffff] { n += 1; } n;') == '2', &
+			eval('let n = 0; for i in [5: 1: 0] { n += 1; } n;') == '0', &
+			eval('let n = 0; for i in [10: -3: 0] { n += i; } n;') == '22', &
+			eval('let n = 0; for i in [0: 0x4000000000000000: 0x7fffffffffffffff] { n += 1; } n;') == '2', &
+
+			! Freeing a struct that nests one level per node recursed once per node,
+			! and overflowed the stack at ~30k of them
+			diags_deep_list%len_ == 0 &
 		]
 	call unit_test_coda(tests, label, npass, nfail)
 

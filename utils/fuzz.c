@@ -247,6 +247,21 @@ static int at_line(const char *out, char *sig, size_t cap)
     return 1;
 }
 
+/* strstr(), but not in a source line that a diagnostic echoes, like ` 2 | <source>`.  A
+ * mutant can contain the text of an error message, e.g. in a comment */
+static const char *find_msg(const char *out, const char *needle)
+{
+    const char *m = out;
+    while ((m = strstr(m, needle))) {
+        const char *s = m;
+        while (s > out && s[-1] != '\n') s--;
+        while (*s == ' ' || (*s >= '0' && *s <= '9')) s++;
+        if (*s != '|' || s > m) return m;
+        m += strlen(needle);
+    }
+    return NULL;
+}
+
 static int classify(const char *out, int timed_out, int status, char *sig, size_t cap)
 {
     sig[0] = 0;
@@ -274,13 +289,13 @@ static int classify(const char *out, int timed_out, int status, char *sig, size_
         sanitize_into(sig, cap, k, strcspn(k, "\n") < 40 ? strcspn(k, "\n") : 40);
         return RES_CRASH;
     }
-    if ((m = strstr(out, "Internal syntran error["))) {
+    if ((m = find_msg(out, "Internal syntran error["))) {
         snprintf(sig, cap, "INTERNAL-");
         m += strlen("Internal syntran error[");
         sanitize_into(sig, cap, m, strcspn(m, "]"));
         return RES_CRASH;
     }
-    if ((m = strstr(out, "Fortran runtime error"))) {
+    if ((m = find_msg(out, "Fortran runtime error"))) {
         snprintf(sig, cap, "FORTRAN-");
         const char *k = strchr(m, ':');
         k = k ? k + 1 : m;
@@ -289,7 +304,7 @@ static int classify(const char *out, int timed_out, int status, char *sig, size_
         if (!at_line(out, sig, cap)) first_frame(out, sig, cap);
         return RES_CRASH;
     }
-    if ((m = strstr(out, "Fatal error"))) {
+    if ((m = find_msg(out, "Fatal error"))) {
         /* syntran's internal_error(), which is preceded by a message line */
         snprintf(sig, cap, "FATAL-");
         const char *e = m;
