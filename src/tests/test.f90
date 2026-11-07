@@ -11285,7 +11285,8 @@ subroutine unit_test_fuzz_regressions(npass, nfail)
 
 	logical, allocatable :: tests(:)
 
-	type(string_vector_t) :: diags_empty, diags_comment, diags_ws, diags_radix, diags_compound
+	type(string_vector_t) :: diags_empty, diags_comment, diags_ws, diags_radix, diags_compound, &
+		diags_unif, diags_shadow, diags_stale, diags_stale2, diags_arr_assign
 
 	write(*,*) 'Unit testing '//label//' ...'
 
@@ -11295,6 +11296,12 @@ subroutine unit_test_fuzz_regressions(npass, nfail)
 	diags_ws      = get_diags('  '//char(10)//char(10))
 	diags_radix    = get_diags('let x = 0x_1F; let y = 0o17; let z = 0b_101; let w = 0xff;')
 	diags_compound = get_diags('let a = [1]; a += 1; a += [2]; let i = 0; i += 1;')
+	diags_unif     = get_diags('let r = [0; 2]; let m = [1; 2, 3]; let e = [0; 0];')
+	diags_shadow   = get_diags('let count = 5; let n = count; let count2 = count + 1;')
+	diags_stale    = get_diags('let a = [0]; for i in [0] { } let q = [0];')
+	diags_stale2   = get_diags('let a = [0]; for i in [0, 1] { let r = [1, 2]; }')
+	diags_arr_assign = get_diags( &
+		'let f = [0]; f = [1, 2]; f = 7; let g = [1.0]; g = [2.0, 3.0]; let h = [1''i64]; h = [2];')
 
 	tests = &
 		[   &
@@ -11371,7 +11378,80 @@ subroutine unit_test_fuzz_regressions(npass, nfail)
 			diag_has_code(get_diags('let i = 0; i -= [1, 2];'), EC_BINARY_TYPES), &
 			diag_has_code(get_diags('let i = 0; i <<= [1];'), EC_BINARY_TYPES), &
 			diag_has_code(get_diags('let s = "a"; s += ["b"];'), EC_BINARY_TYPES), &
-			diags_compound%len_ == 0 &
+			diags_compound%len_ == 0, &
+
+			! A uniform array needs a size.  `[0;]` was a rank-0 array, which the
+			! VM allocated twice.  Only the empty list is an error
+			diag_has_code(get_diags_file(P//'fuzz-unif-no-size.syntran'), &
+				EC_UNEXPECTED_TOKEN), &
+			diag_count_code(get_diags('let r = [0;];'), EC_UNEXPECTED_TOKEN) == 1, &
+			diag_has_code(get_diags('let r = [1, 2;];'), EC_UNEXPECTED_TOKEN), &
+			diag_has_code(get_diags('let r = [i32;];'), EC_UNEXPECTED_TOKEN), &
+			diags_unif%len_ == 0, &
+
+			! The element of a uniform array isn't a scalar, so the loop var over it
+			! has no array to subscript
+			diag_has_code(get_diags_file(P//'fuzz-for-unif-of-array.syntran'), &
+				EC_NON_SCA_VAL), &
+
+			! A global named after an intrinsic, on its own rhs, resolved to the
+			! variable that was being declared in pass 1, and reached the compiler
+			diag_has_code(get_diags_file(P//'fuzz-intr-name-self-ref.syntran'), &
+				EC_FN_PTR_UNSUPPORTED), &
+			diag_has_code(get_diags('let count = count;'), EC_FN_PTR_UNSUPPORTED), &
+			diag_has_code(get_diags('let len = len;'), EC_FN_PTR_UNSUPPORTED), &
+			diag_has_code(get_diags('let c = 1 + c;'), EC_UNDECLARE_VAR), &
+			diag_count_code(get_diags('let c = 1 + c;'), EC_UNDECLARE_VAR) == 1, &
+			diags_shadow%len_ == 0, &
+
+			! A unary op on a fn pointer copied its fn_ret onto itself, and freed it
+			! twice when it had an array or struct in it
+			diag_has_code(get_diags_file(P//'fuzz-unary-fn-ptr.syntran'), &
+				EC_UNARY_TYPES), &
+			diag_has_code(get_diags( &
+				'fn g(): [i32; :] { return [1]; } let y = -g;'), EC_UNARY_TYPES), &
+			diag_has_code(get_diags( &
+				'fn g(): [i32; :] { return [1]; } let y = !g;'), EC_UNARY_TYPES), &
+			diag_has_code(get_diags( &
+				'fn g(): [i32; :] { return [1]; } let y = not g;'), EC_UNARY_TYPES), &
+
+			! `a[...` is parsed speculatively as an assignment, then rewound and
+			! re-parsed.  An E20 at the end of the input was dropped by the de-dupe
+			! in match() on the second try, and the program ran or hit the compiler
+			diag_has_code(get_diags_file(P//'fuzz-subscript-eof-e20.syntran'), &
+				EC_UNEXPECTED_TOKEN), &
+			diag_has_code(get_diags('let a = [5]; let b = a[0'), EC_UNEXPECTED_TOKEN), &
+			diag_has_code(get_diags('let a = [5]; let b = a[foo('), EC_UNEXPECTED_TOKEN), &
+			diag_has_code(get_diags('let a = [5]; let b = a[0:'), EC_UNEXPECTED_TOKEN), &
+
+			! A dot after a fn-typed member copied its value onto its parent, and
+			! freed the fn pointer's return type twice
+			diag_has_code(get_diags_file(P//'fuzz-fn-member-dot.syntran'), &
+				EC_NON_STRUCT_DOT), &
+
+			! A for loop over an explicit array literal copied the stale array of a
+			! reused stack slot onto its loop var, so the next array literal
+			! allocated an already allocated `val`
+			diags_stale%len_ == 0, &
+			diags_stale2%len_ == 0, &
+			eval('let a = [7]; for i in [1, 2] { } let q = [3, 4]; q[1];') == '4', &
+
+			! `(a = 1)` of a scalar onto an array has the value of the whole array,
+			! not the scalar, which made the evaluator hit I2 or read a `left` that
+			! was never allocated
+			eval('let i = [1, 2]; let b = (i = 7) + 1; all(b == [8, 8]);') == 'true', &
+			eval('let i = [1, 2]; all((i = 7) == [7, 7]);') == 'true', &
+			eval('let i = [1, 2]; let b = (i = 3) / 2; all(b == [1, 1]);') == 'true', &
+			eval('fn f(): bool { let i = [1, 2]; return all((i = 5) == [5, 5]); } f();') == 'true', &
+			eval('let i = [1, 2]; i = 3; all(i == [3, 3]);') == 'true', &
+
+			! Whole-array `=` needs element types that agree, like a scalar `=` does.
+			! `ints = [true]` used to reach the evaluator and die with I34
+			diag_has_code(get_diags('let f = [0]; f = [true];'), EC_BINARY_TYPES), &
+			diag_has_code(get_diags('let f = [0]; f = [1.5];'), EC_BINARY_TYPES), &
+			diag_has_code(get_diags('let f = [0]; f = ["a"];'), EC_BINARY_TYPES), &
+			diag_has_code(get_diags('let f = [0]; let g = [true]; f = g;'), EC_BINARY_TYPES), &
+			diags_arr_assign%len_ == 0 &
 		]
 	call unit_test_coda(tests, label, npass, nfail)
 

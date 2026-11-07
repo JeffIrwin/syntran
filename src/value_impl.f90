@@ -443,7 +443,11 @@ module procedure value_copy
 		deallocate(dst%enum_cookie)
 	end if
 
-	if (allocated(src%array)) then
+	! Guarded on type like str/file_ above: a reused stack slot can carry the
+	! stale array of an earlier value.  A for loop over an explicit array
+	! literal copied that onto the loop var, which then made the next array
+	! literal allocate an already allocated `val` in the VM
+	if (src%type == array_type .and. allocated(src%array)) then
 		! Don't rely on a whole-object `dst%array = src%array` here either —
 		! array_t's str(:) component has the same double-nested
 		! reallocation-on-assignment problem as value_t%str above.  See

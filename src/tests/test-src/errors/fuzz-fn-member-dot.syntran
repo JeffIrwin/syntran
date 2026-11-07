@@ -1,0 +1,17 @@
+// Fuzz regression: a dot after a fn-typed member.  Copying the member's value onto
+// its parent node freed the fn pointer's return type twice
+
+struct P {}
+
+struct M
+{
+	mk: fn(): P,
+}
+
+fn f(): P
+{
+	return P{};
+}
+
+let m = M{mk = f};
+let x = m.mk.;

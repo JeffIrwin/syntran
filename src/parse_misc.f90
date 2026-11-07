@@ -59,6 +59,13 @@ module subroutine search(parser, key, id_index, iostat, val, is_loc, is_const)
 
 	if (.not. is_loc) then
 		call parser%vars%search(key, id_index, iostat, val, is_const = is_const)
+
+		! In pass 1 the vars table still holds everything pass 0 inserted, but
+		! num_vars was reset, so an id past it is a global that isn't declared
+		! yet, e.g. the `count` in `let count = count;`.  Treat it as not found,
+		! c.f. the pass-0-only diagnostics in parse_unit()
+		if (iostat == exit_success .and. parser%ipass > 0 .and. &
+			id_index > parser%num_vars) iostat = exit_failure
 	end if
 
 end subroutine search

@@ -1,0 +1,10 @@
+struct Node {}
+
+fn cons(): Node
+{
+	return Node{};
+}
+
+// The unary op copied the fn pointer onto itself, and freed its return type twice
+let l = cons;
+let y = -l;
