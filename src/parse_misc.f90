@@ -63,9 +63,15 @@ module subroutine search(parser, key, id_index, iostat, val, is_loc, is_const)
 		! In pass 1 the vars table still holds everything pass 0 inserted, but
 		! num_vars was reset, so an id past it is a global that isn't declared
 		! yet, e.g. the `count` in `let count = count;`.  Treat it as not found,
-		! c.f. the pass-0-only diagnostics in parse_unit()
+		! c.f. the pass-0-only diagnostics in parse_unit().  Pass 0's value
+		! goes too, e.g. the fn ref in `let sq = sq;`, or callers that build a
+		! node from it would allocate over its fn_params
 		if (iostat == exit_success .and. parser%ipass > 0 .and. &
-			id_index > parser%num_vars) iostat = exit_failure
+			id_index > parser%num_vars) then
+			iostat = exit_failure
+			call value_destroy(val)
+			val%type = unknown_type
+		end if
 	end if
 
 end subroutine search

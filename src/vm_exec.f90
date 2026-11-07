@@ -2245,19 +2245,19 @@ module subroutine vm_run(prog, state, res)
 						call rt_throw(state, err_rt(RC_FOR_STEP_ZERO, 'for loop step is 0'))
 						exit
 					end if
-					for_iters(fi)%len8 = ( &
-						for_iters(fi)%ubound_%sca%i32 - for_iters(fi)%lbound_%sca%i32 &
-						+ for_iters(fi)%step%sca%i32  &
-						- sign(1, for_iters(fi)%step%sca%i32) ) / for_iters(fi)%step%sca%i32
+					for_iters(fi)%len8 = slice_len( &
+						int(for_iters(fi)%lbound_%sca%i32, 8), &
+						int(for_iters(fi)%step%sca%i32, 8), &
+						int(for_iters(fi)%ubound_%sca%i32, 8))
 				case (i64_type)
 					if (for_iters(fi)%step%sca%i64 == 0) then
 						call rt_throw(state, err_rt(RC_FOR_STEP_ZERO, 'for loop step is 0'))
 						exit
 					end if
-					for_iters(fi)%len8 = ( &
-						for_iters(fi)%ubound_%sca%i64 - for_iters(fi)%lbound_%sca%i64 &
-						+ for_iters(fi)%step%sca%i64  &
-						- sign(int(1,8), for_iters(fi)%step%sca%i64) ) / for_iters(fi)%step%sca%i64
+					for_iters(fi)%len8 = slice_len( &
+						for_iters(fi)%lbound_%sca%i64, &
+						for_iters(fi)%step%sca%i64, &
+						for_iters(fi)%ubound_%sca%i64)
 				case (f32_type)
 					if (for_iters(fi)%step%sca%f32 == 0.0) then
 						call rt_throw(state, err_rt(RC_FOR_STEP_ZERO_F, 'for loop step is 0.0'))
