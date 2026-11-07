@@ -1608,6 +1608,9 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval_i32('parse_i32(   "-2");')  ==    -2,  &
 			eval_i32('parse_i32(  "-34");')  ==   -34,  &
 			eval_i32('parse_i32("-1337");')  == -1337,  &
+			eval_i32('parse_i32("12 abc");')  == 12,  &  ! a blank ends the value
+			eval_i32('parse_i32("  7  ");')  == 7,  &
+			abs(eval_f64('parse_f64("1.5 x");') - 1.5d0) < tol, &
 			eval('parse_i64(    "0");')  ==     "0",  &
 			eval('parse_i64(    "1");')  ==     "1",  &
 			eval('parse_i64(    "2");')  ==     "2",  &

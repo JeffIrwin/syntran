@@ -316,7 +316,14 @@ static int sy_jit_load(void *module, void *ctx, LLVMOrcLLJITRef *out, uint64_t *
     }
     LLVMOrcJITDylibAddGenerator(jd, gen);
 
-    pairs = (LLVMOrcCSymbolMapPair *)malloc(n * sizeof(*pairs));
+    /* Room for the two that Windows adds below */
+    pairs = (LLVMOrcCSymbolMapPair *)malloc((n + 2) * sizeof(*pairs));
+    if (pairs == NULL) {
+        LLVMOrcDisposeThreadSafeModule(tsm);
+        LLVMOrcDisposeLLJIT(jit);
+        snprintf(sy_jit_err, sizeof(sy_jit_err), "out of memory");
+        return -1;
+    }
     for (i = 0; i < n; i++) {
         pairs[i].Name = LLVMOrcLLJITMangleAndIntern(jit, sy_syms[i].name);
         pairs[i].Sym.Address = (uint64_t)(uintptr_t)sy_syms[i].addr;
@@ -325,7 +332,6 @@ static int sy_jit_load(void *module, void *ctx, LLVMOrcLLJITRef *out, uint64_t *
         pairs[i].Sym.Flags.TargetFlags = 0;
     }
 #ifdef _WIN32
-    pairs = (LLVMOrcCSymbolMapPair *)realloc(pairs, (n + 1) * sizeof(*pairs));
     pairs[n].Name = LLVMOrcLLJITMangleAndIntern(jit, "__main");
     pairs[n].Sym.Address = (uint64_t)(uintptr_t)&sy_jit_main_stub;
     pairs[n].Sym.Flags.GenericFlags = 1 | 4;
@@ -333,7 +339,6 @@ static int sy_jit_load(void *module, void *ctx, LLVMOrcLLJITRef *out, uint64_t *
     n++;
 #endif
 #ifdef _WIN64
-    pairs = (LLVMOrcCSymbolMapPair *)realloc(pairs, (n + 1) * sizeof(*pairs));
     pairs[n].Name = LLVMOrcLLJITMangleAndIntern(jit, "___chkstk_ms");
     pairs[n].Sym.Address = (uint64_t)(uintptr_t)&___chkstk_ms;
     pairs[n].Sym.Flags.GenericFlags = 1 | 4;

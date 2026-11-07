@@ -8339,6 +8339,13 @@ subroutine finish(em, n, diags)
 	call execute_command_line(cmd, wait = .true., exitstat = es, cmdstat = cmd_stat)
 	if (cmd_stat /= 0 .or. es /= 0) then
 		call diags%push(err_prefix//'linking failed: `'//cmd//'`'//color_reset)
+		if (em%uses_blas .and. blas_enabled) then
+			! Not a fallback to the runtime's own code, which would be slow without a word
+			call diags%push(fg_bright_green//'help'//color_reset//': this program uses linear '// &
+				'algebra (`@`, `std::solve()`, etc.), which links BLAS and LAPACK '// &
+				'(`-llapack -lblas`), so they must be installed where it is compiled, e.g. '// &
+				'`sudo apt-get install libopenblas-dev`')
+		end if
 	end if
 
 	call delete_file(obj)

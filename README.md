@@ -449,8 +449,8 @@ syntran --native fib fib.syntran
 ```
 <!-- syntran-end -->
 
-This is new, and only a small part of the language is supported so far.  See
-[doc/native.md](doc/native.md) for what it is, and how to build syntran with it.
+See [doc/native.md](doc/native.md) for what it supports, and how to build
+syntran with it.
 
 To compile a program in memory and run it right away, use `--jit`.
 

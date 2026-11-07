@@ -1378,8 +1378,6 @@ end function is_name_char
 
 !===============================================================================
 
-!===============================================================================
-
 function enums_slot_of(enums, val) result(k)
 
 	! Position in the enum table of the enum that `val` is a value or an array of,

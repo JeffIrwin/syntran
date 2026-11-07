@@ -334,8 +334,10 @@ if(SYNTRAN_LLVM)
 		# A shared libLLVM, which is the usual install
 		list(APPEND LINK_LIBS LLVM)
 	else()
+		# The same components as the static link above.  src/c/llvm_shim.c calls
+		# the ORC JIT, and the bitcode reader and writer, directly
 		llvm_map_components_to_libnames(LLVM_LIBS core analysis passes target
-			native)
+			native orcjit bitreader bitwriter)
 		list(APPEND LINK_LIBS ${LLVM_LIBS})
 	endif()
 endif()
