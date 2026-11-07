@@ -2542,9 +2542,9 @@ module procedure underline
 	! j :shrug:
 	j = max(min(len(context%text), span%start + length - 1), 1)
 	!print *, 'char = "', context%text(j:j), '"'
-	do while (is_whitespace(context%text(j:j)))
+	do while (length > 0 .and. is_whitespace(context%text(j:j)))
 		length = length - 1
-		j = min(len(context%text), span%start + length - 1)
+		j = max(min(len(context%text), span%start + length - 1), 1)
 	end do
 	length = max(length, 1)
 
