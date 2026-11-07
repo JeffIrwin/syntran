@@ -39,8 +39,12 @@
 			{
 				# BLAS isn't what is being fuzzed, so use the portable fallbacks
 				"name": "Build syntran with runtime checks",
+				"env": {
+					"FPM_FC": "gfortran-14"
+				},
 				"run":
 				"
+					gfortran-14 --version \n
 					fpm install --features debug,noblas
 						--flag '-DSYNTRAN_BOUNDS_CHECK -fcheck=all -g'
 						--prefix ./build/fuzz/ \n
@@ -54,11 +58,15 @@
 				# Exits 1 if it found a new crash, which fails the job and emails the
 				# author of the workflow.  The run number makes each night different
 				"name": "Fuzz",
+				# The dispatch input goes through the environment, not into the script
+				"env": {
+					"FUZZ_SECONDS": "${{ github.event.inputs.seconds || 300 }}"
+				},
 				"run":
 				"
 					build/fuzz/fuzz --bin build/fuzz/bin/syntran --jobs 4
 						--seed ${{ github.run_number }}
-						--time ${{ github.event.inputs.seconds || 300 }} \n
+						--time \"$FUZZ_SECONDS\" \n
 				"
 			},
 			{
