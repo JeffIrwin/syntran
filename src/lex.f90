@@ -539,12 +539,22 @@ subroutine lex_impl(lexer, token)
 		lexer%pos = lexer%pos + 1
 
 		char_vec = new_char_vector()
+		terminated = .false.
 		do
+
+			! Check before reading, so a quote at the very end of the input
+			! doesn't push (and then slice) a char past the end
+			if (lexer%pos > len(lexer%context%text)) exit
 
 			! Make a quote literal by doubling it
 			if (lexer%current() == '"') then
 				lexer%pos = lexer%pos + 1
+				if (lexer%pos > len(lexer%context%text)) then
+					terminated = .true.
+					exit
+				end if
 				if (lexer%current() /= '"') then
+					terminated = .true.
 					exit
 				end if
 			end if
@@ -552,13 +562,11 @@ subroutine lex_impl(lexer, token)
 			call char_vec%push(lexer%current())
 			lexer%pos = lexer%pos + 1
 
-			if (lexer%pos > len(lexer%context%text)) exit
-
 		end do
 
 		text  = lexer%context%text(start: lexer%pos-1)
 
-		if (lexer%pos > len(lexer%context%text)) then
+		if (.not. terminated) then
 			call new_token(token, bad_token, lexer%pos, text)
 			span = new_span(start, len(text))
 			call lexer%diagnostics%push( &

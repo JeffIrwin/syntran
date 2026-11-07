@@ -338,7 +338,7 @@ recursive module subroutine preprocess(parser, tokens_in, src_file, contexts)
 
 	type(text_span_t) :: span
 
-	type(syntax_token_t) :: token, token_peek, lparen, rparen, semicolon
+	type(syntax_token_t) :: token, token_peek, lparen, rparen, semicolon, filetok
 	type(syntax_token_vector_t) :: tokens_out
 
 	! The includer's own context was pushed by new_parser() before it called
@@ -376,6 +376,14 @@ recursive module subroutine preprocess(parser, tokens_in, src_file, contexts)
 			! are consumed by the preprocessor, so the later actual parser does
 			! not see them.
 			call parser%match_pre(lparen_token, tokens_in, i, contexts%v(unit_0), lparen)
+
+			! The file name must be a string literal.  Anything else (including
+			! the eof of a bare `#include`) has no `%val%str` to read.  This
+			! pushes the E20 and leaves the rest of the tokens for the parser
+			if (tokens_in(i + 1)%kind /= str_token) then
+				call parser%match_pre(str_token, tokens_in, i, contexts%v(unit_0), filetok)
+				cycle
+			end if
 
 			! Prepend with path to src_file, unless already absolute
 

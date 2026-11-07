@@ -611,9 +611,13 @@ recursive module subroutine parse_expr_statement(parser, expr)
 		! is_binary_op_allowed_val for str operands) can't be given a sound
 		! meaning here.  Whole-string ops (`s += "x"`, `v[0] += "x"`,
 		! `v[0:2] += "x"`) stay legal
-		if (op%kind == plus_equals_token) then
-			if ((lhs_root_type == str_type .and. allocated(expr%lsubscripts)) .or. &
-			    (lhs_root_arr_type == str_type .and. allocated(expr%lsubscripts) .and. &
+		!
+		! Fortran doesn't short-circuit `.and.`, so size() can only be reached
+		! once lsubscripts is known to be allocated (e.g. `sum_ += ` with a
+		! missing rhs has none)
+		if (op%kind == plus_equals_token .and. allocated(expr%lsubscripts)) then
+			if (lhs_root_type == str_type .or. &
+			    (lhs_root_arr_type == str_type .and. &
 			     size(expr%lsubscripts) == lhs_root_rank + 1)) then
 				span = new_span(op%pos, len(op%text))
 				call parser%diagnostics%push( &
@@ -1658,6 +1662,8 @@ recursive module subroutine parse_dot(parser, expr)
 	! I think this is the right place to parse subscripts. Or should it be after
 	! the recursive parse_dot()?
 	expr%member%val = member
+	! parse_subscripts() reads this for its E36/E13 diagnostics
+	expr%member%identifier = identifier
 	pos0 = parser%current_pos()
 	call parser%parse_subscripts(expr%member)
 	pos1 = parser%current_pos()
@@ -1888,7 +1894,7 @@ end subroutine splice_chain_root
 
 !===============================================================================
 
-subroutine parse_call_arg_list(parser, call_args, call_is_ref, pos_args, &
+recursive subroutine parse_call_arg_list(parser, call_args, call_is_ref, pos_args, &
 		lparen_, rparen_)
 
 	! Parse a parenthesized, comma-separated argument list into `call_args`
@@ -1951,7 +1957,7 @@ end subroutine parse_call_arg_list
 
 !===============================================================================
 
-subroutine parse_swallow_member_tail(parser)
+recursive subroutine parse_swallow_member_tail(parser)
 
 	! Error recovery: consume the rest of a member chain whose receiver type is
 	! unknown -- any `[...]` subscripts and `.name` / `.name(...)` accesses that
@@ -1999,7 +2005,7 @@ end subroutine parse_swallow_member_tail
 
 !===============================================================================
 
-subroutine parse_swallow_arg_list(parser)
+recursive subroutine parse_swallow_arg_list(parser)
 
 	! Error recovery: consume a parenthesized, comma-separated argument list
 	! without building an AST for it, so the parser stays in sync with a
@@ -2035,7 +2041,7 @@ end subroutine parse_swallow_arg_list
 
 !===============================================================================
 
-subroutine parse_file_member(parser, expr, identifier)
+recursive subroutine parse_file_member(parser, expr, identifier)
 
 	! Read-only dot member access on a file handle: f.is_open, f.eof, f.name.
 	! Unlike struct members these are baked from a fixed table rather than

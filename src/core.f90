@@ -589,6 +589,10 @@ function syntax_parse(str_, state, src_file, allow_continue, repl) result(tree)
 
 	! Do nothing for blank lines (or comments)
 	if (parser%current_kind() == eof_token) then
+		! Still a valid (zero-statement) unit, since callers other than the REPL
+		! don't check is_empty and would otherwise compile a kind-0 node
+		tree%kind = translation_unit
+		allocate(tree%members(0))
 		tree%is_empty = .true.
 		tree%diagnostics = parser%diagnostics
 		return

@@ -104,7 +104,7 @@ end function struct_contains_cookie
 
 !===============================================================================
 
-module subroutine parse_struct_declaration(parser, decl)
+recursive module subroutine parse_struct_declaration(parser, decl)
 
 	class(parser_t) :: parser
 	type(syntax_node_t), intent(out) :: decl
@@ -695,7 +695,7 @@ end subroutine parse_enum_access
 
 !===============================================================================
 
-module subroutine parse_enum_cast(parser, expr, enum_name)
+recursive module subroutine parse_enum_cast(parser, expr, enum_name)
 
 	! Parse `EnumName(ordinal)`, the reverse cast from an integer ordinal back
 	! to an enum variant, e.g. `Suit(2) -> Suit.Clubs`.  Called from
@@ -923,7 +923,7 @@ end function enum_closest_variant
 
 !===============================================================================
 
-module subroutine parse_method_declaration(parser, decl, struct, is_const, struct_name, no_fn_kw)
+recursive module subroutine parse_method_declaration(parser, decl, struct, is_const, struct_name, no_fn_kw)
 
 	! Parse a method declared inside a struct body.
 	! The implicit first parameter "0self" is the struct passed by reference.
