@@ -1,0 +1,6 @@
+// Fuzz regression: a struct member access on a value from a struct declaration
+// with no `{` used to read the unallocated name of its struct
+
+struct S
+}
+let a  S{}* S{  } a[].

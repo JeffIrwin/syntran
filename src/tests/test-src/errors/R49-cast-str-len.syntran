@@ -1,0 +1,5 @@
+// R49: cast-str-len
+// i32() and i64() only cast a string with exactly 1 character, to its ASCII code
+
+let s = "ab";
+let n = i32(s);

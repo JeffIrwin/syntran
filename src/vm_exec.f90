@@ -1531,6 +1531,16 @@ module subroutine vm_run(prog, state, res)
 					block
 						integer(kind=8) :: char_pos
 						char_pos = stack%v(base_+nelem+1)%to_i64()
+						if (bounds_check) then
+							if (n%is_loc) then
+								call check_index_nat(state, char_pos, &
+									len(state%locs%vals(id)%array%str(i8+1)%s, 8))
+							else
+								call check_index_nat(state, char_pos, &
+									len(state%vars%vals(id)%array%str(i8+1)%s, 8))
+							end if
+							if (state%rt_halt) exit
+						end if
 						if (n%is_loc) then
 							state%locs%vals(id)%array%str(i8+1)%s( &
 								char_pos+1 : char_pos+1) = right%str%s
@@ -3617,12 +3627,14 @@ module subroutine vm_run(prog, state, res)
 
 			rk_     = instr%b
 			call vm_pop_copy(stack, fill_)
-			len_tot_ = 1
 			do k_ = rk_, 1, -1
 				dims_(k_) = stack%v(stack%len_)%to_i64()
 				stack%len_ = stack%len_ - 1
-				len_tot_   = len_tot_ * dims_(k_)
 			end do
+
+			! Negative or huge extents are a runtime error, not an allocation
+			call check_array_len(state, dims_(1:rk_), len_tot_)
+			if (state%rt_halt) exit
 
 			allocate(val%array)
 			val%type           = array_type
@@ -3657,6 +3669,8 @@ module subroutine vm_run(prog, state, res)
 			stack%len_ = stack%len_ - 2
 
 			len_ = max(0_8, ub_ - lb_)
+			call check_array_len(state, [len_], len_)
+			if (state%rt_halt) exit
 
 			allocate(val%array)
 			val%type           = array_type

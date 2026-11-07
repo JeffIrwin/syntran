@@ -375,9 +375,13 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			! survives is_binary_op_allowed_val for str operands) can't be
 			! given it a sound meaning here.  Whole-string ops (`s += "x"`,
 			! `v[0] += "x"`, `v[0:2] += "x"`) stay legal
-			if (op%kind == plus_equals_token) then
-				if ((lhs_root_type == str_type .and. allocated(expr%lsubscripts)) .or. &
-				    (lhs_root_arr_type == str_type .and. allocated(expr%lsubscripts) .and. &
+			!
+			! Fortran doesn't short-circuit `.and.`, so size() can only be reached
+			! once lsubscripts is known to be allocated (c.f. the unqualified
+			! branch below)
+			if (op%kind == plus_equals_token .and. allocated(expr%lsubscripts)) then
+				if (lhs_root_type == str_type .or. &
+				    (lhs_root_arr_type == str_type .and. &
 				     size(expr%lsubscripts) == lhs_root_rank + 1)) then
 					span = new_span(op%pos, len(op%text))
 					call parser%diagnostics%push( &
@@ -1537,6 +1541,14 @@ recursive module subroutine parse_dot(parser, expr)
 
 	!print *, "struct_name = """, expr%val%struct_name, """"
 
+	! A struct-typed value can have no name after a malformed struct
+	! declaration (it already has a diagnostic).  Recover like an unknown type
+	! above, instead of reading an unallocated name
+	if (.not. allocated(expr%val%struct_name)) then
+		call parse_swallow_member_tail(parser)
+		return
+	end if
+
 	! Is there a better way than looking up every struct by name again?
 	struct_id = parser%structs%find(expr%val%struct_name)
 	if (struct_id == 0) then
@@ -1876,7 +1888,23 @@ recursive subroutine splice_chain_root(recv, node, has_meth, meth, meth_struct)
 		return
 	end if
 
+	! Error recovery can leave a call node without its receiver (`args`) or
+	! callee (`left`), e.g. after a malformed struct declaration, so treat it as
+	! a plain member fragment rather than walking into unallocated components
 	is_meth = any([node%kind, node%root_kind] == method_call_expr)
+	if (is_meth) then
+		if (.not. allocated(node%args)) then
+			recv%member = node
+			node = recv
+			return
+		end if
+	else
+		if (.not. allocated(node%left)) then
+			recv%member = node
+			node = recv
+			return
+		end if
+	end if
 
 	if (is_meth) then
 		is_innermost = .not. is_call_node(node%args(1))

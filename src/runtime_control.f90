@@ -756,7 +756,8 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 		k = k + 1; len_    = slots(k)
 
 		array%type = node%val%array%type
-		array%len_  = len_%to_i64()
+		call check_array_len(state, [len_%to_i64()], array%len_)
+		if (state%rt_halt) return
 		array%cap  = array%len_
 
 		if (array%type == f32_type) then
@@ -819,7 +820,8 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 		! Allocate in one shot without growing
 
 		res%array%type = node%val%array%type
-		res%array%len_  = product(res%array%size)
+		call check_array_len(state, res%array%size, res%array%len_)
+		if (state%rt_halt) return
 		!print *, 'res%array%len_ = ', res%array%len_
 
 		call allocate_array(res, res%array%len_)
@@ -945,6 +947,9 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 		else !if (res%array%type == i64_type) then
 			res%array%len_ = max(0_8, ubound_%sca%i64 - lbound_%sca%i64)
 		end if
+
+		call check_array_len(state, [res%array%len_], res%array%len_)
+		if (state%rt_halt) return
 
 		call allocate_array(res, res%array%len_)
 
