@@ -1044,6 +1044,39 @@ end function syntran_interpret_file
 
 !===============================================================================
 
+function syntran_lex_file(filename, io) result(res)
+
+	! Lex a file and return a dump of every token, for `syntran --lex`.  See
+	! lex_dump() for the format
+
+	character(len = *), intent(in)  :: filename
+	character(len = :), allocatable :: res
+
+	! exit_success/exit_failure status
+	integer, intent(out) :: io
+
+	!********
+
+	character(len = :), allocatable :: source_text
+
+	integer :: iostat
+
+	io = exit_success
+
+	source_text = read_file(filename, iostat)
+	if (iostat /= exit_success) then
+		write(*,*) err_404(filename)
+		io = exit_failure
+		res = ''
+		return
+	end if
+
+	res = lex_dump(source_text, filename)
+
+end function syntran_lex_file
+
+!===============================================================================
+
 end module syntran
 
 !===============================================================================

@@ -1,0 +1,110 @@
+
+// Dump the tokens of a file from the syntran lexer, in the same format as
+// `syntran --lex` does for the Fortran lexer, so the two can be diffed.  See
+// lex_dump() in src/lex.f90 for the format, and utils/test-lex.sh
+//
+// Usage:
+//
+//     syntran -q compiler/lex-dump.syntran -- <file>
+//
+// Syntran has no way to read a whole file as a str.  readln() drops the line
+// feed at the end of each line, so every line is given one back, except for a
+// last line that doesn't have one, which is told apart by `f.eof` (see below)
+
+use lex::*;
+
+// Escape a token's text or value so that a token is always one line with
+// tab-separated fields.  Bytes >= 128 are left alone.  Syntran strs have no
+// escapes, so a lone backslash is "\"
+fn escape(s: str): str
+{
+	let out = "";
+	for i in [0: len(s)]
+	{
+		let c = s[i];
+		if c == "\"
+			out += "\\";
+		else if c == char(10)
+			out += "\n";
+		else if c == char(13)
+			out += "\r";
+		else if c == char(9)
+			out += "\t";
+		else if c == char(0)
+			out += "\0";
+		else
+			out += c;
+	}
+	return out;
+}
+
+// The name of a token kind, which is what `str()` makes of an enum without its
+// `TokenKind.` prefix, e.g. "plus_token"
+fn kind_name(kind: TokenKind): str
+{
+	let s = str(kind);
+	let i = 0;
+	while s[i] != "."
+		i += 1;
+	return s[i + 1:];
+}
+
+fn read_text(path: str): str
+{
+	let f = std::open(path, "r");
+	let text = "";
+	while true
+	{
+		let line = readln(f);
+		if f.eof
+		{
+			// Reading past the end is an empty line.  But a last line without a
+			// line feed sets eof as soon as it's read, and it isn't empty
+			text += line;
+			break;
+		}
+		text += line + char(10);
+	}
+	close(f);
+	return text;
+}
+
+fn main()
+{
+	let args = std::args();
+	if size(args) < 1
+	{
+		println("usage: lex-dump.syntran -- <file>");
+		std::exit(1);
+	}
+
+	let text = read_text(args[0]);
+
+	let lexer = new_lexer(text);
+	let tokens = lex_all(&lexer);
+
+	let tab = char(9);
+	for i in [0: tokens.len]
+	{
+		let t = tokens.data[i];
+		let line = str(t.pos) + tab + kind_name(t.kind) + tab + escape(t.text);
+
+		if t.kind == TokenKind.i32_token
+			line += tab + str(t.i32_);
+		else if t.kind == TokenKind.i64_token
+			line += tab + str(t.i64_);
+		else if t.kind == TokenKind.f32_token
+			line += tab + str(t.f32_);
+		else if t.kind == TokenKind.f64_token
+			line += tab + str(t.f64_);
+		else if t.kind == TokenKind.str_token
+			line += tab + escape(t.str_);
+
+		println(line);
+	}
+
+	for i in [0: lexer.ndiags]
+		println("diag ", lexer.diags[i]);
+}
+
+main();

@@ -273,7 +273,7 @@ module procedure kind_name
 			"fn_call_intr_expr    ", & ! 102
 			"break_keyword        ", & ! 103
 			"break_statement      ", & ! 104
-			"continue keyword     ", & ! 105
+			"continue_keyword     ", & ! 105
 			"continue statement   ", & ! 106
 			"lless_token          ", & ! 107
 			"ggreater_token       ", & ! 108

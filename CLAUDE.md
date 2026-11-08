@@ -247,6 +247,23 @@ bash utils/test-readme.sh              # check all blocks against their hidden e
 bash utils/test-readme.sh --update     # regenerate the hidden expected output from actual behavior
 ```
 
+### Testing the syntran lexer port
+`compiler/lex.syntran` is a port of `src/lex.f90` to syntran, the first piece of
+the eventual self-hosted compiler (see `scratch/self-host.md`).  The hidden flag
+`syntran --lex file.syntran` dumps the Fortran lexer's raw tokens, one per line
+(`lex_dump()` in `src/lex.f90` has the format), and `compiler/lex-dump.syntran`
+dumps the port's in the same format.  To diff them over every file in
+`src/tests/test-src`, which needs no Fortran compiler:
+```bash
+bash utils/test-lex.sh build/v1/bin/syntran                  # on the VM
+bash utils/test-lex.sh --native build/native/bin/syntran     # compiled, much faster
+bash utils/test-lex.sh -v build/v1/bin/syntran samples/      # more files, with diffs
+```
+The port copies the Fortran lexer's quirks on purpose, e.g. a `//` comment skips
+the line feed after it, so a mismatch is a bug in one or the other.  The
+`pos` in the dump is 0-based.  `src/tests/test-src/errors/lex-edge-cases.syntran`
+is a corpus of odd literals and operators.
+
 ### Fuzzing
 `utils/fuzz.c` mutates the `.syntran` files under `src/tests/test-src`,
 `samples`, and `src/tests/long` (token-aware, so most mutants get past the
@@ -406,6 +423,7 @@ Module paths in `use` statements are resolved relative to the current source fil
 - `src/tests/core.f90` - Test core module
 - `src/tests/test-src/` - Syntran script unit test files by category
 - `src/tests/long/aoc/` - Longer integration tests
+- `compiler/` - The self-hosted compiler, written in syntran.  Only the lexer so far
 - `samples/` - Example syntran programs (not tested in CI)
 - `doc/README.md` - Table of contents for the other doc pages
 - `doc/intrinsics.md` - Intrinsic function documentation
