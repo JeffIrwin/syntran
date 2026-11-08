@@ -12,108 +12,124 @@
 // - Ranges are half-open, like syntran slices, so the Fortran `text(a: b)` is
 //   `text[a - 1: b]` here
 // - Diagnostics are only the error code, e.g. "E19", instead of a message
-// - Token kinds are an enum, instead of integer parameters
+// - Token kinds and keywords are enums, instead of integer parameters.  The
+//   keywords are their own enum, and a keyword token has the kind `keyword`
+//   plus a `Keyword`, so the Fortran `let_keyword` is `Keyword.let_` here.  The
+//   enum variants have no `_token` or `_keyword` suffix, since the enum is
+//   already in the name, and compiler/lex-dump.syntran adds them back
+// - Helpers with no dependence on the lexer are in compiler/utils.syntran
+
+use utils::*;
 
 enum TokenKind
 {
-	eof_token,
-	i32_token,
-	whitespace_token,
-	minus_token,
-	plus_token,
-	bad_token,
-	slash_token,
-	star_token,
-	rparen_token,
-	lparen_token,
-	identifier_token,
-	false_keyword,
-	true_keyword,
-	not_keyword,
-	or_keyword,
-	and_keyword,
-	double_equals_token,
-	bang_equals_token,
-	equals_token,
-	let_keyword,
-	double_star_token,
-	rbrace_token,
-	lbrace_token,
-	semicolon_token,
-	if_keyword,
-	else_keyword,
-	for_keyword,
-	in_keyword,
-	while_keyword,
-	rbracket_token,
-	lbracket_token,
-	colon_token,
-	less_token,
-	less_equals_token,
-	greater_token,
-	greater_equals_token,
-	f32_token,
-	comma_token,
-	fn_keyword,
-	str_token,
-	percent_token,
-	plus_equals_token,
-	minus_equals_token,
-	star_equals_token,
-	slash_equals_token,
-	i64_token,
-	double_star_equals_token,
-	percent_equals_token,
-	hash_token,
-	include_keyword,
-	return_keyword,
-	dot_token,
-	struct_keyword,
-	f64_token,
-	break_keyword,
-	continue_keyword,
-	double_less_token,
-	double_greater_token,
-	amp_token,
-	pipe_token,
-	caret_token,
-	bang_token,
-	double_less_equals_token,
-	double_greater_equals_token,
-	amp_equals_token,
-	caret_equals_token,
-	pipe_equals_token,
-	double_colon_token,
-	use_keyword,
-	matmul_token,
-	const_keyword,
-	enum_keyword,
-	comment_token,
-	switch_keyword,
-	case_keyword,
-	default_keyword,
-	when_keyword,
-	question_token,
-	null_keyword,
+	eof,
+	i32,
+	whitespace,
+	minus,
+	plus,
+	bad,
+	slash,
+	star,
+	rparen,
+	lparen,
+	identifier,
+	double_equals,
+	bang_equals,
+	equals,
+	double_star,
+	rbrace,
+	lbrace,
+	semicolon,
+	rbracket,
+	lbracket,
+	colon,
+	less,
+	less_equals,
+	greater,
+	greater_equals,
+	f32,
+	comma,
+	str,
+	percent,
+	plus_equals,
+	minus_equals,
+	star_equals,
+	slash_equals,
+	i64,
+	double_star_equals,
+	percent_equals,
+	hash,
+	dot,
+	f64,
+	double_less,
+	double_greater,
+	amp,
+	pipe,
+	caret,
+	bang,
+	double_less_equals,
+	double_greater_equals,
+	amp_equals,
+	caret_equals,
+	pipe_equals,
+	double_colon,
+	matmul,
+	comment,
+	question,
+	keyword,
+}
+
+// A keyword can't be the name of an enum variant, so they have a trailing `_`
+enum Keyword
+{
+	none,
+	true_,
+	false_,
+	not_,
+	and_,
+	or_,
+	let_,
+	if_,
+	else_,
+	for_,
+	in_,
+	while_,
+	fn_,
+	struct_,
+	enum_,
+	include_,
+	return_,
+	break_,
+	continue_,
+	use_,
+	const_,
+	switch_,
+	case_,
+	default_,
+	when_,
+	null_,
 }
 
 // The type of a literal, from its apostrophe suffix
 enum NumType
 {
-	unknown_type,
-	i32_type,
-	i64_type,
-	f32_type,
-	f64_type,
+	unknown,
+	i32,
+	i64,
+	f32,
+	f64,
 }
 
 //==============================================================================
 
 // Like syntax_token_t.  Only one of the literal values is meaningful, as
-// indicated by `kind`.  `has_val` is set for the literals
+// indicated by `kind`.  `has_val` is set for the literals.  `keyword` is only
+// meaningful if `kind` is `keyword`
 struct Token
 {
 	kind: TokenKind,
+	keyword: Keyword,
 	pos: i32,
 	text: str,
 	has_val: bool,
@@ -129,6 +145,7 @@ fn new_token(kind: TokenKind, pos: i32, text: str): Token
 	return Token
 	{
 		kind = kind,
+		keyword = Keyword.none,
 		pos = pos,
 		text = text,
 		has_val = false,
@@ -140,9 +157,16 @@ fn new_token(kind: TokenKind, pos: i32, text: str): Token
 	};
 }
 
+fn new_keyword_token(pos: i32, text: str, keyword: Keyword): Token
+{
+	let token = new_token(TokenKind.keyword, pos, text);
+	token.keyword = keyword;
+	return token;
+}
+
 fn new_i32_token(pos: i32, text: str, val: i32): Token
 {
-	let token = new_token(TokenKind.i32_token, pos, text);
+	let token = new_token(TokenKind.i32, pos, text);
 	token.has_val = true;
 	token.i32_ = val;
 	return token;
@@ -150,7 +174,7 @@ fn new_i32_token(pos: i32, text: str, val: i32): Token
 
 fn new_i64_token(pos: i32, text: str, val: i64): Token
 {
-	let token = new_token(TokenKind.i64_token, pos, text);
+	let token = new_token(TokenKind.i64, pos, text);
 	token.has_val = true;
 	token.i64_ = val;
 	return token;
@@ -158,7 +182,7 @@ fn new_i64_token(pos: i32, text: str, val: i64): Token
 
 fn new_f32_token(pos: i32, text: str, val: f32): Token
 {
-	let token = new_token(TokenKind.f32_token, pos, text);
+	let token = new_token(TokenKind.f32, pos, text);
 	token.has_val = true;
 	token.f32_ = val;
 	return token;
@@ -166,7 +190,7 @@ fn new_f32_token(pos: i32, text: str, val: f32): Token
 
 fn new_f64_token(pos: i32, text: str, val: f64): Token
 {
-	let token = new_token(TokenKind.f64_token, pos, text);
+	let token = new_token(TokenKind.f64, pos, text);
 	token.has_val = true;
 	token.f64_ = val;
 	return token;
@@ -174,7 +198,7 @@ fn new_f64_token(pos: i32, text: str, val: f64): Token
 
 fn new_str_token(pos: i32, text: str, val: str): Token
 {
-	let token = new_token(TokenKind.str_token, pos, text);
+	let token = new_token(TokenKind.str, pos, text);
 	token.has_val = true;
 	token.str_ = val;
 	return token;
@@ -189,7 +213,7 @@ struct TokenVec
 	cap: i32,
 	data: [Token; :],
 
-	fn push(token: Token)
+	fn push(token: &const Token)
 	{
 		if len >= cap
 		{
@@ -197,10 +221,7 @@ struct TokenVec
 			if cap > 0
 				new_cap = cap * 2;
 
-			let new_data = [new_token(TokenKind.eof_token, 0, ""); new_cap];
-			for i in [0: len]
-				new_data[i] = data[i];
-
+			let new_data = [data, [new_token(TokenKind.eof, 0, ""); new_cap - cap]];
 			data = std::move(new_data);
 			cap = new_cap;
 		}
@@ -216,269 +237,44 @@ fn new_token_vec(): TokenVec
 	{
 		len = 0,
 		cap = 0,
-		data = [new_token(TokenKind.eof_token, 0, ""); 0],
+		data = [new_token(TokenKind.eof, 0, ""); 0],
 	};
 }
 
 //==============================================================================
 
-// len() and size() are i64, but a pos is an i32
-fn strlen(s: str): i32
-{
-	return i32(len(s));
-}
-
-// Syntran's `and` and `or` don't short-circuit, so `i < n and s[i] == "x"` reads
-// past the end of `s`.  This gets a char, or char(0) if `i` is out of range
-fn at(s: str, i: i32): str
-{
-	if i < 0 or i >= strlen(s)
-		return char(0);
-	return s[i];
-}
-
-// Character classes, c.f. src/utils_impl.f90.  A `c` is a str of length 1
-fn is_digit(c: str): bool
-{
-	return "0" <= c and c <= "9";
-}
-
-fn is_digit_under(c: str): bool
-{
-	return is_digit(c) or c == "_";
-}
-
-fn is_hex(c: str): bool
-{
-	return is_digit(c) or ("a" <= c and c <= "f") or ("A" <= c and c <= "F");
-}
-
-fn is_hex_under(c: str): bool
-{
-	return is_hex(c) or c == "_";
-}
-
-fn is_oct_under(c: str): bool
-{
-	return ("0" <= c and c <= "7") or c == "_";
-}
-
-fn is_bin_under(c: str): bool
-{
-	return c == "0" or c == "1" or c == "_";
-}
-
-fn is_sign(c: str): bool
-{
-	return c == "+" or c == "-";
-}
-
-fn is_expo(c: str): bool
-{
-	return c == "d" or c == "e" or c == "D" or c == "E";
-}
-
-fn is_float_under(c: str): bool
-{
-	return is_digit(c) or is_sign(c) or is_expo(c) or c == "." or c == "_";
-}
-
-fn is_letter(c: str): bool
-{
-	return ("a" <= c and c <= "z") or ("A" <= c and c <= "Z");
-}
-
-fn is_alphanum(c: str): bool
-{
-	return is_letter(c) or is_digit(c);
-}
-
-fn is_alphanum_under(c: str): bool
-{
-	return is_alphanum(c) or c == "_";
-}
-
-// tab, line feed, vertical tab, carriage return, and space
-fn is_whitespace(c: str): bool
-{
-	return c == char(9) or c == char(10) or c == char(11) or c == char(13) or c == " ";
-}
-
-// Remove all occurrences of the char `ch` from `s`
-fn rm_char(s: str, ch: str): str
-{
-	let out = "";
-	for i in [0: strlen(s)]
-		if s[i] != ch
-			out += s[i];
-	return out;
-}
-
-// Strip leading zeros, but leave 1 digit, so "000" is "0"
-fn rm_leading_zeros(s: str): str
-{
-	if strlen(s) == 0
-		return "";
-
-	let i = 0;
-	while i < strlen(s) - 1
-	{
-		if s[i] != "0"
-			break;
-		i += 1;
-	}
-	return s[i:];
-}
-
-fn get_keyword_kind(text: str): TokenKind
+// The keyword that `text` is, or Keyword.none for an identifier
+fn get_keyword(text: &const str): Keyword
 {
 	switch text
 	{
-		case "true"     { return TokenKind.true_keyword; }
-		case "false"    { return TokenKind.false_keyword; }
-		case "not"      { return TokenKind.not_keyword; }
-		case "and"      { return TokenKind.and_keyword; }
-		case "or"       { return TokenKind.or_keyword; }
-		case "let"      { return TokenKind.let_keyword; }
-		case "if"       { return TokenKind.if_keyword; }
-		case "else"     { return TokenKind.else_keyword; }
-		case "for"      { return TokenKind.for_keyword; }
-		case "in"       { return TokenKind.in_keyword; }
-		case "while"    { return TokenKind.while_keyword; }
-		case "fn"       { return TokenKind.fn_keyword; }
-		case "struct"   { return TokenKind.struct_keyword; }
-		case "enum"     { return TokenKind.enum_keyword; }
-		case "include"  { return TokenKind.include_keyword; }
-		case "return"   { return TokenKind.return_keyword; }
-		case "break"    { return TokenKind.break_keyword; }
-		case "continue" { return TokenKind.continue_keyword; }
-		case "use"      { return TokenKind.use_keyword; }
-		case "const"    { return TokenKind.const_keyword; }
-		case "switch"   { return TokenKind.switch_keyword; }
-		case "case"     { return TokenKind.case_keyword; }
-		case "default"  { return TokenKind.default_keyword; }
-		case "when"     { return TokenKind.when_keyword; }
-		case "null"     { return TokenKind.null_keyword; }
+		case "true"     { return Keyword.true_; }
+		case "false"    { return Keyword.false_; }
+		case "not"      { return Keyword.not_; }
+		case "and"      { return Keyword.and_; }
+		case "or"       { return Keyword.or_; }
+		case "let"      { return Keyword.let_; }
+		case "if"       { return Keyword.if_; }
+		case "else"     { return Keyword.else_; }
+		case "for"      { return Keyword.for_; }
+		case "in"       { return Keyword.in_; }
+		case "while"    { return Keyword.while_; }
+		case "fn"       { return Keyword.fn_; }
+		case "struct"   { return Keyword.struct_; }
+		case "enum"     { return Keyword.enum_; }
+		case "include"  { return Keyword.include_; }
+		case "return"   { return Keyword.return_; }
+		case "break"    { return Keyword.break_; }
+		case "continue" { return Keyword.continue_; }
+		case "use"      { return Keyword.use_; }
+		case "const"    { return Keyword.const_; }
+		case "switch"   { return Keyword.switch_; }
+		case "case"     { return Keyword.case_; }
+		case "default"  { return Keyword.default_; }
+		case "when"     { return Keyword.when_; }
+		case "null"     { return Keyword.null_; }
 	}
-	return TokenKind.identifier_token;
-}
-
-//==============================================================================
-
-// The value of a hex, octal, or binary digit
-fn digit_val(c: str): i64
-{
-	if is_digit(c)
-		return i64(c) - 48;
-	if "a" <= c and c <= "f"
-		return i64(c) - 87;
-	return i64(c) - 55;
-}
-
-// The number of bits that it takes to hold a digit, which is < 16
-fn bit_len(d: i64): i32
-{
-	let n = 0;
-	let x = d;
-	while x > 0
-	{
-		n += 1;
-		x = x >> 1;
-	}
-	return n;
-}
-
-// The number of significant bits in a string of hex, octal, or binary digits,
-// where `k` is the number of bits per digit.  There are no leading zeros
-// except for a lone "0"
-fn sig_bits(digits: str, k: i32): i32
-{
-	if digits == "0"
-		return 0;
-	return bit_len(digit_val(digits[0])) + k * (strlen(digits) - 1);
-}
-
-// Digits to a value, as the bits of an i64, for a number of up to 64 bits
-fn radix_val(digits: str, k: i32): i64
-{
-	let val = 0'i64;
-	for i in [0: strlen(digits)]
-		val = (val << i64(k)) | digit_val(digits[i]);
-	return val;
-}
-
-// Wrap an i64 that holds the bits of an unsigned 32-bit number as an i32
-fn to_i32(val: i64): i32
-{
-	if val >= 2147483648'i64
-		return i32(val - 4294967296'i64);
-	return i32(val);
-}
-
-// Decimal digits to a value, or -1 if there are none or it doesn't fit in an i64
-fn dec_val(digits: str): i64
-{
-	if strlen(digits) == 0
-		return -1'i64;
-
-	let imax = 9223372036854775807'i64;
-	let val = 0'i64;
-	for i in [0: strlen(digits)]
-	{
-		let d = i64(digits[i]) - 48;
-		if val > (imax - d) / 10
-			return -1'i64;
-		val = val * 10 + d;
-	}
-	return val;
-}
-
-// Would a Fortran list-directed read accept `s` as a real number?  The lexer
-// takes the chars for a float literal greedily, so there can be too many dots,
-// exponents, etc.  Syntran's parse_f32() and parse_f64() are a runtime error
-// for those, but the lexer needs a diagnostic instead.  The chars of `s` are
-// already only digits, `.`, `d`, `e`, `+`, and `-`, and a sign only comes right
-// after an exponent letter
-fn is_real(s: str): bool
-{
-	let i = 0;
-	let n = strlen(s);
-
-	let ndigits = 0;
-	while is_digit(at(s, i))
-	{
-		ndigits += 1;
-		i += 1;
-	}
-	if at(s, i) == "."
-	{
-		i += 1;
-		while is_digit(at(s, i))
-		{
-			ndigits += 1;
-			i += 1;
-		}
-	}
-	if ndigits == 0
-		return false;
-
-	if i == n
-		return true;
-
-	if not is_expo(at(s, i))
-		return false;
-	i += 1;
-
-	if is_sign(at(s, i))
-		i += 1;
-
-	let nexp = 0;
-	while is_digit(at(s, i))
-	{
-		nexp += 1;
-		i += 1;
-	}
-	return nexp > 0 and i == n;
+	return Keyword.none;
 }
 
 //==============================================================================
@@ -501,33 +297,19 @@ struct Lexer
 	pos: i32,
 
 	// Diagnostic codes
-	diags: [str; :],
-	ndiags: i32,
+	diags: StrVec,
 
-	fn push_diag(code: str)
+	fn push_diag(code: &const str)
 	{
-		if ndiags >= i32(size(diags))
-		{
-			let new_cap = 4;
-			if i32(size(diags)) > 0
-				new_cap = i32(size(diags)) * 2;
-
-			let new_diags = [""; new_cap];
-			for i in [0: ndiags]
-				new_diags[i] = diags[i];
-
-			diags = std::move(new_diags);
-		}
-		diags[ndiags] = code;
-		ndiags += 1;
+		diags.push(code);
 		return;
 	}
 
 	// Get the char `offset` from the current one, or char(0) if it's out of range
 	const fn peek(offset: i32): str
 	{
-		let i = pos + offset;
-		if i < 0 or i >= strlen(text)
+		const i = pos + offset;
+		if i < 0 or i >= len(text)
 			return char(0);
 		return text[i];
 	}
@@ -550,8 +332,8 @@ struct Lexer
 		if a < 0
 			a = 0;
 		let b = pos + end_;
-		if b > strlen(text)
-			b = strlen(text);
+		if b > len(text)
+			b = len(text);
 		if b <= a
 			return "";
 		return text[a: b];
@@ -598,7 +380,7 @@ struct Lexer
 	// (allow_float is false for hex/octal/binary, which only accept i32/i64)
 	fn lex_type_suffix(allow_float: bool): Suffix
 	{
-		let sfx = Suffix{type = NumType.unknown_type, suffix = "", start = pos, end_ = pos};
+		let sfx = Suffix{type = NumType.unknown, suffix = "", start = pos, end_ = pos};
 
 		if current() != "'"
 			return sfx;
@@ -613,21 +395,21 @@ struct Lexer
 
 		switch sfx.suffix
 		{
-			case "i32" { sfx.type = NumType.i32_type; }
-			case "i64" { sfx.type = NumType.i64_type; }
+			case "i32" { sfx.type = NumType.i32; }
+			case "i64" { sfx.type = NumType.i64; }
 			case "f32"
 			{
 				if allow_float
-					sfx.type = NumType.f32_type;
+					sfx.type = NumType.f32;
 			}
 			case "f64"
 			{
 				if allow_float
-					sfx.type = NumType.f64_type;
+					sfx.type = NumType.f64;
 			}
 		}
 
-		if sfx.type == NumType.unknown_type
+		if sfx.type == NumType.unknown
 			push_diag("E18");
 
 		return sfx;
@@ -636,7 +418,7 @@ struct Lexer
 	// Lex a hex (k = 4), octal (k = 3), or binary (k = 1) literal.  The
 	// Fortran lexer has a copy of this for each radix.  `err32` and `err64` are
 	// the codes of the diagnostics for a value that doesn't fit
-	fn lex_radix(start: i32, radix_name: str, k: i32, err32: str, err64: str): Token
+	fn lex_radix(start: i32, radix_name: &const str, k: i32, err32: &const str, err64: &const str): Token
 	{
 		pos += 2;  // skip the prefix
 
@@ -656,31 +438,31 @@ struct Lexer
 			while is_bin_under(current())
 				pos += 1;
 		}
-		let end_ = pos;
+		const end_ = pos;
 
-		let sfx = lex_type_suffix(false);
+		const sfx = lex_type_suffix(false);
 
-		let lit = text[start: end_];
-		let digits = rm_leading_zeros(rm_char(lit[2:], "_"));
+		const lit = text[start: end_];
+		const digits = rm_leading_zeros(rm_char(lit[2:], "_"));
 
 		// The number of bits is how Fortran decides whether a value fits in its
 		// fixed-width i32 or i64 `read` of a BOZ literal.  An i32 has the same
 		// bits as the unsigned value, so 0xffffffff is -1
-		let nbits = sig_bits(digits, k);
+		const nbits = sig_bits(digits, k);
 
-		if sfx.type == NumType.i32_type
+		if sfx.type == NumType.i32
 		{
 			if nbits <= 32
 				return new_i32_token(start, lit, to_i32(radix_val(digits, k)));
 			push_diag(err32);
-			return new_token(TokenKind.bad_token, pos, lit);
+			return new_token(TokenKind.bad, pos, lit);
 		}
-		if sfx.type == NumType.i64_type
+		if sfx.type == NumType.i64
 		{
 			if nbits <= 64
 				return new_i64_token(start, lit, radix_val(digits, k));
 			push_diag(err64);
-			return new_token(TokenKind.bad_token, pos, lit);
+			return new_token(TokenKind.bad, pos, lit);
 		}
 
 		if nbits <= 32
@@ -688,7 +470,7 @@ struct Lexer
 		if nbits <= 64
 			return new_i64_token(start, lit, radix_val(digits, k));
 		push_diag(err64);
-		return new_token(TokenKind.bad_token, pos, lit);
+		return new_token(TokenKind.bad, pos, lit);
 	}
 
 	// Numeric decimal integer or float
@@ -705,7 +487,7 @@ struct Lexer
 
 			pos += 1;
 		}
-		let end_ = pos;
+		const end_ = pos;
 
 		// Legacy float-32 "f" type suffix
 		let float32 = false;
@@ -721,20 +503,20 @@ struct Lexer
 		}
 
 		// Preferred apostrophe type suffix
-		let sfx = lex_type_suffix(true);
+		const sfx = lex_type_suffix(true);
 
-		if float and (sfx.type == NumType.i32_type or sfx.type == NumType.i64_type)
+		if float and (sfx.type == NumType.i32 or sfx.type == NumType.i64)
 		{
 			// An integer suffix on a literal that's already shaped like a float
 			// is a different mistake than an out-of-range integer
 			push_diag("E104");
-			return new_token(TokenKind.bad_token, pos, text[start: sfx.end_]);
+			return new_token(TokenKind.bad, pos, text[start: sfx.end_]);
 		}
 
-		let lit = text[start: end_];
-		let strip = rm_char(lit, "_");
+		const lit = text[start: end_];
+		const strip = rm_char(lit, "_");
 
-		if sfx.type != NumType.unknown_type
+		if sfx.type != NumType.unknown
 		{
 			// Handle explicit apostrophe type ascription suffixes
 			return lex_typed(start, lit, strip, sfx.type);
@@ -763,49 +545,49 @@ struct Lexer
 			return new_f64_token(start, lit, std::parse_f64(strip));
 		}
 
-		let val = dec_val(strip);
-		if 0 <= val and val <= 2147483647
+		const val = dec_val(strip);
+		if 0 <= val and val <= 0x7fff_ffff
 			return new_i32_token(start, lit, i32(val));
 		if val >= 0
 			return new_i64_token(start, lit, val);
 
 		push_diag("E2");
-		return new_token(TokenKind.bad_token, pos, lit);
+		return new_token(TokenKind.bad, pos, lit);
 	}
 
 	// A decimal literal with an explicit type suffix
-	fn lex_typed(start: i32, lit: str, strip: str, type: NumType): Token
+	fn lex_typed(start: i32, lit: &const str, strip: &const str, type: NumType): Token
 	{
 		switch type
 		{
-			case NumType.f32_type
+			case NumType.f32
 			{
 				if is_real(strip)
 					return new_f32_token(start, lit, std::parse_f32(strip));
 				push_diag("E15");
 			}
-			case NumType.f64_type
+			case NumType.f64
 			{
 				if is_real(strip)
 					return new_f64_token(start, lit, std::parse_f64(strip));
 				push_diag("E16");
 			}
-			case NumType.i32_type
+			case NumType.i32
 			{
-				let val = dec_val(strip);
-				if 0 <= val and val <= 2147483647
+				const val = dec_val(strip);
+				if 0 <= val and val <= 0x7fff_ffff
 					return new_i32_token(start, lit, i32(val));
 				push_diag("E1");
 			}
-			case NumType.i64_type
+			case NumType.i64
 			{
-				let val = dec_val(strip);
+				const val = dec_val(strip);
 				if val >= 0
 					return new_i64_token(start, lit, val);
 				push_diag("E2");
 			}
 		}
-		return new_token(TokenKind.bad_token, pos, lit);
+		return new_token(TokenKind.bad, pos, lit);
 	}
 
 	// Raw string literal: r"...", r#"..."#, r##"..."##, etc.  Count the '#'
@@ -818,7 +600,7 @@ struct Lexer
 
 		let val = "";
 		let terminated = false;
-		while pos < strlen(text)
+		while pos < len(text)
 		{
 			if current() == """"
 			{
@@ -844,12 +626,12 @@ struct Lexer
 			pos += 1;
 		}
 
-		let lit = text[start: pos];
+		const lit = text[start: pos];
 
 		if not terminated
 		{
 			push_diag("E11");
-			return new_token(TokenKind.bad_token, pos, lit);
+			return new_token(TokenKind.bad, pos, lit);
 		}
 		return new_str_token(start, lit, val);
 	}
@@ -861,13 +643,13 @@ struct Lexer
 
 		let val = "";
 		let terminated = false;
-		while pos < strlen(text)
+		while pos < len(text)
 		{
 			// Make a quote literal by doubling it
 			if current() == """"
 			{
 				pos += 1;
-				if pos >= strlen(text)
+				if pos >= len(text)
 				{
 					terminated = true;
 					break;
@@ -883,12 +665,12 @@ struct Lexer
 			pos += 1;
 		}
 
-		let lit = text[start: pos];
+		const lit = text[start: pos];
 
 		if not terminated
 		{
 			push_diag("E10");
-			return new_token(TokenKind.bad_token, pos, lit);
+			return new_token(TokenKind.bad, pos, lit);
 		}
 		return new_str_token(start, lit, val);
 	}
@@ -896,10 +678,10 @@ struct Lexer
 	// Get the next token.  c.f. lex_impl() and lex_wrap()
 	fn lex(): Token
 	{
-		if pos >= strlen(text)
-			return new_token(TokenKind.eof_token, pos, char(0));
+		if pos >= len(text)
+			return new_token(TokenKind.eof, pos, char(0));
 
-		let start = pos;
+		const start = pos;
 
 		if get_text(0, 2) == "0x" and has_radix_digit("x")
 			return lex_radix(start, "hex", 4, "E3", "E4");
@@ -930,17 +712,20 @@ struct Lexer
 		{
 			while is_whitespace(current())
 				pos += 1;
-			return new_token(TokenKind.whitespace_token, start, text[start: pos]);
+			return new_token(TokenKind.whitespace, start, text[start: pos]);
 		}
 
 		if is_letter(current()) or current() == "_"
 		{
 			while is_alphanum(current()) or current() == "_"
 				pos += 1;
-			let word = text[start: pos];
+			const word = text[start: pos];
 
 			// This block handles booleans as well as identifiers
-			return new_token(get_keyword_kind(word), start, word);
+			const keyword = get_keyword(word);
+			if keyword == Keyword.none
+				return new_token(TokenKind.identifier, start, word);
+			return new_keyword_token(start, word, keyword);
 		}
 
 		if pos == 0 and get_text(0, 2) == "#!"
@@ -948,7 +733,7 @@ struct Lexer
 			// Handle a special shebang `#!` case at the very beginning of the
 			// file and ignore the rest of the first line
 			read_single_line_comment();
-			return new_token(TokenKind.comment_token, start, text[start: pos]);
+			return new_token(TokenKind.comment, start, text[start: pos]);
 		}
 
 		// Operators.  Most of them are 1 or 2 chars, and a few are 3, in which
@@ -956,7 +741,7 @@ struct Lexer
 		// Every case falls through to the `pos += 1` at the end, including a
 		// comment, which skips the char after it, i.e. its line feed.  That's
 		// what the Fortran lexer does
-		let token = new_token(TokenKind.bad_token, pos, current());
+		let token = new_token(TokenKind.bad, pos, current());
 
 		switch current()
 		{
@@ -965,11 +750,11 @@ struct Lexer
 				if lookahead() == "="
 				{
 					pos += 1;
-					token = new_token(TokenKind.plus_equals_token, pos, "+=");
+					token = new_token(TokenKind.plus_equals, pos, "+=");
 				}
 				else
 				{
-					token = new_token(TokenKind.plus_token, pos, current());
+					token = new_token(TokenKind.plus, pos, current());
 				}
 			}
 			case "-"
@@ -977,11 +762,11 @@ struct Lexer
 				if lookahead() == "="
 				{
 					pos += 1;
-					token = new_token(TokenKind.minus_equals_token, pos, "-=");
+					token = new_token(TokenKind.minus_equals, pos, "-=");
 				}
 				else
 				{
-					token = new_token(TokenKind.minus_token, pos, current());
+					token = new_token(TokenKind.minus, pos, current());
 				}
 			}
 			case "*"
@@ -991,22 +776,22 @@ struct Lexer
 					if peek(2) == "="
 					{
 						pos += 2;
-						token = new_token(TokenKind.double_star_equals_token, pos, "**=");
+						token = new_token(TokenKind.double_star_equals, pos, "**=");
 					}
 					else
 					{
 						pos += 1;
-						token = new_token(TokenKind.double_star_token, pos, "**");
+						token = new_token(TokenKind.double_star, pos, "**");
 					}
 				}
 				else if lookahead() == "="
 				{
 					pos += 1;
-					token = new_token(TokenKind.star_equals_token, pos, "*=");
+					token = new_token(TokenKind.star_equals, pos, "*=");
 				}
 				else
 				{
-					token = new_token(TokenKind.star_token, pos, current());
+					token = new_token(TokenKind.star, pos, current());
 				}
 			}
 			case "/"
@@ -1014,16 +799,16 @@ struct Lexer
 				if lookahead() == "/"
 				{
 					read_single_line_comment();
-					token = new_token(TokenKind.comment_token, start, text[start: pos]);
+					token = new_token(TokenKind.comment, start, text[start: pos]);
 				}
 				else if lookahead() == "="
 				{
 					pos += 1;
-					token = new_token(TokenKind.slash_equals_token, pos, "/=");
+					token = new_token(TokenKind.slash_equals, pos, "/=");
 				}
 				else
 				{
-					token = new_token(TokenKind.slash_token, pos, current());
+					token = new_token(TokenKind.slash, pos, current());
 				}
 			}
 			case "%"
@@ -1031,83 +816,83 @@ struct Lexer
 				if lookahead() == "="
 				{
 					pos += 1;
-					token = new_token(TokenKind.percent_equals_token, pos, "%=");
+					token = new_token(TokenKind.percent_equals, pos, "%=");
 				}
 				else
 				{
-					token = new_token(TokenKind.percent_token, pos, current());
+					token = new_token(TokenKind.percent, pos, current());
 				}
 			}
 			case "@"
 			{
-				token = new_token(TokenKind.matmul_token, pos, current());
+				token = new_token(TokenKind.matmul, pos, current());
 			}
 			case "("
 			{
-				token = new_token(TokenKind.lparen_token, pos, current());
+				token = new_token(TokenKind.lparen, pos, current());
 			}
 			case ")"
 			{
-				token = new_token(TokenKind.rparen_token, pos, current());
+				token = new_token(TokenKind.rparen, pos, current());
 			}
 			case "{"
 			{
-				token = new_token(TokenKind.lbrace_token, pos, current());
+				token = new_token(TokenKind.lbrace, pos, current());
 			}
 			case "}"
 			{
-				token = new_token(TokenKind.rbrace_token, pos, current());
+				token = new_token(TokenKind.rbrace, pos, current());
 			}
 			case "["
 			{
-				token = new_token(TokenKind.lbracket_token, pos, current());
+				token = new_token(TokenKind.lbracket, pos, current());
 			}
 			case "]"
 			{
-				token = new_token(TokenKind.rbracket_token, pos, current());
+				token = new_token(TokenKind.rbracket, pos, current());
 			}
 			case ":"
 			{
 				if lookahead() == ":"
 				{
 					pos += 1;
-					token = new_token(TokenKind.double_colon_token, pos, "::");
+					token = new_token(TokenKind.double_colon, pos, "::");
 				}
 				else
 				{
-					token = new_token(TokenKind.colon_token, pos, current());
+					token = new_token(TokenKind.colon, pos, current());
 				}
 			}
 			case ";"
 			{
-				token = new_token(TokenKind.semicolon_token, pos, current());
+				token = new_token(TokenKind.semicolon, pos, current());
 			}
 			case ","
 			{
-				token = new_token(TokenKind.comma_token, pos, current());
+				token = new_token(TokenKind.comma, pos, current());
 			}
 			case "."
 			{
-				token = new_token(TokenKind.dot_token, pos, current());
+				token = new_token(TokenKind.dot, pos, current());
 			}
 			case "#"
 			{
-				token = new_token(TokenKind.hash_token, pos, current());
+				token = new_token(TokenKind.hash, pos, current());
 			}
 			case "?"
 			{
-				token = new_token(TokenKind.question_token, pos, current());
+				token = new_token(TokenKind.question, pos, current());
 			}
 			case "="
 			{
 				if lookahead() == "="
 				{
 					pos += 1;
-					token = new_token(TokenKind.double_equals_token, pos, "==");
+					token = new_token(TokenKind.double_equals, pos, "==");
 				}
 				else
 				{
-					token = new_token(TokenKind.equals_token, pos, current());
+					token = new_token(TokenKind.equals, pos, current());
 				}
 			}
 			case "!"
@@ -1115,11 +900,11 @@ struct Lexer
 				if lookahead() == "="
 				{
 					pos += 1;
-					token = new_token(TokenKind.bang_equals_token, pos, "!=");
+					token = new_token(TokenKind.bang_equals, pos, "!=");
 				}
 				else
 				{
-					token = new_token(TokenKind.bang_token, pos, current());
+					token = new_token(TokenKind.bang, pos, current());
 				}
 			}
 			case "<"
@@ -1127,24 +912,24 @@ struct Lexer
 				if lookahead() == "="
 				{
 					pos += 1;
-					token = new_token(TokenKind.less_equals_token, pos, "<=");
+					token = new_token(TokenKind.less_equals, pos, "<=");
 				}
 				else if lookahead() == "<"
 				{
 					if peek(2) == "="
 					{
 						pos += 2;
-						token = new_token(TokenKind.double_less_equals_token, pos, "<<=");
+						token = new_token(TokenKind.double_less_equals, pos, "<<=");
 					}
 					else
 					{
 						pos += 1;
-						token = new_token(TokenKind.double_less_token, pos, "<<");
+						token = new_token(TokenKind.double_less, pos, "<<");
 					}
 				}
 				else
 				{
-					token = new_token(TokenKind.less_token, pos, current());
+					token = new_token(TokenKind.less, pos, current());
 				}
 			}
 			case ">"
@@ -1152,24 +937,24 @@ struct Lexer
 				if lookahead() == "="
 				{
 					pos += 1;
-					token = new_token(TokenKind.greater_equals_token, pos, ">=");
+					token = new_token(TokenKind.greater_equals, pos, ">=");
 				}
 				else if lookahead() == ">"
 				{
 					if peek(2) == "="
 					{
 						pos += 2;
-						token = new_token(TokenKind.double_greater_equals_token, pos, ">>=");
+						token = new_token(TokenKind.double_greater_equals, pos, ">>=");
 					}
 					else
 					{
 						pos += 1;
-						token = new_token(TokenKind.double_greater_token, pos, ">>");
+						token = new_token(TokenKind.double_greater, pos, ">>");
 					}
 				}
 				else
 				{
-					token = new_token(TokenKind.greater_token, pos, current());
+					token = new_token(TokenKind.greater, pos, current());
 				}
 			}
 			case "^"
@@ -1177,11 +962,11 @@ struct Lexer
 				if lookahead() == "="
 				{
 					pos += 1;
-					token = new_token(TokenKind.caret_equals_token, pos, "^=");
+					token = new_token(TokenKind.caret_equals, pos, "^=");
 				}
 				else
 				{
-					token = new_token(TokenKind.caret_token, pos, current());
+					token = new_token(TokenKind.caret, pos, current());
 				}
 			}
 			case "|"
@@ -1189,11 +974,11 @@ struct Lexer
 				if lookahead() == "="
 				{
 					pos += 1;
-					token = new_token(TokenKind.pipe_equals_token, pos, "|=");
+					token = new_token(TokenKind.pipe_equals, pos, "|=");
 				}
 				else
 				{
-					token = new_token(TokenKind.pipe_token, pos, current());
+					token = new_token(TokenKind.pipe, pos, current());
 				}
 			}
 			case "&"
@@ -1201,11 +986,11 @@ struct Lexer
 				if lookahead() == "="
 				{
 					pos += 1;
-					token = new_token(TokenKind.amp_equals_token, pos, "&=");
+					token = new_token(TokenKind.amp_equals, pos, "&=");
 				}
 				else
 				{
-					token = new_token(TokenKind.amp_token, pos, current());
+					token = new_token(TokenKind.amp, pos, current());
 				}
 			}
 			default
@@ -1225,8 +1010,7 @@ fn new_lexer(text: str): Lexer
 	{
 		text = text,
 		pos = 0,
-		diags = [""; 0],
-		ndiags = 0,
+		diags = new_str_vec(),
 	};
 }
 
@@ -1237,9 +1021,9 @@ fn lex_all(lexer: &Lexer): TokenVec
 	let tokens = new_token_vec();
 	while true
 	{
-		let token = lexer.lex();
+		const token = lexer.lex();
 		tokens.push(token);
-		if token.kind == TokenKind.eof_token
+		if token.kind == TokenKind.eof
 			break;
 	}
 	return tokens;

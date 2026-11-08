@@ -16,12 +16,12 @@ use lex::*;
 // Escape a token's text or value so that a token is always one line with
 // tab-separated fields.  Bytes >= 128 are left alone.  Syntran strs have no
 // escapes, so a lone backslash is "\"
-fn escape(s: str): str
+fn escape(s: &const str): str
 {
 	let out = "";
 	for i in [0: len(s)]
 	{
-		let c = s[i];
+		const c = s[i];
 		if c == r#"\"#
 			out += "\\";
 		else if c == char(10)
@@ -38,24 +38,35 @@ fn escape(s: str): str
 	return out;
 }
 
-// The name of a token kind, which is what `str()` makes of an enum without its
-// `TokenKind.` prefix, e.g. "plus_token"
-fn kind_name(kind: TokenKind): str
+// The name of an enum variant, which is what `str()` makes of an enum without its
+// `TokenKind.` prefix, and without the trailing `_` of a keyword, e.g. "plus"
+fn variant_name(s: &const str): str
 {
-	let s = str(kind);
 	let i = 0;
 	while s[i] != "."
 		i += 1;
-	return s[i + 1:];
+	const name = s[i + 1:];
+	if name[len(name) - 1] == "_"
+		return name[0: len(name) - 1];
+	return name;
 }
 
-fn read_text(path: str): str
+// The name of a token's kind in the Fortran lexer, e.g. "plus_token" or
+// "let_keyword".  The enums here leave off the suffixes
+fn kind_name(token: &const Token): str
+{
+	if token.kind == TokenKind.keyword
+		return variant_name(str(token.keyword)) + "_keyword";
+	return variant_name(str(token.kind)) + "_token";
+}
+
+fn read_text(path: &const str): str
 {
 	let f = std::open(path, "r");
 	let text = "";
 	while true
 	{
-		let line = readln(f);
+		const line = readln(f);
 		if f.eof
 		{
 			// Reading past the end is an empty line.  But a last line without a
@@ -71,40 +82,40 @@ fn read_text(path: str): str
 
 fn main()
 {
-	let args = std::args();
+	const args = std::args();
 	if size(args) < 1
 	{
 		println("usage: lex-dump.syntran -- <file>");
 		std::exit(1);
 	}
 
-	let text = read_text(args[0]);
+	const text = read_text(args[0]);
 
 	let lexer = new_lexer(text);
-	let tokens = lex_all(&lexer);
+	const tokens = lex_all(&lexer);
 
-	let tab = char(9);
+	const tab = char(9);
 	for i in [0: tokens.len]
 	{
-		let t = tokens.data[i];
-		let line = str(t.pos) + tab + kind_name(t.kind) + tab + escape(t.text);
+		const t = tokens.data[i];
+		let line = str(t.pos) + tab + kind_name(t) + tab + escape(t.text);
 
-		if t.kind == TokenKind.i32_token
+		if t.kind == TokenKind.i32
 			line += tab + str(t.i32_);
-		else if t.kind == TokenKind.i64_token
+		else if t.kind == TokenKind.i64
 			line += tab + str(t.i64_);
-		else if t.kind == TokenKind.f32_token
+		else if t.kind == TokenKind.f32
 			line += tab + str(t.f32_);
-		else if t.kind == TokenKind.f64_token
+		else if t.kind == TokenKind.f64
 			line += tab + str(t.f64_);
-		else if t.kind == TokenKind.str_token
+		else if t.kind == TokenKind.str
 			line += tab + escape(t.str_);
 
 		println(line);
 	}
 
-	for i in [0: lexer.ndiags]
-		println("diag ", lexer.diags[i]);
+	for i in [0: lexer.diags.len]
+		println("diag ", lexer.diags.data[i]);
 }
 
 main();
