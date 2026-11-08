@@ -3102,7 +3102,12 @@ recursive function emit_intr_call(em, node) result(s)
 		s = 'achar('//convert(a1, elem_type(node%args(1)%val), i32_type)//')'
 
 	case ('parse_i32', 'parse_i64', 'parse_f32', 'parse_f64', 'parse_bool')
-		s = 'rt_'//base//'('//a1//')'
+		! With an `ok` arg, a2 is the variable that rt_parse_*() sets
+		if (n >= 2) then
+			s = 'rt_'//base//'('//a1//', '//a2//')'
+		else
+			s = 'rt_'//base//'('//a1//')'
+		end if
 
 	case ('size')
 		if (n == 2) then
@@ -3204,6 +3209,9 @@ recursive function emit_intr_call(em, node) result(s)
 
 	case ('exists')
 		s = 'rt_exists('//a1//')'
+
+	case ('read_file')
+		s = 'rt_read_file('//a1//')'
 
 	case ('move')
 		! The temp takes the array or str out of the variable with move_alloc(),

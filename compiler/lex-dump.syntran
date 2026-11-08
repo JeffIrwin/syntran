@@ -6,10 +6,6 @@
 // Usage:
 //
 //     syntran -q compiler/lex-dump.syntran -- <file>
-//
-// Syntran has no way to read a whole file as a str.  readln() drops the line
-// feed at the end of each line, so every line is given one back, except for a
-// last line that doesn't have one, which is told apart by `f.eof` (see below)
 
 use lex::*;
 
@@ -60,26 +56,6 @@ fn kind_name(token: &const Token): str
 	return variant_name(str(token.kind)) + "_token";
 }
 
-fn read_text(path: &const str): str
-{
-	let f = std::open(path, "r");
-	let text = "";
-	while true
-	{
-		const line = readln(f);
-		if f.eof
-		{
-			// Reading past the end is an empty line.  But a last line without a
-			// line feed sets eof as soon as it's read, and it isn't empty
-			text += line;
-			break;
-		}
-		text += line + char(10);
-	}
-	close(f);
-	return text;
-}
-
 fn main()
 {
 	const args = std::args();
@@ -89,7 +65,7 @@ fn main()
 		std::exit(1);
 	}
 
-	const text = read_text(args[0]);
+	const text = std::read_file(args[0]);
 
 	let lexer = new_lexer(text);
 	const tokens = lex_all(&lexer);

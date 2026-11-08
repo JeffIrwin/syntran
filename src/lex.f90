@@ -1031,6 +1031,28 @@ end subroutine read_single_line_comment
 
 !===============================================================================
 
+logical function is_line_end(text, i)
+
+	! Is the char `i` of `text` the end of a line, for counting lines in
+	! new_lexer()?  It's a line feed, or the CR that is not the first half of a
+	! CRLF, so a CRLF is one line end, like a line feed alone.  The last char
+	! always ends a line, even without a line feed
+
+	character(len = *), intent(in) :: text
+	integer, intent(in) :: i
+
+	!********
+
+	is_line_end = i == len(text) .or. text(i:i) == line_feed
+
+	if (text(i:i) == carriage_return .and. i < len(text)) then
+		is_line_end = is_line_end .or. text(i+1: i+1) /= line_feed
+	end if
+
+end function is_line_end
+
+!===============================================================================
+
 function new_lexer(text, src_file, unit_) result(lexer)
 
 	character(len = *) :: text, src_file
@@ -1065,20 +1087,7 @@ function new_lexer(text, src_file, unit_) result(lexer)
 		i = i + 1
 		if (i > len(text)) exit !outer
 
-		if (i == len(text) .or. &
-			text(i:i) == line_feed .or. &
-			text(i:i) == carriage_return) then
-
-			nlines = nlines + 1
-
-			!do
-			!	i = i + 1
-			!	if (i > len(text)) exit outer
-			!	if (text(i:i) /= line_feed .and. &
-			!	    text(i:i) /= carriage_return) exit
-			!end do
-
-		end if
+		if (is_line_end(text, i)) nlines = nlines + 1
 
 	end do !outer
 
@@ -1094,9 +1103,7 @@ function new_lexer(text, src_file, unit_) result(lexer)
 		i = i + 1
 		if (i > len(text)) exit
 
-		if (i == len(text) .or. &
-			text(i:i) == line_feed .or. &
-			text(i:i) == carriage_return) then
+		if (is_line_end(text, i)) then
 
 			nlines = nlines + 1
 
