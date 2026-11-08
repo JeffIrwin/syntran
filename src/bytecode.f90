@@ -541,6 +541,9 @@ module syntran__bytecode_m
 	! std::system(cmd)
 	integer, parameter :: INTR_SYSTEM = 164
 
+	! std::read_file(path)
+	integer, parameter :: INTR_READ_FILE = 165
+
 	!********
 
 	! A single bytecode instruction.  Kept as a plain POD record (no allocatable
@@ -1122,6 +1125,7 @@ pure integer function intr_id_from_name(name) result(id)
 	case ("hasenv");         id = INTR_HASENV
 	case ("system");         id = INTR_SYSTEM
 	case ("exists");         id = INTR_EXISTS
+	case ("read_file");      id = INTR_READ_FILE
 	case ("try_open");       id = INTR_TRY_OPEN
 	case ("print_trace");    id = INTR_PRINT_TRACE
 	case ("stack_trace");    id = INTR_STACK_TRACE

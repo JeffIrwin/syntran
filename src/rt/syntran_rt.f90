@@ -411,43 +411,66 @@ end function rt_reshape_str_4
 !===============================================================================
 
 ! Convert a string to a number, like the interpreter's parse_*() fns do.  A
-! string which isn't a number is a fatal error
+! string which isn't a number is a fatal error, unless there is an `ok` arg,
+! which is set to whether it parsed instead, and the result is 0 if it didn't
 
-function rt_parse_i32(s) result(r)
+subroutine rt_parse_check(good, ok, name, s)
+    logical, intent(in) :: good
+    logical, intent(out), optional :: ok
+    character(len = *), intent(in) :: name, s
+    if (present(ok)) then
+        ok = good
+    else if (.not. good) then
+        call rt_fatal(' cannot parse_' // name // '() for argument `' // s // '`')
+    end if
+end subroutine rt_parse_check
+
+function rt_parse_i32(s, ok) result(r)
     character(len = *), intent(in) :: s
+    logical, intent(out), optional :: ok
     integer(int32) :: r
     integer :: io
     read(s, *, iostat = io) r
-    if (io /= 0) call rt_fatal(' cannot parse_i32() for argument `'//s//'`')
+    if (io /= 0) r = 0
+    call rt_parse_check(io == 0, ok, 'i32', s)
 end function rt_parse_i32
 
-function rt_parse_i64(s) result(r)
+function rt_parse_i64(s, ok) result(r)
     character(len = *), intent(in) :: s
+    logical, intent(out), optional :: ok
     integer(int64) :: r
     integer :: io
     read(s, *, iostat = io) r
-    if (io /= 0) call rt_fatal(' cannot parse_i64() for argument `'//s//'`')
+    if (io /= 0) r = 0
+    call rt_parse_check(io == 0, ok, 'i64', s)
 end function rt_parse_i64
 
-function rt_parse_f32(s) result(r)
+function rt_parse_f32(s, ok) result(r)
     character(len = *), intent(in) :: s
+    logical, intent(out), optional :: ok
     real(real32) :: r
     integer :: io
     read(s, *, iostat = io) r
-    if (io /= 0) call rt_fatal(' cannot parse_f32() for argument `'//s//'`')
+    if (io /= 0) r = 0
+    call rt_parse_check(io == 0, ok, 'f32', s)
 end function rt_parse_f32
 
-function rt_parse_f64(s) result(r)
+function rt_parse_f64(s, ok) result(r)
     character(len = *), intent(in) :: s
+    logical, intent(out), optional :: ok
     real(real64) :: r
     integer :: io
     read(s, *, iostat = io) r
-    if (io /= 0) call rt_fatal(' cannot parse_f64() for argument `'//s//'`')
+    if (io /= 0) r = 0
+    call rt_parse_check(io == 0, ok, 'f64', s)
 end function rt_parse_f64
 
-function rt_parse_bool(s) result(r)
+function rt_parse_bool(s, ok) result(r)
     character(len = *), intent(in) :: s
+    logical, intent(out), optional :: ok
     logical :: r
+    logical :: good
+    good = .true.
     select case (trim(adjustl(s)))
     case ('true')
         r = .true.
@@ -455,8 +478,9 @@ function rt_parse_bool(s) result(r)
         r = .false.
     case default
         r = .false.
-        call rt_fatal(' cannot parse_bool() for argument `'//s//'`')
+        good = .false.
     end select
+    call rt_parse_check(good, ok, 'bool', s)
 end function rt_parse_bool
 
 !===============================================================================
@@ -1301,6 +1325,25 @@ function rt_exists(path) result(r)
     logical :: r
     inquire(file = path, exist = r)
 end function rt_exists
+
+! The exact bytes of a file, for std::read_file()
+function rt_read_file(path) result(s)
+    character(len = *), intent(in) :: path
+    character(len = :), allocatable :: s
+    integer :: iu, io
+    integer(int64) :: n
+    open(newunit = iu, file = path, status = 'old', action = 'read', &
+        access = 'stream', form = 'unformatted', iostat = io)
+    if (io /= 0) call rt_fatal('cannot open file "' // path // '"')
+    inquire(unit = iu, size = n)
+    if (n < 0) call rt_fatal('cannot open file "' // path // '"')
+    allocate(character(len = n) :: s)
+    if (n > 0) then
+        read(iu, iostat = io) s
+        if (io /= 0) call rt_fatal('cannot open file "' // path // '"')
+    end if
+    close(iu)
+end function rt_read_file
 
 function rt_getenv(name) result(s)
     character(len = *), intent(in) :: name

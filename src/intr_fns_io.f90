@@ -28,7 +28,7 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 		char_fn, i32_sca_fn, i32_arr_fn, i64_sca_fn, i64_arr_fn, &
 		f32_sca_fn, f32_arr_fn, f64_sca_fn, f64_arr_fn, &
 		open_fn, readln_fn, writeln_fn, eof_fn, close_fn, exit_fn, &
-		getenv_fn, hasenv_fn, system_fn, exists_fn, try_open_fn, &
+		getenv_fn, hasenv_fn, system_fn, exists_fn, read_file_fn, try_open_fn, &
 		print_trace_fn, stack_trace_fn, caller_fn, print_fn, write_fn, format_fn, printf_fn, writef_fn
 
 	! std::read_<type>(): the stub that is registered as the std-only name, then
@@ -158,52 +158,29 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 	! Should this accept any type?  f32 can be converted implicitly so there
 	! shouldn't be a need for other types
 
-	parse_i32_fn%type%type = i32_type
-	allocate(parse_i32_fn%params(1))
-	allocate(parse_i32_fn%param_names%v(1))
-	parse_i32_fn%params(1)%type = str_type
-	parse_i32_fn%param_names%v(1)%s = "str"
+	! Each one takes an optional by-ref `ok`, see new_parse_fn()
 
+	parse_i32_fn = new_parse_fn(i32_type)
 	call fns%insert("parse_i32", parse_i32_fn, id_index)
 
 	!********
 
-	parse_i64_fn%type%type = i64_type
-	allocate(parse_i64_fn%params(1))
-	allocate(parse_i64_fn%param_names%v(1))
-	parse_i64_fn%params(1)%type = str_type
-	parse_i64_fn%param_names%v(1)%s = "str"
-
+	parse_i64_fn = new_parse_fn(i64_type)
 	call fns%insert("parse_i64", parse_i64_fn, id_index)
 
 	!********
 
-	parse_f32_fn%type%type = f32_type
-	allocate(parse_f32_fn%params(1))
-	allocate(parse_f32_fn%param_names%v(1))
-	parse_f32_fn%params(1)%type = str_type
-	parse_f32_fn%param_names%v(1)%s = "str"
-
+	parse_f32_fn = new_parse_fn(f32_type)
 	call fns%insert("parse_f32", parse_f32_fn, id_index)
 
 	!********
 
-	parse_f64_fn%type%type = f64_type
-	allocate(parse_f64_fn%params(1))
-	allocate(parse_f64_fn%param_names%v(1))
-	parse_f64_fn%params(1)%type = str_type
-	parse_f64_fn%param_names%v(1)%s = "str"
-
+	parse_f64_fn = new_parse_fn(f64_type)
 	call fns%insert("parse_f64", parse_f64_fn, id_index)
 
 	!********
 
-	parse_bool_fn%type%type = bool_type
-	allocate(parse_bool_fn%params(1))
-	allocate(parse_bool_fn%param_names%v(1))
-	parse_bool_fn%params(1)%type = str_type
-	parse_bool_fn%param_names%v(1)%s = "str"
-
+	parse_bool_fn = new_parse_fn(bool_type)
 	call fns%insert("parse_bool", parse_bool_fn, id_index)
 
 	!********
@@ -545,6 +522,21 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 
 	!********
 
+	! std::read_file(path) returns the whole contents of a file as a str, byte for
+	! byte, so unlike readln() it keeps line feeds, including a missing one at the
+	! end.  Relative paths are resolved the same way open() resolves them.  It is
+	! a runtime error if the file can't be read, like open().  This is an std-only
+	! function
+	read_file_fn%type%type = str_type
+	allocate(read_file_fn%params(1))
+	allocate(read_file_fn%param_names%v(1))
+	read_file_fn%params(1)%type = str_type
+	read_file_fn%param_names%v(1)%s = "path"
+
+	call fns%insert("std::read_file", read_file_fn, id_index)
+
+	!********
+
 	! std::try_open(filename, mode) is a non-throwing open().  On failure it
 	! returns a closed handle instead of a runtime error; check f.is_open
 	! before using it.  A malformed `mode` is still a runtime error (R6/R7).
@@ -632,7 +624,7 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 			char_fn, i32_sca_fn, i32_arr_fn, i64_sca_fn, i64_arr_fn, &
 			f32_sca_fn, f32_arr_fn, f64_sca_fn, f64_arr_fn, &
 			open_fn, readln_fn, writeln_fn, eof_fn, close_fn, exit_fn, &
-			getenv_fn, hasenv_fn, system_fn, exists_fn, try_open_fn, &
+			getenv_fn, hasenv_fn, system_fn, exists_fn, read_file_fn, try_open_fn, &
 			print_trace_fn, stack_trace_fn, caller_fn, print_fn, write_fn, format_fn, printf_fn, writef_fn, read_fns &
 		]
 
@@ -675,6 +667,43 @@ function new_read_fn(elem_type, is_arr) result(fn)
 	fn%param_names%v(1)%s = "file_handle"
 
 end function new_read_fn
+
+!===============================================================================
+
+function new_parse_fn(ret_type) result(fn)
+
+	! The signature of parse_<type>() for one result type:
+	!
+	!     parse_<t>(str: str):                t
+	!     parse_<t>(str: str, ok: &bool):     t
+	!
+	! With no `ok`, bad text is a runtime error.  With one, it sets `ok` to
+	! whether the text parsed, and the result is 0 if it didn't.  `ok` is the only
+	! variadic param, set up the same way as the `info` of lu_factor(), and is
+	! by-ref, see fn_t%ref_params
+
+	integer, intent(in) :: ret_type
+
+	type(fn_t) :: fn
+
+	!********
+
+	fn%type%type = ret_type
+
+	allocate(fn%params(1))
+	allocate(fn%param_names%v(1))
+	fn%params(1)%type = str_type
+	fn%param_names%v(1)%s = "str"
+
+	fn%variadic_min  = 0
+	fn%variadic_max  = 1
+	fn%variadic_type = bool_type
+	fn%variadic_name = "ok"
+
+	fn%ref_params       = [.false., .true.]
+	fn%const_ref_params = [.false., .false.]
+
+end function new_parse_fn
 
 !===============================================================================
 

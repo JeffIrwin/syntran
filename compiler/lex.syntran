@@ -526,29 +526,36 @@ struct Lexer
 
 		if float32
 		{
-			// This check catches problems like `1.234e+1e+2` which look like a
-			// float but aren't correctly formatted
-			if not is_real(strip)
+			// This catches problems like `1.234e+1e+2` which look like a float
+			// but aren't correctly formatted
+			let ok = false;
+			const f = std::parse_f32(strip, &ok);
+			if not ok
 			{
 				push_diag("E15");
 				return new_f32_token(start, lit, 0.0'f32);
 			}
-			return new_f32_token(start, lit, std::parse_f32(strip));
+			return new_f32_token(start, lit, f);
 		}
 		if float64
 		{
-			if not is_real(strip)
+			let ok = false;
+			const f = std::parse_f64(strip, &ok);
+			if not ok
 			{
 				push_diag("E16");
 				return new_f64_token(start, lit, 0.0'f64);
 			}
-			return new_f64_token(start, lit, std::parse_f64(strip));
+			return new_f64_token(start, lit, f);
 		}
 
-		const val = dec_val(strip);
-		if 0 <= val and val <= 0x7fff_ffff
+		// Only digits, so a value that parses is not negative.  It's not ok if
+		// it doesn't fit in an i64
+		let ok = false;
+		const val = std::parse_i64(strip, &ok);
+		if ok and val <= 0x7fff_ffff
 			return new_i32_token(start, lit, i32(val));
-		if val >= 0
+		if ok
 			return new_i64_token(start, lit, val);
 
 		push_diag("E2");
@@ -562,27 +569,33 @@ struct Lexer
 		{
 			case NumType.f32
 			{
-				if is_real(strip)
-					return new_f32_token(start, lit, std::parse_f32(strip));
+				let ok = false;
+				const f = std::parse_f32(strip, &ok);
+				if ok
+					return new_f32_token(start, lit, f);
 				push_diag("E15");
 			}
 			case NumType.f64
 			{
-				if is_real(strip)
-					return new_f64_token(start, lit, std::parse_f64(strip));
+				let ok = false;
+				const f = std::parse_f64(strip, &ok);
+				if ok
+					return new_f64_token(start, lit, f);
 				push_diag("E16");
 			}
 			case NumType.i32
 			{
-				const val = dec_val(strip);
-				if 0 <= val and val <= 0x7fff_ffff
+				let ok = false;
+				const val = std::parse_i64(strip, &ok);
+				if ok and val <= 0x7fff_ffff
 					return new_i32_token(start, lit, i32(val));
 				push_diag("E1");
 			}
 			case NumType.i64
 			{
-				const val = dec_val(strip);
-				if val >= 0
+				let ok = false;
+				const val = std::parse_i64(strip, &ok);
+				if ok
 					return new_i64_token(start, lit, val);
 				push_diag("E2");
 			}

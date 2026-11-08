@@ -859,6 +859,7 @@ error); they only reflect the handle's current state.
 ## `parse_bool`
 ```rust
 fn parse_bool(s: str): bool
+fn parse_bool(s: str, ok: &bool): bool
 ```
 
 Convert from a string to a `bool`.  Only `"true"` and `"false"` are accepted,
@@ -866,19 +867,23 @@ optionally with surrounding spaces, so `parse_bool("true")` is `true`.  Other
 spellings like `"True"`, `"t"`, or `"1"` are not accepted.
 
 Any invalid text will cause a runtime error,
-[R46](errors.md#r46----parse-bool).
+[R46](errors.md#r46----parse-bool).  With the optional `ok` argument there is no
+error, and the result is `false` for invalid text.  See [`parse_i32`](#parse_i32).
 
 Related functions: [`parse_i32`](#parse_i32), [`str`](#str)
 
 ## `parse_f32`
 ```rust
 fn parse_f32(s: str): f32
+fn parse_f32(s: str, ok: &bool): f32
 ```
 
 Convert from a string to a float `f32`.  For example, `parse_f32("65.4")`
 returns roughly `65.4f`.
 
-Any invalid numbers will cause a runtime error.
+Any invalid numbers will cause a runtime error.  With the optional `ok` argument
+there is no error, and the result is `0.0f` for invalid text.  See
+[`parse_i32`](#parse_i32).
 
 Note that other numeric types (`i32`) can be converted to float with
 [`f32`](#f32), e.g. `f32(3)`, or simply by multiplying by `1.0f`.
@@ -888,12 +893,15 @@ Related functions: [`parse_i32`](#parse_i32), [`str`](#str)
 ## `parse_f64`
 ```rust
 fn parse_f64(s: str): f64
+fn parse_f64(s: str, ok: &bool): f64
 ```
 
 Convert from a string to a double `f64`.  For example, `parse_f64("65.4")`
 returns roughly `65.4`.
 
-Any invalid numbers will cause a runtime error.
+Any invalid numbers will cause a runtime error.  With the optional `ok` argument
+there is no error, and the result is `0.0` for invalid text.  See
+[`parse_i32`](#parse_i32).
 
 Note that other numeric types (`i32`) can be converted to double with
 [`f64`](#f64), e.g. `f64(3)`, or simply by multiplying by `1.0`.
@@ -903,6 +911,7 @@ Related functions: [`parse_f32`](#parse_f32), [`str`](#str)
 ## `parse_i32`
 ```rust
 fn parse_i32(s: str): i32
+fn parse_i32(s: str, ok: &bool): i32
 ```
 
 Convert from a string to an integer `i32`.  For example, `parse_i32("65")`
@@ -913,6 +922,20 @@ Any invalid numbers will cause a runtime error.  Other languages variously refer
 to similar functions as `atoi()`, `stoi()`, `read()`, `parse()`, `strtol()`,
 `str2int()`, etc.
 
+If you give the optional `ok` argument, which must be a `bool` variable passed
+by reference, then there is no error.  Instead, `ok` is set to whether the text
+could be parsed, and the result is `0` if it could not.  `ok` is always assigned,
+and any previous value is overwritten.  It accepts exactly the text that the
+one-argument form does, so a number that overflows an `i32` is not ok.  The same
+goes for the other `parse_` fns.
+
+```rust
+let ok = false;
+const n = parse_i32(text, &ok);
+if not ok
+	println("not a number: ", text);
+```
+
 Note that other numeric types (`f32`) can be implicitly cast to `i32`.
 
 Related functions: [`parse_i64`](#parse_i64), [`str`](#str)
@@ -920,12 +943,15 @@ Related functions: [`parse_i64`](#parse_i64), [`str`](#str)
 ## `parse_i64`
 ```rust
 fn parse_i64(s: str): i64
+fn parse_i64(s: str, ok: &bool): i64
 ```
 
 Convert from a string to an integer `i64`.  For example, `parse_i64("65")`
 returns `65`.
 
-Any invalid numbers will cause a runtime error.
+Any invalid numbers will cause a runtime error.  With the optional `ok` argument
+there is no error, and the result is `0` for invalid text.  See
+[`parse_i32`](#parse_i32).
 
 Related functions: [`parse_i32`](#parse_i32), [`str`](#str)
 
@@ -1008,6 +1034,30 @@ Related functions: [`sum`](#sum)
 
 ## `read_f32`
 ## `read_f64`
+## `read_file`
+```rust
+fn read_file(path: str): str
+```
+
+Return the whole contents of the file at `path` as a `str`.  The result is the
+exact bytes of the file, so unlike [`readln`](#readln), the line feeds are kept,
+and so is a missing line feed at the end of the last line.  A `\r\n` line ending
+is not changed either.  It is also much faster than building a file up from
+lines, which copies the text over and over.
+
+Relative paths are resolved the same way [`open`](#open) resolves them.  A file
+that doesn't exist or can't be read, or a directory, is a runtime error,
+[R8](errors.md#r8----open-file), as for `open()`.  Use [`exists`](#exists) first
+if you need to recover from that.  Must be called with the `std::` prefix, e.g.
+`std::read_file("data.txt")`.
+
+```rust
+const text = std::read_file("data.txt");
+println(len(text), " bytes");
+```
+
+Related functions: [`exists`](#exists), [`open`](#open), [`readln`](#readln)
+
 ## `read_i32`
 ## `read_i64`
 ```rust
@@ -1053,7 +1103,7 @@ fn readln(file_handle: file): str
 
 Read a single line from `file_handle`, or from stdin if called with no argument
 
-Related functions: [`close`](#close), [`eof`](#eof), [`open`](#open), [`read_i32`](#read_i32)
+Related functions: [`close`](#close), [`eof`](#eof), [`open`](#open), [`read_file`](#read_file), [`read_i32`](#read_i32)
 
 ## `repeat`
 ```rust

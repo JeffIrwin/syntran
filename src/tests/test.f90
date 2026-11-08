@@ -1668,6 +1668,47 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('parse_bool("  true");')  == "true",  &
 			eval('parse_bool("false  ");')  == "false",  &
 			eval('parse_bool("true") and not parse_bool("false");')  == "true",  &
+
+			! parse_<t>(s, &ok) sets ok instead of being a runtime error.  The
+			! result is 0 for bad text.  ok is set again by every call
+			eval('let ok = false; parse_i32("42", &ok);') == '42', &
+			eval('let ok = false; parse_i32("42", &ok); ok;') == 'true', &
+			eval('let ok = true; parse_i32("abc", &ok);') == '0', &
+			eval('let ok = true; parse_i32("abc", &ok); ok;') == 'false', &
+			eval('let ok = true; parse_i32("", &ok); ok;') == 'false', &
+			eval('let ok = true; parse_i32("2147483648", &ok); ok;') == 'false', &  ! overflow
+			eval('let ok = true; parse_i32("2147483647", &ok); ok;') == 'true', &
+			eval('let ok = true; parse_i32("12 abc", &ok); ok;') == 'true', &  ! same as 1-arg
+			eval('let ok = true; parse_i32("abc", &ok); parse_i32("7", &ok); ok;') == 'true', &
+			eval('let ok = false; parse_i64("2147483648", &ok);') == '2147483648', &
+			eval('let ok = false; parse_i64("2147483648", &ok); ok;') == 'true', &
+			eval('let ok = true; parse_i64("9223372036854775808", &ok); ok;') == 'false', &
+			eval('let ok = true; parse_i64("1.5", &ok); ok;') == 'false', &
+			abs(eval_f32('let ok = false; parse_f32("1.5", &ok);') - 1.5) < tol, &
+			eval('let ok = false; parse_f32("1.5", &ok); ok;') == 'true', &
+			eval('let ok = true; parse_f32("1.2e+1e+2", &ok); ok;') == 'false', &
+			abs(eval_f64('let ok = false; parse_f64("1.5", &ok);') - 1.5d0) < tol, &
+			abs(eval_f64('let ok = false; parse_f64("1.5d2", &ok);') - 150.d0) < tol, &
+			abs(eval_f64('let ok = true; parse_f64("1.2e+1e+2", &ok);')) < tol, &
+			eval('let ok = true; parse_f64("1.2e+1e+2", &ok); ok;') == 'false', &
+			eval('let ok = true; parse_f64("x", &ok); ok;') == 'false', &
+			eval('let ok = false; parse_bool("true", &ok); ok;') == 'true', &
+			eval('let ok = false; parse_bool("true", &ok);') == 'true', &
+			eval('let ok = true; parse_bool("false", &ok);') == 'false', &
+			eval('let ok = true; parse_bool("false", &ok); ok;') == 'true', &
+			eval('let ok = true; parse_bool("tx", &ok);') == 'false', &
+			eval('let ok = true; parse_bool("tx", &ok); ok;') == 'false', &
+			eval('let ok = true; parse_bool("t", &ok); ok;') == 'false', &
+			eval('fn p(s: str): i32 { let ok = false; let v = parse_i32(s, &ok); ' // &
+				'if ok { return v; } return -1; } p("5") + p("x");') == '4', &
+			diag_has_code(get_diags('parse_i32("x");'), RC_PARSE_I32), &
+			diag_has_code(get_diags('parse_i64("x");'), RC_PARSE_I64), &
+			diag_has_code(get_diags('parse_f32("x");'), RC_PARSE_F32), &
+			diag_has_code(get_diags('parse_f64("x");'), RC_PARSE_F64), &
+			diag_has_code(get_diags('parse_bool("x");'), RC_PARSE_BOOL), &
+			diag_has_code(get_diags('let ok = true; parse_i32("1", ok);'), EC_BAD_ARG_VAL), &
+			diag_has_code(get_diags('let ok = 1; parse_i32("1", &ok);'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags('let ok = true; parse_f64("1", &ok, &ok);'), EC_TOO_MANY_ARGS), &
 			abs(eval_f32('f32(3);') - 3.0) < tol, &
 			abs(eval_f32('f32(3) / 2;') - 1.5) < tol, &
 			abs(eval_f32('f32(7''i64);') - 7.0) < tol, &
@@ -1860,6 +1901,13 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('std::exists("no/such/path/syntran_xyz");') == 'false', &
 			eval('std::exists("");') == 'false', &
 			diag_has_code(get_diags('exists("x");'), EC_STD_ONLY_FN), &
+
+			! std::read_file.  The exact bytes are in io/test-20.syntran
+			eval('len(std::read_file("src/tests/test-src/io/test-01.syntran")) > 0;') == 'true', &
+			eval('std::read_file("src/tests/test-src/io/test-01.syntran")[0: 3];') == char(10)//'fn', &
+			diag_has_code(get_diags('std::read_file("no/such/path/syntran_xyz");'), RC_OPEN_FILE), &
+			diag_has_code(get_diags('std::read_file("src/tests/test-src/io");'), RC_OPEN_FILE), &
+			diag_has_code(get_diags('read_file("x");'), EC_STD_ONLY_FN), &
 
 			eval('let f = std::try_open("no/such/path/xyz", "r"); f.is_open;') == 'false', &
 			eval('let f = std::try_open("no/such/path/xyz", "r"); f.name;') == 'no/such/path/xyz', &
@@ -5162,6 +5210,8 @@ subroutine unit_test_io(npass, nfail)
 			! Relative paths are resolved against the script's directory, which
 			! the native backend has to do too
 			interpret_file(path//'test-19.syntran', quiet, chdir_ = .true.) == 'true', &
+			! std::read_file() of exact bytes
+			interpret_file(path//'test-20.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -11428,7 +11478,21 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E129-untyped-null.syntran'), &
 				EC_UNTYPED_NULL, P//'E129-untyped-null.syntran', 9, 1, 18), &
 			diag_loc_ok(get_diags_file(P//'E131-move-not-variable.syntran'), &
-				EC_MOVE_NOT_VAR, P//'E131-move-not-variable.syntran', 9, 20, 6) &
+				EC_MOVE_NOT_VAR, P//'E131-move-not-variable.syntran', 9, 20, 6), &
+
+			! The source is the exact bytes of the file, so a CRLF reaches the
+			! lexer, and it's one line end, not two.  A lone CR is still one.  The
+			! source is built here, because git may change the line ends of a file
+			diag_loc_ok(get_diags('let a = 1;'//carriage_return//line_feed &
+				//'let b = ;'//carriage_return//line_feed), &
+				EC_UNEXPECTED_TOKEN, '<stdin>', 2, 9, 1), &
+			diag_loc_ok(get_diags('let a = 1;'//carriage_return//line_feed//line_feed &
+				//'let c = 3;'//carriage_return//'let b = ;'), &
+				EC_UNEXPECTED_TOKEN, '<stdin>', 4, 9, 1), &
+
+			! The last line has no line feed
+			diag_loc_ok(get_diags('let a = 1;'//line_feed//'let b = ;'), &
+				EC_UNEXPECTED_TOKEN, '<stdin>', 2, 9, 1) &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

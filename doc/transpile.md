@@ -59,7 +59,8 @@ This is a subset of the language so far:
   casts `i32(Suit.Hearts)` and `Suit(2)`, comparison, printing, arrays of
   enums, a bare enum name as in `for v in Suit`, and `switch` on an enum
 - File I/O: `open`, `std::try_open`, `close`, `std::write`, `std::writef`, `writeln`, `readln`, `eof`,
-  `std::exists`, the members `f.is_open`, `f.eof`, and `f.name`, and `readln()`
+  `std::exists`, `std::read_file`, the `ok` argument of `parse_<type>()`, the
+  members `f.is_open`, `f.eof`, and `f.name`, and `readln()`
   and `eof()` of standard input.  Binary files, with a `b` in the mode of `open`,
   and `std::read_i32`, `std::read_i64`, `std::read_f32`, and `std::read_f64`.
   `std::IN`, `std::OUT`, `std::ERR`, `std::PI`, `std::getenv`, `std::hasenv`, `std::system`, and

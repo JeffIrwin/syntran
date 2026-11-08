@@ -222,8 +222,8 @@ This is a subset of the language so far:
   of structs, and optional structs (`?Node`) that can be `null`.  A struct is a
   value, so assigning or passing one copies it
 - Files: `open`, `std::try_open`, `close`, `readln`, `eof`, `writeln`,
-  `std::write`, `std::exists`, `std::read_i32` and the other `std::read_<type>`
-  fns, `std::IN`, `std::OUT`, and `std::ERR`, and the members `f.is_open`,
+  `std::write`, `std::exists`, `std::read_file`, `std::read_i32` and the other
+  `std::read_<type>` fns, the `ok` argument of `parse_<type>()`, `std::IN`, `std::OUT`, and `std::ERR`, and the members `f.is_open`,
   `f.eof`, and `f.name`.  A file handle is a value, so assigning or passing one
   copies it
 - Function pointers: `fn(i32): i32` variables, parameters, return values, and

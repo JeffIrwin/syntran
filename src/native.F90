@@ -5664,25 +5664,32 @@ recursive function emit_intr_call(em, node) result(r)
 		end if
 
 	case ('parse_i32', 'parse_i64', 'parse_f32', 'parse_f64', 'parse_bool')
+		! The `ok` is a variable that the runtime sets, like the `info` of
+		! lu_factor(), or null to make bad text a runtime error
 		a = emit_arg(em, node, 1)
+		if (n >= 2) then
+			valp = var_ptr(em, node%args(2), bool_type)
+		else
+			valp = LLVMConstNull(em%t_ptr)
+		end if
 		r%owned = .false.
 		select case (base)
 		case ('parse_i32')
 			r%ty = i32_type
-			r%v = rt_call(em, 'sy_parse_i32', em%t_i32, [a%v])
+			r%v = rt_call(em, 'sy_parse_i32', em%t_i32, [a%v, valp])
 		case ('parse_i64')
 			r%ty = i64_type
-			r%v = rt_call(em, 'sy_parse_i64', em%t_i64, [a%v])
+			r%v = rt_call(em, 'sy_parse_i64', em%t_i64, [a%v, valp])
 		case ('parse_f32')
 			r%ty = f32_type
-			r%v = rt_call(em, 'sy_parse_f32', em%t_f32, [a%v])
+			r%v = rt_call(em, 'sy_parse_f32', em%t_f32, [a%v, valp])
 		case ('parse_f64')
 			r%ty = f64_type
-			r%v = rt_call(em, 'sy_parse_f64', em%t_f64, [a%v])
+			r%v = rt_call(em, 'sy_parse_f64', em%t_f64, [a%v, valp])
 		case default
 			r%ty = bool_type
 			r%v = LLVMBuildICmp(em%bld, LLVM_INT_NE, rt_call(em, 'sy_parse_bool', em%t_i8, &
-				[a%v]), LLVMConstInt(em%t_i8, 0_c_int64_t, 0), cs(''))
+				[a%v, valp]), LLVMConstInt(em%t_i8, 0_c_int64_t, 0), cs(''))
 		end select
 		call dispose(em, a)
 
@@ -5765,6 +5772,14 @@ recursive function emit_intr_call(em, node) result(r)
 		r%owned = .false.
 		r%v = LLVMBuildICmp(em%bld, LLVM_INT_NE, rt_call(em, 'sy_hasenv', em%t_i8, [a%v]), &
 			LLVMConstInt(em%t_i8, 0_c_int64_t, 0), cs(''))
+		call dispose(em, a)
+
+	case ('read_file')
+		! The text of a file, which is owned like a string is
+		a = emit_arg(em, node, 1)
+		r%ty = str_type
+		r%owned = .true.
+		r%v = rt_call(em, 'sy_read_file', em%t_ptr, [a%v])
 		call dispose(em, a)
 
 	case ('system')

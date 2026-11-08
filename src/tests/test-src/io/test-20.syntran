@@ -1,0 +1,51 @@
+
+// Write the exact bytes of a str to a file, with no line feed added
+fn write_bytes(path: &const str, s: &const str)
+{
+	let f = open(path, "wb");
+	std::write(f, s);
+	close(f);
+}
+
+// std::read_file() gives back exactly the bytes that are in a file
+fn same(path: &const str, s: &const str): bool
+{
+	write_bytes(path, s);
+	return std::read_file(path) == s;
+}
+
+fn main(): bool
+{
+	const path = "build/test-20.bin";
+	const lf = char(10);
+	const cr = char(13);
+
+	// A last line with a line feed, and without one, which readln() can't tell apart
+	if not same(path, "ab" + lf + "cd" + lf)
+		return false;
+	if not same(path, "ab" + lf + "cd")
+		return false;
+
+	// CRLF is not turned into a line feed, and blank lines stay
+	if not same(path, "ab" + cr + lf + "cd" + cr + lf + lf + lf)
+		return false;
+
+	// Bytes that aren't text, and an empty file
+	if not same(path, "a" + char(0) + "b" + char(200) + char(255))
+		return false;
+	if not same(path, "")
+		return false;
+
+	// A bigger file than a line, and the length is right
+	const big = repeat("0123456789" + lf, 10000);
+	if not same(path, big)
+		return false;
+	if len(std::read_file(path)) != 110000
+		return false;
+
+	// A relative path is read from the same place as it was written to
+	const text = std::read_file(path);
+	return std::exists(path) and text[0] == "0";
+}
+
+return main();
