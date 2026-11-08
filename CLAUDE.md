@@ -247,6 +247,36 @@ bash utils/test-readme.sh              # check all blocks against their hidden e
 bash utils/test-readme.sh --update     # regenerate the hidden expected output from actual behavior
 ```
 
+### Fuzzing
+`utils/fuzz.c` mutates the `.syntran` files under `src/tests/test-src`,
+`samples`, and `src/tests/long` (token-aware, so most mutants get past the
+lexer) and runs each one through `syntran -q`.  The contract is that any input
+either runs or stops with a coded `E##`/`R##` diagnostic.  It reports a crash for
+a signal, a timeout, an internal error (`I##` or `Fatal error`), or a Fortran
+runtime error.  It is plain C, outside the fpm build:
+```bash
+fpm install --profile debug --flag "-DSYNTRAN_BOUNDS_CHECK -fcheck=all -g" --prefix ./build/fuzz/
+cc -O2 -Wall -o build/fuzz/fuzz utils/fuzz.c
+build/fuzz/fuzz --time 300 --jobs 4           # or --iters 5000; --seed N to reproduce
+build/fuzz/fuzz --reduce build/fuzz/crashes/<signature>.syntran    # writes <file>.min
+```
+It saves one reproducer and its output per crash signature to
+`build/fuzz/crashes/`, and exits 1 if it found a signature that isn't already
+there (delete that directory to re-check a fixed bug).  Each run is capped at
+2 GB of address space on Linux, since a valid mutant like `[0; 2147483647]` wants
+8 GB; `--mem-mb <n>` changes it.  A signature is the kind of
+failure plus where: the Fortran `At line N of file F` when there is one, else the
+frame addresses (their low 12 bits, since macOS backtraces have no symbol names).
+So the same bug can still show up under a few signatures, and a fixed one stops
+showing up.  A seed file's `use`/`#include` paths don't resolve, since mutants run
+from `build/fuzz/work/<n>/`.
+
+For each bug that the fuzzer finds, reduce the reproducer, fix the bug, and add
+the `.min` file to `src/tests/test-src/` as a regression test, as described
+above.  Don't take ASan/UBSan builds as the default: they make the build very
+slow, and UBSan only instruments the C files.  `.github/workflows/fuzz.yml` runs
+it nightly, separately from `main.yml` so that a find never blocks a push.
+
 ### Evaluating a script as a command-line string
 To run a syntran script without saving it as a file:
 ```bash

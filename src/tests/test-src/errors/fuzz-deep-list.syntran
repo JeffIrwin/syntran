@@ -1,0 +1,28 @@
+
+// A linked list with a node per push nests one value_t per node, and freeing
+// it at exit used to recurse once per node and overflow the stack at ~30k
+// nodes.  Building and dropping it must work, and it must have no diagnostics
+
+struct Node
+{
+	val: i32,
+	next: ?Node,
+}
+
+struct List
+{
+	head: ?Node,
+
+	fn push(v: i32)
+	{
+		head = Node{val = v, next = head};
+	}
+}
+
+let big = List{head = null};
+for i in [0: 200000]
+{
+	big.push(i);
+}
+println(big.head.val);
+

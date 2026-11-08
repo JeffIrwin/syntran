@@ -1,0 +1,4 @@
+// Fuzz regression: an unterminated string at the very end of the file used
+// to read and slice past the end of the source text
+
+#include("

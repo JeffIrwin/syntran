@@ -236,6 +236,8 @@ module syntran__errors_m
 		RC_BINARY_WRITE_TYPE = "R45", &
 		RC_PARSE_BOOL = "R46", &
 		RC_NULL_MEMBER = "R47", &
+		RC_BAD_ARRAY_SIZE = "R48", &
+		RC_CAST_STR_LEN = "R49", &
 		WC_MISSING_RETURN = "W1"
 
 	! A text span indicates which characters to underline in a faulty line of
@@ -1121,11 +1123,11 @@ module syntran__errors_m
 			character(len = *), intent(in) :: range
 		end function err_non_int_range
 
-		module function err_het_array(context, span, elem) result(err)
+		module function err_het_array(context, span, elem, expect, actual) result(err)
 			type(text_context_t) :: context
 			type(text_span_t), intent(in) :: span
 			character(len = :), allocatable :: err
-			character(len = *), intent(in) :: elem
+			character(len = *), intent(in) :: elem, expect, actual
 		end function err_het_array
 
 		module function err_unset_member(context, span, mem_name, struct_name) result(err)
@@ -1209,6 +1211,17 @@ module syntran__errors_m
 			integer(kind = 8), intent(in) :: ncopies
 			character(len = :), allocatable :: err
 		end function err_rt_repeat_negative
+
+		module function err_rt_bad_array_size(sizes) result(err)
+			integer(kind = 8), intent(in) :: sizes(:)
+			character(len = :), allocatable :: err
+		end function err_rt_bad_array_size
+
+		module function err_rt_cast_str_len(fn, len_) result(err)
+			character(len = *), intent(in) :: fn
+			integer(kind = 8), intent(in) :: len_
+			character(len = :), allocatable :: err
+		end function err_rt_cast_str_len
 
 		module function err_rt_solve_shape(fn, arows, acols, brows) result(err)
 			character(len = *), intent(in) :: fn

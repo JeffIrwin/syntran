@@ -5850,7 +5850,7 @@ function intr_scalar(em, base, a, rtype, pos) result(r)
 			! The code of a single character
 			r%ty = i32_type
 			r%owned = .false.
-			r%v = rt_call(em, 'sy_str_code', em%t_i32, [a%v])
+			r%v = rt_call(em, 'sy_str_code', em%t_i32, [a%v, ci32(em, merge(1, 0, base == 'i64'))])
 			call dispose(em, a)
 			r = convert(em, r, merge(i32_type, i64_type, base == 'i32'))
 		else if (a%ty == enum_type) then
@@ -8148,7 +8148,7 @@ recursive subroutine emit_for(em, node)
 	logical :: stepped
 
 	type(c_ptr) :: it, p, cond_bb, body_bb, latch_bb, end_bb, ignored
-	type(c_ptr) :: cur, ahead, behind, zero
+	type(c_ptr) :: cur, ahead, behind, zero, nxt, wrapped, step_bb
 	type(nval_t) :: lb, ub, st, iv
 
 	! Any other iterable is an array that is made first
@@ -8206,7 +8206,21 @@ recursive subroutine emit_for(em, node)
 
 	call LLVMPositionBuilderAtEnd(em%bld, latch_bb)
 	cur = LLVMBuildLoad2(em%bld, em%t_i64, it, cs(''))
-	ignored = LLVMBuildStore(em%bld, LLVMBuildAdd(em%bld, cur, st%v, cs('')), it)
+	nxt = LLVMBuildAdd(em%bld, cur, st%v, cs(''))
+	if (stepped) then
+		! If cur + step wraps around the end of an i64, the next value is past
+		! the bound, so the loop is done.  It would otherwise start over at the
+		! other end of the i64s, like `[0: 0x4000000000000000: 0x7fffffffffffffff]`.
+		! The unstepped loop can't wrap, since it only runs while cur < ub
+		step_bb = new_block(em, 'step')
+		wrapped = LLVMBuildSelect(em%bld, &
+			LLVMBuildICmp(em%bld, LLVM_INT_SGT, st%v, zero, cs('')), &
+			LLVMBuildICmp(em%bld, LLVM_INT_SLT, nxt, cur, cs('')), &
+			LLVMBuildICmp(em%bld, LLVM_INT_SGT, nxt, cur, cs('')), cs(''))
+		ignored = LLVMBuildCondBr(em%bld, wrapped, end_bb, step_bb)
+		call LLVMPositionBuilderAtEnd(em%bld, step_bb)
+	end if
+	ignored = LLVMBuildStore(em%bld, nxt, it)
 	ignored = LLVMBuildBr(em%bld, cond_bb)
 
 	call LLVMPositionBuilderAtEnd(em%bld, end_bb)

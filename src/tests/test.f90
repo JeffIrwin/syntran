@@ -2721,6 +2721,10 @@ subroutine unit_test_bitwise(npass, nfail)
 			eval("i64([0b1111, 0b0111, 0b0011, 0b0001]) << [0: 4];") == "[15, 14, 12, 8]", &
 			eval("[0b1111, 0b0111, 0b0011, 0b0001] << i64([0: 4]);") == "[15, 14, 12, 8]", &
 			eval("i64([0b1111, 0b0111, 0b0011, 0b0001]) << i64([0: 4]);") == "[15, 14, 12, 8]", &
+			eval("[1, 2] << 3'i64 == [8, 16];") == "[true, true]", &
+			eval("1 << [3'i64, 4'i64] == [8, 16];") == "[true, true]", &
+			eval("[1, 2] << [3'i64, 4'i64] == [8, 32];") == "[true, true]", &
+			eval("[1] << 31'i64 == [-2147483648];") == "[true]", &
 			eval_i32("1024 >> 0;") == 1024, &
 			eval_i32("1024 >> 1;") == 512, &
 			eval_i32("1024 >> 2;") == 256, &
@@ -2734,6 +2738,9 @@ subroutine unit_test_bitwise(npass, nfail)
 			eval_i32("0b10110000 >> 4;") == eval_i32("0b00001011;"), &
 			eval("1024 >> [0: 4];") == "[1024, 512, 256, 128]", &
 			eval("1024'i64 >> [0: 4];") == "[1024, 512, 256, 128]", &
+			eval("[2, 4] >> 1'i64 == [1, 2];") == "[true, true]", &
+			eval("16 >> [1'i64, 2'i64] == [8, 4];") == "[true, true]", &
+			eval("[16, 16] >> [1'i64, 2'i64] == [8, 4];") == "[true, true]", &
 			eval_i32("0 ^ 0;") == 0, &
 			eval_i32("1 ^ 1;") == 0, &
 			eval_i32("255 ^ 255;") == 0, &
@@ -2781,6 +2788,28 @@ subroutine unit_test_bitwise(npass, nfail)
 			eval("!1'i64  == -2;") == "true", &
 			eval("all(![0: 4] == [-1, -2, -3, -4]);") == "true", &
 			eval("all(!i64([0: 4]) == [-1, -2, -3, -4]);") == "true", &
+
+			! A shift is in the width of the left operand, whatever the width of
+			! the count.  A count of that width or more is 0, and a negative count
+			! is masked, which used to abort with -fcheck=all.  An i64 count is
+			! truncated to the left operand's width first, like the native backend
+			eval("let one = 1; one << 31 == -2147483648;") == "true", &
+			eval("let one = 1; one << 32 == 0;") == "true", &
+			eval("let one = 1; one << -1 == -2147483648;") == "true", &
+			eval("let one = 1; one << -6 == 67108864;") == "true", &
+			eval("let one = 1; one << 33'i64 == 0;") == "true", &
+			eval("let one = 1; one << 4294967297'i64 == 2;") == "true", &
+			eval("let m = -8; m >> 40 == 0;") == "true", &
+			eval("let m = -8; m >> 1'i64 == 2147483644;") == "true", &
+			eval("let one = 1'i64; one << 64 == 0;") == "true", &
+			eval("let one = 1'i64; one << 100'i64 == 0;") == "true", &
+			eval("let one = 1'i64; one << -1 == one << 63;") == "true", &
+			eval("let one = 1'i64; one >> 64 == 0;") == "true", &
+			eval("all([1, 2, 4] << 33 == [0, 0, 0]);") == "true", &
+			eval("all([1, 2, 4] << [1, 2, 33] == [2, 8, 0]);") == "true", &
+			eval("all(1 << [1, 33, -1] == [2, 0, -2147483647 - 1]);") == "true", &
+			eval("let a = 1; a <<= 40; a == 0;") == "true", &
+			eval("let a = 16; a >>= 33; a == 0;") == "true", &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -8554,6 +8583,15 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_has_code(get_diags('let b=[1,2,3]; let a = [b; 5];'), EC_NON_SCA_VAL), &
 			diag_has_code(get_diags('let a = [1.0: 5.0];'), EC_NON_INT_RANGE), &
 			diag_has_code(get_diags('let a = [1, "a"];'), EC_HET_ARRAY), &
+			diag_has_text(get_diags('let a = [1, "a"];'), &
+				'has type `str` but the first element has type `i32`'), &
+			diag_has_text(get_diags( &
+				'let a = ["a","b"]; let b = [1,2]; let c = [a, a, b];'), &
+				'has type `[i32; :]` but the first element has type `[str; :]`'), &
+			diag_has_text(get_diags( &
+				'struct A{x:i32} struct B{x:i32} ' // &
+				'let c = [A{x=1}, B{x=1}];'), &
+				'has type `B` but the first element has type `A`'), &
 			! Regression: cat'ing arrays of mismatched element types used to
 			! skip this check entirely (only top-level `array_type` was
 			! compared, never the element type inside), crashing at runtime
@@ -10246,7 +10284,44 @@ subroutine unit_test_runtime_errors(npass, nfail)
 
 			! R39 again, for the i64 overload of repeat()
 			diag_has_code(get_diags("println(repeat(""ab"", -1'i64));"), RC_REPEAT_NEGATIVE), &
-			.not. diag_has_code(get_diags("println(repeat(""ab"", 2'i64));"), RC_REPEAT_NEGATIVE) &
+			.not. diag_has_code(get_diags("println(repeat(""ab"", 2'i64));"), RC_REPEAT_NEGATIVE), &
+
+			! R48: an array with a negative extent, or too many elements to allocate
+			rt_code_both_file(P//'R48-bad-array-size.syntran', RC_BAD_ARRAY_SIZE), &
+			diag_count_code(get_diags_file(P//'R48-bad-array-size.syntran'), &
+				RC_BAD_ARRAY_SIZE) == 1, &
+			diag_has_code(get_diags('let n = -1; let a = [0; n];'), RC_BAD_ARRAY_SIZE), &
+			diag_has_code(get_diags('let n = -2; let a = [0; 3, n];'), RC_BAD_ARRAY_SIZE), &
+			diag_has_code(get_diags("let n = -1'i64; let a = [0.5; n];"), RC_BAD_ARRAY_SIZE), &
+			diag_has_code(get_diags('let a = [1.5; 9223372036854775807];'), RC_BAD_ARRAY_SIZE), &
+			diag_has_code(get_diags('let a = [0; 4611686018427387904, 4];'), RC_BAD_ARRAY_SIZE), &
+			diag_has_code(get_diags('let a = [0: 9223372036854775807];'), RC_BAD_ARRAY_SIZE), &
+			.not. diag_has_code(get_diags('let n = 0; let a = [0; n]; println(size(a, 0));'), &
+				RC_BAD_ARRAY_SIZE), &
+			.not. diag_has_code(get_diags('let a = [0; 0, 9223372036854775807];'), &
+				RC_BAD_ARRAY_SIZE), &
+			.not. diag_has_code(get_diags('let a = [7: 3]; println(size(a, 0));'), &
+				RC_BAD_ARRAY_SIZE), &
+
+			! The negative array used to be stored with a size of -1, and then
+			! crashed when it was returned into an existing variable.  The error
+			! ends the program, so there is no return to check
+			diag_has_code(get_diags( &
+				'fn f(): [i32; :] { let n = 0; n -= 1; let a = [0; n]; return a; } ' &
+				//'let b = [0]; b = f(); println(b);'), RC_BAD_ARRAY_SIZE), &
+
+			! R49: i32() or i64() of a string that is not 1 character long
+			rt_code_both_file(P//'R49-cast-str-len.syntran', RC_CAST_STR_LEN), &
+			diag_count_code(get_diags_file(P//'R49-cast-str-len.syntran'), &
+				RC_CAST_STR_LEN) == 1, &
+			diag_has_code(get_diags('println(i32("ab"));'), RC_CAST_STR_LEN), &
+			diag_has_code(get_diags('println(i32(""));'), RC_CAST_STR_LEN), &
+			diag_has_code(get_diags('println(i64("ab"));'), RC_CAST_STR_LEN), &
+			diag_has_code(get_diags('println(i32(["a", "bc"]));'), RC_CAST_STR_LEN), &
+			diag_has_code(get_diags('println(i64(["a", "", "c"]));'), RC_CAST_STR_LEN), &
+			.not. diag_has_code(get_diags('println(i32("A"));'), RC_CAST_STR_LEN), &
+			.not. diag_has_code(get_diags('println(i64("A"));'), RC_CAST_STR_LEN), &
+			.not. diag_has_code(get_diags('println(i32(["a", "b"]));'), RC_CAST_STR_LEN) &
 		]
 
 	! R33: out-of-bounds subscript.  Only reachable in builds compiled with
@@ -10342,6 +10417,32 @@ subroutine unit_test_bounds_check(npass, nfail)
 			RC_SUBSCRIPT_OOB), &
 		diag_has_code(get_diags( &
 			'let v = ["abc", "def"]; println(v[1, [0, 9]]);'), &
+			RC_SUBSCRIPT_OOB), &
+
+		! The character position of a string array element assignment
+		! (`v[i, j] = c`) was never checked, for a global or a local
+		diag_has_code(get_diags('let v = ["abc"]; v[0, 5] = "x";'), &
+			RC_SUBSCRIPT_OOB), &
+		diag_has_code(get_diags('let v = ["abc"]; v[0, -1] = "x";'), &
+			RC_SUBSCRIPT_OOB), &
+		diag_has_code(get_diags('let q = ["abc"]; q[0, 2147483647] = "x";'), &
+			RC_SUBSCRIPT_OOB), &
+		diag_has_code(get_diags( &
+			'fn f() { let v = ["abc"]; v[0, 5] = "x"; } f();'), &
+			RC_SUBSCRIPT_OOB), &
+
+		! Subscripts of the result of a call, and a member of its element
+		diag_has_code(get_diags( &
+			'fn g(): [i32; :] { return [1, 2]; } println(g()[5]);'), &
+			RC_SUBSCRIPT_OOB), &
+		diag_has_code(get_diags( &
+			'fn g(): [i32; :] { return [1, 2]; } println(g()[-1]);'), &
+			RC_SUBSCRIPT_OOB), &
+		diag_has_code(get_diags( &
+			'struct S {x: i32,} fn g(): [S; :] { return [S{x = 1}]; } println(g()[-1].x);'), &
+			RC_SUBSCRIPT_OOB), &
+		diag_has_code(get_diags( &
+			'struct S {x: i32,} fn g(): [S; :] { return [S{x = 1}]; } println(g()[1].x);'), &
 			RC_SUBSCRIPT_OOB) &
 		], label, npass, nfail)
 
@@ -11169,6 +11270,246 @@ subroutine unit_test_dir_unreadable_errors(npass, nfail)
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_dir_unreadable_errors
+
+!===============================================================================
+
+subroutine unit_test_fuzz_regressions(npass, nfail)
+
+	! Inputs that utils/fuzz.c found to crash the interpreter (a Fortran runtime
+	! error, a signal, or `Fatal error`) instead of stopping with a coded
+	! diagnostic.  The contract is that any input either runs or reports an
+	! E##/R## code, so each row only needs to see the code and get back at all.
+	!
+	! The bad programs live in test-src/errors/fuzz-*.syntran, which keeps them
+	! out of the transpile/native test scripts (they skip errors/)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'fuzz regressions'
+	character(len = *), parameter :: P = 'src/tests/test-src/errors/'
+
+	logical, allocatable :: tests(:)
+
+	type(string_vector_t) :: diags_empty, diags_comment, diags_ws, diags_radix, diags_compound, &
+		diags_unif, diags_shadow, diags_stale, diags_stale2, diags_arr_assign, &
+		diags_fn_shadow, diags_deep_list
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	! An empty program is valid, and used to compile an uninitialized node
+	diags_empty   = get_diags('')
+	diags_comment = get_diags('// just a comment')
+	diags_ws      = get_diags('  '//char(10)//char(10))
+	diags_radix    = get_diags('let x = 0x_1F; let y = 0o17; let z = 0b_101; let w = 0xff;')
+	diags_compound = get_diags('let a = [1]; a += 1; a += [2]; let i = 0; i += 1;')
+	diags_unif     = get_diags('let r = [0; 2]; let m = [1; 2, 3]; let e = [0; 0];')
+	diags_shadow   = get_diags('let count = 5; let n = count; let count2 = count + 1;')
+	diags_stale    = get_diags('let a = [0]; for i in [0] { } let q = [0];')
+	diags_stale2   = get_diags('let a = [0]; for i in [0, 1] { let r = [1, 2]; }')
+	diags_arr_assign = get_diags( &
+		'let f = [0]; f = [1, 2]; f = 7; let g = [1.0]; g = [2.0, 3.0]; let h = [1''i64]; h = [2];')
+	diags_fn_shadow = get_diags('fn sq(x: i32): i32 { return x * x; } let sq = sq;')
+	diags_deep_list = get_diags_file(P//'fuzz-deep-list.syntran')
+
+	tests = &
+		[   &
+			diags_empty%len_   == 0, &
+			diags_comment%len_ == 0, &
+			diags_ws%len_      == 0, &
+
+			! parse_dot() didn't set the member's name before parse_subscripts()
+			! read it for E36
+			diag_loc_ok(get_diags_file(P//'fuzz-struct-member-sub-count.syntran'), &
+				EC_BAD_SUB_COUNT, P//'fuzz-struct-member-sub-count.syntran', 10, 19, 2), &
+			diag_count_code(get_diags_file(P//'fuzz-struct-member-sub-count.syntran'), &
+				EC_BAD_SUB_COUNT) == 1, &
+			diag_has_code(get_diags( &
+				'struct C {v: [i32; :],} let c = C{v = [1, 2]}; c.v[0, 0] = 1;'), &
+				EC_BAD_SUB_COUNT), &
+
+			! A `+=` with no rhs has no lsubscripts for the E111 check to size
+			diag_has_code(get_diags_file(P//'fuzz-compound-no-rhs.syntran'), &
+				EC_UNEXPECTED_TOKEN), &
+
+			! Mutually recursive parse procs that weren't `recursive`
+			diag_has_code(get_diags_file(P//'fuzz-nested-size.syntran'), &
+				EC_UNEXPECTED_TOKEN), &
+
+			! #include operand that isn't a string literal, and the eof case
+			diag_has_code(get_diags_file(P//'fuzz-include-eof.syntran'), &
+				EC_UNEXPECTED_TOKEN), &
+			diag_has_code(get_diags_file(P//'fuzz-include-not-str.syntran'), &
+				EC_UNEXPECTED_TOKEN), &
+			diag_has_code(get_diags('#include('), EC_UNEXPECTED_TOKEN), &
+
+			! A `"` as the very last char read and sliced past the end
+			diag_loc_ok(get_diags_file(P//'fuzz-include-unterminated.syntran'), &
+				EC_UNTERMINATED_STR, P//'fuzz-include-unterminated.syntran', 4, 10, 1), &
+
+			! A closed string ending exactly at the end of the input is not
+			! unterminated, it is just missing its `;`
+			.not. diag_has_code(get_diags('"a"'), EC_UNTERMINATED_STR), &
+			diag_has_code(get_diags('"a"'), EC_UNEXPECTED_TOKEN), &
+
+			! The qualified-name copy of the E111 check also called size() on an
+			! lsubscripts that wasn't allocated, for a `::` with no name after
+			diag_has_code(get_diags('let s = 1; s :: += 2;'), EC_UNEXPECTED_TOKEN), &
+			diag_has_code(get_diags('let s = "a"; s :: += "e";'), EC_UNEXPECTED_TOKEN), &
+
+			! A fn declaration with no parens returned without a diagnostic, and
+			! the compiler got a kind-0 node
+			diag_has_code(get_diags('fn f'), EC_UNEXPECTED_TOKEN), &
+			diag_has_code(get_diags('fn f { }'), EC_UNEXPECTED_TOKEN), &
+			diag_has_code(get_diags('fn f: i32 { return 1; }'), EC_UNEXPECTED_TOKEN), &
+			.not. diag_has_code(get_diags('fn f(): i32 { return 1; } println(f());'), &
+				EC_UNEXPECTED_TOKEN), &
+
+			! Recovery after a malformed struct left values with no struct name, and
+			! call nodes with no receiver
+			diag_has_code(get_diags_file(P//'fuzz-struct-no-name.syntran'), &
+				EC_UNEXPECTED_TOKEN), &
+			diag_has_code(get_diags_file(P//'fuzz-call-chain-no-recv.syntran'), &
+				EC_UNEXPECTED_TOKEN), &
+
+			! A bare `0x`, `0o`, or `0b` has no digits, so it is not a literal.  It
+			! used to read past the end of an empty string in rm_leading_zeros().
+			! The literals that do have digits are unchanged
+			diag_has_code(get_diags('let x = 0x;'), EC_UNEXPECTED_TOKEN), &
+			diag_has_code(get_diags('let x = 0o;'), EC_UNEXPECTED_TOKEN), &
+			diag_has_code(get_diags('let x = 0b;'), EC_UNEXPECTED_TOKEN), &
+			diag_has_code(get_diags('0x'), EC_UNEXPECTED_TOKEN), &
+			diag_has_code(get_diags('let x = 0x_;'), EC_UNEXPECTED_TOKEN), &
+			diags_radix%len_ == 0, &
+
+			! A compound assignment can't make a scalar into an array, same as `=`
+			diag_has_code(get_diags('let i = 0; i += [1];'), EC_BINARY_TYPES), &
+			diag_has_code(get_diags('let i = 0; i -= [1, 2];'), EC_BINARY_TYPES), &
+			diag_has_code(get_diags('let i = 0; i <<= [1];'), EC_BINARY_TYPES), &
+			diag_has_code(get_diags('let s = "a"; s += ["b"];'), EC_BINARY_TYPES), &
+			diags_compound%len_ == 0, &
+
+			! A uniform array needs a size.  `[0;]` was a rank-0 array, which the
+			! VM allocated twice.  Only the empty list is an error
+			diag_has_code(get_diags_file(P//'fuzz-unif-no-size.syntran'), &
+				EC_UNEXPECTED_TOKEN), &
+			diag_count_code(get_diags('let r = [0;];'), EC_UNEXPECTED_TOKEN) == 1, &
+			diag_has_code(get_diags('let r = [1, 2;];'), EC_UNEXPECTED_TOKEN), &
+			diag_has_code(get_diags('let r = [i32;];'), EC_UNEXPECTED_TOKEN), &
+			diags_unif%len_ == 0, &
+
+			! The element of a uniform array isn't a scalar, so the loop var over it
+			! has no array to subscript
+			diag_has_code(get_diags_file(P//'fuzz-for-unif-of-array.syntran'), &
+				EC_NON_SCA_VAL), &
+
+			! A global named after an intrinsic, on its own rhs, resolved to the
+			! variable that was being declared in pass 1, and reached the compiler
+			diag_has_code(get_diags_file(P//'fuzz-intr-name-self-ref.syntran'), &
+				EC_FN_PTR_UNSUPPORTED), &
+			diag_has_code(get_diags('let count = count;'), EC_FN_PTR_UNSUPPORTED), &
+			diag_has_code(get_diags('let len = len;'), EC_FN_PTR_UNSUPPORTED), &
+			diag_has_code(get_diags('let c = 1 + c;'), EC_UNDECLARE_VAR), &
+			diag_count_code(get_diags('let c = 1 + c;'), EC_UNDECLARE_VAR) == 1, &
+			diags_shadow%len_ == 0, &
+
+			! A unary op on a fn pointer copied its fn_ret onto itself, and freed it
+			! twice when it had an array or struct in it
+			diag_has_code(get_diags_file(P//'fuzz-unary-fn-ptr.syntran'), &
+				EC_UNARY_TYPES), &
+			diag_has_code(get_diags( &
+				'fn g(): [i32; :] { return [1]; } let y = -g;'), EC_UNARY_TYPES), &
+			diag_has_code(get_diags( &
+				'fn g(): [i32; :] { return [1]; } let y = !g;'), EC_UNARY_TYPES), &
+			diag_has_code(get_diags( &
+				'fn g(): [i32; :] { return [1]; } let y = not g;'), EC_UNARY_TYPES), &
+
+			! `a[...` is parsed speculatively as an assignment, then rewound and
+			! re-parsed.  An E20 at the end of the input was dropped by the de-dupe
+			! in match() on the second try, and the program ran or hit the compiler
+			diag_has_code(get_diags_file(P//'fuzz-subscript-eof-e20.syntran'), &
+				EC_UNEXPECTED_TOKEN), &
+			diag_has_code(get_diags('let a = [5]; let b = a[0'), EC_UNEXPECTED_TOKEN), &
+			diag_has_code(get_diags('let a = [5]; let b = a[foo('), EC_UNEXPECTED_TOKEN), &
+			diag_has_code(get_diags('let a = [5]; let b = a[0:'), EC_UNEXPECTED_TOKEN), &
+
+			! A dot after a fn-typed member copied its value onto its parent, and
+			! freed the fn pointer's return type twice
+			diag_has_code(get_diags_file(P//'fuzz-fn-member-dot.syntran'), &
+				EC_NON_STRUCT_DOT), &
+
+			! An undeclared name that ends an #include'd file was located in the
+			! includer's text, since the current token is already the includer's.
+			! The includer's leading blank line made underline() read text(0:0)
+			diag_loc_ok(get_diags_file(P//'fuzz-include-eof-name.syntran'), &
+				EC_UNDECLARE_VAR, P//'fuzz-include-eof-name-inc.syntran', 1, 1, 1), &
+
+			! A for loop over an explicit array literal copied the stale array of a
+			! reused stack slot onto its loop var, so the next array literal
+			! allocated an already allocated `val`
+			diags_stale%len_ == 0, &
+			diags_stale2%len_ == 0, &
+			eval('let a = [7]; for i in [1, 2] { } let q = [3, 4]; q[1];') == '4', &
+
+			! `(a = 1)` of a scalar onto an array has the value of the whole array,
+			! not the scalar, which made the evaluator hit I2 or read a `left` that
+			! was never allocated
+			eval('let i = [1, 2]; let b = (i = 7) + 1; all(b == [8, 8]);') == 'true', &
+			eval('let i = [1, 2]; all((i = 7) == [7, 7]);') == 'true', &
+			eval('let i = [1, 2]; let b = (i = 3) / 2; all(b == [1, 1]);') == 'true', &
+			eval('fn f(): bool { let i = [1, 2]; return all((i = 5) == [5, 5]); } f();') == 'true', &
+			eval('let i = [1, 2]; i = 3; all(i == [3, 3]);') == 'true', &
+
+			! Whole-array `=` needs element types that agree, like a scalar `=` does.
+			! `ints = [true]` used to reach the evaluator and die with I34
+			diag_has_code(get_diags('let f = [0]; f = [true];'), EC_BINARY_TYPES), &
+			diag_has_code(get_diags('let f = [0]; f = [1.5];'), EC_BINARY_TYPES), &
+			diag_has_code(get_diags('let f = [0]; f = ["a"];'), EC_BINARY_TYPES), &
+			diag_has_code(get_diags('let f = [0]; let g = [true]; f = g;'), EC_BINARY_TYPES), &
+			diags_arr_assign%len_ == 0, &
+
+			! A global named after a fn, on its own rhs, took the fn ref that pass 0
+			! had typed it with, and allocated its fn_params a second time
+			diags_fn_shadow%len_ == 0, &
+			eval('fn sq(x: i32): i32 { return x * x; } let sq = sq; sq(3);') == '9', &
+
+			! The element count of a stepped array was (u - l + s - sign(1,s)) / s,
+			! which overflowed for a big step and allocated too few elements
+			eval('let s = 0x7fffffff; let a = [0: s: 5]; size(a, 0);') == '1', &
+			eval('let a = [10: 0x7fffffff: 20]; a[0];') == '10', &
+			eval('let a = [5: -0x7fffffff: 0]; a[0];') == '5', &
+			eval('let a = [0: 0x40000000: 0x7fffffff]; a[1];') == '1073741824', &
+			eval('let a = [0: -0x40000000: -0x7fffffff]; a[1];') == '-1073741824', &
+			eval('let a = [0: 0x7fffffffffffffff: 5''i64]; size(a, 0);') == '1', &
+			eval('let a = [0: 0x4000000000000000: 0x7fffffffffffffff]; size(a, 0);') == '2', &
+			eval('let a = [5: 1: 0]; size(a, 0);') == '0', &
+			eval('let a = [0: 3: 10]; size(a, 0);') == '4', &
+			eval('let a = [10: -3: 0]; a[3];') == '1', &
+
+			! The unstepped `[lb: ub]` of two i32 bounds counts in i64, since
+			! ub - lb overflows an i32 at 2**31 elements.  That isn't tested
+			! here, because any input that overflows allocates >= 8 GB, which
+			! gets the Linux CI jobs OOM-killed
+			diag_has_code(get_diags('let a = [0: 1: 0x7fffffffffffffff];'), RC_BAD_ARRAY_SIZE), &
+
+			! The same count sets the number of iterations of a for loop
+			eval('let n = 0; for i in [0: 0x7fffffff: 5] { n += 1; } n;') == '1', &
+			eval('let n = 0; for i in [0: 0x40000000: 0x7fffffff] { n += i; } n;') == '1073741824', &
+			eval('let n = 0; for i in [0: -0x40000000: -0x7fffffff] { n += 1; } n;') == '2', &
+			eval('let n = 0; for i in [5: 1: 0] { n += 1; } n;') == '0', &
+			eval('let n = 0; for i in [10: -3: 0] { n += i; } n;') == '22', &
+			eval('let n = 0; for i in [0: 0x4000000000000000: 0x7fffffffffffffff] { n += 1; } n;') == '2', &
+
+			! Freeing a struct that nests one level per node recursed once per node,
+			! and overflowed the stack at ~30k of them
+			diags_deep_list%len_ == 0 &
+		]
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_fuzz_regressions
 
 !===============================================================================
 
@@ -12681,6 +13022,7 @@ subroutine unit_tests(iostat)
 	if (run_group('eval_api')) call unit_test_eval_api(npass, nfail)
 	if (run_group('error_locations')) call unit_test_error_locations(npass, nfail)
 	if (run_group('dir_unreadable_errors')) call unit_test_dir_unreadable_errors(npass, nfail)
+	if (run_group('fuzz_regressions')) call unit_test_fuzz_regressions(npass, nfail)
 	if (run_group('assignment')) call unit_test_assignment(npass, nfail)
 	if (run_group('comments')) call unit_test_comments(npass, nfail)
 	if (run_group('blocks')) call unit_test_blocks(npass, nfail)

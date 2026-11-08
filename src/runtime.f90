@@ -228,6 +228,12 @@ module syntran__runtime_m
 			integer(kind = 8), intent(in) :: cap
 		end subroutine
 
+		module subroutine check_array_len(state, sizes, len_)
+			type(state_t), intent(inout) :: state
+			integer(kind = 8), intent(in) :: sizes(:)
+			integer(kind = 8), intent(out) :: len_
+		end subroutine
+
 		module function new_array(type, cap) result(vector)
 			integer, intent(in) :: type
 			integer, intent(in), optional :: cap
@@ -576,27 +582,39 @@ end subroutine open_file_impl
 elemental function slice_len(lsub, ssub, usub) result(len_)
 
 	! Number of elements in the stepped slice lsub : ssub : usub, i.e.
-	! python's len(range(lsub, usub, ssub)).  Branchless apart from the
-	! max(): this is the same (u - l + s - sign(1,s)) / s formula used by
-	! OP_FOR_SETUP_NAT (vm_exec.f90) and step_array construction
+	! python's len(range(lsub, usub, ssub)).  It is also the count for
+	! OP_FOR_SETUP (vm_exec.f90) and step_array construction
 	! (runtime_control.f90's eval_array_expr, step_array kind).
 	!
+	! The empty/reversed cases are tested first, and the count is
+	! (u - l - sign(1,s)) / s + 1 rather than (u - l + s - sign(1,s)) / s, so
+	! that a big step doesn't overflow.  i32 callers widen their args to i64,
+	! so only an i64 range wider than huge(0_8) can still overflow in u - l.
+	! That is reported as huge(0_8), which check_array_len() rejects
+	!
 	! This used to be built from a `divceil` (integer division ceiling)
-	! helper plus two `if` guards to clamp an empty/reversed slice to 0.
-	! divceil() truncates toward zero, so it over-counts by one for a
-	! negative numerator (divceil(-1, 2) = 1, not the true ceil(-0.5) = 0);
-	! that made `max(0_8, divceil(u - l, s))` -- used at some call sites --
-	! silently wrong for an empty stepped slice like a[4:2:3], and made the
-	! unguarded two-`if` form work only because the guards independently
-	! covered exactly the cases divceil() got wrong.  This formula sidesteps
-	! all of that: it's the one already used elsewhere in this file for
-	! for-loops and step_array literals, verified against every combination
-	! of a slice's sign and direction
+	! helper plus two `if` guards.  divceil() truncates toward zero, so it
+	! over-counts by one for a negative numerator (divceil(-1, 2) = 1, not
+	! the true ceil(-0.5) = 0), which was wrong for an empty stepped slice
+	! like a[4:2:3]
 
 	integer(kind = 8), intent(in) :: lsub, ssub, usub
 	integer(kind = 8) :: len_
 
-	len_ = max(0_8, (usub - lsub + ssub - sign(1_8, ssub)) / ssub)
+	integer(kind = 8) :: d
+
+	if ((ssub > 0 .and. lsub >= usub) .or. (ssub < 0 .and. lsub <= usub)) then
+		len_ = 0
+		return
+	end if
+
+	d = usub - lsub
+	if ((d > 0) .neqv. (ssub > 0)) then
+		! u - l wrapped around
+		len_ = huge(0_8)
+	else
+		len_ = (d - sign(1_8, ssub)) / ssub + 1
+	end if
 
 end function slice_len
 

@@ -285,7 +285,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			if (search_io /= exit_success) then
 				span = new_span(identifier%pos, len(identifier%text))
 				call parser%diagnostics%push( &
-					err_undeclare_var(parser%context(), span, identifier%text, &
+					err_undeclare_var(parser%contexts%v(identifier%unit_), span, identifier%text, &
 					parser%vars%closest(identifier%text)))
 			end if
 
@@ -307,6 +307,11 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			! re-parse the same tokens and re-push them, causing duplicates
 			parser%pos = pos0
 			parser%diagnostics%len_ = ndiag0
+
+			! The discarded diagnostics included an E20 whose position is
+			! remembered for de-duping in match().  Forget it, or the re-parse
+			! is a "second" failure at that position and its E20 is dropped
+			parser%last_e20_pos = 0
 		else
 			! It's a qualified assignment
 
@@ -331,7 +336,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			if (search_io /= exit_success .and. .not. allocated(expr%member)) then
 				span = new_span(identifier%pos, len(identifier%text))
 				call parser%diagnostics%push( &
-					err_undeclare_var(parser%context(), span, identifier%text, &
+					err_undeclare_var(parser%contexts%v(identifier%unit_), span, identifier%text, &
 					parser%vars%closest(identifier%text)))
 			end if
 
@@ -375,9 +380,13 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			! survives is_binary_op_allowed_val for str operands) can't be
 			! given it a sound meaning here.  Whole-string ops (`s += "x"`,
 			! `v[0] += "x"`, `v[0:2] += "x"`) stay legal
-			if (op%kind == plus_equals_token) then
-				if ((lhs_root_type == str_type .and. allocated(expr%lsubscripts)) .or. &
-				    (lhs_root_arr_type == str_type .and. allocated(expr%lsubscripts) .and. &
+			!
+			! Fortran doesn't short-circuit `.and.`, so size() can only be reached
+			! once lsubscripts is known to be allocated (c.f. the unqualified
+			! branch below)
+			if (op%kind == plus_equals_token .and. allocated(expr%lsubscripts)) then
+				if (lhs_root_type == str_type .or. &
+				    (lhs_root_arr_type == str_type .and. &
 				     size(expr%lsubscripts) == lhs_root_rank + 1)) then
 					span = new_span(op%pos, len(op%text))
 					call parser%diagnostics%push( &
@@ -492,7 +501,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			if (search_io /= exit_success .and. .not. allocated(expr%member)) then
 				span = new_span(identifier%pos, len(identifier%text))
 				call parser%diagnostics%push( &
-					err_undeclare_var(parser%context(), &
+					err_undeclare_var(parser%contexts%v(identifier%unit_), &
 					span, identifier%text, &
 					parser%vars%closest(identifier%text)))
 			end if
@@ -522,6 +531,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			! re-parses the same tokens and would otherwise re-push them,
 			! causing duplicates
 			parser%diagnostics%len_ = ndiag0
+			parser%last_e20_pos = 0  ! see the rewind above
 			call parser%parse_expr(expr=expr)
 			return
 		end if
@@ -563,7 +573,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			if (search_io /= exit_success) then
 				span = new_span(identifier%pos, len(identifier%text))
 				call parser%diagnostics%push( &
-					err_undeclare_var(parser%context(), &
+					err_undeclare_var(parser%contexts%v(identifier%unit_), &
 					span, identifier%text, &
 					parser%vars%closest(identifier%text)))
 				!print *, "undeclared var 2"
@@ -611,9 +621,13 @@ recursive module subroutine parse_expr_statement(parser, expr)
 		! is_binary_op_allowed_val for str operands) can't be given a sound
 		! meaning here.  Whole-string ops (`s += "x"`, `v[0] += "x"`,
 		! `v[0:2] += "x"`) stay legal
-		if (op%kind == plus_equals_token) then
-			if ((lhs_root_type == str_type .and. allocated(expr%lsubscripts)) .or. &
-			    (lhs_root_arr_type == str_type .and. allocated(expr%lsubscripts) .and. &
+		!
+		! Fortran doesn't short-circuit `.and.`, so size() can only be reached
+		! once lsubscripts is known to be allocated (e.g. `sum_ += ` with a
+		! missing rhs has none)
+		if (op%kind == plus_equals_token .and. allocated(expr%lsubscripts)) then
+			if (lhs_root_type == str_type .or. &
+			    (lhs_root_arr_type == str_type .and. &
 			     size(expr%lsubscripts) == lhs_root_rank + 1)) then
 				span = new_span(op%pos, len(op%text))
 				call parser%diagnostics%push( &
@@ -1151,7 +1165,7 @@ recursive module subroutine parse_name_expr(parser, expr)
 
 			span = new_span(identifier%pos, len(identifier%text))
 			call parser%diagnostics%push( &
-				err_undeclare_var(parser%context(), &
+				err_undeclare_var(parser%contexts%v(identifier%unit_), &
 				span, identifier%text, suggest))
 		end if
 	end if
@@ -1533,6 +1547,14 @@ recursive module subroutine parse_dot(parser, expr)
 
 	!print *, "struct_name = """, expr%val%struct_name, """"
 
+	! A struct-typed value can have no name after a malformed struct
+	! declaration (it already has a diagnostic).  Recover like an unknown type
+	! above, instead of reading an unallocated name
+	if (.not. allocated(expr%val%struct_name)) then
+		call parse_swallow_member_tail(parser)
+		return
+	end if
+
 	! Is there a better way than looking up every struct by name again?
 	struct_id = parser%structs%find(expr%val%struct_name)
 	if (struct_id == 0) then
@@ -1658,11 +1680,13 @@ recursive module subroutine parse_dot(parser, expr)
 	! I think this is the right place to parse subscripts. Or should it be after
 	! the recursive parse_dot()?
 	expr%member%val = member
+	! parse_subscripts() reads this for its E36/E13 diagnostics
+	expr%member%identifier = identifier
 	pos0 = parser%current_pos()
 	call parser%parse_subscripts(expr%member)
 	pos1 = parser%current_pos()
 	if (allocated(expr%member%lsubscripts)) then
-		expr%val = expr%member%val
+		call value_copy(expr%val, expr%member%val)
 	end if
 
 	if (parser%current_kind() == lparen_token) then
@@ -1717,7 +1741,7 @@ recursive module subroutine parse_dot(parser, expr)
 	! I think this needs a recursive call to `parse_dot()` right here to handle
 	! things like `a.b.c`
 	if (parser%peek_kind(0) == dot_token) then
-		expr%member%val = expr%val
+		call value_copy(expr%member%val, expr%val)
 		expr%member%identifier = identifier  ! set for diags in recursed parse_dot()
 
 		! Save the current expr (e.g. y.b) before the recursive call can turn
@@ -1726,7 +1750,7 @@ recursive module subroutine parse_dot(parser, expr)
 		receiver_cand = expr
 
 		call parser%parse_dot(expr%member)
-		expr%val = expr%member%val
+		call value_copy(expr%val, expr%member%val)
 
 		! If the recursive call resolved a method call or a fn-typed member
 		! call, possibly with more members or calls chained after it (e.g.
@@ -1870,7 +1894,23 @@ recursive subroutine splice_chain_root(recv, node, has_meth, meth, meth_struct)
 		return
 	end if
 
+	! Error recovery can leave a call node without its receiver (`args`) or
+	! callee (`left`), e.g. after a malformed struct declaration, so treat it as
+	! a plain member fragment rather than walking into unallocated components
 	is_meth = any([node%kind, node%root_kind] == method_call_expr)
+	if (is_meth) then
+		if (.not. allocated(node%args)) then
+			recv%member = node
+			node = recv
+			return
+		end if
+	else
+		if (.not. allocated(node%left)) then
+			recv%member = node
+			node = recv
+			return
+		end if
+	end if
 
 	if (is_meth) then
 		is_innermost = .not. is_call_node(node%args(1))
@@ -1888,7 +1928,7 @@ end subroutine splice_chain_root
 
 !===============================================================================
 
-subroutine parse_call_arg_list(parser, call_args, call_is_ref, pos_args, &
+recursive subroutine parse_call_arg_list(parser, call_args, call_is_ref, pos_args, &
 		lparen_, rparen_)
 
 	! Parse a parenthesized, comma-separated argument list into `call_args`
@@ -1951,7 +1991,7 @@ end subroutine parse_call_arg_list
 
 !===============================================================================
 
-subroutine parse_swallow_member_tail(parser)
+recursive subroutine parse_swallow_member_tail(parser)
 
 	! Error recovery: consume the rest of a member chain whose receiver type is
 	! unknown -- any `[...]` subscripts and `.name` / `.name(...)` accesses that
@@ -1999,7 +2039,7 @@ end subroutine parse_swallow_member_tail
 
 !===============================================================================
 
-subroutine parse_swallow_arg_list(parser)
+recursive subroutine parse_swallow_arg_list(parser)
 
 	! Error recovery: consume a parenthesized, comma-separated argument list
 	! without building an AST for it, so the parser stays in sync with a
@@ -2035,7 +2075,7 @@ end subroutine parse_swallow_arg_list
 
 !===============================================================================
 
-subroutine parse_file_member(parser, expr, identifier)
+recursive subroutine parse_file_member(parser, expr, identifier)
 
 	! Read-only dot member access on a file handle: f.is_open, f.eof, f.name.
 	! Unlike struct members these are baked from a fixed table rather than
@@ -2093,15 +2133,15 @@ subroutine parse_file_member(parser, expr, identifier)
 	! it (a bool member gets the standard E39 "scalar cannot have subscripts")
 	call parser%parse_subscripts(expr%member)
 	if (allocated(expr%member%lsubscripts)) then
-		expr%val = expr%member%val
+		call value_copy(expr%val, expr%member%val)
 	end if
 
 	! f.name.foo -- keep the parser in sync; the recursive parse_dot() call
 	! will report E62 (dot on a non-struct str/bool value)
 	if (parser%peek_kind(0) == dot_token) then
-		expr%member%val = expr%val
+		call value_copy(expr%member%val, expr%val)
 		call parser%parse_dot(expr%member)
-		expr%val = expr%member%val
+		call value_copy(expr%val, expr%member%val)
 	end if
 
 end subroutine parse_file_member

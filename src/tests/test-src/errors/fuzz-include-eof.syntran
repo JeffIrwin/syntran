@@ -1,0 +1,4 @@
+// Fuzz regression: `#include` needs a parenthesized string literal.  A bare
+// directive at the end of the file used to segfault in the preprocessor
+
+#include

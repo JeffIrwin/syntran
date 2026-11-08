@@ -660,6 +660,49 @@ end subroutine allocate_array
 
 !===============================================================================
 
+module subroutine check_array_len(state, sizes, len_)
+
+	! Total number of elements of an array with the extents `sizes`, or an R48
+	! runtime error (and len_ = 0) if an extent is negative or the array is too
+	! large to allocate.  Call this before allocate_array() with a length that
+	! comes from the program, e.g. `[0; n]`.  The caller must check
+	! state%rt_halt immediately after
+	!
+	! The limit is far below huge(0_8), so that the element count times the size
+	! of an element, even a struct, can't overflow when the memory is allocated
+
+	type(state_t), intent(inout) :: state
+	integer(kind = 8), intent(in) :: sizes(:)
+	integer(kind = 8), intent(out) :: len_
+
+	integer(kind = 8), parameter :: max_len = 2_8**40
+
+	integer :: i
+
+	len_ = 0
+
+	if (any(sizes < 0)) then
+		call rt_throw(state, err_rt_bad_array_size(sizes))
+		return
+	end if
+
+	! An empty array is fine no matter how big its other extents are
+	if (any(sizes == 0)) return
+
+	len_ = 1
+	do i = 1, size(sizes)
+		if (len_ > max_len / sizes(i)) then
+			len_ = 0
+			call rt_throw(state, err_rt_bad_array_size(sizes))
+			return
+		end if
+		len_ = len_ * sizes(i)
+	end do
+
+end subroutine check_array_len
+
+!===============================================================================
+
 module function new_array(type, cap) result(vector)
 
 	! Only caller is the size_array branch of eval_array_expr
@@ -2350,6 +2393,11 @@ module subroutine apply_subscripts_to_val(node, val, state, res, slots)
 		i8    = 0
 		do i = 1, val%array%rank
 			subscript = slots(i)
+			if (bounds_check) then
+				call check_bound(state, subscript%to_i64(), i, val%array%rank, &
+					val%array%size(i))
+				if (state%rt_halt) return
+			end if
 			i8   = i8 + prod * subscript%to_i64()
 			prod = prod * val%array%size(i)
 		end do

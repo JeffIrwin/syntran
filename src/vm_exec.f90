@@ -209,6 +209,25 @@ end subroutine store_move
 
 !===============================================================================
 
+subroutine store_keep_array(prog, ip, tos, slot)
+	! `(a = 1)` of a scalar onto an array `a` broadcasts it, and the parser
+	! types that expression as `a`.  But the scalar is still on TOS after the
+	! store, so give the expression's reader the array that was stored.  Nobody
+	! reads TOS when the next op is OP_POP, which skips the copy for the usual
+	! statement `a = 1;`
+	type(program_t), intent(in) :: prog
+	integer, intent(in) :: ip
+	type(value_t), intent(inout) :: tos
+	type(value_t), intent(in) :: slot
+
+	if (slot%type /= array_type .or. tos%type == array_type) return
+	if (next_op_is_pop(prog, ip)) return
+	call value_copy(tos, slot)
+
+end subroutine store_keep_array
+
+!===============================================================================
+
 subroutine vm_stack_grow(stack)
 	! Grow the operand stack when len_ > cap.  Called from the typed-load fast
 	! path which increments len_ before checking capacity.
@@ -997,6 +1016,7 @@ module subroutine vm_run(prog, state, res)
 				state%vars%vals(instr%a) = stack%v(stack%len_)
 			else
 				call assign_(state%vars%vals(instr%a), stack%v(stack%len_), '=')
+				call store_keep_array(prog, ip, stack%v(stack%len_), state%vars%vals(instr%a))
 			end if
 
 		case (OP_STORE_LOCAL)
@@ -1006,6 +1026,7 @@ module subroutine vm_run(prog, state, res)
 				state%locs%vals(instr%a) = stack%v(stack%len_)
 			else
 				call assign_(state%locs%vals(instr%a), stack%v(stack%len_), '=')
+				call store_keep_array(prog, ip, stack%v(stack%len_), state%locs%vals(instr%a))
 			end if
 
 		! --- binary operation ---
@@ -1531,6 +1552,16 @@ module subroutine vm_run(prog, state, res)
 					block
 						integer(kind=8) :: char_pos
 						char_pos = stack%v(base_+nelem+1)%to_i64()
+						if (bounds_check) then
+							if (n%is_loc) then
+								call check_index_nat(state, char_pos, &
+									len(state%locs%vals(id)%array%str(i8+1)%s, 8))
+							else
+								call check_index_nat(state, char_pos, &
+									len(state%vars%vals(id)%array%str(i8+1)%s, 8))
+							end if
+							if (state%rt_halt) exit
+						end if
 						if (n%is_loc) then
 							state%locs%vals(id)%array%str(i8+1)%s( &
 								char_pos+1 : char_pos+1) = right%str%s
@@ -2103,7 +2134,7 @@ module subroutine vm_run(prog, state, res)
 						for_iters(fi)%len8 = for_iters(fi)%len8 * stack%v(k_)%to_i64()
 					end do
 					k_ = k_ + 1
-					for_iters(fi)%lbound_ = stack%v(k_)
+					call value_copy(for_iters(fi)%lbound_, stack%v(k_))  ! not `=`, for Intel
 
 				case default
 					write(*,*) err_int(IC_FOR_ARRAY_KIND, 'for loop: unknown array kind')
@@ -2214,19 +2245,19 @@ module subroutine vm_run(prog, state, res)
 						call rt_throw(state, err_rt(RC_FOR_STEP_ZERO, 'for loop step is 0'))
 						exit
 					end if
-					for_iters(fi)%len8 = ( &
-						for_iters(fi)%ubound_%sca%i32 - for_iters(fi)%lbound_%sca%i32 &
-						+ for_iters(fi)%step%sca%i32  &
-						- sign(1, for_iters(fi)%step%sca%i32) ) / for_iters(fi)%step%sca%i32
+					for_iters(fi)%len8 = slice_len( &
+						int(for_iters(fi)%lbound_%sca%i32, 8), &
+						int(for_iters(fi)%step%sca%i32, 8), &
+						int(for_iters(fi)%ubound_%sca%i32, 8))
 				case (i64_type)
 					if (for_iters(fi)%step%sca%i64 == 0) then
 						call rt_throw(state, err_rt(RC_FOR_STEP_ZERO, 'for loop step is 0'))
 						exit
 					end if
-					for_iters(fi)%len8 = ( &
-						for_iters(fi)%ubound_%sca%i64 - for_iters(fi)%lbound_%sca%i64 &
-						+ for_iters(fi)%step%sca%i64  &
-						- sign(int(1,8), for_iters(fi)%step%sca%i64) ) / for_iters(fi)%step%sca%i64
+					for_iters(fi)%len8 = slice_len( &
+						for_iters(fi)%lbound_%sca%i64, &
+						for_iters(fi)%step%sca%i64, &
+						for_iters(fi)%ubound_%sca%i64)
 				case (f32_type)
 					if (for_iters(fi)%step%sca%f32 == 0.0) then
 						call rt_throw(state, err_rt(RC_FOR_STEP_ZERO_F, 'for loop step is 0.0'))
@@ -3617,12 +3648,14 @@ module subroutine vm_run(prog, state, res)
 
 			rk_     = instr%b
 			call vm_pop_copy(stack, fill_)
-			len_tot_ = 1
 			do k_ = rk_, 1, -1
 				dims_(k_) = stack%v(stack%len_)%to_i64()
 				stack%len_ = stack%len_ - 1
-				len_tot_   = len_tot_ * dims_(k_)
 			end do
+
+			! Negative or huge extents are a runtime error, not an allocation
+			call check_array_len(state, dims_(1:rk_), len_tot_)
+			if (state%rt_halt) exit
 
 			allocate(val%array)
 			val%type           = array_type
@@ -3657,6 +3690,8 @@ module subroutine vm_run(prog, state, res)
 			stack%len_ = stack%len_ - 2
 
 			len_ = max(0_8, ub_ - lb_)
+			call check_array_len(state, [len_], len_)
+			if (state%rt_halt) exit
 
 			allocate(val%array)
 			val%type           = array_type

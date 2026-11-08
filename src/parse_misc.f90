@@ -59,6 +59,19 @@ module subroutine search(parser, key, id_index, iostat, val, is_loc, is_const)
 
 	if (.not. is_loc) then
 		call parser%vars%search(key, id_index, iostat, val, is_const = is_const)
+
+		! In pass 1 the vars table still holds everything pass 0 inserted, but
+		! num_vars was reset, so an id past it is a global that isn't declared
+		! yet, e.g. the `count` in `let count = count;`.  Treat it as not found,
+		! c.f. the pass-0-only diagnostics in parse_unit().  Pass 0's value
+		! goes too, e.g. the fn ref in `let sq = sq;`, or callers that build a
+		! node from it would allocate over its fn_params
+		if (iostat == exit_success .and. parser%ipass > 0 .and. &
+			id_index > parser%num_vars) then
+			iostat = exit_failure
+			call value_destroy(val)
+			val%type = unknown_type
+		end if
 	end if
 
 end subroutine search
@@ -338,7 +351,7 @@ recursive module subroutine preprocess(parser, tokens_in, src_file, contexts)
 
 	type(text_span_t) :: span
 
-	type(syntax_token_t) :: token, token_peek, lparen, rparen, semicolon
+	type(syntax_token_t) :: token, token_peek, lparen, rparen, semicolon, filetok
 	type(syntax_token_vector_t) :: tokens_out
 
 	! The includer's own context was pushed by new_parser() before it called
@@ -376,6 +389,14 @@ recursive module subroutine preprocess(parser, tokens_in, src_file, contexts)
 			! are consumed by the preprocessor, so the later actual parser does
 			! not see them.
 			call parser%match_pre(lparen_token, tokens_in, i, contexts%v(unit_0), lparen)
+
+			! The file name must be a string literal.  Anything else (including
+			! the eof of a bare `#include`) has no `%val%str` to read.  This
+			! pushes the E20 and leaves the rest of the tokens for the parser
+			if (tokens_in(i + 1)%kind /= str_token) then
+				call parser%match_pre(str_token, tokens_in, i, contexts%v(unit_0), filetok)
+				cycle
+			end if
 
 			! Prepend with path to src_file, unless already absolute
 

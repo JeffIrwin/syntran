@@ -748,7 +748,7 @@ recursive module subroutine parse_qualified_expr(parser, expr)
 			! Struct not found
 			span = new_span(fn_identifier%pos, len(fn_identifier%text))
 			call parser%diagnostics%push( &
-				err_undeclare_var(parser%context(), span, fn_name, &
+				err_undeclare_var(parser%contexts%v(fn_identifier%unit_), span, fn_name, &
 				parser%vars%closest(fn_name)))
 		end if
 
@@ -759,7 +759,7 @@ recursive module subroutine parse_qualified_expr(parser, expr)
 		if (iostat /= exit_success) then
 			span = new_span(fn_identifier%pos, len(fn_identifier%text))
 			call parser%diagnostics%push( &
-				err_undeclare_var(parser%context(), span, fn_name, &
+				err_undeclare_var(parser%contexts%v(fn_identifier%unit_), span, fn_name, &
 				parser%vars%closest(fn_name)))
 			return
 		end if
@@ -776,7 +776,7 @@ end subroutine parse_qualified_expr
 
 !===============================================================================
 
-module subroutine parse_fn_declaration(parser, decl, no_fn_kw)
+recursive module subroutine parse_fn_declaration(parser, decl, no_fn_kw)
 
 	class(parser_t) :: parser
 	type(syntax_node_t), intent(out) :: decl
@@ -848,9 +848,16 @@ module subroutine parse_fn_declaration(parser, decl, no_fn_kw)
 
 	!print *, 'matching lparen'
 
-	! This is a bit of a hack, but parser can crash otherwise if parens are
-	! missing.  Should parens be optional for fns without params?
-	if (parser%current_kind() /= lparen_token) return
+	! Parens are required, even for fns without params.  Report the missing one
+	! (match() pushes E20) and bail out, undoing the scope state from above.
+	! Returning without a diagnostic leaves a kind-0 node for the compiler
+	if (parser%current_kind() /= lparen_token) then
+		call parser%match(lparen_token, lparen)
+		call parser%vars%pop_scope()
+		call parser%locs%pop_scope()
+		parser%is_loc = .false.
+		return
+	end if
 
 	call parser%match(lparen_token, lparen)
 

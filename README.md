@@ -2872,6 +2872,11 @@ made by `let cur = list;`, when a list is passed to a fn by value, and when a fn
 returns one.  For a big tree, an array of nodes that refer to each other by index
 scales better.
 
+A list with a node per element is freed without recursion, so a million nodes are
+fine.  But copying one, printing it, assigning over it, or dropping a fn's local
+list still recurses once per node, which overflows an 8 MB stack at a few tens of
+thousands of nodes.
+
 ## Enums
 
 Enums declare a named type with a fixed set of integer-valued variants:

@@ -460,7 +460,8 @@ recursive module subroutine parse_array_expr(parser, expr)
 		if (io /= TYPE_MATCH .and. io /= TYPE_RANK_MISMATCH) then
 			span = new_span(span_beg, span_end - span_beg + 1)
 			call parser%diagnostics%push(err_het_array( &
-				parser%context(), span, parser%text(span_beg, span_end)))
+				parser%context(), span, parser%text(span_beg, span_end), &
+				type_name(lbound_%val), type_name(elem%val)))
 		end if
 
 		if (elem%val%type == array_type) then
@@ -632,6 +633,10 @@ recursive module subroutine parse_subscripts(parser, expr)
 	ssubscripts_vec = new_syntax_node_vector()  ! steps
 
 	call parser%match(lbracket_token, lbracket)
+
+	! With empty brackets, `a[]`, the loop below never sets span0 but the
+	! diagnostics after it still read it
+	span0 = parser%current_pos()
 
 	do while ( &
 		parser%current_kind() /= rbracket_token .and. &
@@ -1101,7 +1106,7 @@ end function is_zero_literal
 
 !===============================================================================
 
-module subroutine parse_size(parser, size)
+recursive module subroutine parse_size(parser, size)
 
 	class(parser_t) :: parser
 
@@ -1111,20 +1116,31 @@ module subroutine parse_size(parser, size)
 
 	integer :: span_beg, span_end, pos0
 
+	logical :: is_empty
+
 	type(syntax_node_t)  :: len
 	type(syntax_token_t) :: comma, dummy
 	type(text_span_t) :: span
 
+	! At least one size is required, so that `[0;]` doesn't make a rank-0 array.
+	! The empty list falls into parse_expr(), which reports E20 at the `]`
 	size = new_syntax_node_vector()
-	do while ( &
-		parser%current_kind() /= rbracket_token .and. &
-		parser%current_kind() /= eof_token)
+	do
 
 		pos0 = parser%pos
+		is_empty = parser%current_kind() == rbracket_token
 
 		span_beg = parser%peek_pos(0)
 		call parser%parse_expr(expr=len)
 		span_end = parser%peek_pos(0) - 1
+
+		if (is_empty) then
+			! parse_expr() consumed the `]` that it reported.  Give it back,
+			! so that the caller can match it without a cascade of E20s
+			parser%pos = pos0
+			call size%push(len)
+			exit
+		end if
 
 		!print *, 'len = ', parser%text(span_beg, span_end)
 
@@ -1143,6 +1159,8 @@ module subroutine parse_size(parser, size)
 		if (parser%current_kind() /= rbracket_token) then
 			call parser%match(comma_token, comma)
 		end if
+
+		if (any(parser%current_kind() == [rbracket_token, eof_token])) exit
 
 	end do
 

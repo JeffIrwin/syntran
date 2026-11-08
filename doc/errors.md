@@ -372,7 +372,7 @@ An implicit unit-step range's bounds (`[lo: hi]`) are of a uniform but non-integ
 
 ### E59 -- het-array
 
-An array literal is heterogeneous: an element's type doesn't match the first element's type.
+An array literal is heterogeneous: an element's type doesn't match the first element's type.  The message names both types.
 
 [Example](../src/tests/test-src/errors/E59-het-array.syntran)
 
@@ -1352,6 +1352,18 @@ A member was read or assigned through an optional struct (`?Node`) that is `null
 `tail.next.val` when `tail.next` is `null`.  Compare with `x == null` first.
 
 [Example](../src/tests/test-src/errors/R47-null-member.syntran)
+
+### R48 -- bad-array-size
+
+An array was built with a negative extent, like `[0; n]` with `n = -1`, or with more than 2^40 elements, which is too many to allocate.  An extent of zero is fine, and gives an empty array.  A range like `[7: 3]` whose upper bound is below its lower bound is also fine, and is empty.  The sizes can come from the program, so they aren't known until runtime.
+
+[Example](../src/tests/test-src/errors/R48-bad-array-size.syntran)
+
+### R49 -- cast-str-len
+
+[`i32()`](intrinsics.md#i32) or [`i64()`](intrinsics.md#i64) was given a string that doesn't have exactly 1 character, or an array with such an element.  Only a single character has an integer value, its ASCII code.  To read a number from a string, use `parse_i32()` or `parse_i64()` instead.
+
+[Example](../src/tests/test-src/errors/R49-cast-str-len.syntran)
 
 ## Warnings
 

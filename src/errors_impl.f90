@@ -422,6 +422,8 @@ module procedure get_all_error_codes
 	call codes%push(RC_BINARY_WRITE_TYPE)
 	call codes%push(RC_PARSE_BOOL)
 	call codes%push(RC_NULL_MEMBER)
+	call codes%push(RC_BAD_ARRAY_SIZE)
+	call codes%push(RC_CAST_STR_LEN)
 	call codes%push(WC_MISSING_RETURN)
 end procedure get_all_error_codes
 
@@ -1857,7 +1859,7 @@ module procedure err_het_array
 
 	err = err_pre(EC_HET_ARRAY) &
 		//'array is heterogeneous.  Element `'//elem  &
-		//"` does not match the first element's type" &
+		//'` has type `'//actual//'` but the first element has type `'//expect//'`' &
 		//underline(context, span) &
 		//" heterogeneous array element"//color_reset
 
@@ -2069,6 +2071,35 @@ module procedure err_rt_repeat_negative
 		"ncopies argument of repeat() is negative: "//str(ncopies))
 
 end procedure err_rt_repeat_negative
+
+
+!===============================================================================
+
+module procedure err_rt_bad_array_size
+
+	! Runtime (R48) error for an array that is built with a negative extent, or
+	! with so many elements that it can't be allocated
+
+	err = err_rt(RC_BAD_ARRAY_SIZE, &
+		"invalid array size "//dims_str(sizes)//": extents must not be negative, "// &
+		"and the array must have at most 2^40 elements")
+
+end procedure err_rt_bad_array_size
+
+
+!===============================================================================
+
+module procedure err_rt_cast_str_len
+
+	! Runtime (R49) error for i32() or i64() of a string that isn't exactly 1
+	! character long, which is the only kind that has an integer value (its
+	! ASCII code)
+
+	err = err_rt(RC_CAST_STR_LEN, &
+		"cannot cast a string of length "//str(len_)//" with `"//fn//"()`: only "// &
+		"single-character strings can be cast.  Use `parse_"//fn//"()` to parse a number")
+
+end procedure err_rt_cast_str_len
 
 
 !===============================================================================
@@ -2511,9 +2542,9 @@ module procedure underline
 	! j :shrug:
 	j = max(min(len(context%text), span%start + length - 1), 1)
 	!print *, 'char = "', context%text(j:j), '"'
-	do while (is_whitespace(context%text(j:j)))
+	do while (length > 0 .and. is_whitespace(context%text(j:j)))
 		length = length - 1
-		j = min(len(context%text), span%start + length - 1)
+		j = max(min(len(context%text), span%start + length - 1), 1)
 	end do
 	length = max(length, 1)
 

@@ -1,0 +1,6 @@
+// Fuzz regression: an unfinished call in a subscript, as the last tokens of the file.
+// parse_expr_statement() parses `a[...` speculatively and rewinds, and the
+// re-parse's E20 at the same position was dropped as a duplicate of the discarded one
+
+let a = [5];
+let b = a[idx(
