@@ -7802,7 +7802,7 @@ subroutine unit_test_lex_dump(npass, nfail)
 
 	character(len = *), parameter :: label = 'lex_dump'
 
-	character, parameter :: t = char(9), lf = line_feed
+	character, parameter :: lf = line_feed
 
 	logical, allocatable :: tests(:)
 
@@ -7812,60 +7812,67 @@ subroutine unit_test_lex_dump(npass, nfail)
 		[   &
 			! Positions are 0-based
 			lex_dump('+', 'a') == &
-				'0'//t//'plus_token'//t//'+'//lf// &
-				'1'//t//'eof_token'//t//'\0'//lf, &
+				'0 plus_token +'//lf// &
+				'1 eof_token \0'//lf, &
 
 			! A 2-char operator has the pos of its last char
 			lex_dump('a+=1', 'a') == &
-				'0'//t//'identifier_token'//t//'a'//lf// &
-				'2'//t//'plus_equals_token'//t//'+='//lf// &
-				'3'//t//'i32_token'//t//'1'//t//'1'//lf// &
-				'4'//t//'eof_token'//t//'\0'//lf, &
+				'0 identifier_token a'//lf// &
+				'2 plus_equals_token +='//lf// &
+				'3 i32_token 1 1'//lf// &
+				'4 eof_token \0'//lf, &
 
 			! Hex with a type suffix.  The text doesn't include the suffix
 			lex_dump("0x1F'i64", 'a') == &
-				'0'//t//'i64_token'//t//"0x1F"//t//'31'//lf// &
-				'8'//t//'eof_token'//t//'\0'//lf, &
+				'0 i64_token 0x1F 31'//lf// &
+				'8 eof_token \0'//lf, &
 
 			! Whitespace and comments are kept, and escaped.  The lexer skips the
 			! char after a `//` comment, i.e. its line feed, so there is no
 			! whitespace token for it, unlike after a shebang below
 			lex_dump('a // b'//lf//'c', 'a') == &
-				'0'//t//'identifier_token'//t//'a'//lf// &
-				'1'//t//'whitespace_token'//t//' '//lf// &
-				'2'//t//'comment_token'//t//'// b'//lf// &
-				'7'//t//'identifier_token'//t//'c'//lf// &
-				'8'//t//'eof_token'//t//'\0'//lf, &
+				'0 identifier_token a'//lf// &
+				'1 whitespace_token  '//lf// &
+				'2 comment_token // b'//lf// &
+				'7 identifier_token c'//lf// &
+				'8 eof_token \0'//lf, &
 			lex_dump('a'//lf//'b', 'a') == &
-				'0'//t//'identifier_token'//t//'a'//lf// &
-				'1'//t//'whitespace_token'//t//'\n'//lf// &
-				'2'//t//'identifier_token'//t//'b'//lf// &
-				'3'//t//'eof_token'//t//'\0'//lf, &
+				'0 identifier_token a'//lf// &
+				'1 whitespace_token \n'//lf// &
+				'2 identifier_token b'//lf// &
+				'3 eof_token \0'//lf, &
+
+			! A tab is escaped, so that the only delimiters in a line are spaces
+			lex_dump('a'//char(9)//'b', 'a') == &
+				'0 identifier_token a'//lf// &
+				'1 whitespace_token \t'//lf// &
+				'2 identifier_token b'//lf// &
+				'3 eof_token \0'//lf, &
 
 			! A doubled quote is one quote in the value
 			lex_dump('"a""b"', 'a') == &
-				'0'//t//'str_token'//t//'"a""b"'//t//'a"b'//lf// &
-				'6'//t//'eof_token'//t//'\0'//lf, &
+				'0 str_token "a""b" a"b'//lf// &
+				'6 eof_token \0'//lf, &
 
 			! Raw strings are verbatim
 			lex_dump('r#"x"y"#', 'a') == &
-				'0'//t//'str_token'//t//'r#"x"y"#'//t//'x"y'//lf// &
-				'8'//t//'eof_token'//t//'\0'//lf, &
+				'0 str_token r#"x"y"# x"y'//lf// &
+				'8 eof_token \0'//lf, &
 
 			! Shebang
 			lex_dump('#!x'//lf, 'a') == &
-				'0'//t//'comment_token'//t//'#!x'//lf// &
-				'3'//t//'whitespace_token'//t//'\n'//lf// &
-				'4'//t//'eof_token'//t//'\0'//lf, &
+				'0 comment_token #!x'//lf// &
+				'3 whitespace_token \n'//lf// &
+				'4 eof_token \0'//lf, &
 
 			! Bad tokens are kept, and then the diagnostic codes come last
 			lex_dump('$', 'a') == &
-				'0'//t//'bad_token'//t//'$'//lf// &
-				'1'//t//'eof_token'//t//'\0'//lf// &
+				'0 bad_token $'//lf// &
+				'1 eof_token \0'//lf// &
 				'diag E19'//lf, &
 			lex_dump('"a', 'a') == &
-				'2'//t//'bad_token'//t//'"a'//lf// &
-				'2'//t//'eof_token'//t//'\0'//lf// &
+				'2 bad_token "a'//lf// &
+				'2 eof_token \0'//lf// &
 				'diag E10'//lf, &
 
 			.false.  & ! so I don't have to bother w/ trailing commas

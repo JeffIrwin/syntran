@@ -1126,7 +1126,7 @@ end function new_lexer
 function escape_dump(str_) result(esc)
 
 	! Escape a token's text or value for lex_dump(), so that a token is always
-	! exactly one line with tab-separated fields.  Bytes >= 128 are left alone
+	! exactly one line, with no tabs in it.  Bytes >= 128 are left alone
 
 	character(len = *), intent(in) :: str_
 	character(len = :), allocatable :: esc
@@ -1198,11 +1198,12 @@ function lex_dump(text, src_file) result(str_)
 	! tokens are all kept.  This is used to test the syntran port of the lexer
 	! in compiler/lex.syntran, which prints the same format:
 	!
-	!     <pos> <tab> <kind_name> <tab> <text> [<tab> <value>]
+	!     <pos> <kind_name> <text> [<value>]
 	!     ...
 	!     diag <code>
 	!
-	! `pos` is 0-based, unlike the lexer's own 1-based pos
+	! The fields are separated by one space, and the text and value can have
+	! spaces of their own.  `pos` is 0-based, unlike the lexer's own 1-based pos
 
 	character(len = *), intent(in) :: text, src_file
 	character(len = :), allocatable :: str_
@@ -1221,12 +1222,12 @@ function lex_dump(text, src_file) result(str_)
 	do
 		call lexer%lex(token)
 
-		call push_str(sb, str(token%pos - 1)//tab//kind_name(token%kind)//tab &
+		call push_str(sb, str(token%pos - 1)//" "//kind_name(token%kind)//" " &
 			//escape_dump(token%text))
 
 		select case (token%kind)
 		case (i32_token, i64_token, f32_token, f64_token, str_token)
-			call push_str(sb, tab//escape_dump(token%val%to_str()))
+			call push_str(sb, " "//escape_dump(token%val%to_str()))
 		end select
 		call push_str(sb, line_feed)
 

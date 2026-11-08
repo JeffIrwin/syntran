@@ -13,9 +13,9 @@
 
 use lex::*;
 
-// Escape a token's text or value so that a token is always one line with
-// tab-separated fields.  Bytes >= 128 are left alone.  Syntran strs have no
-// escapes, so a lone backslash is "\"
+// Escape a token's text or value so that a token is always one line, with no
+// tabs in it.  Bytes >= 128 are left alone.  Syntran strs have no escapes, so a
+// lone backslash is "\"
 fn escape(s: &const str): str
 {
 	let out = "";
@@ -94,22 +94,21 @@ fn main()
 	let lexer = new_lexer(text);
 	const tokens = lex_all(&lexer);
 
-	const tab = char(9);
 	for i in [0: tokens.len]
 	{
 		const t = tokens.data[i];
-		let line = str(t.pos) + tab + kind_name(t) + tab + escape(t.text);
+		let line = str(t.pos) + " " + kind_name(t) + " " + escape(t.text);
 
 		if t.kind == TokenKind.i32
-			line += tab + str(t.i32_);
+			line += " " + str(t.i32_);
 		else if t.kind == TokenKind.i64
-			line += tab + str(t.i64_);
+			line += " " + str(t.i64_);
 		else if t.kind == TokenKind.f32
-			line += tab + str(t.f32_);
+			line += " " + str(t.f32_);
 		else if t.kind == TokenKind.f64
-			line += tab + str(t.f64_);
+			line += " " + str(t.f64_);
 		else if t.kind == TokenKind.str
-			line += tab + escape(t.str_);
+			line += " " + escape(t.str_);
 
 		println(line);
 	}
