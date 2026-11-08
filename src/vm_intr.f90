@@ -38,7 +38,7 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 	!*******
 
 	integer :: i, io
-	integer :: env_len, env_stat
+	integer :: env_len, env_stat, sys_stat, sys_cstat
 	integer :: red_inner, red_n, red_outer, red_op
 	integer :: solve_n, solve_nrhs, solve_info
 	integer(kind = 8) :: ir, ic, ncopies, bad_len
@@ -1117,6 +1117,17 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 		res%type = bool_type
 		call get_environment_variable(args(1)%str%s, status = env_stat)
 		res%sca%bool = env_stat == 0
+
+	case (INTR_SYSTEM)
+		! std::system(cmd) -- run a command line and return its exit status, or
+		! -1 if it can't be started.  Flush first so that output stays in order
+		res%type = i32_type
+		flush(output_unit)
+		flush(error_unit)
+		sys_stat = -1
+		call execute_command_line(args(1)%str%s, exitstat = sys_stat, cmdstat = sys_cstat)
+		if (sys_cstat /= 0) sys_stat = -1
+		res%sca%i32 = sys_stat
 
 	case (INTR_EXISTS)
 		! std::exists(path) -- whether a file exists at `path`

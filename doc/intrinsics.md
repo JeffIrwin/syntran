@@ -1268,6 +1268,28 @@ let sd = sum(a, 0, a > 2); // [0, 7, 11]
 
 Related functions: [`product`](#product), [`count`](#count)
 
+## `system`
+```rust
+fn system(cmd: str): i32
+```
+
+Run the command line `cmd` through the shell (`sh -c` on Unix, `cmd /c` on
+Windows) and return its exit status.  The result is `-1` if the command can't be
+started.  Standard output and error are flushed first, so that output stays in
+order.  Pipes, redirection, and `&&` work as they do in the shell, and quoting
+is up to the caller.  Close a file that you wrote before a command reads it.
+Must be called with the `std::` prefix, e.g. `std::system("ls -l")`.
+
+```rust
+let status = std::system("echo hello > out.txt");
+if status != 0
+{
+	println("failed with status ", status);
+}
+```
+
+Related functions: [`getenv`](#getenv), [`exit`](#exit)
+
 ## `tan`
 ```rust
 fn tan(x: any_float): any_float

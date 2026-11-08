@@ -62,7 +62,7 @@ This is a subset of the language so far:
   `std::exists`, the members `f.is_open`, `f.eof`, and `f.name`, and `readln()`
   and `eof()` of standard input.  Binary files, with a `b` in the mode of `open`,
   and `std::read_i32`, `std::read_i64`, `std::read_f32`, and `std::read_f64`.
-  `std::IN`, `std::OUT`, `std::ERR`, `std::PI`, `std::getenv`, `std::hasenv`, and
+  `std::IN`, `std::OUT`, `std::ERR`, `std::PI`, `std::getenv`, `std::hasenv`, `std::system`, and
   `std::args()`
 - Function pointers: a variable of a fn type, passing and returning one, a member
   of a struct that is one, calling one, and comparing two with `==` and `!=`

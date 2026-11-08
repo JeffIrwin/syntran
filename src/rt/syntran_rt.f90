@@ -1320,6 +1320,18 @@ function rt_hasenv(name) result(r)
     r = st == 0
 end function rt_hasenv
 
+function rt_system(cmd) result(r)
+    character(len = *), intent(in) :: cmd
+    integer(int32) :: r
+    integer :: st, cst
+    flush(output_unit)
+    flush(error_unit)
+    st = -1
+    call execute_command_line(cmd, exitstat = st, cmdstat = cst)
+    if (cst /= 0) st = -1
+    r = int(st, int32)
+end function rt_system
+
 function rt_args() result(r)
     ! The command line arguments of the program
     type(rt_str_t), allocatable :: r(:)

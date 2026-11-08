@@ -28,7 +28,7 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 		char_fn, i32_sca_fn, i32_arr_fn, i64_sca_fn, i64_arr_fn, &
 		f32_sca_fn, f32_arr_fn, f64_sca_fn, f64_arr_fn, &
 		open_fn, readln_fn, writeln_fn, eof_fn, close_fn, exit_fn, &
-		getenv_fn, hasenv_fn, exists_fn, try_open_fn, &
+		getenv_fn, hasenv_fn, system_fn, exists_fn, try_open_fn, &
 		print_trace_fn, stack_trace_fn, caller_fn, print_fn, write_fn, format_fn, printf_fn, writef_fn
 
 	! std::read_<type>(): the stub that is registered as the std-only name, then
@@ -517,6 +517,19 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 
 	!********
 
+	! std::system(cmd) runs the command line `cmd` through the shell and returns
+	! its exit status, or -1 if it can't be started.  Quoting is up to the
+	! caller.  This is an std-only function: it must be called as std::system(cmd)
+	system_fn%type%type = i32_type
+	allocate(system_fn%params(1))
+	allocate(system_fn%param_names%v(1))
+	system_fn%params(1)%type = str_type
+	system_fn%param_names%v(1)%s = "cmd"
+
+	call fns%insert("std::system", system_fn, id_index)
+
+	!********
+
 	! std::exists(path) returns whether a file exists at `path`.  Relative
 	! paths are resolved the same way open() resolves them (against the
 	! script dir under --cd).  Note that a `true` result is not a guarantee
@@ -619,7 +632,7 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 			char_fn, i32_sca_fn, i32_arr_fn, i64_sca_fn, i64_arr_fn, &
 			f32_sca_fn, f32_arr_fn, f64_sca_fn, f64_arr_fn, &
 			open_fn, readln_fn, writeln_fn, eof_fn, close_fn, exit_fn, &
-			getenv_fn, hasenv_fn, exists_fn, try_open_fn, &
+			getenv_fn, hasenv_fn, system_fn, exists_fn, try_open_fn, &
 			print_trace_fn, stack_trace_fn, caller_fn, print_fn, write_fn, format_fn, printf_fn, writef_fn, read_fns &
 		]
 

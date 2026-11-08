@@ -7746,6 +7746,47 @@ end subroutine unit_test_move
 
 !===============================================================================
 
+subroutine unit_test_system(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'std::system'
+
+	! Path to syntran test files from root of repo
+	character(len = *), parameter :: path = 'src/tests/test-src/system/'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			interpret_file(path//'test-01.syntran', quiet) == '0', &
+
+			! Portable across sh and cmd, and silent
+			interpret('std::system("exit 0");') == '0', &
+			interpret('std::system("exit 3");') == '3', &
+			interpret('let s = std::system("exit 7"); s + 1;') == '8', &
+
+			! std-only
+			diag_has_code(get_diags('system("exit 0");'), EC_STD_ONLY_FN), &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_system
+
+!===============================================================================
+
 subroutine unit_test_ref(npass, nfail)
 
 	implicit none
@@ -13152,6 +13193,7 @@ subroutine unit_tests(iostat)
 	if (run_group('bitwise_2')) call unit_test_bitwise_2(npass, nfail)
 	if (run_group('ref')) call unit_test_ref(npass, nfail)
 	if (run_group('move')) call unit_test_move(npass, nfail)
+	if (run_group('system')) call unit_test_system(npass, nfail)
 	if (run_group('recursion')) call unit_test_recursion(npass, nfail)
 	if (run_group('args')) call unit_test_args(npass, nfail)
 	if (run_group('reshape')) call unit_test_reshape(npass, nfail)

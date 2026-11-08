@@ -538,6 +538,9 @@ module syntran__bytecode_m
 	! OP_CALL_INTR
 	integer, parameter :: INTR_MOVE = 163
 
+	! std::system(cmd)
+	integer, parameter :: INTR_SYSTEM = 164
+
 	!********
 
 	! A single bytecode instruction.  Kept as a plain POD record (no allocatable
@@ -1117,6 +1120,7 @@ pure integer function intr_id_from_name(name) result(id)
 	case ("getenv");         id = INTR_GETENV
 	case ("move");           id = INTR_MOVE
 	case ("hasenv");         id = INTR_HASENV
+	case ("system");         id = INTR_SYSTEM
 	case ("exists");         id = INTR_EXISTS
 	case ("try_open");       id = INTR_TRY_OPEN
 	case ("print_trace");    id = INTR_PRINT_TRACE
