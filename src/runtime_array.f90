@@ -910,7 +910,7 @@ module subroutine apply_assign_op(lhs, rhs, op)
 	case (slash_equals_token)
 		call div(tmp, rhs_, lhs, op%text)
 
-	case (sstar_equals_token)
+	case (double_star_equals_token)
 		call pow(tmp, rhs_, lhs, op%text)
 
 	case (percent_equals_token)
@@ -925,10 +925,10 @@ module subroutine apply_assign_op(lhs, rhs, op)
 	case (caret_equals_token)
 		call bit_xor(tmp, rhs_, lhs, op%text)
 
-	case (lless_equals_token)
+	case (double_less_equals_token)
 		call left_shift(tmp, rhs_, lhs, op%text)
 
-	case (ggreater_equals_token)
+	case (double_greater_equals_token)
 		call right_shift(tmp, rhs_, lhs, op%text)
 
 	case default

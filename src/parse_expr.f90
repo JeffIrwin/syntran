@@ -114,7 +114,7 @@ recursive module subroutine parse_let_expr(parser, is_const, expr)
 					call parser%next(dummy)
 				end do
 			else if (is_assignment_op(parser%current_kind()) .or. &
-			         parser%current_kind() == eequals_token) then
+			         parser%current_kind() == double_equals_token) then
 				! Typo'd operator, e.g. `let x == 4;` or `let x += 4;`
 				call parser%next(dummy)
 			end if
@@ -701,7 +701,7 @@ recursive module subroutine parse_expr(parser, parent_prec, expr)
 		if (prec == 0 .or. prec <= parent_precl) exit
 
 		call parser%next(op)
-		if (op%kind == sstar_token) then
+		if (op%kind == double_star_token) then
 			! `**` is right-associative, like Fortran:  `a ** b ** c` is
 			! `a ** (b ** c)`.  Parsing the right operand with a parent
 			! precedence one lower lets another `**` nest into it.  That is

@@ -487,7 +487,7 @@ subroutine do_binop(left, right, op_kind, restype, res, rt_err)
 		call mul(left, right, res, '*')
 	case (matmul_token)
 		call matmul_(left, right, res, '@', rt_err)
-	case (sstar_token)
+	case (double_star_token)
 		call pow(left, right, res, '**')
 	case (slash_token)
 		call div(left, right, res, '/')
@@ -497,7 +497,7 @@ subroutine do_binop(left, right, op_kind, restype, res, rt_err)
 		call and_(left, right, res, 'and')
 	case (or_keyword)
 		call or_(left, right, res, 'or')
-	case (eequals_token)
+	case (double_equals_token)
 		call is_eq(left, right, res, '==')
 	case (bang_equals_token)
 		call is_ne(left, right, res, '!=')
@@ -509,9 +509,9 @@ subroutine do_binop(left, right, op_kind, restype, res, rt_err)
 		call is_gt(left, right, res, '>')
 	case (greater_equals_token)
 		call is_ge(left, right, res, '>=')
-	case (lless_token)
+	case (double_less_token)
 		call left_shift(left, right, res, '<<')
-	case (ggreater_token)
+	case (double_greater_token)
 		call right_shift(left, right, res, '>>')
 	case (caret_token)
 		call bit_xor(left, right, res, '^')
@@ -540,20 +540,20 @@ function op_text(op_kind) result(text)
 	case (plus_token);           text = '+'
 	case (minus_token);          text = '-'
 	case (star_token);           text = '*'
-	case (sstar_token);          text = '**'
+	case (double_star_token);          text = '**'
 	case (slash_token);          text = '/'
 	case (percent_token);        text = '%'
 	case (matmul_token);         text = '@'
 	case (and_keyword);          text = 'and'
 	case (or_keyword);           text = 'or'
-	case (eequals_token);        text = '=='
+	case (double_equals_token);        text = '=='
 	case (bang_equals_token);    text = '!='
 	case (less_token);           text = '<'
 	case (less_equals_token);    text = '<='
 	case (greater_token);        text = '>'
 	case (greater_equals_token); text = '>='
-	case (lless_token);          text = '<<'
-	case (ggreater_token);       text = '>>'
+	case (double_less_token);          text = '<<'
+	case (double_greater_token);       text = '>>'
 	case (caret_token);          text = '^'
 	case (pipe_token);           text = '|'
 	case (amp_token);            text = '&'
@@ -669,7 +669,7 @@ subroutine do_array_binop_typed(left, right, op_kind, elem_type, res, rt_err)
 		case (f32_type); res%array%bool = left%array%f32 >= right%array%f32
 		case (f64_type); res%array%bool = left%array%f64 >= right%array%f64
 		end select
-	case (eequals_token)
+	case (double_equals_token)
 		res%array = mold(left%array, bool_type)
 		select case (elem_type)
 		case (i32_type);  res%array%bool = left%array%i32  == right%array%i32

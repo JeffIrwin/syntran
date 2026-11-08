@@ -131,7 +131,7 @@ function null_test_operand(node) result(which)
 	integer :: which
 
 	which = 0
-	if (.not. any(node%op%kind == [eequals_token, bang_equals_token])) return
+	if (.not. any(node%op%kind == [double_equals_token, bang_equals_token])) return
 
 	if (is_null_literal(node%right)) then
 		if (is_null_test_var(node%left)) which = 1
@@ -626,7 +626,7 @@ recursive subroutine compile_switch_statement(prog, cs, node)
 					call emit_switch_load_subj(prog, node, subj_type)
 					call compile_node(prog, cs, node%members(i)%elems(j))
 					val_type = node%members(i)%elems(j)%val%type
-					call emit_case_cmp(prog, eequals_token, subj_type, val_type)
+					call emit_case_cmp(prog, double_equals_token, subj_type, val_type)
 				end if
 				match_ips(j) = prog%len_ + 1
 				call emit(prog, OP_JUMP_IF_TRUE, a = 0)

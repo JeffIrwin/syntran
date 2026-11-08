@@ -234,8 +234,6 @@ module syntran__core_m
 	!    * can arrays contain a fn? (E89) -- the array-element storage path
 	!      genuinely has no fn_type case
 	!    * closures and anonymous (lambda) fns?
-	!  - i like claude's "double_colon_token" name. i should change things like
-	!    "sstar_token", "pplus_token", etc. to "double_star_token" ...
 	!  - minloc, maxloc, findloc std:: fns
 	!    * useful for aoc
 	!  - add ci/cd tests for gfortran 15. maybe phase out 10 or 11 for managable
@@ -528,9 +526,9 @@ module syntran__core_m
 	!
 	!****************************************
 
-	! A note on naming: Immo calls '==' equals_equals_token, but I think that
-	! invites tab-completion mistakes so I went with eequals_token.  Same for
-	! sstar_token (and upcoming pplus_token, mminus_token, etc.)
+	! A note on naming: doubled operators are spelled out as double_*_token, e.g.
+	! double_equals_token for '==' and double_star_token for '**'.  Immo's
+	! equals_equals_token would invite tab-completion mistakes with equals_token.
 
 !===============================================================================
 

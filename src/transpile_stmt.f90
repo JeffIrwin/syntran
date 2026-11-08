@@ -456,7 +456,7 @@ recursive module subroutine emit_assign(em, node)
 		op_str = ' * '
 	case (slash_equals_token)
 		op_str = ' / '
-	case (sstar_equals_token)
+	case (double_star_equals_token)
 		op_str = ' ** '
 	case (percent_equals_token)
 		fn_str = 'mod'
@@ -466,16 +466,16 @@ recursive module subroutine emit_assign(em, node)
 		fn_str = 'ior'
 	case (caret_equals_token)
 		fn_str = 'ieor'
-	case (lless_equals_token)
+	case (double_less_equals_token)
 		fn_str = 'shiftl'
-	case (ggreater_equals_token)
+	case (double_greater_equals_token)
 		fn_str = 'shiftr'
 	case default
 		call em_unsupported(em, 'the `'//node%op%text//'` operator')
 		return
 	end select
 
-	if (node%op%kind == lless_equals_token .or. node%op%kind == ggreater_equals_token) then
+	if (node%op%kind == double_less_equals_token .or. node%op%kind == double_greater_equals_token) then
 		! Shifted in the width of the target.  The count can have any integer
 		! type
 		call em_line(em, lhs//' = '//fn_str//'('//lhs//', '//rhs//')')
@@ -730,7 +730,7 @@ end function is_pure_case
 
 recursive function case_cmp(em, subj, sval, v, op) result(s)
 
-	! Fortran expression for `<subject> == v` if `op` is eequals_token, or for
+	! Fortran expression for `<subject> == v` if `op` is double_equals_token, or for
 	! `<subject> < v` if it is less_token.  `subj` is the hidden variable that the
 	! subject was stored in and `sval` is its value, for the type
 
@@ -828,7 +828,7 @@ recursive function case_test(em, subj, sval, v) result(s)
 		s = '(.not. '//case_cmp(em, subj, sval, v%lbound_, less_token)//' .and. '// &
 			case_cmp(em, subj, sval, v%ubound_, less_token)//')'
 	else
-		s = case_cmp(em, subj, sval, v, eequals_token)
+		s = case_cmp(em, subj, sval, v, double_equals_token)
 	end if
 
 end function case_test
@@ -936,7 +936,7 @@ recursive subroutine emit_switch(em, node, is_result)
 							em%indent = em%indent - 1
 							call em_line(em, 'end if')
 						else
-							test = case_cmp(em, subj, node%condition%val, v, eequals_token)
+							test = case_cmp(em, subj, node%condition%val, v, double_equals_token)
 							call em_line(em, matched//' = '//unparen(test))
 						end if
 					end associate
