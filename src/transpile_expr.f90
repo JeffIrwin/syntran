@@ -2976,6 +2976,8 @@ recursive function emit_intr_call(em, node) result(s)
 
 	integer :: i, n, iu, t, ferr
 
+	logical :: ok
+
 	type(rt_str_t), allocatable :: fpieces(:), fspecs(:)
 
 	name = node%identifier%text
@@ -3202,6 +3204,27 @@ recursive function emit_intr_call(em, node) result(s)
 
 	case ('exists')
 		s = 'rt_exists('//a1//')'
+
+	case ('move')
+		! The temp takes the array or str out of the variable with move_alloc(),
+		! which doesn't copy, and the variable gets an empty one, like in the
+		! interpreter.  a1 is the variable or member, and both lines are hoisted
+		! before the statement
+		em%tmp_count = em%tmp_count + 1
+		s = 'mv_t'//str(em%tmp_count)
+		call em%decls%push(decl_line(em, node%val, s, ok))
+		if (.not. ok) call em_unsupported(em, 'a move of type `'//kind_name(node%val%type)//'`', &
+			node%identifier%pos)
+		call em_line(em, 'call move_alloc('//a1//', '//s//')')
+		if (is_arr(node%val)) then
+			args = '0'
+			do i = 2, node%val%array%rank
+				args = args//', 0'
+			end do
+			call em_line(em, 'allocate('//a1//'('//args//'))')
+		else
+			call em_line(em, a1//" = ''")
+		end if
 
 	case ('getenv', 'hasenv')
 		s = 'rt_'//base//'('//a1//')'

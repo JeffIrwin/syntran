@@ -1178,6 +1178,9 @@ recursive function may_clobber(node) result(c)
 	select case (node%kind)
 	case (fn_call_expr, method_call_expr, fn_call_ptr_expr, assignment_expr)
 		return
+	case (fn_call_intr_expr)
+		! std::move() leaves its variable empty, which frees what it held
+		if (node%identifier%text == 'move') return
 	end select
 
 	c = .false.
@@ -5494,6 +5497,10 @@ recursive function emit_intr_call(em, node) result(r)
 
 	type(nval_t) :: piece, acc, a, b
 
+	type(place_t) :: pl
+
+	type(c_ptr) :: ignored
+
 	name = node%identifier%text
 	base = name
 	if (len(name) > 1) then
@@ -5567,6 +5574,28 @@ recursive function emit_intr_call(em, node) result(r)
 		r = arr_val(rt_call(em, 'sy_solve', em%t_ptr, [a%v, b%v]), .true., node%val)
 		call dispose(em, a)
 		call dispose(em, b)
+
+	case ('move')
+		! Take the array or str out of its variable or member, and leave an empty one
+		! there.  The value is then owned, like a fn result, so assigning it moves it
+		! with no copy.  The parser checked that the arg is a plain variable or member
+		if (place_of(em, node%args(1), pl)) then
+			r = elem_load(em, pl%ty, pl%p)
+			if (pl%ty == array_type) then
+				r%elem = pl%elem
+				r%rank = pl%rank
+				sizes = store_sizes(em, [(ci64(em, 0_8), i = 1, max(pl%rank, 1))])
+				zero = rt_call(em, 'sy_arr_new', em%t_ptr, &
+					[ci32(em, elem_code(pl%elem)), ci32(em, max(pl%rank, 1)), sizes])
+			else
+				zero = str_literal(em, '')
+			end if
+			ignored = LLVMBuildStore(em%bld, zero, pl%p)
+			r%owned = .true.
+			call place_done(em, pl)
+		else
+			r = dummy_val(em, node%val%type)
+		end if
 
 	case ('lu_factor')
 		! The matrix is changed in place, through the array that the variable holds,

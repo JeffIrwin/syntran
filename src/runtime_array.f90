@@ -544,6 +544,67 @@ end subroutine move_member_in
 
 !===============================================================================
 
+module subroutine move_take(v, val)
+
+	! std::move(x): move the array or str v into val without copying it.  Unlike
+	! the by-ref moves above, nobody puts it back, so v is left an empty array
+	! (same element type and rank, all extents 0) or an empty str.  That keeps
+	! v a valid value that can be read or reassigned
+
+	type(value_t), intent(inout) :: v
+	type(value_t), intent(out) :: val
+
+	call value_move(v, val)
+
+	select case (val%type)
+	case (str_type)
+		allocate(v%str)
+		v%str%s = ''
+
+	case (array_type)
+		allocate(v%array)
+		v%array%type = val%array%type
+		v%array%kind = expl_array
+		v%array%rank = val%array%rank
+		v%array%len_ = 0
+		allocate(v%array%size(val%array%rank))
+		v%array%size = 0
+		call allocate_array(v, 0_8)
+
+		! Struct and enum arrays also keep their element type in the value
+		if (allocated(val%struct_name))   v%struct_name   = val%struct_name
+		if (allocated(val%struct_cookie)) v%struct_cookie = val%struct_cookie
+		if (allocated(val%enum_name))     v%enum_name     = val%enum_name
+		if (allocated(val%enum_cookie))   v%enum_cookie   = val%enum_cookie
+	end select
+
+end subroutine move_take
+
+!===============================================================================
+
+module subroutine move_member_take(node, var, state, val)
+
+	! std::move(x.a.b) of a plain dot chain, see move_take()
+
+	type(syntax_node_t), intent(in), target :: node
+	type(value_t), intent(inout), target :: var
+	type(state_t), intent(inout) :: state
+	type(value_t), intent(out) :: val
+
+	!********
+
+	type(value_t), pointer :: v
+
+	v => member_leaf(node, var, state, .false.)
+	if (.not. associated(v)) return
+
+	call move_take(v, val)
+
+end subroutine move_member_take
+
+!===============================================================================
+
+
 subroutine get_file_member(member_node, var, state, res)
 
 	! Read one of a file handle's fixed read-only members (c.f. FILE_MEM_*

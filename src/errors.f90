@@ -146,6 +146,7 @@ module syntran__errors_m
 		EC_NULL_ARRAY = "E128", &
 		EC_UNTYPED_NULL = "E129", &
 		EC_NATIVE_UNSUPPORTED = "E130", &
+		EC_MOVE_NOT_VAR = "E131", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -899,6 +900,12 @@ module syntran__errors_m
 			character(len = :), allocatable :: err
 			character(len = *), intent(in) :: var
 		end function err_untyped_null
+
+		module function err_move_not_var(context, span) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+		end function err_move_not_var
 
 		module function err_native_unsupported(context, span, what) result(err)
 			type(text_context_t) :: context
