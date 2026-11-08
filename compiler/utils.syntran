@@ -1,0 +1,266 @@
+
+// Small helpers for the self-hosted compiler that don't depend on any of its
+// types: character classes, digit and number conversion, and a growable array
+// of strs.  The lexer, compiler/lex.syntran, is the first user.  c.f.
+// src/utils_impl.f90 for the character classes
+
+//==============================================================================
+
+// Syntran's `and` and `or` don't short-circuit, so `i < n and s[i] == "x"` reads
+// past the end of `s`.  This gets a char, or char(0) if `i` is out of range
+fn at(s: &const str, i: i32): str
+{
+	if i < 0 or i >= len(s)
+		return char(0);
+	return s[i];
+}
+
+// Character classes.  A `c` is a str of length 1
+fn is_digit(c: str): bool
+{
+	return "0" <= c and c <= "9";
+}
+
+fn is_digit_under(c: str): bool
+{
+	return is_digit(c) or c == "_";
+}
+
+fn is_hex(c: str): bool
+{
+	return is_digit(c) or ("a" <= c and c <= "f") or ("A" <= c and c <= "F");
+}
+
+fn is_hex_under(c: str): bool
+{
+	return is_hex(c) or c == "_";
+}
+
+fn is_oct_under(c: str): bool
+{
+	return ("0" <= c and c <= "7") or c == "_";
+}
+
+fn is_bin_under(c: str): bool
+{
+	return c == "0" or c == "1" or c == "_";
+}
+
+fn is_sign(c: str): bool
+{
+	return c == "+" or c == "-";
+}
+
+fn is_expo(c: str): bool
+{
+	return c == "d" or c == "e" or c == "D" or c == "E";
+}
+
+fn is_float_under(c: str): bool
+{
+	return is_digit(c) or is_sign(c) or is_expo(c) or c == "." or c == "_";
+}
+
+fn is_letter(c: str): bool
+{
+	return ("a" <= c and c <= "z") or ("A" <= c and c <= "Z");
+}
+
+fn is_alphanum(c: str): bool
+{
+	return is_letter(c) or is_digit(c);
+}
+
+fn is_alphanum_under(c: str): bool
+{
+	return is_alphanum(c) or c == "_";
+}
+
+// tab, line feed, vertical tab, carriage return, and space
+fn is_whitespace(c: str): bool
+{
+	return c == char(9) or c == char(10) or c == char(11) or c == char(13) or c == " ";
+}
+
+//==============================================================================
+
+// Remove all occurrences of the char `ch` from `s`
+fn rm_char(s: &const str, ch: str): str
+{
+	let out = "";
+	for i in [0: len(s)]
+		if s[i] != ch
+			out += s[i];
+	return out;
+}
+
+// Strip leading zeros, but leave 1 digit, so "000" is "0"
+fn rm_leading_zeros(s: &const str): str
+{
+	if len(s) == 0
+		return "";
+
+	let i = 0;
+	while i < len(s) - 1
+	{
+		if s[i] != "0"
+			break;
+		i += 1;
+	}
+	return s[i:];
+}
+
+// The value of a hex, octal, or binary digit
+fn digit_val(c: str): i32
+{
+	if is_digit(c)
+		return i32(c) - i32("0");
+	if "a" <= c and c <= "f"
+		return i32(c) - i32("a") + 10;
+	return i32(c) - i32("A") + 10;
+}
+
+// The number of bits that it takes to hold a digit, which is < 16
+fn bit_len(d: i32): i32
+{
+	let n = 0;
+	let x = d;
+	while x > 0
+	{
+		n += 1;
+		x = x >> 1;
+	}
+	return n;
+}
+
+// The number of significant bits in a string of hex, octal, or binary digits,
+// where `k` is the number of bits per digit.  There are no leading zeros
+// except for a lone "0"
+fn sig_bits(digits: &const str, k: i32): i64
+{
+	if digits == "0"
+		return 0'i64;
+	return bit_len(digit_val(digits[0])) + k * (len(digits) - 1);
+}
+
+// Digits to a value, as the bits of an i64, for a number of up to 64 bits
+fn radix_val(digits: &const str, k: i32): i64
+{
+	let val = 0'i64;
+	for i in [0: len(digits)]
+		val = (val << k) | i64(digit_val(digits[i]));
+	return val;
+}
+
+// Wrap an i64 that holds the bits of an unsigned 32-bit number as an i32
+fn to_i32(val: i64): i32
+{
+	if val >= 0x8000_0000'i64
+		return i32(val - 0x1_0000_0000'i64);
+	return i32(val);
+}
+
+// Decimal digits to a value, or -1 if there are none or it doesn't fit in an i64
+fn dec_val(digits: &const str): i64
+{
+	if len(digits) == 0
+		return -1'i64;
+
+	const imax = 0x7fff_ffff_ffff_ffff'i64;
+	let val = 0'i64;
+	for i in [0: len(digits)]
+	{
+		const d = digit_val(digits[i]);
+		if val > (imax - d) / 10
+			return -1'i64;
+		val = val * 10 + d;
+	}
+	return val;
+}
+
+// Would a Fortran list-directed read accept `s` as a real number?  The lexer
+// takes the chars for a float literal greedily, so there can be too many dots,
+// exponents, etc.  Syntran's parse_f32() and parse_f64() are a runtime error
+// for those, but the lexer needs a diagnostic instead.  The chars of `s` are
+// already only digits, `.`, `d`, `e`, `+`, and `-`, and a sign only comes right
+// after an exponent letter
+fn is_real(s: &const str): bool
+{
+	let i = 0;
+	const n = len(s);
+
+	let ndigits = 0;
+	while is_digit(at(s, i))
+	{
+		ndigits += 1;
+		i += 1;
+	}
+	if at(s, i) == "."
+	{
+		i += 1;
+		while is_digit(at(s, i))
+		{
+			ndigits += 1;
+			i += 1;
+		}
+	}
+	if ndigits == 0
+		return false;
+
+	if i == n
+		return true;
+
+	if not is_expo(at(s, i))
+		return false;
+	i += 1;
+
+	if is_sign(at(s, i))
+		i += 1;
+
+	let nexp = 0;
+	while is_digit(at(s, i))
+	{
+		nexp += 1;
+		i += 1;
+	}
+	return nexp > 0 and i == n;
+}
+
+//==============================================================================
+
+// A growable array of strs, like samples/vec_i32.syntran.  `len` is the number
+// of strs that are in use, and `cap` is the allocated size of `data`
+struct StrVec
+{
+	len: i32,
+	cap: i32,
+	data: [str; :],
+
+	fn push(s: &const str)
+	{
+		if len >= cap
+		{
+			let new_cap = 16;
+			if cap > 0
+				new_cap = cap * 2;
+
+			let new_data = [data, [""; new_cap - cap]];
+			data = std::move(new_data);
+			cap = new_cap;
+		}
+		data[len] = s;
+		len += 1;
+		return;
+	}
+}
+
+fn new_str_vec(): StrVec
+{
+	return StrVec
+	{
+		len = 0,
+		cap = 0,
+		data = [""; 0],
+	};
+}
+
