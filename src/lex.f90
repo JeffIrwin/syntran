@@ -655,11 +655,11 @@ subroutine lex_impl(lexer, token)
 				if (lexer%peek(2) == "=") then
 					!print *, '**='
 					lexer%pos = lexer%pos + 2
-					call new_token(token, sstar_equals_token, lexer%pos, "**=")
+					call new_token(token, double_star_equals_token, lexer%pos, "**=")
 
 				else
 					lexer%pos = lexer%pos + 1
-					call new_token(token, sstar_token, lexer%pos, "**")
+					call new_token(token, double_star_token, lexer%pos, "**")
 
 				end if
 
@@ -743,7 +743,7 @@ subroutine lex_impl(lexer, token)
 		case ("=")
 			if (lexer%lookahead() == "=") then
 				lexer%pos = lexer%pos + 1
-				call new_token(token, eequals_token, lexer%pos, "==")
+				call new_token(token, double_equals_token, lexer%pos, "==")
 			else
 				call new_token(token, equals_token, lexer%pos, lexer%current())
 			end if
@@ -764,10 +764,10 @@ subroutine lex_impl(lexer, token)
 
 				if (lexer%peek(2) == "=") then
 					lexer%pos = lexer%pos + 2
-					call new_token(token, lless_equals_token, lexer%pos, "<<=")
+					call new_token(token, double_less_equals_token, lexer%pos, "<<=")
 				else
 					lexer%pos = lexer%pos + 1
-					call new_token(token, lless_token, lexer%pos, "<<")
+					call new_token(token, double_less_token, lexer%pos, "<<")
 				end if
 
 			else
@@ -782,10 +782,10 @@ subroutine lex_impl(lexer, token)
 
 				if (lexer%peek(2) == "=") then
 					lexer%pos = lexer%pos + 2
-					call new_token(token, ggreater_equals_token, lexer%pos, ">>=")
+					call new_token(token, double_greater_equals_token, lexer%pos, ">>=")
 				else
 					lexer%pos = lexer%pos + 1
-					call new_token(token, ggreater_token, lexer%pos, ">>")
+					call new_token(token, double_greater_token, lexer%pos, ">>")
 				end if
 
 			else

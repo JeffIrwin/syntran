@@ -410,9 +410,9 @@ module logical function is_assignment_op(op)
 
 	is_assignment_op = any(op == [equals_token, plus_equals_token, &
 		minus_equals_token, star_equals_token, slash_equals_token, &
-		sstar_equals_token, percent_equals_token, &
+		double_star_equals_token, percent_equals_token, &
 		amp_equals_token, pipe_equals_token, caret_equals_token, &
-		lless_equals_token, ggreater_equals_token])
+		double_less_equals_token, double_greater_equals_token])
 
 end function is_assignment_op
 
@@ -472,9 +472,9 @@ module logical function is_binary_op_allowed(left, op, right, left_arr, right_ar
 
 			end if
 
-		case (minus_token, star_token, sstar_token, slash_token, &
+		case (minus_token, star_token, double_star_token, slash_token, &
 			minus_equals_token, star_equals_token, slash_equals_token, &
-			sstar_equals_token, percent_token, percent_equals_token)
+			double_star_equals_token, percent_token, percent_equals_token)
 			! these operators work on numbers but not strings
 
 			if (left == array_type .and. right == array_type) then
@@ -515,8 +515,8 @@ module logical function is_binary_op_allowed(left, op, right, left_arr, right_ar
 			end if
 
 		case ( &
-				lless_token, ggreater_token, &
-				lless_equals_token, ggreater_equals_token)
+				double_less_token, double_greater_token, &
+				double_less_equals_token, double_greater_equals_token)
 
 			! Bitwise shift operators work on any combination of ints
 
@@ -596,7 +596,7 @@ module logical function is_binary_op_allowed(left, op, right, left_arr, right_ar
 
 			end if
 
-		case (eequals_token, bang_equals_token)
+		case (double_equals_token, bang_equals_token)
 
 			if (left == file_type .or. right == file_type) then
 				allowed = .false.
@@ -853,7 +853,7 @@ module integer function get_binary_op_prec(kind) result(prec)
 		! unary ops, like Fortran.  It is also right-associative, which
 		! parse_expr() handles.  See the matching note on get_unary_op_prec
 		! above
-		case (sstar_token)
+		case (double_star_token)
 			prec = 12
 
 		case (star_token, slash_token, percent_token, matmul_token)
@@ -862,7 +862,7 @@ module integer function get_binary_op_prec(kind) result(prec)
 		case (plus_token, minus_token)
 			prec = 9
 
-		case (lless_token, ggreater_token) ! `<<`, `>>`
+		case (double_less_token, double_greater_token) ! `<<`, `>>`
 			prec = 8
 
 		case (amp_token) ! `&`
@@ -878,7 +878,7 @@ module integer function get_binary_op_prec(kind) result(prec)
 				greater_token, greater_equals_token)
 			prec = 4
 
-		case (eequals_token, bang_equals_token)
+		case (double_equals_token, bang_equals_token)
 			prec = 3
 
 		case (and_keyword)  ! `and` (logical, not bitwise)
@@ -948,7 +948,7 @@ recursive module integer function get_binary_op_kind( &
 
 	select case (op)
 	case ( &
-			eequals_token, bang_equals_token, less_token, less_equals_token, &
+			double_equals_token, bang_equals_token, less_token, less_equals_token, &
 			greater_token, greater_equals_token)
 		!print *, 'bool_type'
 
@@ -961,7 +961,7 @@ recursive module integer function get_binary_op_kind( &
 			kind_ = bool_type
 		end if
 
-	case (lless_token, ggreater_token)
+	case (double_less_token, double_greater_token)
 		! Bitwise shifts return the left operand's type for scalars
 		if (left == array_type .or. right == array_type) then
 

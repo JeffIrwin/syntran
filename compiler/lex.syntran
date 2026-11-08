@@ -32,11 +32,11 @@ enum TokenKind
 	not_keyword,
 	or_keyword,
 	and_keyword,
-	eequals_token,
+	double_equals_token,
 	bang_equals_token,
 	equals_token,
 	let_keyword,
-	sstar_token,
+	double_star_token,
 	rbrace_token,
 	lbrace_token,
 	semicolon_token,
@@ -62,7 +62,7 @@ enum TokenKind
 	star_equals_token,
 	slash_equals_token,
 	i64_token,
-	sstar_equals_token,
+	double_star_equals_token,
 	percent_equals_token,
 	hash_token,
 	include_keyword,
@@ -72,14 +72,14 @@ enum TokenKind
 	f64_token,
 	break_keyword,
 	continue_keyword,
-	lless_token,
-	ggreater_token,
+	double_less_token,
+	double_greater_token,
 	amp_token,
 	pipe_token,
 	caret_token,
 	bang_token,
-	lless_equals_token,
-	ggreater_equals_token,
+	double_less_equals_token,
+	double_greater_equals_token,
 	amp_equals_token,
 	caret_equals_token,
 	pipe_equals_token,
@@ -991,12 +991,12 @@ struct Lexer
 					if peek(2) == "="
 					{
 						pos += 2;
-						token = new_token(TokenKind.sstar_equals_token, pos, "**=");
+						token = new_token(TokenKind.double_star_equals_token, pos, "**=");
 					}
 					else
 					{
 						pos += 1;
-						token = new_token(TokenKind.sstar_token, pos, "**");
+						token = new_token(TokenKind.double_star_token, pos, "**");
 					}
 				}
 				else if lookahead() == "="
@@ -1103,7 +1103,7 @@ struct Lexer
 				if lookahead() == "="
 				{
 					pos += 1;
-					token = new_token(TokenKind.eequals_token, pos, "==");
+					token = new_token(TokenKind.double_equals_token, pos, "==");
 				}
 				else
 				{
@@ -1134,12 +1134,12 @@ struct Lexer
 					if peek(2) == "="
 					{
 						pos += 2;
-						token = new_token(TokenKind.lless_equals_token, pos, "<<=");
+						token = new_token(TokenKind.double_less_equals_token, pos, "<<=");
 					}
 					else
 					{
 						pos += 1;
-						token = new_token(TokenKind.lless_token, pos, "<<");
+						token = new_token(TokenKind.double_less_token, pos, "<<");
 					}
 				}
 				else
@@ -1159,12 +1159,12 @@ struct Lexer
 					if peek(2) == "="
 					{
 						pos += 2;
-						token = new_token(TokenKind.ggreater_equals_token, pos, ">>=");
+						token = new_token(TokenKind.double_greater_equals_token, pos, ">>=");
 					}
 					else
 					{
 						pos += 1;
-						token = new_token(TokenKind.ggreater_token, pos, ">>");
+						token = new_token(TokenKind.double_greater_token, pos, ">>");
 					}
 				}
 				else

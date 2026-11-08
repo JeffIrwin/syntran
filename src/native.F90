@@ -3450,7 +3450,7 @@ function enum_compare(em, op, l, r, op_text) result(res)
 		return
 	end if
 
-	by_value = .not. (op == eequals_token .or. op == bang_equals_token)
+	by_value = .not. (op == double_equals_token .or. op == bang_equals_token)
 	associate (e => em%enums%table(k)%val)
 		do i = 1, e%num_vars
 			do j = i + 1, e%num_vars
@@ -3471,7 +3471,7 @@ function enum_compare(em, op, l, r, op_text) result(res)
 	end if
 
 	select case (op)
-	case (eequals_token)
+	case (double_equals_token)
 		res%v = LLVMBuildICmp(em%bld, LLVM_INT_EQ, a, b, cs(''))
 	case (bang_equals_token)
 		res%v = LLVMBuildICmp(em%bld, LLVM_INT_NE, a, b, cs(''))
@@ -4249,7 +4249,7 @@ function binop_vals(em, op, l, r, op_text) result(res)
 			res%ty = str_type
 			res%owned = .true.
 			res%v = rt_call(em, 'sy_str_cat', em%t_ptr, [l%v, r%v])
-		case (eequals_token, bang_equals_token)
+		case (double_equals_token, bang_equals_token)
 			res%ty = bool_type
 			res%v = str_test(em, 'sy_str_eq', l%v, r%v)
 			if (op == bang_equals_token) res%v = LLVMBuildNot(em%bld, res%v, cs(''))
@@ -4280,7 +4280,7 @@ function binop_vals(em, op, l, r, op_text) result(res)
 			(r%ty == struct_type .or. r%ty == null_type)) then
 		res%ty = bool_type
 		select case (op)
-		case (eequals_token)
+		case (double_equals_token)
 			res%v = LLVMBuildICmp(em%bld, LLVM_INT_EQ, l%v, r%v, cs(''))
 		case (bang_equals_token)
 			res%v = LLVMBuildICmp(em%bld, LLVM_INT_NE, l%v, r%v, cs(''))
@@ -4305,7 +4305,7 @@ function binop_vals(em, op, l, r, op_text) result(res)
 	if (l%ty == fn_type .and. r%ty == fn_type) then
 		res%ty = bool_type
 		select case (op)
-		case (eequals_token)
+		case (double_equals_token)
 			res%v = LLVMBuildICmp(em%bld, LLVM_INT_EQ, l%v, r%v, cs(''))
 		case (bang_equals_token)
 			res%v = LLVMBuildICmp(em%bld, LLVM_INT_NE, l%v, r%v, cs(''))
@@ -4324,7 +4324,7 @@ function binop_vals(em, op, l, r, op_text) result(res)
 			res%v = LLVMBuildAnd(em%bld, l%v, r%v, cs(''))
 		case (or_keyword)
 			res%v = LLVMBuildOr(em%bld, l%v, r%v, cs(''))
-		case (eequals_token)
+		case (double_equals_token)
 			res%v = LLVMBuildICmp(em%bld, LLVM_INT_EQ, l%v, r%v, cs(''))
 		case (bang_equals_token)
 			res%v = LLVMBuildICmp(em%bld, LLVM_INT_NE, l%v, r%v, cs(''))
@@ -4345,7 +4345,7 @@ function binop_vals(em, op, l, r, op_text) result(res)
 	! Shifts are in the width of the left operand, and are logical.  A shift by
 	! as many bits as it has or more is 0, which LLVM leaves undefined.  A negative
 	! count is masked like Fortran's shifts do
-	if (op == lless_token .or. op == ggreater_token) then
+	if (op == double_less_token .or. op == double_greater_token) then
 		if (l%ty /= i32_type .and. l%ty /= i64_type) then
 			call unsupported(em, 'a shift of type `'//kind_name(l%ty)//'`')
 			res = dummy_val(em, l%ty)
@@ -4358,7 +4358,7 @@ function binop_vals(em, op, l, r, op_text) result(res)
 		! The count is masked to the width, so a negative one wraps like in Fortran
 		masked = LLVMBuildAnd(em%bld, b%v, &
 			LLVMConstInt(ll_type(em, l%ty), int(bits - 1, c_int64_t), 0), cs(''))
-		if (op == lless_token) then
+		if (op == double_less_token) then
 			res%v = LLVMBuildShl(em%bld, a%v, masked, cs(''))
 		else
 			res%v = LLVMBuildLShr(em%bld, a%v, masked, cs(''))
@@ -4372,7 +4372,7 @@ function binop_vals(em, op, l, r, op_text) result(res)
 
 	! A power of a float and an i32 is done by repeated multiplication, like
 	! Fortran does.  Everything else converts to the wider type first
-	if (op == sstar_token .and. (l%ty == f32_type .or. l%ty == f64_type) &
+	if (op == double_star_token .and. (l%ty == f32_type .or. l%ty == f64_type) &
 			.and. r%ty == i32_type) then
 		res%ty = l%ty
 		if (l%ty == f64_type) then
@@ -4487,7 +4487,7 @@ function num_binop(em, op, ct, a, b, op_text) result(res)
 			res%v = LLVMBuildSelect(em%bld, is_zero, a, q, cs(''))
 		end if
 
-	case (sstar_token)
+	case (double_star_token)
 		select case (ct)
 		case (i32_type)
 			res%v = rt_call(em, 'sy_ipow_i32', em%t_i32, [a, b])
@@ -4511,12 +4511,12 @@ function num_binop(em, op, ct, a, b, op_text) result(res)
 			res%v = LLVMBuildXor(em%bld, a, b, cs(''))
 		end if
 
-	case (eequals_token, bang_equals_token, less_token, less_equals_token, &
+	case (double_equals_token, bang_equals_token, less_token, less_equals_token, &
 			greater_token, greater_equals_token)
 		res%ty = bool_type
 		if (is_int) then
 			select case (op)
-			case (eequals_token)
+			case (double_equals_token)
 				res%v = LLVMBuildICmp(em%bld, LLVM_INT_EQ, a, b, cs(''))
 			case (bang_equals_token)
 				res%v = LLVMBuildICmp(em%bld, LLVM_INT_NE, a, b, cs(''))
@@ -4532,7 +4532,7 @@ function num_binop(em, op, ct, a, b, op_text) result(res)
 		else
 			! Like Fortran, everything is false for a NaN, except /=
 			select case (op)
-			case (eequals_token)
+			case (double_equals_token)
 				res%v = LLVMBuildFCmp(em%bld, LLVM_REAL_OEQ, a, b, cs(''))
 			case (bang_equals_token)
 				res%v = LLVMBuildFCmp(em%bld, LLVM_REAL_UNE, a, b, cs(''))
@@ -6290,9 +6290,9 @@ recursive function emit_assign_val(em, node, as_stmt) result(res)
 		case (star_equals_token);    op = star_token
 		case (slash_equals_token);   op = slash_token
 		case (percent_equals_token); op = percent_token
-		case (sstar_equals_token);   op = sstar_token
-		case (lless_equals_token);   op = lless_token
-		case (ggreater_equals_token);op = ggreater_token
+		case (double_star_equals_token);   op = double_star_token
+		case (double_less_equals_token);   op = double_less_token
+		case (double_greater_equals_token);op = double_greater_token
 		case (amp_equals_token);     op = amp_token
 		case (pipe_equals_token);    op = pipe_token
 		case (caret_equals_token);   op = caret_token
@@ -7848,7 +7848,7 @@ recursive subroutine emit_switch(em, node, is_result)
 								em%t_i8, [held%v, v%v]), LLVMConstInt(em%t_i8, 0_c_int64_t, 0), cs(''))
 							call dispose(em, v)
 						else
-							t = binop_vals(em, eequals_token, held, v, '==')
+							t = binop_vals(em, double_equals_token, held, v, '==')
 						end if
 					end if
 				end associate

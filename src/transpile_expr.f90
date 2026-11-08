@@ -645,7 +645,7 @@ module function enum_cmp(em, k, op, l, r) result(s)
 	character(len = :), allocatable :: ops, a, b
 
 	select case (op)
-	case (eequals_token)
+	case (double_equals_token)
 		ops = '=='
 	case (bang_equals_token)
 		ops = '/='
@@ -661,7 +661,7 @@ module function enum_cmp(em, k, op, l, r) result(s)
 
 	a = l
 	b = r
-	if (.not. (op == eequals_token .or. op == bang_equals_token) .or. &
+	if (.not. (op == double_equals_token .or. op == bang_equals_token) .or. &
 			enum_has_alias(em%enums%table(k)%val)) then
 		a = enum_fn(em, k, 'val')//'('//l//')'
 		b = enum_fn(em, k, 'val')//'('//r//')'
@@ -1321,7 +1321,7 @@ function emit_str_binary(em, node, l, r, lvl) result(s)
 		select case (node%op%kind)
 		case (plus_token)
 			s = 'rt_cat('//la//', '//ra//')'
-		case (eequals_token)
+		case (double_equals_token)
 			s = 'rt_eq('//la//', '//ra//')'
 		case (bang_equals_token)
 			s = '(.not. rt_eq('//la//', '//ra//'))'
@@ -1343,7 +1343,7 @@ function emit_str_binary(em, node, l, r, lvl) result(s)
 		case (plus_token)
 			s = '('//l//' // '//r//')'
 			lvl = 6
-		case (eequals_token)
+		case (double_equals_token)
 			s = 'rt_str_eq('//unparen(l)//', '//unparen(r)//')'
 		case (bang_equals_token)
 			s = '(.not. rt_str_eq('//l//', '//r//'))'
@@ -1586,7 +1586,7 @@ recursive function emit_binary_lvl(em, node, lvl) result(s)
 
 	select case (node%op%kind)
 
-	case (plus_token, minus_token, star_token, slash_token, sstar_token, &
+	case (plus_token, minus_token, star_token, slash_token, double_star_token, &
 			percent_token)
 
 		if (.not. is_numeric_type(restype)) then
@@ -1596,7 +1596,7 @@ recursive function emit_binary_lvl(em, node, lvl) result(s)
 			return
 		end if
 
-		if (node%op%kind == sstar_token) then
+		if (node%op%kind == double_star_token) then
 			s = emit_pow(l, r, lp, rp, lt, rt, restype, lvl)
 			return
 		end if
@@ -1625,12 +1625,12 @@ recursive function emit_binary_lvl(em, node, lvl) result(s)
 			s = 'mod('//unparen(l)//', '//unparen(r)//')'
 		end select
 
-	case (eequals_token, bang_equals_token, less_token, less_equals_token, &
+	case (double_equals_token, bang_equals_token, less_token, less_equals_token, &
 			greater_token, greater_equals_token)
 
 		if (lt == bool_type .and. rt == bool_type) then
 			select case (node%op%kind)
-			case (eequals_token)
+			case (double_equals_token)
 				s = '('//operand(l, lp, 1, .true.)//' .eqv. '// &
 					operand(r, rp, 1, .false.)//')'
 				lvl = 1
@@ -1646,7 +1646,7 @@ recursive function emit_binary_lvl(em, node, lvl) result(s)
 		end if
 
 		if (lt == fn_type .and. rt == fn_type) then
-			if (node%op%kind /= eequals_token .and. node%op%kind /= bang_equals_token) then
+			if (node%op%kind /= double_equals_token .and. node%op%kind /= bang_equals_token) then
 				call em_unsupported(em, 'ordering comparison of fn pointers')
 				s = '.false.'
 				return
@@ -1701,7 +1701,7 @@ recursive function emit_binary_lvl(em, node, lvl) result(s)
 		r = operand(r, rp, 5, .false.)
 
 		select case (node%op%kind)
-		case (eequals_token)
+		case (double_equals_token)
 			s = '('//l//' == '//r//')'
 		case (bang_equals_token)
 			s = '('//l//' /= '//r//')'
@@ -1746,7 +1746,7 @@ recursive function emit_binary_lvl(em, node, lvl) result(s)
 			s = 'ieor('//l//', '//r//')'
 		end select
 
-	case (lless_token, ggreater_token)
+	case (double_less_token, double_greater_token)
 		if (.not. (lt == i32_type .or. lt == i64_type)) then
 			call em_unsupported(em, 'a bitwise shift of type `'//kind_name(lt)//'`')
 			s = '0'
@@ -1756,7 +1756,7 @@ recursive function emit_binary_lvl(em, node, lvl) result(s)
 		! The result is in the width of the left operand, even if the right
 		! operand is an i64 (so the convert() below is a no-op).  Both are logical
 		! shifts, so a `>>` doesn't extend the sign bit
-		if (node%op%kind == lless_token) then
+		if (node%op%kind == double_less_token) then
 			s = convert('shiftl('//unparen(l)//', '//unparen(r)//')', lt, restype)
 		else
 			s = convert('shiftr('//unparen(l)//', '//unparen(r)//')', lt, restype)

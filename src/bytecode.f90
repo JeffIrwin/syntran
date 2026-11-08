@@ -1195,7 +1195,7 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 			case (f32_type); op = OP_MOD_F32
 			case (f64_type); op = OP_MOD_F64
 			end select
-		case (sstar_token)
+		case (double_star_token)
 			select case (ltype)
 			case (i32_type); op = OP_POW_I32
 			case (i64_type); op = OP_POW_I64
@@ -1234,7 +1234,7 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 			case (f64_type); op = OP_GE_F64
 			case (str_type); op = OP_GE_STR
 			end select
-		case (eequals_token)
+		case (double_equals_token)
 			select case (ltype)
 			case (i32_type); op = OP_EQ_I32
 			case (i64_type); op = OP_EQ_I64
@@ -1291,7 +1291,7 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 		case (greater_equals_token)
 			if (ltype == i32_type) then; op = OP_GE_I32_I64
 			else;                         op = OP_GE_I64_I32; end if
-		case (eequals_token)
+		case (double_equals_token)
 			if (ltype == i32_type) then; op = OP_EQ_I32_I64
 			else;                         op = OP_EQ_I64_I32; end if
 		case (bang_equals_token)
@@ -1332,7 +1332,7 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 		case (greater_equals_token)
 			if (ltype == f32_type) then; op = OP_GE_F32_I32
 			else;                         op = OP_GE_I32_F32; end if
-		case (eequals_token)
+		case (double_equals_token)
 			if (ltype == f32_type) then; op = OP_EQ_F32_I32
 			else;                         op = OP_EQ_I32_F32; end if
 		case (bang_equals_token)
@@ -1373,7 +1373,7 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 		case (greater_equals_token)
 			if (ltype == f32_type) then; op = OP_GE_F32_I64
 			else;                         op = OP_GE_I64_F32; end if
-		case (eequals_token)
+		case (double_equals_token)
 			if (ltype == f32_type) then; op = OP_EQ_F32_I64
 			else;                         op = OP_EQ_I64_F32; end if
 		case (bang_equals_token)
@@ -1414,7 +1414,7 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 		case (greater_equals_token)
 			if (ltype == f64_type) then; op = OP_GE_F64_I32
 			else;                         op = OP_GE_I32_F64; end if
-		case (eequals_token)
+		case (double_equals_token)
 			if (ltype == f64_type) then; op = OP_EQ_F64_I32
 			else;                         op = OP_EQ_I32_F64; end if
 		case (bang_equals_token)
@@ -1455,7 +1455,7 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 		case (greater_equals_token)
 			if (ltype == f64_type) then; op = OP_GE_F64_I64
 			else;                         op = OP_GE_I64_F64; end if
-		case (eequals_token)
+		case (double_equals_token)
 			if (ltype == f64_type) then; op = OP_EQ_F64_I64
 			else;                         op = OP_EQ_I64_F64; end if
 		case (bang_equals_token)
@@ -1515,13 +1515,13 @@ pure integer function arr_binop_typed_opcode(op_kind, elem_type) result(op)
 		select case (op_kind)
 		case (plus_token, minus_token, star_token, slash_token, percent_token, &
 		      less_token, less_equals_token, greater_token, greater_equals_token, &
-		      eequals_token, bang_equals_token)
+		      double_equals_token, bang_equals_token)
 			op = OP_ARR_BINOP
 		end select
 	case (bool_type)
 		! Logical/equality operators for bool arrays
 		select case (op_kind)
-		case (eequals_token, bang_equals_token, and_keyword, or_keyword)
+		case (double_equals_token, bang_equals_token, and_keyword, or_keyword)
 			op = OP_ARR_BINOP
 		end select
 	end select
@@ -2317,7 +2317,7 @@ pure integer function compound_to_arith_token(op_kind) result(tok)
 	case (star_equals_token);    tok = star_token
 	case (slash_equals_token);   tok = slash_token
 	case (percent_equals_token); tok = percent_token
-	case (sstar_equals_token);   tok = sstar_token
+	case (double_star_equals_token);   tok = double_star_token
 	case default;                tok = 0
 	end select
 
