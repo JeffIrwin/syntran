@@ -58,6 +58,10 @@ module syntran__core_m
 	!    * parked:
 	!      + can/should the repl use llvm jit? no, at least probably not until
 	!        we're ready to remove the bytecode vm entirely
+	!  - fuzz testing
+	!    * when/where does the ci fuzz run? either only on master or cron is
+	!      broken
+	!    * periodically check the ci fuzz runs
 	!  - self-hosted compiler
 	!    * pre-req: need a way to interface and call c api libs
 	!  - massive old readme bug:
