@@ -22,7 +22,7 @@ fn escape(s: str): str
 	for i in [0: len(s)]
 	{
 		let c = s[i];
-		if c == "\"
+		if c == r#"\"#
 			out += "\\";
 		else if c == char(10)
 			out += "\n";
