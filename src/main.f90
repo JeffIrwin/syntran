@@ -50,6 +50,12 @@ program main
 				syntax_only = .true., io = io)
 		end if
 
+	else if (args%lex) then
+		! Hidden: dump the lexer's tokens, one per line, instead of running the
+		! program.  See lex_dump().  parse_args() has already guaranteed a file
+		res = syntran_lex_file(args%syntran_file, io)
+		if (io == EXIT_SUCCESS) write(*,'(a)', advance = 'no') res
+
 	else if (args%transpile) then
 		! Write the program as Fortran source for the user to compile, instead of
 		! running it.  The value of the last statement is only printed by the

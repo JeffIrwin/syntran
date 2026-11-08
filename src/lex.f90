@@ -65,6 +65,12 @@ subroutine lex_impl(lexer, token)
 
 	!print *, 'lexer%unit_ = ', lexer%unit_
 
+	! A float literal that fails to `read()`, e.g. `1.234e+1e+2`, still makes a
+	! token with a diagnostic, and a failed read leaves its target undefined.
+	! Without this, the token has a different garbage value on every run
+	f32 = 0.0
+	f64 = 0.0d0
+
 	if (lexer%pos > len(lexer%context%text)) then
 
 		call new_token(token, eof_token, lexer%pos, null_char)
@@ -1114,6 +1120,137 @@ function new_lexer(text, src_file, unit_) result(lexer)
 	lexer%context = new_context(text, src_file, lines)
 
 end function new_lexer
+
+!===============================================================================
+
+function escape_dump(str_) result(esc)
+
+	! Escape a token's text or value for lex_dump(), so that a token is always
+	! exactly one line with tab-separated fields.  Bytes >= 128 are left alone
+
+	character(len = *), intent(in) :: str_
+	character(len = :), allocatable :: esc
+
+	!********
+
+	integer :: i
+
+	type(char_vector_t) :: sb
+
+	sb = new_char_vector()
+	do i = 1, len(str_)
+		select case (str_(i:i))
+		case ("\")
+			call sb%push("\")
+			call sb%push("\")
+		case (line_feed)
+			call sb%push("\")
+			call sb%push("n")
+		case (carriage_return)
+			call sb%push("\")
+			call sb%push("r")
+		case (tab)
+			call sb%push("\")
+			call sb%push("t")
+		case (null_char)
+			call sb%push("\")
+			call sb%push("0")
+		case default
+			call sb%push(str_(i:i))
+		end select
+	end do
+	esc = sb%trim()
+
+end function escape_dump
+
+!===============================================================================
+
+function diag_code(diag) result(code)
+
+	! Get the `E##` out of a diagnostic like "Error[E42]: ..."
+
+	character(len = *), intent(in) :: diag
+	character(len = :), allocatable :: code
+
+	!********
+
+	integer :: i, j
+
+	code = "?"
+
+	i = index(diag, "Error[")
+	if (i == 0) return
+	i = i + len("Error[")
+
+	j = index(diag(i:), "]")
+	if (j == 0) return
+
+	code = diag(i: i + j - 2)
+
+end function diag_code
+
+!===============================================================================
+
+function lex_dump(text, src_file) result(str_)
+
+	! Lex `text` and dump every raw token, one per line, followed by the code of
+	! each lexer diagnostic.  Unlike new_parser(), whitespace, comment, and bad
+	! tokens are all kept.  This is used to test the syntran port of the lexer
+	! in compiler/lex.syntran, which prints the same format:
+	!
+	!     <pos> <tab> <kind_name> <tab> <text> [<tab> <value>]
+	!     ...
+	!     diag <code>
+	!
+	! `pos` is 0-based, unlike the lexer's own 1-based pos
+
+	character(len = *), intent(in) :: text, src_file
+	character(len = :), allocatable :: str_
+
+	!********
+
+	integer :: i
+
+	type(char_vector_t) :: sb
+	type(lexer_t) :: lexer
+	type(syntax_token_t) :: token
+
+	sb = new_char_vector()
+	lexer = new_lexer(text, src_file, 1)
+
+	do
+		call lexer%lex(token)
+
+		call push_str(sb, str(token%pos - 1)//tab//kind_name(token%kind)//tab &
+			//escape_dump(token%text))
+
+		select case (token%kind)
+		case (i32_token, i64_token, f32_token, f64_token, str_token)
+			call push_str(sb, tab//escape_dump(token%val%to_str()))
+		end select
+		call push_str(sb, line_feed)
+
+		if (token%kind == eof_token) exit
+	end do
+
+	do i = 1, lexer%diagnostics%len_
+		call push_str(sb, "diag "//diag_code(lexer%diagnostics%v(i)%s)//line_feed)
+	end do
+
+	str_ = sb%trim()
+
+end function lex_dump
+
+!===============================================================================
+
+subroutine push_str(sb, str_)
+	type(char_vector_t), intent(inout) :: sb
+	character(len = *), intent(in) :: str_
+	integer :: i
+	do i = 1, len(str_)
+		call sb%push(str_(i:i))
+	end do
+end subroutine push_str
 
 !===============================================================================
 
