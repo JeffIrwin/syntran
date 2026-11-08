@@ -282,7 +282,7 @@ module syntran__native_m
 		! The enums, and the tables of the values and the names of the variants of
 		! each, which are made at their first use, by position
 		type(enums_t), pointer :: enums => null()
-		type(c_ptr), allocatable :: evals(:), enames(:)
+		type(c_ptr), allocatable :: evals(:), enames(:), evnames(:)
 
 		! The LLVM fn and type of each user fn, by id.  They are declared at their
 		! first reference
@@ -3326,7 +3326,8 @@ end subroutine emit_struct_methods
 subroutine enum_tables(em, k)
 
 	! The constant tables of the enum at position `k` of the table, which hold
-	! the backing value of each of its variants and the name of each as a str.
+	! the backing value of each of its variants, and the name of each as a str,
+	! both with the enum's name and without it.
 	! The value of an enum is the index of its variant
 
 	type(nemitter_t), intent(inout) :: em
@@ -3337,24 +3338,28 @@ subroutine enum_tables(em, k)
 	integer :: i, n
 
 	type(c_ptr) :: g
-	type(c_ptr), allocatable :: vs(:), ns(:)
+	type(c_ptr), allocatable :: vs(:), ns(:), vn(:)
 
 	if (.not. allocated(em%evals)) then
-		allocate(em%evals(size(em%enums%table)), em%enames(size(em%enums%table)))
+		allocate(em%evals(size(em%enums%table)), em%enames(size(em%enums%table)), &
+			em%evnames(size(em%enums%table)))
 		em%evals = c_null_ptr
 		em%enames = c_null_ptr
+		em%evnames = c_null_ptr
 	end if
 	if (c_associated(em%evals(k))) return
 
 	associate (e => em%enums%table(k)%val)
 
 		n = e%num_vars
-		allocate(vs(max(n, 1)), ns(max(n, 1)))
+		allocate(vs(max(n, 1)), ns(max(n, 1)), vn(max(n, 1)))
 		vs = c_null_ptr
 		ns = c_null_ptr
+		vn = c_null_ptr
 		do i = 1, n
 			vs(i) = ci32(em, e%variant_values(i))
 			ns(i) = str_literal(em, em%enums%table(k)%key//'.'//e%variant_names%v(i)%s)
+			vn(i) = str_literal(em, e%variant_names%v(i)%s)
 		end do
 
 		g = LLVMAddGlobal(em%llmod, LLVMArrayType2(em%t_i32, int(n, c_int64_t)), &
@@ -3370,6 +3375,13 @@ subroutine enum_tables(em, k)
 		call LLVMSetGlobalConstant(g, 1)
 		call LLVMSetLinkage(g, LLVM_PRIVATE_LINKAGE)
 		em%enames(k) = g
+
+		g = LLVMAddGlobal(em%llmod, LLVMArrayType2(em%t_ptr, int(n, c_int64_t)), &
+			cs('.evn.'//str(k)))
+		call LLVMSetInitializer(g, LLVMConstArray(em%t_ptr, vn, n))
+		call LLVMSetGlobalConstant(g, 1)
+		call LLVMSetLinkage(g, LLVM_PRIVATE_LINKAGE)
+		em%evnames(k) = g
 
 	end associate
 
@@ -3395,6 +3407,28 @@ function enum_names(em, k) result(g)
 	g = em%enames(k)
 
 end function enum_names
+
+!===============================================================================
+
+function enum_variant_names(em, k) result(g)
+
+	! The table of the names of the variants of an enum, as strs, without the
+	! name of the enum like enum_names() has
+
+	type(nemitter_t), intent(inout) :: em
+	integer, intent(in) :: k
+	type(c_ptr) :: g
+
+	g = LLVMConstNull(em%t_ptr)
+	if (k < 1 .or. .not. associated(em%enums)) then
+		call unsupported(em, 'an enum of unknown type')
+		return
+	end if
+
+	call enum_tables(em, k)
+	g = em%evnames(k)
+
+end function enum_variant_names
 
 !===============================================================================
 
@@ -5780,6 +5814,16 @@ recursive function emit_intr_call(em, node) result(r)
 		r%ty = str_type
 		r%owned = .true.
 		r%v = rt_call(em, 'sy_read_file', em%t_ptr, [a%v])
+		call dispose(em, a)
+
+	case ('variant_of')
+		! The name of the variant of an enum value.  It's in a table of
+		! constants, which are immortal, so it's owned like any other str
+		a = emit_arg(em, node, 1)
+		r%ty = str_type
+		r%owned = .true.
+		r%v = LLVMBuildLoad2(em%bld, em%t_ptr, LLVMBuildGEP2(em%bld, em%t_ptr, &
+			enum_variant_names(em, a%sk), [a%v], 1, cs('')), cs(''))
 		call dispose(em, a)
 
 	case ('system')

@@ -1,0 +1,62 @@
+// std::variant_of() is the name of an enum value's variant, without the enum's
+// name that str() has.  An alias is named by the variant that it was written as
+
+enum Suit
+{
+	Hearts,
+	Diamonds,
+	Clubs,
+	Spades,
+}
+
+enum Card
+{
+	Two,
+	Jack = 10,
+	Queen,
+	King = Jack,
+}
+
+struct Player
+{
+	name: str,
+	suit: Suit,
+}
+
+fn describe(s: Suit): str
+{
+	return std::variant_of(s);
+}
+
+// Variants, a reverse cast, and a value in a variable
+let ok1 = std::variant_of(Suit.Clubs) == "Clubs";
+let ok2 = std::variant_of(Suit(3)) == "Spades";
+const s = Suit.Diamonds;
+let ok3 = std::variant_of(s) == "Diamonds";
+
+// str() is unchanged
+let ok4 = str(s) == "Suit.Diamonds" and str(std::variant_of(s)) == "Diamonds";
+
+// Aliases keep the name that was written, since an enum value is its variant
+let ok5 = std::variant_of(Card.Jack) == "Jack"
+	and std::variant_of(Card.King) == "King"
+	and std::variant_of(Card.Queen) == "Queen";
+
+// An element of an array, a member of a struct, and a fn argument
+const hand = [Suit.Hearts, Suit.Spades];
+let ok6 = std::variant_of(hand[1]) == "Spades";
+const p = Player{name = "Alice", suit = Suit.Clubs};
+let ok7 = std::variant_of(p.suit) == "Clubs" and describe(p.suit) == "Clubs";
+
+// Every variant of a bare enum name in a loop, in declaration order
+let names = "";
+for v in Suit
+	names += std::variant_of(v) + ",";
+let ok8 = names == "Hearts,Diamonds,Clubs,Spades,";
+
+// Two enums with the same variant names
+enum Dir { North, South }
+enum Signal { North, South }
+let ok9 = std::variant_of(Dir.South) == std::variant_of(Signal.South);
+
+return ok1 and ok2 and ok3 and ok4 and ok5 and ok6 and ok7 and ok8 and ok9;

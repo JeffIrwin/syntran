@@ -609,6 +609,17 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		end if
 	end if
 
+	! std::variant_of() takes any_type so that it can take any enum, so check that
+	! the arg is a scalar enum here
+	if (fn%is_intr .and. identifier_%text == "variant_of" .and. args%len_ == 1) then
+		if (args%v(1)%val%type /= enum_type .and. &
+			args%v(1)%val%type /= unknown_type) then
+			call parser%diagnostics%push(err_bad_arg_type( &
+				parser%context(), alias_spans(1), identifier_%text, 0, "value", &
+				"enum", type_name(args%v(1)%val)))
+		end if
+	end if
+
 	! std::move() has the type of its arg, and moves it out of the variable
 	if (fn%is_intr .and. identifier_%text == "move" .and. args%len_ == 1) then
 		call check_move_arg(parser, args%v(1), alias_spans(1))

@@ -34,14 +34,10 @@ fn escape(s: &const str): str
 	return out;
 }
 
-// The name of an enum variant, which is what `str()` makes of an enum without its
-// `TokenKind.` prefix, and without the trailing `_` of a keyword, e.g. "plus"
-fn variant_name(s: &const str): str
+// The name of an enum variant without the trailing `_` of a keyword, which
+// avoids a clash with a syntran keyword, e.g. "plus"
+fn bare_name(name: str): str
 {
-	let i = 0;
-	while s[i] != "."
-		i += 1;
-	const name = s[i + 1:];
 	if name[len(name) - 1] == "_"
 		return name[0: len(name) - 1];
 	return name;
@@ -52,8 +48,8 @@ fn variant_name(s: &const str): str
 fn kind_name(token: &const Token): str
 {
 	if token.kind == TokenKind.keyword
-		return variant_name(str(token.keyword)) + "_keyword";
-	return variant_name(str(token.kind)) + "_token";
+		return bare_name(std::variant_of(token.keyword)) + "_keyword";
+	return bare_name(std::variant_of(token.kind)) + "_token";
 }
 
 fn main()

@@ -304,8 +304,9 @@ subroutine lex_impl(lexer, token)
 
 	!********
 
-	if (is_digit_under(lexer%current())) then
-		! Numeric decimal integer or float
+	if (is_digit(lexer%current())) then
+		! Numeric decimal integer or float.  It must start with a digit, so that
+		! `_x` is an identifier
 
 		float = .false.
 
@@ -617,11 +618,12 @@ subroutine lex_impl(lexer, token)
 
 	end if
 
-	if (lexer%pos == 1           .and. &
-		lexer%get_text(0,2) == "#!") then
+	if (lexer%get_text(0,2) == "//" .or. &
+		(lexer%pos == 1 .and. lexer%get_text(0,2) == "#!")) then
 
-		! Handle a special shebang `#!` case at very beginning of file and
-		! ignore the rest of the first line
+		! A `//` comment, or a special shebang `#!` case at very beginning of
+		! file.  Ignore the rest of the line.  The line feed after it is the next
+		! token, a whitespace
 		call lexer%read_single_line_comment()
 
 		text = lexer%context%text(start: lexer%pos-1)
@@ -673,14 +675,7 @@ subroutine lex_impl(lexer, token)
 			end if
 
 		case ("/")
-			if (lexer%lookahead() == "/") then
-
-				call lexer%read_single_line_comment()
-
-				text = lexer%context%text(start: lexer%pos-1)
-				call new_token(token, comment_token, start, text)
-
-			else if (lexer%lookahead() == "=") then
+			if (lexer%lookahead() == "=") then
 				lexer%pos = lexer%pos + 1
 				call new_token(token, slash_equals_token, lexer%pos, "/=")
 

@@ -1108,6 +1108,12 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 			return
 		end if
 
+	case (INTR_VARIANT_OF)
+		! std::variant_of(e) -- the name of the variant, without the enum's
+		res%type = str_type
+		if (.not. allocated(res%str)) allocate(res%str)
+		res%str%s = args(1)%enum_variant
+
 	case default
 		write(*,*) 'VM: unknown intr_id in vm_call_intr: ', intr_id
 		call internal_error()
@@ -1406,14 +1412,16 @@ subroutine parse_str_value(intr_id, s, res, ok)
 	select case (intr_id)
 	case (INTR_PARSE_I32)
 		res%type = i32_type
-		read(s, *, iostat = io) res%sca%i32
-		ok = io == 0
+		ok = starts_with_int(s)
+		if (ok) read(s, *, iostat = io) res%sca%i32
+		if (ok) ok = io == 0
 		if (.not. ok) res%sca%i32 = 0
 
 	case (INTR_PARSE_I64)
 		res%type = i64_type
-		read(s, *, iostat = io) res%sca%i64
-		ok = io == 0
+		ok = starts_with_int(s)
+		if (ok) read(s, *, iostat = io) res%sca%i64
+		if (ok) ok = io == 0
 		if (.not. ok) res%sca%i64 = 0
 
 	case (INTR_PARSE_F32)
@@ -1445,6 +1453,51 @@ subroutine parse_str_value(intr_id, s, res, ok)
 	end select
 
 end subroutine parse_str_value
+
+!===============================================================================
+
+function starts_with_int(s) result(ok)
+
+	! Does `s` start with an integer, i.e. blanks, an optional sign, and digits,
+	! which are followed by the end or a separator?  A list-directed read of an
+	! integer decides that for itself, but not the same way for every compiler:
+	! ifx and ifort accept `1.5` as an integer, and gfortran doesn't.  So this is
+	! checked here first, and the read only has to convert and detect overflow
+
+	character(len = *), intent(in) :: s
+	logical :: ok
+
+	!********
+
+	integer :: i, nd
+
+	i = 1
+	do while (i <= len(s))
+		if (s(i:i) /= ' ' .and. s(i:i) /= char(9)) exit
+		i = i + 1
+	end do
+
+	if (i <= len(s)) then
+		if (s(i:i) == '+' .or. s(i:i) == '-') i = i + 1
+	end if
+
+	nd = 0
+	do while (i <= len(s))
+		if (s(i:i) < '0' .or. s(i:i) > '9') exit
+		nd = nd + 1
+		i = i + 1
+	end do
+
+	ok = nd > 0
+	if (.not. ok .or. i > len(s)) return
+
+	select case (s(i:i))
+	case (' ', ',', '/', char(9), char(10), char(13))
+	case default
+		ok = .false.
+	end select
+
+end function starts_with_int
 
 !===============================================================================
 

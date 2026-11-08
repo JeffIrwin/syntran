@@ -103,6 +103,7 @@ src/tests/test-src/enum/test-06.syntran
 src/tests/test-src/enum/test-07.syntran
 src/tests/test-src/enum/test-08.syntran
 src/tests/test-src/enum/test-09.syntran
+src/tests/test-src/enum/test-10.syntran
 src/tests/test-src/errors/R1-matmul-dim.syntran
 src/tests/test-src/errors/R10-readln-not-read-mode.syntran
 src/tests/test-src/errors/R11-readln-fail.syntran
@@ -417,6 +418,7 @@ src/tests/test-src/transpile/test-18.syntran
 src/tests/test-src/var-scopes/test-01.syntran
 src/tests/test-src/var-scopes/test-02.syntran
 src/tests/test-src/var-scopes/test-03.syntran
+src/tests/test-src/var-scopes/test-04.syntran
 src/tests/test-src/while-loops/test-01.syntran
 src/tests/test-src/while-loops/test-02.syntran
 src/tests/test-src/while-loops/test-03.syntran

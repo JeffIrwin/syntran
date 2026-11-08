@@ -259,8 +259,8 @@ bash utils/test-lex.sh build/v1/bin/syntran                  # on the VM
 bash utils/test-lex.sh --native build/native/bin/syntran     # compiled, much faster
 bash utils/test-lex.sh -v build/v1/bin/syntran samples/      # more files, with diffs
 ```
-The port copies the Fortran lexer's quirks on purpose, e.g. a `//` comment skips
-the line feed after it, so a mismatch is a bug in one or the other.  The
+The port copies the Fortran lexer's quirks on purpose, e.g. a 2-char operator
+has the `pos` of its last char, so a mismatch is a bug in one or the other.  The
 `pos` in the dump is 0-based.  `src/tests/test-src/errors/lex-edge-cases.syntran`
 is a corpus of odd literals and operators.
 

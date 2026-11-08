@@ -1684,6 +1684,13 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('let ok = false; parse_i64("2147483648", &ok); ok;') == 'true', &
 			eval('let ok = true; parse_i64("9223372036854775808", &ok); ok;') == 'false', &
 			eval('let ok = true; parse_i64("1.5", &ok); ok;') == 'false', &
+			eval('let ok = true; parse_i32("1.5", &ok); ok;') == 'false', &
+			eval('let ok = true; parse_i32("1e3", &ok); ok;') == 'false', &
+			eval('let ok = true; parse_i32("-", &ok); ok;') == 'false', &
+			eval('let ok = true; parse_i32("12x", &ok); ok;') == 'false', &
+			eval('let ok = false; parse_i32(" -7 ", &ok); ok;') == 'true', &
+			eval('let ok = false; parse_i32("+7", &ok);') == '7', &
+			diag_has_code(get_diags('parse_i32("1.5");'), RC_PARSE_I32), &
 			abs(eval_f32('let ok = false; parse_f32("1.5", &ok);') - 1.5) < tol, &
 			eval('let ok = false; parse_f32("1.5", &ok); ok;') == 'true', &
 			eval('let ok = true; parse_f32("1.2e+1e+2", &ok); ok;') == 'false', &
@@ -2425,6 +2432,7 @@ subroutine unit_test_var_scopes(npass, nfail)
 			interpret_file(path//'test-01.syntran', quiet) == 'true', &
 			interpret_file(path//'test-02.syntran', quiet) == 'true', &
 			interpret_file(path//'test-03.syntran', quiet) == 'true', &
+			interpret_file(path//'test-04.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -7651,6 +7659,28 @@ subroutine unit_test_enum(npass, nfail)
 				//'let a=[P{n=1}]; let b=[P{n=1}]; a == b;'), &
 				EC_BINARY_TYPES), &
 
+			! std::variant_of() is the variant's name without the enum's, which
+			! str() has
+			eval( 'enum Suit{Hearts,Clubs} std::variant_of(Suit.Clubs);', quiet) == &
+				'Clubs', &
+			eval( 'enum Suit{Hearts,Clubs} str(Suit.Clubs);', quiet) == &
+				'Suit.Clubs', &
+			eval( 'enum Card{Two,Jack=10,King=Jack}' &
+				//'std::variant_of(Card.King);', quiet) == 'King', &
+			eval( 'enum Suit{Hearts,Clubs} let a = [Suit.Hearts, Suit.Clubs];' &
+				//'std::variant_of(a[1]);', quiet) == 'Clubs', &
+			eval( 'enum Suit{Hearts,Clubs} std::variant_of(Suit(0));', quiet) == &
+				'Hearts', &
+
+			! ... and it takes only a scalar enum value
+			diag_has_code(get_diags('std::variant_of(1);'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} std::variant_of([Suit.Hearts]);'), &
+				EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} std::variant_of(Suit);'), &
+				EC_ENUM_NAME_VALUE), &
+
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -7692,6 +7722,7 @@ subroutine unit_test_enum_long(npass, nfail)
 			interpret_file(path//'test-07.syntran', quiet) == 'true', &
 			interpret_file(path//'test-08.syntran', quiet) == 'true', &
 			interpret_file(path//'test-09.syntran', quiet) == 'true', &
+			interpret_file(path//'test-10.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -7877,15 +7908,33 @@ subroutine unit_test_lex_dump(npass, nfail)
 				'0 i64_token 0x1F 31'//lf// &
 				'8 eof_token \0'//lf, &
 
-			! Whitespace and comments are kept, and escaped.  The lexer skips the
-			! char after a `//` comment, i.e. its line feed, so there is no
-			! whitespace token for it, unlike after a shebang below
+			! Whitespace and comments are kept, and escaped.  The line feed after a
+			! `//` comment is a whitespace token of its own, like after a shebang
+			! below
 			lex_dump('a // b'//lf//'c', 'a') == &
 				'0 identifier_token a'//lf// &
 				'1 whitespace_token  '//lf// &
 				'2 comment_token // b'//lf// &
+				'6 whitespace_token \n'//lf// &
 				'7 identifier_token c'//lf// &
 				'8 eof_token \0'//lf, &
+
+			! A comment at the end, with no line feed after it
+			lex_dump('a//b', 'a') == &
+				'0 identifier_token a'//lf// &
+				'1 comment_token //b'//lf// &
+				'4 eof_token \0'//lf, &
+
+			! An identifier can start with an underscore, but a number can't
+			lex_dump('_x _ __1 1_0', 'a') == &
+				'0 identifier_token _x'//lf// &
+				'2 whitespace_token  '//lf// &
+				'3 identifier_token _'//lf// &
+				'4 whitespace_token  '//lf// &
+				'5 identifier_token __1'//lf// &
+				'8 whitespace_token  '//lf// &
+				'9 i32_token 1_0 10'//lf// &
+				'12 eof_token \0'//lf, &
 			lex_dump('a'//lf//'b', 'a') == &
 				'0 identifier_token a'//lf// &
 				'1 whitespace_token \n'//lf// &

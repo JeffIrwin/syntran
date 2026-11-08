@@ -2980,6 +2980,14 @@ println(Suit.Diamonds);
 ```
 <!-- syntran-end -->
 
+To get just the variant's name, without the enum's, use `std::variant_of()`:
+<!-- syntran-begin mode=file group=enums -->
+```rust
+println(std::variant_of(Suit.Diamonds));
+// Diamonds
+```
+<!-- syntran-end -->
+
 Enums can be used anywhere a type is expected: as function parameters and
 return types, and as struct members:
 <!-- syntran-begin mode=file group=enums -->
@@ -3052,6 +3060,7 @@ let all = [Suit.Hearts, Suit.Diamonds, Suit.Clubs, Suit.Spades];
 30
 Suit.Clubs
 Suit.Diamonds
+Diamonds
 Suit.Spades
 [Suit.Diamonds, Suit.Clubs, Suit.Spades]
 4
