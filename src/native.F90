@@ -5767,6 +5767,13 @@ recursive function emit_intr_call(em, node) result(r)
 			LLVMConstInt(em%t_i8, 0_c_int64_t, 0), cs(''))
 		call dispose(em, a)
 
+	case ('system')
+		a = emit_arg(em, node, 1)
+		r%ty = i32_type
+		r%owned = .false.
+		r%v = rt_call(em, 'sy_system', em%t_i32, [a%v])
+		call dispose(em, a)
+
 	case ('exists')
 		a = emit_arg(em, node, 1)
 		r%ty = bool_type

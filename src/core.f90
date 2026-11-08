@@ -31,6 +31,17 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - self-hosted compiler
+	!    * wip
+	!    * std::move done
+	!    * std::system() done, as one cmd str (the user quotes).  maybe add a
+	!      std::shell_quote() or an argv overload later
+	!    * port lexer as test, follow scratch/self-host.md
+	!    * sum types and other follow-ups as needed
+	!    * later, might want ffi, a way to interface and call c api libs. for
+	!      now we can generate llvm ir just by writing text with now llvm lib
+	!      dependency. this would not allow a native repl and would require
+	!      shelling out to clang for exe linking
 	!  - llvm compiled backend
 	!    * test (manually) all aoc solutions in its repo
 	!      + done
@@ -62,8 +73,6 @@ module syntran__core_m
 	!    * when/where does the ci fuzz run? either only on master or cron is
 	!      broken
 	!    * periodically check the ci fuzz runs
-	!  - self-hosted compiler
-	!    * pre-req: need a way to interface and call c api libs
 	!  - massive old readme bug:
 	!    * "recursive functions are not possible currently"
 	!    * of course the sentence before is wrong too, which says fns need to be

@@ -215,7 +215,7 @@ This is a subset of the language so far:
 - `std::print_trace()`, `std::stack_trace()`, and `std::caller()`, which look at the
   stack of calls, as a runtime error does
 - `std::args()`, which is the arguments that the compiled program is run with,
-  `std::getenv()`, and `std::hasenv()`
+  `std::getenv()`, `std::hasenv()`, and `std::system()`
 - `std::move()` of an array or a str, which leaves an empty one in its variable or
   member, and assigning the result to a variable or member doesn't copy it
 - Structs, including methods, members that are arrays or other structs, arrays

@@ -37,6 +37,7 @@
 #include <io.h>
 #define sy_isatty(f) _isatty(_fileno(f))
 #else
+#include <sys/wait.h>
 #include <unistd.h>
 #define sy_isatty(f) isatty(fileno(f))
 #endif
@@ -2247,6 +2248,24 @@ sy_str *sy_getenv(const sy_str *name)
 int8_t sy_hasenv(const sy_str *name)
 {
     return getenv(name->data) != NULL;
+}
+
+/* std::system() is the exit status of the command, or -1 if it can't be started.  Flush
+ * first so that output stays in order */
+int32_t sy_system(const sy_str *cmd)
+{
+    int r;
+
+    fflush(NULL);
+    r = system(cmd->data);
+    if (r == -1)
+        return -1;
+#ifndef _WIN32
+    /* A command that is killed by a signal is the number of the signal, like libgfortran's
+     * exitstat in the VM */
+    r = WIFEXITED(r) ? WEXITSTATUS(r) : WIFSIGNALED(r) ? WTERMSIG(r) : r;
+#endif
+    return (int32_t)r;
 }
 
 /* Reductions: sum, product, minval, maxval, count, all, and any of an array along

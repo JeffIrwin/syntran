@@ -3226,7 +3226,7 @@ recursive function emit_intr_call(em, node) result(s)
 			call em_line(em, a1//" = ''")
 		end if
 
-	case ('getenv', 'hasenv')
+	case ('getenv', 'hasenv', 'system')
 		s = 'rt_'//base//'('//a1//')'
 
 	case ('args')
