@@ -308,7 +308,8 @@ while slicing, and the construction of ranges, are in the runtime.  A struct is
 a heap object too, with a slot for each member after a pointer to a constant
 that describes the struct, so the runtime can copy, free, and print it.  An
 enum is the index of its variant, with constant tables of the variants' names
-and backing values.  The runtime writes floats exactly as the Fortran runtime
+(with and without the enum's name, for `str()` and `std::variant_of()`) and
+backing values.  The runtime writes floats exactly as the Fortran runtime
 does, which a unit test checks against it.
 
 A runtime error is reported from the runtime, with the source line of the

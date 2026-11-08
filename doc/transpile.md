@@ -56,8 +56,9 @@ This is a subset of the language so far:
   returning structs, and printing.  Methods, const methods, and implicit access
   of the members of `self`
 - Enums: declarations (with explicit values and aliases), `Suit.Hearts`, the
-  casts `i32(Suit.Hearts)` and `Suit(2)`, comparison, printing, arrays of
-  enums, a bare enum name as in `for v in Suit`, and `switch` on an enum
+  casts `i32(Suit.Hearts)` and `Suit(2)`, comparison, printing, `std::variant_of`,
+  arrays of enums, a bare enum name as in `for v in Suit`, and `switch` on an
+  enum
 - File I/O: `open`, `std::try_open`, `close`, `std::write`, `std::writef`, `writeln`, `readln`, `eof`,
   `std::exists`, `std::read_file`, the `ok` argument of `parse_<type>()`, the
   members `f.is_open`, `f.eof`, and `f.name`, and `readln()`

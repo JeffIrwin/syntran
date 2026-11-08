@@ -3029,6 +3029,8 @@ subroutine emit_enum_procs(em)
 	!
 	!   enumN_strs(i)  the name of variant i, like `Suit.Clubs`, as an rt_str_t
 	!   enumN_str(i)   the same as a string, for a single variant
+	!   enumN_name(i)  the name of a single variant alone, like `Clubs`, which is
+	!                  `std::variant_of()`
 	!   enumN_val(i)   the backing value of variant i, `i32(Suit.Clubs)`
 	!   enumN_of(v)    the first variant with backing value v, `Suit(v)`
 	!
@@ -3091,6 +3093,20 @@ subroutine emit_enum_procs(em)
 			call em%procs%push("            r = '"//nm//".<invalid>'")
 			call em%procs%push('        end select')
 			call em%procs%push('    end function '//id//'_str')
+			call em%procs%push('')
+
+			call em%procs%push('    function '//id//'_name(v) result(r)')
+			call em%procs%push('        integer(int32), intent(in) :: v')
+			call em%procs%push('        character(len = :), allocatable :: r')
+			call em%procs%push('        select case (v)')
+			do i = 1, e%num_vars
+				call em%procs%push('        case ('//str(i - 1)//')')
+				call em%procs%push("            r = '"//e%variant_names%v(i)%s//"'")
+			end do
+			call em%procs%push('        case default')
+			call em%procs%push("            r = '<invalid>'")
+			call em%procs%push('        end select')
+			call em%procs%push('    end function '//id//'_name')
 			call em%procs%push('')
 
 			call em%procs%push('    elemental function '//id//'_val(v) result(r)')

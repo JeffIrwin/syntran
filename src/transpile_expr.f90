@@ -2974,7 +2974,7 @@ recursive function emit_intr_call(em, node) result(s)
 	character(len = :), allocatable :: name, base, suffix, a1, a2, args, kind_str, &
 		arg_i, spec_i, fmt_call
 
-	integer :: i, n, iu, t, ferr
+	integer :: i, n, iu, t, ferr, ek
 
 	logical :: ok
 
@@ -3212,6 +3212,12 @@ recursive function emit_intr_call(em, node) result(s)
 
 	case ('read_file')
 		s = 'rt_read_file('//a1//')'
+
+	case ('variant_of')
+		! The name of the variant, from the helper of the enum's type
+		ek = enum_slot_of(em, node%args(1)%val)
+		if (ek == 0) call em_unsupported(em, 'an enum of unknown type')
+		s = enum_fn(em, max(ek, 1), 'name')//'('//a1//')'
 
 	case ('move')
 		! The temp takes the array or str out of the variable with move_alloc(),

@@ -705,7 +705,8 @@ struct Lexer
 		if get_text(0, 2) == "0b" and has_radix_digit("b")
 			return lex_radix(start, "binary", 1, "E7", "E8");
 
-		if is_digit_under(current())
+		// A decimal must start with a digit, so that `_x` is an identifier
+		if is_digit(current())
 			return lex_decimal(start);
 
 		if current() == "r"
@@ -741,19 +742,18 @@ struct Lexer
 			return new_keyword_token(start, word, keyword);
 		}
 
-		if pos == 0 and get_text(0, 2) == "#!"
+		if get_text(0, 2) == "//" or (pos == 0 and get_text(0, 2) == "#!")
 		{
-			// Handle a special shebang `#!` case at the very beginning of the
-			// file and ignore the rest of the first line
+			// A `//` comment, or a special shebang `#!` case at the very beginning
+			// of the file.  Ignore the rest of the line.  The line feed after it
+			// is the next token, a whitespace
 			read_single_line_comment();
 			return new_token(TokenKind.comment, start, text[start: pos]);
 		}
 
 		// Operators.  Most of them are 1 or 2 chars, and a few are 3, in which
 		// case `pos` is moved to the last one, and that is the pos of the token.
-		// Every case falls through to the `pos += 1` at the end, including a
-		// comment, which skips the char after it, i.e. its line feed.  That's
-		// what the Fortran lexer does
+		// Every case falls through to the `pos += 1` at the end
 		let token = new_token(TokenKind.bad, pos, current());
 
 		switch current()
@@ -809,12 +809,7 @@ struct Lexer
 			}
 			case "/"
 			{
-				if lookahead() == "/"
-				{
-					read_single_line_comment();
-					token = new_token(TokenKind.comment, start, text[start: pos]);
-				}
-				else if lookahead() == "="
+				if lookahead() == "="
 				{
 					pos += 1;
 					token = new_token(TokenKind.slash_equals, pos, "/=");

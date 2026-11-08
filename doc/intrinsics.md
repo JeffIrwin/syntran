@@ -1411,6 +1411,29 @@ See also [File handle members](#file-handle-members) for `f.is_open`,
 
 Related functions: [`open`](#open), [`exists`](#exists), [`close`](#close)
 
+## `variant_of`
+```rust
+fn variant_of(e: enum): str
+```
+
+Return the name of the variant of an enum value, without the name of the enum
+that [`str`](#str) and [`println`](#println) put before it.  An alias, which is
+a variant with the same backing value as an earlier one, is named by the variant
+that was written, since an enum value is its variant and not just its integer.
+The argument must be a single enum value, not an array of them, nor a bare enum
+name.  Must be called with the `std::` prefix, e.g. `std::variant_of(s)`.
+
+```rust
+enum Suit { Hearts, Clubs }
+
+println(Suit.Clubs);
+// Suit.Clubs
+println(std::variant_of(Suit.Clubs));
+// Clubs
+```
+
+Related functions: [`str`](#str), [`println`](#println), [`i32`](#i32)
+
 ## `write`
 ```rust
 fn write(file_handle: file, s0: any, s1: any, s2: any, ...)
