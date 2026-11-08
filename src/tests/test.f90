@@ -7691,6 +7691,61 @@ end subroutine unit_test_bitwise_2
 
 !===============================================================================
 
+subroutine unit_test_move(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'std::move'
+
+	! Path to syntran test files from root of repo
+	character(len = *), parameter :: path = 'src/tests/test-src/move/'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			interpret_file(path//'test-01.syntran', quiet) == '0', &
+			interpret_file(path//'test-02.syntran', quiet) == '0', &
+
+			! The moved-from variable is empty, and the value is all there
+			interpret('let a = [1, 2, 3]; let b = std::move(a); size(a);') == '0', &
+			interpret('let a = [1, 2, 3]; let b = std::move(a); b;') == '[1, 2, 3]', &
+			interpret('let s = "abc"; let t = std::move(s); len(s);') == '0', &
+			interpret('let s = "abc"; let t = std::move(s); t;') == 'abc', &
+
+			! A moved-from array can be assigned again
+			interpret('let a = [1, 2]; let b = std::move(a); a = [5, 6, 7]; a;') &
+				== '[5, 6, 7]', &
+
+			! Assigning an array of the same type moves it, but an i32 array
+			! assigned to an i64 array is still cast
+			interpret('let a = [i64(1), i64(2)]; a = [3, 4]; a[1];') == '4', &
+			trimw(interpret('let a = [1.0, 2.0]; let b = [3.0, 4.0]; a = b; b[0] = 9.0; a[0];')) &
+				== '3.000000000000000E+00', &
+
+			! A copy of a variable is still a copy
+			interpret('let a = [1, 2]; let b = a; b[0] = 7; a[0];') == '1', &
+			interpret('let a = [1, 2]; let b = [0, 0]; b = a; b[0] = 7; a[0];') == '1', &
+			interpret('let s = "x"; let t = s; t += "y"; s;') == 'x', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_move
+
+!===============================================================================
+
 subroutine unit_test_ref(npass, nfail)
 
 	implicit none
@@ -8895,6 +8950,21 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_has_code(get_diags('const x = null;'), EC_UNTYPED_NULL), &
 			diag_count_code(get_diags_file(P//'E129-untyped-null.syntran'), &
 				EC_UNTYPED_NULL) == 1, &
+
+			! E131: std::move() of something that isn't a variable
+			diag_has_code(get_diags('let a = [1, 2]; let b = std::move(a[0:1]);'), &
+				EC_MOVE_NOT_VAR), &
+			diag_has_code(get_diags('let b = std::move([1, 2]);'), EC_MOVE_NOT_VAR), &
+			diag_count_code(get_diags_file(P//'E131-move-not-variable.syntran'), &
+				EC_MOVE_NOT_VAR) == 1, &
+			! ... a scalar is the wrong type, and a const can't be moved out of
+			diag_has_code(get_diags('let x = 1; let y = std::move(x);'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags('const a = [1, 2]; let b = std::move(a);'), EC_CONST_ASSIGN), &
+			! ... but a plain variable or member is fine
+			.not. diag_has_code(get_diags('let a = [1, 2]; let b = std::move(a);'), &
+				EC_MOVE_NOT_VAR), &
+			.not. diag_has_code(get_diags('struct S{v:[i32; :],} let s = S{v=[1]}; ' &
+				//'let b = std::move(s.v);'), EC_MOVE_NOT_VAR), &
 
 			! E130: no valid program is known that the native backend can't compile any
 			! more, so there is no example of it (a `for` over a scalar is reported,
@@ -11215,7 +11285,9 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E128-null-array.syntran'), &
 				EC_NULL_ARRAY, P//'E128-null-array.syntran', 6, 14, 4), &
 			diag_loc_ok(get_diags_file(P//'E129-untyped-null.syntran'), &
-				EC_UNTYPED_NULL, P//'E129-untyped-null.syntran', 9, 1, 18) &
+				EC_UNTYPED_NULL, P//'E129-untyped-null.syntran', 9, 1, 18), &
+			diag_loc_ok(get_diags_file(P//'E131-move-not-variable.syntran'), &
+				EC_MOVE_NOT_VAR, P//'E131-move-not-variable.syntran', 9, 20, 6) &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
@@ -13079,6 +13151,7 @@ subroutine unit_tests(iostat)
 	if (run_group('bit_ass')) call unit_test_bit_ass(npass, nfail)
 	if (run_group('bitwise_2')) call unit_test_bitwise_2(npass, nfail)
 	if (run_group('ref')) call unit_test_ref(npass, nfail)
+	if (run_group('move')) call unit_test_move(npass, nfail)
 	if (run_group('recursion')) call unit_test_recursion(npass, nfail)
 	if (run_group('args')) call unit_test_args(npass, nfail)
 	if (run_group('reshape')) call unit_test_reshape(npass, nfail)

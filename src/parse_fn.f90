@@ -609,6 +609,13 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		end if
 	end if
 
+	! std::move() has the type of its arg, and moves it out of the variable
+	if (fn%is_intr .and. identifier_%text == "move" .and. args%len_ == 1) then
+		call check_move_arg(parser, args%v(1), alias_spans(1))
+		if (any(args%v(1)%val%type == [array_type, str_type])) &
+			fn_call%val = args%v(1)%val
+	end if
+
 	if (fn%is_intr .and. any(identifier_%text == ["format", "printf", "writef"])) then
 		! The format string is the first arg, except for writef(), where the file
 		! handle comes first
@@ -1510,6 +1517,87 @@ logical function has_ref_root(arg, arg_is_ref)
 end function has_ref_root
 
 end subroutine check_ref_aliases
+
+!===============================================================================
+
+recursive pure function move_chain_plain(node) result(ok)
+
+	! Whether a member chain has no subscripts anywhere, like chain_total_nslots()
+	! (bytecode.f90) == 0
+
+	type(syntax_node_t), intent(in) :: node
+	logical :: ok
+
+	ok = .not. allocated(node%lsubscripts)
+	if (.not. ok) return
+
+	if (allocated(node%member)) then
+		if (node%member%kind == dot_expr) then
+			ok = move_chain_plain(node%member)
+		else
+			ok = .not. allocated(node%member%lsubscripts)
+		end if
+	end if
+
+end function move_chain_plain
+
+!===============================================================================
+
+subroutine check_move_arg(parser, arg, span)
+
+	! std::move(x) takes the value out of a variable and leaves it empty, so x
+	! has to be a plain variable or member chain, not a const one, holding an
+	! array or str (any_type lets every other type through the param check)
+
+	class(parser_t), intent(inout) :: parser
+	type(syntax_node_t), intent(in) :: arg
+	type(text_span_t), intent(in) :: span
+
+	!********
+
+	logical :: is_const_var
+
+	if (arg%val%type == unknown_type) return
+
+	if (arg%val%type /= array_type .and. arg%val%type /= str_type) then
+		call parser%diagnostics%push(err_bad_arg_type(parser%context(), span, &
+			"move", 0, "x", "array or str", type_name(arg%val)))
+		return
+	end if
+
+	if (arg%kind == name_expr) then
+		if (allocated(arg%lsubscripts) .or. arg%is_enum_name) then
+			call parser%diagnostics%push(err_move_not_var(parser%context(), span))
+			return
+		end if
+	else if (arg%kind == dot_expr) then
+		if (arg%root_kind /= 0 .or. .not. allocated(arg%member) &
+				.or. .not. move_chain_plain(arg)) then
+			call parser%diagnostics%push(err_move_not_var(parser%context(), span))
+			return
+		end if
+	else
+		call parser%diagnostics%push(err_move_not_var(parser%context(), span))
+		return
+	end if
+
+	! A member of a const struct, or of self in a const method, can't be moved
+	! out of either
+	if (arg%kind == dot_expr .and. parser%in_method .and. arg%is_loc .and. &
+			arg%id_index == parser%self_loc_id) then
+		! An implicit-self field, whose identifier is the field name
+		is_const_var = parser%in_const_method
+	else if (arg%is_loc) then
+		is_const_var = parser%locs%is_const(arg%identifier%text)
+	else
+		is_const_var = parser%vars%is_const(arg%identifier%text)
+	end if
+	if (is_const_var) then
+		call parser%diagnostics%push(err_const_assign( &
+			parser%context(), span, arg%identifier%text))
+	end if
+
+end subroutine check_move_arg
 
 !===============================================================================
 

@@ -769,6 +769,39 @@ Not to be confused with [`min`](#min), which compares its scalar arguments.
 
 Related functions: [`maxval`](#maxval), [`min`](#min)
 
+## `move`
+```rust
+fn move(x: [any; any_rank]): [any; any_rank]
+fn move(x: str): str
+```
+
+Move the array or `str` out of the variable `x` and return it, without copying
+it.  `x` is left empty, i.e. a zero-size array of the same element type and rank,
+or `""`, and it can still be read or assigned again.  Must be called with the
+`std::` prefix.
+
+`x` must be a plain variable or a struct member, like `x`, `v.data`, or a field
+such as `data` inside a method.  It can't be a subscript, a slice, or any other
+expression ([E131](errors.md#e131----move-not-variable)), a const variable
+([E83](errors.md#e83----const-assign)), or anything but an array or `str`
+([E42](errors.md#e42----bad-arg-type)).
+
+Assigning the result to a variable or a struct member, like `data = std::move(new_data);`,
+moves it into place instead of copying it.  A growable array only needs one copy
+of its elements when it grows, instead of two:
+
+```rust
+let new_data = [0; new_cap];
+for i in [0: len]
+	new_data[i] = data[i];
+data = std::move(new_data);
+```
+
+See [`samples/vec_i32.syntran`](../samples/vec_i32.syntran) for a complete example.
+
+The Fortran backend (`--transpile`) moves it with `move_alloc()` into a temporary,
+and an assignment from that temporary still copies once.
+
 ## `norm2`
 ```rust
 fn norm2(array: [any_float; any_rank]): any_float

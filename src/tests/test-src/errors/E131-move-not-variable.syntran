@@ -1,0 +1,13 @@
+// E131: move-not-variable
+// std::move() takes the value out of a variable and leaves it empty, so its
+// argument has to be a plain variable or member, not an element, a slice, or
+// another expression
+
+fn main(): i32
+{
+	let a = [1, 2, 3];
+	let b = std::move(a[0:2]);
+	return i32(size(b));
+}
+
+return main();

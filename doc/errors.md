@@ -858,6 +858,15 @@ compiling natively.  There is at most one diagnostic for each statement.
 See [native.md](native.md) for what is supported.  At the moment no valid program is
 known that it can't compile, so there is no example.
 
+### E131 -- move-not-variable
+
+The argument of `std::move()` is not a plain variable or struct member, like `x` or
+`v.data`.  It moves the value out of its variable and leaves an empty array or str behind,
+so it can't take a subscript, a slice, a literal, or a fn call.  (A scalar or struct
+argument is E42, and a const variable is E83.)
+
+[Example](../src/tests/test-src/errors/E131-move-not-variable.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type

@@ -1,0 +1,128 @@
+
+// std::move() of struct members, and moving a temporary into a member
+
+struct Inner
+{
+	data: [i32; :],
+	name: str,
+}
+
+struct Outer
+{
+	inner: Inner,
+	n: i32,
+}
+
+struct Vec
+{
+	len: i32,
+	data: [i32; :],
+	name: str,
+
+	fn push(val: i32)
+	{
+		if len >= i32(size(data))
+		{
+			let new_cap = 1;
+			if len > 0
+				new_cap = len * 2;
+
+			let new_data = [0; new_cap];
+			for i in [0: len]
+				new_data[i] = data[i];
+
+			data = std::move(new_data);
+		}
+		data[len] = val;
+		len += 1;
+		return;
+	}
+
+	// Take the buffer out, and leave an empty vec
+	fn drain(): [i32; :]
+	{
+		len = 0;
+		return std::move(data);
+	}
+
+	fn regrow(n: i32)
+	{
+		let old = std::move(data);
+		data = [0; n];
+		for i in [0: i32(size(old))]
+			data[i] = old[i];
+		return;
+	}
+
+	fn rename(s: str)
+	{
+		let t = s;
+		name = std::move(t);
+		return;
+	}
+
+}
+
+fn check(b: bool): i32
+{
+	if b
+		return 0;
+	return 1;
+}
+
+fn main(): i32
+{
+	let status = 0;
+
+	// a member of a local
+	let i = Inner{data = [1, 2, 3], name = "inner"};
+	let d = std::move(i.data);
+	status += check(size(i.data) == 0 and size(d) == 3 and d[1] == 2);
+	i.data = [9];
+	status += check(size(i.data) == 1 and i.data[0] == 9);
+
+	let nm = std::move(i.name);
+	status += check(nm == "inner" and i.name == "");
+
+	// a nested member
+	let o = Outer{inner = Inner{data = [4, 5], name = "n"}, n = 1};
+	let d2 = std::move(o.inner.data);
+	status += check(size(o.inner.data) == 0 and size(d2) == 2 and d2[0] == 4);
+	status += check(o.n == 1 and o.inner.name == "n");
+
+	// moving into a member
+	let tmp = [7, 8, 9];
+	o.inner.data = std::move(tmp);
+	status += check(size(tmp) == 0 and size(o.inner.data) == 3);
+	o.inner.data = [1];
+	status += check(size(o.inner.data) == 1);
+	let s2 = "moved";
+	o.inner.name = std::move(s2);
+	status += check(o.inner.name == "moved" and len(s2) == 0);
+
+	// a vec that grows by moving its new buffer in
+	let v = Vec{len = 0, data = [0; 0], name = "v"};
+	for k in [0: 20]
+		v.push(k * 3);
+	status += check(v.len == 20);
+	status += check(size(v.data) == 32);
+	let sum = 0;
+	for k in [0: 20]
+		sum += v.data[k];
+	status += check(sum == 570);
+
+	v.regrow(40);
+	status += check(size(v.data) == 40 and v.data[19] == 57 and v.data[39] == 0);
+
+	v.rename("w");
+	status += check(v.name == "w");
+
+	let out = v.drain();
+	status += check(size(out) == 40 and size(v.data) == 0 and v.len == 0);
+	v.push(5);
+	status += check(v.len == 1 and v.data[0] == 5);
+
+	return status;
+}
+
+return main();

@@ -74,7 +74,8 @@ This is a subset of the language so far:
   `maxval` (with `dim` and `mask` too), `norm2`, `dot`, `min`, `max`, `abs`,
   `exp`, `log`, `log2`, `log10`, `sqrt`, the trigonometric functions and their
   inverses in radians and in degrees, `i32`, `i64`, `f32`, `f64`, `parse_i32`,
-  `parse_i64`, `parse_f32`, `parse_f64`, `parse_bool`, `exit`
+  `parse_i64`, `parse_f32`, `parse_f64`, `parse_bool`, `exit`, and `std::move` of an array or
+  a str (the array or str is moved into a temporary, so assigning that still copies once)
 
 ## What isn't supported yet
 

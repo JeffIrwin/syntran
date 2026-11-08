@@ -166,9 +166,16 @@ module syntran__core_m
 	!    * ANSI color codes, or some other way to color text
 	!    * E, I (after complex numbers)
 	!    * done: PI, std::IN/OUT/ERR
-	!  - built-in `move` fn to move_alloc an array (or struct)? it's useful to
-	!    avoid a copy in many cases, e.g. dynamic vector example
-	!    src/tests/test-src/struct/test-03.syntran
+	!  - std::move follow-ups.  std::move of an array or str is done (see
+	!    doc/intrinsics.md and samples/vec_i32.syntran), and so is moving an
+	!    array or str temporary into a variable or member
+	!    * move a whole struct, e.g. a vec or a linked list
+	!    * the transpiler moves into a temp, so `y = std::move(x)` still copies
+	!      once.  it would need statement-level matching
+	!    * other copies that a move could avoid: `return x` of a local array
+	!      (OP_LOAD_LOCAL copies it), and passing a variable to an intrinsic
+	!    * the other vec/queue/stack copies of this example still say "cannot
+	!      move yet": src/tests/long/aoc/*, samples/queue_*.syntran
 	!  - generics? longshot, lots of design decisions
 	!  - log a known issue that syntran is not threadsafe
 	!    * did some work on feature/parallel branch to try running long tests in

@@ -237,7 +237,7 @@ subroutine declare_array_fns(fns, id_index, fn_array)
 		solve_f32_mat_fn, solve_f64_mat_fn, &
 		lu_factor_f32_fn, lu_factor_f64_fn, lu_factor_std_fn, &
 		lu_solve_f32_fn, lu_solve_f64_fn, lu_solve_std_fn, &
-		lu_solve_f32_mat_fn, lu_solve_f64_mat_fn
+		lu_solve_f32_mat_fn, lu_solve_f64_mat_fn, move_fn
 
 	! Overloads of the reductions that take `dim` and/or `mask` args.  These are
 	! resolved from the plain names (e.g. sum) by resolve_overload().  They all
@@ -830,6 +830,19 @@ subroutine declare_array_fns(fns, id_index, fn_array)
 
 	!********
 
+	! std::move(x) -- moves the array or str x out of a variable without
+	! copying it, leaving x empty.  Only arrays and strs are accepted, which is
+	! checked in parse_fn_call() since the param is any_type
+
+	move_fn%type%type = any_type
+	allocate(move_fn%params(1))
+	allocate(move_fn%param_names%v(1))
+	move_fn%params(1)%type = any_type
+	move_fn%param_names%v(1)%s = "x"
+	call fns%insert("std::move", move_fn, id_index)
+
+	!********
+
 	! std::shape(source) -- return the extents of source as a rank-1 i64 array.
 	! The result length equals the rank of source; result[i] is the size along
 	! dimension i.  Return type is i64 for consistency with the size() intrinsic.
@@ -920,6 +933,7 @@ subroutine declare_array_fns(fns, id_index, fn_array)
 			lu_factor_f32_fn, lu_factor_f64_fn, lu_factor_std_fn, &
 			lu_solve_f32_fn, lu_solve_f64_fn, lu_solve_std_fn, &
 			lu_solve_f32_mat_fn, lu_solve_f64_mat_fn, &
+			move_fn, &
 			shape_fn, &
 			ext_fns &
 		]
