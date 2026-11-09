@@ -221,7 +221,10 @@ struct TokenVec
 			if cap > 0
 				new_cap = cap * 2;
 
-			let new_data = [data, [new_token(TokenKind.eof, 0, ""); new_cap - cap]];
+			let new_data = [
+				data,
+				[new_token(TokenKind.eof, 0, ""); new_cap - cap],
+			];
 			data = std::move(new_data);
 			cap = new_cap;
 		}
@@ -291,7 +294,7 @@ struct Suffix
 
 struct Lexer
 {
-	// The lexer takes a string of characters and divides it into tokens or words
+	// The lexer divides a string of characters into tokens or words
 
 	text: str,
 	pos: i32,
@@ -305,7 +308,7 @@ struct Lexer
 		return;
 	}
 
-	// Get the char `offset` from the current one, or char(0) if it's out of range
+	// Get the char `offset` from the current one, or char(0) if out of range
 	const fn peek(offset: i32): str
 	{
 		const i = pos + offset;
@@ -380,7 +383,13 @@ struct Lexer
 	// (allow_float is false for hex/octal/binary, which only accept i32/i64)
 	fn lex_type_suffix(allow_float: bool): Suffix
 	{
-		let sfx = Suffix{type = NumType.unknown, suffix = "", start = pos, end_ = pos};
+		let sfx = Suffix
+		{
+			type = NumType.unknown,
+			suffix = "",
+			start = pos,
+			end_ = pos,
+		};
 
 		if current() != "'"
 			return sfx;
@@ -566,7 +575,9 @@ struct Lexer
 	}
 
 	// A decimal literal with an explicit type suffix
-	fn lex_typed(start: i32, lit: &const str, strip: &const str, type: NumType): Token
+	fn lex_typed(
+		start: i32, lit: &const str, strip: &const str, type: NumType,
+	): Token
 	{
 		switch type
 		{
@@ -747,15 +758,15 @@ struct Lexer
 
 		if get_text(0, 2) == "//" or (pos == 0 and get_text(0, 2) == "#!")
 		{
-			// A `//` comment, or a special shebang `#!` case at the very beginning
-			// of the file.  Ignore the rest of the line.  The line feed after it
-			// is the next token, a whitespace
+			// A `//` comment, or a special shebang `#!` case at the very
+			// beginning of the file.  Ignore the rest of the line.  The line
+			// feed after it is the next token, a whitespace
 			read_single_line_comment();
 			return new_token(TokenKind.comment, start, text[start: pos]);
 		}
 
 		// Operators.  Most of them are 1 or 2 chars, and a few are 3, in which
-		// case `pos` is moved to the last one, and that is the pos of the token.
+		// case `pos` is moved to the last one, which is the pos of the token.
 		// Every case falls through to the `pos += 1` at the end
 		let token = new_token(TokenKind.bad, pos, current());
 
@@ -792,7 +803,9 @@ struct Lexer
 					if peek(2) == "="
 					{
 						pos += 2;
-						token = new_token(TokenKind.double_star_equals, pos, "**=");
+						token = new_token(
+							TokenKind.double_star_equals, pos, "**=",
+						);
 					}
 					else
 					{
@@ -930,7 +943,9 @@ struct Lexer
 					if peek(2) == "="
 					{
 						pos += 2;
-						token = new_token(TokenKind.double_less_equals, pos, "<<=");
+						token = new_token(
+							TokenKind.double_less_equals, pos, "<<=",
+						);
 					}
 					else
 					{
@@ -955,7 +970,9 @@ struct Lexer
 					if peek(2) == "="
 					{
 						pos += 2;
-						token = new_token(TokenKind.double_greater_equals, pos, ">>=");
+						token = new_token(
+							TokenKind.double_greater_equals, pos, ">>=",
+						);
 					}
 					else
 					{
