@@ -463,61 +463,83 @@ Run `syntran -h` to see a comprehensive listing of syntran command-line argument
  syntran 1.7.0
  https://github.com/JeffIrwin/syntran
 
- Usage:
-     syntran <file.syntran> [options] [-- <script args>...]
-     syntran
-     syntran -c <cmd> | --command <cmd>
-     syntran -h | --help
-     syntran --version
+ Usage: syntran [OPTIONS] [FILE] [-- <ARGS>...]
+        syntran [OPTIONS] -c <CMD>
+        syntran help
 
  Options:
-     -h --help           Show this help
-     --version           Show version and build details
-     -c --command <cmd>  Run program passed in as string
-     --color (off|on)    Set ANSI text color [default: auto]
-     --fmax-errors <n>   Limit max error messages to <n> [default: 4]
-     -i --interactive    Interpret a file then start an interactive shell
-     -q --quiet          Don't print the banner, only errors and println calls
-     --permissive-return Downgrade missing-return errors to warnings
-     --cd                Resolve the script's relative file paths against
-                         its own directory
-     -s --syntax-only    Parse and type check without running the program
-     -t --transpile <f>  Write the program as Fortran source to <f> ('-' for
-                         stdout) instead of running it
-     --keep-unused-fns   With --transpile, also write fns that nothing calls
-     -o --native <f>     Compile the program with LLVM to an executable <f>
-                         (or an object <f>.o, or LLVM IR <f>.ll)
-     -j --jit            Compile the program with LLVM and run it right away
-     -- <args>...        Pass remaining arguments to script via std::args()
+   -h, --help
+           Show this help
+       --version
+           Show version and build details
+   -c, --command <CMD>
+           Run program passed in as string
+       --color <WHEN>
+           Set ANSI text color [possible values: auto, on, off] [default: auto]
+       --fmax-errors <N>
+           Limit max error messages to <N> [default: 4]
+   -i, --interactive
+           Interpret a file then start an interactive shell
+   -q, --quiet
+           Don't print the banner, only errors and println calls
+       --permissive-return
+           Downgrade missing-return errors to warnings
+       --cd
+           Resolve the script's relative file paths against its own directory
+   -s, --syntax-only
+           Parse and type check without running the program
+   -t, --transpile <FILE>
+           Write the program as Fortran source to <FILE> ('-' for stdout)
+           instead of running it
+       --keep-unused-fns
+           With --transpile, also write fns that nothing calls
+   -o, --native <FILE>
+           Compile the program with LLVM to an executable <FILE>
+           (or an object <FILE>.o, or LLVM IR <FILE>.ll)
+   -j, --jit
+           Compile the program with LLVM and run it right away
+       -- <ARGS>...
+           Pass remaining arguments to script via std::args()
 ```
 <!-- syntran-expect
  syntran X.Y.Z
  https://github.com/JeffIrwin/syntran
- Usage:
-     syntran <file.syntran> [options] [-- <script args>...]
-     syntran
-     syntran -c <cmd> | --command <cmd>
-     syntran -h | --help
-     syntran --version
+ Usage: syntran [OPTIONS] [FILE] [-- <ARGS>...]
+        syntran [OPTIONS] -c <CMD>
+        syntran help
  Options:
-     -h --help           Show this help
-     --version           Show version and build details
-     -c --command <cmd>  Run program passed in as string
-     --color (off|on)    Set ANSI text color [default: auto]
-     --fmax-errors <n>   Limit max error messages to <n> [default: 4]
-     -i --interactive    Interpret a file then start an interactive shell
-     -q --quiet          Don't print the banner, only errors and println calls
-     --permissive-return Downgrade missing-return errors to warnings
-     --cd                Resolve the script's relative file paths against
-                         its own directory
-     -s --syntax-only    Parse and type check without running the program
-     -t --transpile <f>  Write the program as Fortran source to <f> ('-' for
-                         stdout) instead of running it
-     --keep-unused-fns   With --transpile, also write fns that nothing calls
-     -o --native <f>     Compile the program with LLVM to an executable <f>
-                         (or an object <f>.o, or LLVM IR <f>.ll)
-     -j --jit            Compile the program with LLVM and run it right away
-     -- <args>...        Pass remaining arguments to script via std::args()
+   -h, --help
+           Show this help
+       --version
+           Show version and build details
+   -c, --command <CMD>
+           Run program passed in as string
+       --color <WHEN>
+           Set ANSI text color [possible values: auto, on, off] [default: auto]
+       --fmax-errors <N>
+           Limit max error messages to <N> [default: 4]
+   -i, --interactive
+           Interpret a file then start an interactive shell
+   -q, --quiet
+           Don't print the banner, only errors and println calls
+       --permissive-return
+           Downgrade missing-return errors to warnings
+       --cd
+           Resolve the script's relative file paths against its own directory
+   -s, --syntax-only
+           Parse and type check without running the program
+   -t, --transpile <FILE>
+           Write the program as Fortran source to <FILE> ('-' for stdout)
+           instead of running it
+       --keep-unused-fns
+           With --transpile, also write fns that nothing calls
+   -o, --native <FILE>
+           Compile the program with LLVM to an executable <FILE>
+           (or an object <FILE>.o, or LLVM IR <FILE>.ll)
+   -j, --jit
+           Compile the program with LLVM and run it right away
+       -- <ARGS>...
+           Pass remaining arguments to script via std::args()
 -->
 <!-- syntran-end -->
 
