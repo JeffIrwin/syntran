@@ -1,14 +1,8 @@
 # Syntran style guide
 
-This is the style of syntran source code, as it has evolved in the self-hosted
-compiler in [`compiler/`](../compiler/), which is the reference.  It is mostly a
-description of what that code already does, plus a few things marked
-**(prescribed)** that are a decision for new code, not yet a habit.
-
-It is semi-official: follow it in `compiler/` and in new code, and don't feel
-obliged to restyle old code.  Much of [`samples/`](../samples/) and the
-long tests predate it, e.g. `Vec_i32` and `K&R` braces.  The unit tests under
-`src/tests/test-src/` are exempt too, since many of them exist to exercise odd
+This is the style of syntran source code.  Follow it in the self-hosted
+compiler in [`compiler/`](../compiler/) and in new code.  The unit tests under
+`src/tests/test-src/` are exempt, since many of them exist to exercise odd
 syntax on purpose.
 
 The checkable rules are enforced by a [linter](#the-linter), which is written in
@@ -141,10 +135,7 @@ Besides the case:
   `std::parse_i64()`.  Don't `use std::*;`, since a future version of syntran
   may add a function that clashes with one of yours
 
-## Modules, structs, and constructors (prescribed)
-
-This is the one place that the guide asks for something that old code doesn't
-do yet.  For new code:
+## Modules, structs, and constructors
 
 - A module has **one public struct**, like a class, and the module is named
   after it in `snake_case`.  `token.syntran` has `struct Token`.  Enums and
@@ -198,14 +189,9 @@ const t = token::new(token::Kind.word, "hi");
 show(&t);
 ```
 
-Where the old style had `new_token(...)` and `use lex::*;`, this has
-`token::new(...)`.  Qualified names are the point: they say where a thing is from
-at the call site, they can't clash, and one struct per module keeps them short
-enough that nobody wants the glob.
-
-Existing code in `compiler/` doesn't follow this yet.  `lex.syntran` has several
-structs, and constructors such as `new_token()` and `new_lexer()`.  It can be
-migrated when it is split up.  The linter doesn't check this part.
+Qualified names are the point: they say where a thing is from at the call site,
+they can't clash, and one struct per module keeps them short enough that nobody
+wants the glob.
 
 ## Comments
 
@@ -255,10 +241,9 @@ It prints `path:line:col: rule: message` for each violation, sorted, and exits
 | `line-length`    | at most 100 columns, with a tab as 4                                   |
 | `final-newline`  | the file ends with a newline                                           |
 
-Not checked, because they take judgment or the old code would fail: comments,
-the 80-column goal, braces on single statements, `const` vs `let`, `&const`
-params, the `std::` prefix, and everything in
-[the section on modules](#modules-structs-and-constructors-prescribed).
+Not checked, because they take judgment: comments, the 80-column goal, braces
+on single statements, `const` vs `let`, `&const` params, the `std::` prefix, and
+everything in [the section on modules](#modules-structs-and-constructors).
 
 Names in a test that exists to exercise odd syntax, such as the files in
 `src/tests/test-src/errors/`, will trip it.  That's expected, and they are not
