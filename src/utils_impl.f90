@@ -375,16 +375,17 @@ end procedure is_dir
 
 module procedure read_file
 
-	! Read all lines of a file into str_
-
-
-
+	! Read the exact bytes of a file into str_.  A line end is left as it is, so a
+	! CRLF keeps its CR, and a last line without a line feed doesn't get one.  This
+	! is the same as std::read_file(), so the lexer sees the bytes of the file, and
+	! so will a lexer that is written in syntran
 
 	!********
 
 	character :: c
 
 	integer :: io, iu
+	integer(kind = 8) :: n
 
 	type(char_vector_t) :: sb  ! string builder
 
@@ -400,32 +401,33 @@ module procedure read_file
 		return
 	end if
 
-	open(file = file, newunit = iu, status = 'old', iostat = io)
+	open(file = file, newunit = iu, status = 'old', action = 'read', &
+		access = 'stream', form = 'unformatted', iostat = io)
 	if (io /= exit_success) then
 		if (present(iostat)) iostat = io
 		return
 	end if
 
-	! Read 1 character at a time until end
-	sb = new_char_vector()
-	do
-		read(iu, '(a)', advance = 'no', iostat = io) c
-		if (io == iostat_end) then
-			io = exit_success
-			exit
-		end if
-
-		!if (io == iostat_eor) exit
-		if (io == iostat_eor) c = line_feed
-
-		call sb%push(c)
-
-	end do
+	inquire(unit = iu, size = n)
+	if (n > 0) then
+		deallocate(str_)
+		allocate(character(len = n) :: str_)
+		read(iu, iostat = io) str_
+		if (io /= exit_success) str_ = ''
+	else
+		! An empty file, or one with no size like a named pipe, which can only be
+		! read once, to the end
+		sb = new_char_vector()
+		do
+			read(iu, iostat = io) c
+			if (io /= exit_success) exit
+			call sb%push(c)
+		end do
+		if (io == iostat_end) io = exit_success
+		str_ = sb%trim()
+		if (io /= exit_success) str_ = ''
+	end if
 	close(iu)
-	str_ = sb%trim()
-
-	!print *, 'str = '
-	!print *, str
 
 	if (present(iostat)) iostat = io
 

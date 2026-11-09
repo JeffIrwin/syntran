@@ -102,6 +102,7 @@ src/tests/test-src/enum/test-06.syntran
 src/tests/test-src/enum/test-07.syntran
 src/tests/test-src/enum/test-08.syntran
 src/tests/test-src/enum/test-09.syntran
+src/tests/test-src/enum/test-10.syntran
 src/tests/test-src/explorer/arrays.syntran
 src/tests/test-src/explorer/fn.syntran
 src/tests/test-src/explorer/for.syntran
@@ -210,6 +211,7 @@ src/tests/test-src/io/test-16.syntran
 src/tests/test-src/io/test-17.syntran
 src/tests/test-src/io/test-18.syntran
 src/tests/test-src/io/test-19.syntran
+src/tests/test-src/io/test-20.syntran
 src/tests/test-src/linear-algebra/test-01.syntran
 src/tests/test-src/linear-algebra/test-02.syntran
 src/tests/test-src/linear-algebra/test-03.syntran
@@ -273,6 +275,8 @@ src/tests/test-src/modules/test-struct-mod-qualified.syntran
 src/tests/test-src/modules/test-struct-mod.syntran
 src/tests/test-src/modules/test-struct-transitive.syntran
 src/tests/test-src/modules/utils.syntran
+src/tests/test-src/move/test-01.syntran
+src/tests/test-src/move/test-02.syntran
 src/tests/test-src/nd-i32/logo-lowres.syntran
 src/tests/test-src/nd-i32/reduce-dim.syntran
 src/tests/test-src/nd-i32/reduce-mask.syntran
@@ -319,6 +323,7 @@ src/tests/test-src/switch/test-14.syntran
 src/tests/test-src/switch/test-15.syntran
 src/tests/test-src/switch/test-16.syntran
 src/tests/test-src/switch/test-17.syntran
+src/tests/test-src/system/test-01.syntran
 src/tests/test-src/transpile/test-01.syntran
 src/tests/test-src/transpile/test-02.syntran
 src/tests/test-src/transpile/test-03.syntran
@@ -340,6 +345,7 @@ src/tests/test-src/transpile/test-18.syntran
 src/tests/test-src/var-scopes/test-01.syntran
 src/tests/test-src/var-scopes/test-02.syntran
 src/tests/test-src/var-scopes/test-03.syntran
+src/tests/test-src/var-scopes/test-04.syntran
 src/tests/test-src/while-loops/test-01.syntran
 src/tests/test-src/while-loops/test-02.syntran
 src/tests/test-src/while-loops/test-03.syntran

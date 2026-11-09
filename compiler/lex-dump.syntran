@@ -1,0 +1,92 @@
+
+// Dump the tokens of a file from the syntran lexer, in the same format as
+// `syntran --lex` does for the Fortran lexer, so the two can be diffed.  See
+// lex_dump() in src/lex.f90 for the format, and utils/test-lex.sh
+//
+// Usage:
+//
+//     syntran -q compiler/lex-dump.syntran -- <file>
+
+use lex::*;
+
+// Escape a token's text or value so that a token is always one line, with no
+// tabs in it.  Bytes >= 128 are left alone.  Syntran strs have no escapes, so a
+// lone backslash is "\"
+fn escape(s: &const str): str
+{
+	let out = "";
+	for i in [0: len(s)]
+	{
+		const c = s[i];
+		if c == r#"\"#
+			out += "\\";
+		else if c == char(10)
+			out += "\n";
+		else if c == char(13)
+			out += "\r";
+		else if c == char(9)
+			out += "\t";
+		else if c == char(0)
+			out += "\0";
+		else
+			out += c;
+	}
+	return out;
+}
+
+// The name of an enum variant without the trailing `_` of a keyword, which
+// avoids a clash with a syntran keyword, e.g. "plus"
+fn bare_name(name: str): str
+{
+	if name[len(name) - 1] == "_"
+		return name[0: len(name) - 1];
+	return name;
+}
+
+// The name of a token's kind in the Fortran lexer, e.g. "plus_token" or
+// "let_keyword".  The enums here leave off the suffixes
+fn kind_name(token: &const Token): str
+{
+	if token.kind == TokenKind.keyword
+		return bare_name(std::variant_of(token.keyword)) + "_keyword";
+	return bare_name(std::variant_of(token.kind)) + "_token";
+}
+
+fn main()
+{
+	const args = std::args();
+	if size(args) < 1
+	{
+		println("usage: lex-dump.syntran -- <file>");
+		std::exit(1);
+	}
+
+	const text = std::read_file(args[0]);
+
+	let lexer = new_lexer(text);
+	const tokens = lex_all(&lexer);
+
+	for i in [0: tokens.len]
+	{
+		const t = tokens.data[i];
+		let line = str(t.pos) + " " + kind_name(t) + " " + escape(t.text);
+
+		if t.kind == TokenKind.i32
+			line += " " + str(t.i32_);
+		else if t.kind == TokenKind.i64
+			line += " " + str(t.i64_);
+		else if t.kind == TokenKind.f32
+			line += " " + str(t.f32_);
+		else if t.kind == TokenKind.f64
+			line += " " + str(t.f64_);
+		else if t.kind == TokenKind.str
+			line += " " + escape(t.str_);
+
+		println(line);
+	}
+
+	for i in [0: lexer.diags.len]
+		println("diag ", lexer.diags.data[i]);
+}
+
+main();

@@ -215,13 +215,15 @@ This is a subset of the language so far:
 - `std::print_trace()`, `std::stack_trace()`, and `std::caller()`, which look at the
   stack of calls, as a runtime error does
 - `std::args()`, which is the arguments that the compiled program is run with,
-  `std::getenv()`, and `std::hasenv()`
+  `std::getenv()`, `std::hasenv()`, and `std::system()`
+- `std::move()` of an array or a str, which leaves an empty one in its variable or
+  member, and assigning the result to a variable or member doesn't copy it
 - Structs, including methods, members that are arrays or other structs, arrays
   of structs, and optional structs (`?Node`) that can be `null`.  A struct is a
   value, so assigning or passing one copies it
 - Files: `open`, `std::try_open`, `close`, `readln`, `eof`, `writeln`,
-  `std::write`, `std::exists`, `std::read_i32` and the other `std::read_<type>`
-  fns, `std::IN`, `std::OUT`, and `std::ERR`, and the members `f.is_open`,
+  `std::write`, `std::exists`, `std::read_file`, `std::read_i32` and the other
+  `std::read_<type>` fns, the `ok` argument of `parse_<type>()`, `std::IN`, `std::OUT`, and `std::ERR`, and the members `f.is_open`,
   `f.eof`, and `f.name`.  A file handle is a value, so assigning or passing one
   copies it
 - Function pointers: `fn(i32): i32` variables, parameters, return values, and
@@ -306,7 +308,8 @@ while slicing, and the construction of ranges, are in the runtime.  A struct is
 a heap object too, with a slot for each member after a pointer to a constant
 that describes the struct, so the runtime can copy, free, and print it.  An
 enum is the index of its variant, with constant tables of the variants' names
-and backing values.  The runtime writes floats exactly as the Fortran runtime
+(with and without the enum's name, for `str()` and `std::variant_of()`) and
+backing values.  The runtime writes floats exactly as the Fortran runtime
 does, which a unit test checks against it.
 
 A runtime error is reported from the runtime, with the source line of the

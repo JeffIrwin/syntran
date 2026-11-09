@@ -3,3 +3,6 @@
 *.{cmd,[cC][mM][dD]} text eol=crlf
 *.{bat,[bB][aA][tT]} text eol=crlf
 
+
+# Has CRs on purpose, to test the lexers
+src/tests/test-src/errors/lex-edge-cases.syntran -text

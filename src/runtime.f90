@@ -223,6 +223,18 @@ module syntran__runtime_m
 			type(value_t), intent(inout) :: val
 		end subroutine
 
+		module subroutine move_take(v, val)
+			type(value_t), intent(inout) :: v
+			type(value_t), intent(out) :: val
+		end subroutine
+
+		module subroutine move_member_take(node, var, state, val)
+			type(syntax_node_t), intent(in), target :: node
+			type(value_t), intent(inout), target :: var
+			type(state_t), intent(inout) :: state
+			type(value_t), intent(out) :: val
+		end subroutine
+
 		module subroutine allocate_array(val, cap)
 			type(value_t), intent(inout) :: val
 			integer(kind = 8), intent(in) :: cap

@@ -1668,6 +1668,54 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('parse_bool("  true");')  == "true",  &
 			eval('parse_bool("false  ");')  == "false",  &
 			eval('parse_bool("true") and not parse_bool("false");')  == "true",  &
+
+			! parse_<t>(s, &ok) sets ok instead of being a runtime error.  The
+			! result is 0 for bad text.  ok is set again by every call
+			eval('let ok = false; parse_i32("42", &ok);') == '42', &
+			eval('let ok = false; parse_i32("42", &ok); ok;') == 'true', &
+			eval('let ok = true; parse_i32("abc", &ok);') == '0', &
+			eval('let ok = true; parse_i32("abc", &ok); ok;') == 'false', &
+			eval('let ok = true; parse_i32("", &ok); ok;') == 'false', &
+			eval('let ok = true; parse_i32("2147483648", &ok); ok;') == 'false', &  ! overflow
+			eval('let ok = true; parse_i32("2147483647", &ok); ok;') == 'true', &
+			eval('let ok = true; parse_i32("12 abc", &ok); ok;') == 'true', &  ! same as 1-arg
+			eval('let ok = true; parse_i32("abc", &ok); parse_i32("7", &ok); ok;') == 'true', &
+			eval('let ok = false; parse_i64("2147483648", &ok);') == '2147483648', &
+			eval('let ok = false; parse_i64("2147483648", &ok); ok;') == 'true', &
+			eval('let ok = true; parse_i64("9223372036854775808", &ok); ok;') == 'false', &
+			eval('let ok = true; parse_i64("1.5", &ok); ok;') == 'false', &
+			eval('let ok = true; parse_i32("1.5", &ok); ok;') == 'false', &
+			eval('let ok = true; parse_i32("1e3", &ok); ok;') == 'false', &
+			eval('let ok = true; parse_i32("-", &ok); ok;') == 'false', &
+			eval('let ok = true; parse_i32("12x", &ok); ok;') == 'false', &
+			eval('let ok = false; parse_i32(" -7 ", &ok); ok;') == 'true', &
+			eval('let ok = false; parse_i32("+7", &ok);') == '7', &
+			diag_has_code(get_diags('parse_i32("1.5");'), RC_PARSE_I32), &
+			abs(eval_f32('let ok = false; parse_f32("1.5", &ok);') - 1.5) < tol, &
+			eval('let ok = false; parse_f32("1.5", &ok); ok;') == 'true', &
+			eval('let ok = true; parse_f32("1.2e+1e+2", &ok); ok;') == 'false', &
+			abs(eval_f64('let ok = false; parse_f64("1.5", &ok);') - 1.5d0) < tol, &
+			abs(eval_f64('let ok = false; parse_f64("1.5d2", &ok);') - 150.d0) < tol, &
+			abs(eval_f64('let ok = true; parse_f64("1.2e+1e+2", &ok);')) < tol, &
+			eval('let ok = true; parse_f64("1.2e+1e+2", &ok); ok;') == 'false', &
+			eval('let ok = true; parse_f64("x", &ok); ok;') == 'false', &
+			eval('let ok = false; parse_bool("true", &ok); ok;') == 'true', &
+			eval('let ok = false; parse_bool("true", &ok);') == 'true', &
+			eval('let ok = true; parse_bool("false", &ok);') == 'false', &
+			eval('let ok = true; parse_bool("false", &ok); ok;') == 'true', &
+			eval('let ok = true; parse_bool("tx", &ok);') == 'false', &
+			eval('let ok = true; parse_bool("tx", &ok); ok;') == 'false', &
+			eval('let ok = true; parse_bool("t", &ok); ok;') == 'false', &
+			eval('fn p(s: str): i32 { let ok = false; let v = parse_i32(s, &ok); ' // &
+				'if ok { return v; } return -1; } p("5") + p("x");') == '4', &
+			diag_has_code(get_diags('parse_i32("x");'), RC_PARSE_I32), &
+			diag_has_code(get_diags('parse_i64("x");'), RC_PARSE_I64), &
+			diag_has_code(get_diags('parse_f32("x");'), RC_PARSE_F32), &
+			diag_has_code(get_diags('parse_f64("x");'), RC_PARSE_F64), &
+			diag_has_code(get_diags('parse_bool("x");'), RC_PARSE_BOOL), &
+			diag_has_code(get_diags('let ok = true; parse_i32("1", ok);'), EC_BAD_ARG_VAL), &
+			diag_has_code(get_diags('let ok = 1; parse_i32("1", &ok);'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags('let ok = true; parse_f64("1", &ok, &ok);'), EC_TOO_MANY_ARGS), &
 			abs(eval_f32('f32(3);') - 3.0) < tol, &
 			abs(eval_f32('f32(3) / 2;') - 1.5) < tol, &
 			abs(eval_f32('f32(7''i64);') - 7.0) < tol, &
@@ -1860,6 +1908,13 @@ subroutine unit_test_intr_fns(npass, nfail)
 			eval('std::exists("no/such/path/syntran_xyz");') == 'false', &
 			eval('std::exists("");') == 'false', &
 			diag_has_code(get_diags('exists("x");'), EC_STD_ONLY_FN), &
+
+			! std::read_file.  The exact bytes are in io/test-20.syntran
+			eval('len(std::read_file("src/tests/test-src/io/test-01.syntran")) > 0;') == 'true', &
+			eval('std::read_file("src/tests/test-src/io/test-01.syntran")[0: 3];') == char(10)//'fn', &
+			diag_has_code(get_diags('std::read_file("no/such/path/syntran_xyz");'), RC_OPEN_FILE), &
+			diag_has_code(get_diags('std::read_file("src/tests/test-src/io");'), RC_OPEN_FILE), &
+			diag_has_code(get_diags('read_file("x");'), EC_STD_ONLY_FN), &
 
 			eval('let f = std::try_open("no/such/path/xyz", "r"); f.is_open;') == 'false', &
 			eval('let f = std::try_open("no/such/path/xyz", "r"); f.name;') == 'no/such/path/xyz', &
@@ -2377,6 +2432,7 @@ subroutine unit_test_var_scopes(npass, nfail)
 			interpret_file(path//'test-01.syntran', quiet) == 'true', &
 			interpret_file(path//'test-02.syntran', quiet) == 'true', &
 			interpret_file(path//'test-03.syntran', quiet) == 'true', &
+			interpret_file(path//'test-04.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -5162,6 +5218,8 @@ subroutine unit_test_io(npass, nfail)
 			! Relative paths are resolved against the script's directory, which
 			! the native backend has to do too
 			interpret_file(path//'test-19.syntran', quiet, chdir_ = .true.) == 'true', &
+			! std::read_file() of exact bytes
+			interpret_file(path//'test-20.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -7601,6 +7659,28 @@ subroutine unit_test_enum(npass, nfail)
 				//'let a=[P{n=1}]; let b=[P{n=1}]; a == b;'), &
 				EC_BINARY_TYPES), &
 
+			! std::variant_of() is the variant's name without the enum's, which
+			! str() has
+			eval( 'enum Suit{Hearts,Clubs} std::variant_of(Suit.Clubs);', quiet) == &
+				'Clubs', &
+			eval( 'enum Suit{Hearts,Clubs} str(Suit.Clubs);', quiet) == &
+				'Suit.Clubs', &
+			eval( 'enum Card{Two,Jack=10,King=Jack}' &
+				//'std::variant_of(Card.King);', quiet) == 'King', &
+			eval( 'enum Suit{Hearts,Clubs} let a = [Suit.Hearts, Suit.Clubs];' &
+				//'std::variant_of(a[1]);', quiet) == 'Clubs', &
+			eval( 'enum Suit{Hearts,Clubs} std::variant_of(Suit(0));', quiet) == &
+				'Hearts', &
+
+			! ... and it takes only a scalar enum value
+			diag_has_code(get_diags('std::variant_of(1);'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} std::variant_of([Suit.Hearts]);'), &
+				EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags( &
+				'enum Suit{Hearts,Clubs} std::variant_of(Suit);'), &
+				EC_ENUM_NAME_VALUE), &
+
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -7642,6 +7722,7 @@ subroutine unit_test_enum_long(npass, nfail)
 			interpret_file(path//'test-07.syntran', quiet) == 'true', &
 			interpret_file(path//'test-08.syntran', quiet) == 'true', &
 			interpret_file(path//'test-09.syntran', quiet) == 'true', &
+			interpret_file(path//'test-10.syntran', quiet) == 'true', &
 			.false.  & ! so I don't have to bother w/ trailing commas
 		]
 
@@ -7688,6 +7769,225 @@ subroutine unit_test_bitwise_2(npass, nfail)
 	call unit_test_coda(tests, label, npass, nfail)
 
 end subroutine unit_test_bitwise_2
+
+!===============================================================================
+
+subroutine unit_test_move(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'std::move'
+
+	! Path to syntran test files from root of repo
+	character(len = *), parameter :: path = 'src/tests/test-src/move/'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			interpret_file(path//'test-01.syntran', quiet) == '0', &
+			interpret_file(path//'test-02.syntran', quiet) == '0', &
+
+			! The moved-from variable is empty, and the value is all there
+			interpret('let a = [1, 2, 3]; let b = std::move(a); size(a);') == '0', &
+			interpret('let a = [1, 2, 3]; let b = std::move(a); b;') == '[1, 2, 3]', &
+			interpret('let s = "abc"; let t = std::move(s); len(s);') == '0', &
+			interpret('let s = "abc"; let t = std::move(s); t;') == 'abc', &
+
+			! A moved-from array can be assigned again
+			interpret('let a = [1, 2]; let b = std::move(a); a = [5, 6, 7]; a;') &
+				== '[5, 6, 7]', &
+
+			! Assigning an array of the same type moves it, but an i32 array
+			! assigned to an i64 array is still cast
+			interpret('let a = [i64(1), i64(2)]; a = [3, 4]; a[1];') == '4', &
+			trimw(interpret('let a = [1.0, 2.0]; let b = [3.0, 4.0]; a = b; b[0] = 9.0; a[0];')) &
+				== '3.000000000000000E+00', &
+
+			! A copy of a variable is still a copy
+			interpret('let a = [1, 2]; let b = a; b[0] = 7; a[0];') == '1', &
+			interpret('let a = [1, 2]; let b = [0, 0]; b = a; b[0] = 7; a[0];') == '1', &
+			interpret('let s = "x"; let t = s; t += "y"; s;') == 'x', &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_move
+
+!===============================================================================
+
+subroutine unit_test_system(npass, nfail)
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'std::system'
+
+	! Path to syntran test files from root of repo
+	character(len = *), parameter :: path = 'src/tests/test-src/system/'
+
+	logical, parameter :: quiet = .true.
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			interpret_file(path//'test-01.syntran', quiet) == '0', &
+
+			! Portable across sh and cmd, and silent
+			interpret('std::system("exit 0");') == '0', &
+			interpret('std::system("exit 3");') == '3', &
+			interpret('let s = std::system("exit 7"); s + 1;') == '8', &
+
+			! 126 is a status like any other.  127 isn't tested, because the Intel
+			! runtimes treat it as a command that wasn't found, and don't give it
+			! back as gfortran does
+			interpret('std::system("exit 126");') == '126', &
+
+			! std-only
+			diag_has_code(get_diags('system("exit 0");'), EC_STD_ONLY_FN), &
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_system
+
+!===============================================================================
+
+subroutine unit_test_lex_dump(npass, nfail)
+
+	! The hidden `--lex` dump, which compiler/lex.syntran has to match.  The
+	! differential test over src/tests/test-src is utils/test-lex.sh
+
+	use syntran__lex_m, only: lex_dump
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'lex_dump'
+
+	character, parameter :: lf = line_feed
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! Positions are 0-based
+			lex_dump('+', 'a') == &
+				'0 plus_token +'//lf// &
+				'1 eof_token \0'//lf, &
+
+			! A 2-char operator has the pos of its last char
+			lex_dump('a+=1', 'a') == &
+				'0 identifier_token a'//lf// &
+				'2 plus_equals_token +='//lf// &
+				'3 i32_token 1 1'//lf// &
+				'4 eof_token \0'//lf, &
+
+			! Hex with a type suffix.  The text doesn't include the suffix
+			lex_dump("0x1F'i64", 'a') == &
+				'0 i64_token 0x1F 31'//lf// &
+				'8 eof_token \0'//lf, &
+
+			! Whitespace and comments are kept, and escaped.  The line feed after a
+			! `//` comment is a whitespace token of its own, like after a shebang
+			! below
+			lex_dump('a // b'//lf//'c', 'a') == &
+				'0 identifier_token a'//lf// &
+				'1 whitespace_token  '//lf// &
+				'2 comment_token // b'//lf// &
+				'6 whitespace_token \n'//lf// &
+				'7 identifier_token c'//lf// &
+				'8 eof_token \0'//lf, &
+
+			! A comment at the end, with no line feed after it
+			lex_dump('a//b', 'a') == &
+				'0 identifier_token a'//lf// &
+				'1 comment_token //b'//lf// &
+				'4 eof_token \0'//lf, &
+
+			! An identifier can start with an underscore, but a number can't
+			lex_dump('_x _ __1 1_0', 'a') == &
+				'0 identifier_token _x'//lf// &
+				'2 whitespace_token  '//lf// &
+				'3 identifier_token _'//lf// &
+				'4 whitespace_token  '//lf// &
+				'5 identifier_token __1'//lf// &
+				'8 whitespace_token  '//lf// &
+				'9 i32_token 1_0 10'//lf// &
+				'12 eof_token \0'//lf, &
+			lex_dump('a'//lf//'b', 'a') == &
+				'0 identifier_token a'//lf// &
+				'1 whitespace_token \n'//lf// &
+				'2 identifier_token b'//lf// &
+				'3 eof_token \0'//lf, &
+
+			! A tab is escaped, so that the only delimiters in a line are spaces
+			lex_dump('a'//char(9)//'b', 'a') == &
+				'0 identifier_token a'//lf// &
+				'1 whitespace_token \t'//lf// &
+				'2 identifier_token b'//lf// &
+				'3 eof_token \0'//lf, &
+
+			! A doubled quote is one quote in the value
+			lex_dump('"a""b"', 'a') == &
+				'0 str_token "a""b" a"b'//lf// &
+				'6 eof_token \0'//lf, &
+
+			! Raw strings are verbatim
+			lex_dump('r#"x"y"#', 'a') == &
+				'0 str_token r#"x"y"# x"y'//lf// &
+				'8 eof_token \0'//lf, &
+
+			! Shebang
+			lex_dump('#!x'//lf, 'a') == &
+				'0 comment_token #!x'//lf// &
+				'3 whitespace_token \n'//lf// &
+				'4 eof_token \0'//lf, &
+
+			! Bad tokens are kept, and then the diagnostic codes come last
+			lex_dump('$', 'a') == &
+				'0 bad_token $'//lf// &
+				'1 eof_token \0'//lf// &
+				'diag E19'//lf, &
+			lex_dump('"a', 'a') == &
+				'2 bad_token "a'//lf// &
+				'2 eof_token \0'//lf// &
+				'diag E10'//lf, &
+
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_lex_dump
 
 !===============================================================================
 
@@ -8895,6 +9195,21 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_has_code(get_diags('const x = null;'), EC_UNTYPED_NULL), &
 			diag_count_code(get_diags_file(P//'E129-untyped-null.syntran'), &
 				EC_UNTYPED_NULL) == 1, &
+
+			! E131: std::move() of something that isn't a variable
+			diag_has_code(get_diags('let a = [1, 2]; let b = std::move(a[0:1]);'), &
+				EC_MOVE_NOT_VAR), &
+			diag_has_code(get_diags('let b = std::move([1, 2]);'), EC_MOVE_NOT_VAR), &
+			diag_count_code(get_diags_file(P//'E131-move-not-variable.syntran'), &
+				EC_MOVE_NOT_VAR) == 1, &
+			! ... a scalar is the wrong type, and a const can't be moved out of
+			diag_has_code(get_diags('let x = 1; let y = std::move(x);'), EC_BAD_ARG_TYPE), &
+			diag_has_code(get_diags('const a = [1, 2]; let b = std::move(a);'), EC_CONST_ASSIGN), &
+			! ... but a plain variable or member is fine
+			.not. diag_has_code(get_diags('let a = [1, 2]; let b = std::move(a);'), &
+				EC_MOVE_NOT_VAR), &
+			.not. diag_has_code(get_diags('struct S{v:[i32; :],} let s = S{v=[1]}; ' &
+				//'let b = std::move(s.v);'), EC_MOVE_NOT_VAR), &
 
 			! E130: no valid program is known that the native backend can't compile any
 			! more, so there is no example of it (a `for` over a scalar is reported,
@@ -11215,7 +11530,23 @@ subroutine unit_test_error_locations(npass, nfail)
 			diag_loc_ok(get_diags_file(P//'E128-null-array.syntran'), &
 				EC_NULL_ARRAY, P//'E128-null-array.syntran', 6, 14, 4), &
 			diag_loc_ok(get_diags_file(P//'E129-untyped-null.syntran'), &
-				EC_UNTYPED_NULL, P//'E129-untyped-null.syntran', 9, 1, 18) &
+				EC_UNTYPED_NULL, P//'E129-untyped-null.syntran', 9, 1, 18), &
+			diag_loc_ok(get_diags_file(P//'E131-move-not-variable.syntran'), &
+				EC_MOVE_NOT_VAR, P//'E131-move-not-variable.syntran', 9, 20, 6), &
+
+			! The source is the exact bytes of the file, so a CRLF reaches the
+			! lexer, and it's one line end, not two.  A lone CR is still one.  The
+			! source is built here, because git may change the line ends of a file
+			diag_loc_ok(get_diags('let a = 1;'//carriage_return//line_feed &
+				//'let b = ;'//carriage_return//line_feed), &
+				EC_UNEXPECTED_TOKEN, '<stdin>', 2, 9, 1), &
+			diag_loc_ok(get_diags('let a = 1;'//carriage_return//line_feed//line_feed &
+				//'let c = 3;'//carriage_return//'let b = ;'), &
+				EC_UNEXPECTED_TOKEN, '<stdin>', 4, 9, 1), &
+
+			! The last line has no line feed
+			diag_loc_ok(get_diags('let a = 1;'//line_feed//'let b = ;'), &
+				EC_UNEXPECTED_TOKEN, '<stdin>', 2, 9, 1) &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
@@ -13079,6 +13410,9 @@ subroutine unit_tests(iostat)
 	if (run_group('bit_ass')) call unit_test_bit_ass(npass, nfail)
 	if (run_group('bitwise_2')) call unit_test_bitwise_2(npass, nfail)
 	if (run_group('ref')) call unit_test_ref(npass, nfail)
+	if (run_group('move')) call unit_test_move(npass, nfail)
+	if (run_group('system')) call unit_test_system(npass, nfail)
+	if (run_group('lex_dump')) call unit_test_lex_dump(npass, nfail)
 	if (run_group('recursion')) call unit_test_recursion(npass, nfail)
 	if (run_group('args')) call unit_test_args(npass, nfail)
 	if (run_group('reshape')) call unit_test_reshape(npass, nfail)

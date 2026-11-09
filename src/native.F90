@@ -282,7 +282,7 @@ module syntran__native_m
 		! The enums, and the tables of the values and the names of the variants of
 		! each, which are made at their first use, by position
 		type(enums_t), pointer :: enums => null()
-		type(c_ptr), allocatable :: evals(:), enames(:)
+		type(c_ptr), allocatable :: evals(:), enames(:), evnames(:)
 
 		! The LLVM fn and type of each user fn, by id.  They are declared at their
 		! first reference
@@ -1178,6 +1178,9 @@ recursive function may_clobber(node) result(c)
 	select case (node%kind)
 	case (fn_call_expr, method_call_expr, fn_call_ptr_expr, assignment_expr)
 		return
+	case (fn_call_intr_expr)
+		! std::move() leaves its variable empty, which frees what it held
+		if (node%identifier%text == 'move') return
 	end select
 
 	c = .false.
@@ -3323,7 +3326,8 @@ end subroutine emit_struct_methods
 subroutine enum_tables(em, k)
 
 	! The constant tables of the enum at position `k` of the table, which hold
-	! the backing value of each of its variants and the name of each as a str.
+	! the backing value of each of its variants, and the name of each as a str,
+	! both with the enum's name and without it.
 	! The value of an enum is the index of its variant
 
 	type(nemitter_t), intent(inout) :: em
@@ -3334,24 +3338,28 @@ subroutine enum_tables(em, k)
 	integer :: i, n
 
 	type(c_ptr) :: g
-	type(c_ptr), allocatable :: vs(:), ns(:)
+	type(c_ptr), allocatable :: vs(:), ns(:), vn(:)
 
 	if (.not. allocated(em%evals)) then
-		allocate(em%evals(size(em%enums%table)), em%enames(size(em%enums%table)))
+		allocate(em%evals(size(em%enums%table)), em%enames(size(em%enums%table)), &
+			em%evnames(size(em%enums%table)))
 		em%evals = c_null_ptr
 		em%enames = c_null_ptr
+		em%evnames = c_null_ptr
 	end if
 	if (c_associated(em%evals(k))) return
 
 	associate (e => em%enums%table(k)%val)
 
 		n = e%num_vars
-		allocate(vs(max(n, 1)), ns(max(n, 1)))
+		allocate(vs(max(n, 1)), ns(max(n, 1)), vn(max(n, 1)))
 		vs = c_null_ptr
 		ns = c_null_ptr
+		vn = c_null_ptr
 		do i = 1, n
 			vs(i) = ci32(em, e%variant_values(i))
 			ns(i) = str_literal(em, em%enums%table(k)%key//'.'//e%variant_names%v(i)%s)
+			vn(i) = str_literal(em, e%variant_names%v(i)%s)
 		end do
 
 		g = LLVMAddGlobal(em%llmod, LLVMArrayType2(em%t_i32, int(n, c_int64_t)), &
@@ -3367,6 +3375,13 @@ subroutine enum_tables(em, k)
 		call LLVMSetGlobalConstant(g, 1)
 		call LLVMSetLinkage(g, LLVM_PRIVATE_LINKAGE)
 		em%enames(k) = g
+
+		g = LLVMAddGlobal(em%llmod, LLVMArrayType2(em%t_ptr, int(n, c_int64_t)), &
+			cs('.evn.'//str(k)))
+		call LLVMSetInitializer(g, LLVMConstArray(em%t_ptr, vn, n))
+		call LLVMSetGlobalConstant(g, 1)
+		call LLVMSetLinkage(g, LLVM_PRIVATE_LINKAGE)
+		em%evnames(k) = g
 
 	end associate
 
@@ -3392,6 +3407,28 @@ function enum_names(em, k) result(g)
 	g = em%enames(k)
 
 end function enum_names
+
+!===============================================================================
+
+function enum_variant_names(em, k) result(g)
+
+	! The table of the names of the variants of an enum, as strs, without the
+	! name of the enum like enum_names() has
+
+	type(nemitter_t), intent(inout) :: em
+	integer, intent(in) :: k
+	type(c_ptr) :: g
+
+	g = LLVMConstNull(em%t_ptr)
+	if (k < 1 .or. .not. associated(em%enums)) then
+		call unsupported(em, 'an enum of unknown type')
+		return
+	end if
+
+	call enum_tables(em, k)
+	g = em%evnames(k)
+
+end function enum_variant_names
 
 !===============================================================================
 
@@ -3447,7 +3484,7 @@ function enum_compare(em, op, l, r, op_text) result(res)
 		return
 	end if
 
-	by_value = .not. (op == eequals_token .or. op == bang_equals_token)
+	by_value = .not. (op == double_equals_token .or. op == bang_equals_token)
 	associate (e => em%enums%table(k)%val)
 		do i = 1, e%num_vars
 			do j = i + 1, e%num_vars
@@ -3468,7 +3505,7 @@ function enum_compare(em, op, l, r, op_text) result(res)
 	end if
 
 	select case (op)
-	case (eequals_token)
+	case (double_equals_token)
 		res%v = LLVMBuildICmp(em%bld, LLVM_INT_EQ, a, b, cs(''))
 	case (bang_equals_token)
 		res%v = LLVMBuildICmp(em%bld, LLVM_INT_NE, a, b, cs(''))
@@ -4246,7 +4283,7 @@ function binop_vals(em, op, l, r, op_text) result(res)
 			res%ty = str_type
 			res%owned = .true.
 			res%v = rt_call(em, 'sy_str_cat', em%t_ptr, [l%v, r%v])
-		case (eequals_token, bang_equals_token)
+		case (double_equals_token, bang_equals_token)
 			res%ty = bool_type
 			res%v = str_test(em, 'sy_str_eq', l%v, r%v)
 			if (op == bang_equals_token) res%v = LLVMBuildNot(em%bld, res%v, cs(''))
@@ -4277,7 +4314,7 @@ function binop_vals(em, op, l, r, op_text) result(res)
 			(r%ty == struct_type .or. r%ty == null_type)) then
 		res%ty = bool_type
 		select case (op)
-		case (eequals_token)
+		case (double_equals_token)
 			res%v = LLVMBuildICmp(em%bld, LLVM_INT_EQ, l%v, r%v, cs(''))
 		case (bang_equals_token)
 			res%v = LLVMBuildICmp(em%bld, LLVM_INT_NE, l%v, r%v, cs(''))
@@ -4302,7 +4339,7 @@ function binop_vals(em, op, l, r, op_text) result(res)
 	if (l%ty == fn_type .and. r%ty == fn_type) then
 		res%ty = bool_type
 		select case (op)
-		case (eequals_token)
+		case (double_equals_token)
 			res%v = LLVMBuildICmp(em%bld, LLVM_INT_EQ, l%v, r%v, cs(''))
 		case (bang_equals_token)
 			res%v = LLVMBuildICmp(em%bld, LLVM_INT_NE, l%v, r%v, cs(''))
@@ -4321,7 +4358,7 @@ function binop_vals(em, op, l, r, op_text) result(res)
 			res%v = LLVMBuildAnd(em%bld, l%v, r%v, cs(''))
 		case (or_keyword)
 			res%v = LLVMBuildOr(em%bld, l%v, r%v, cs(''))
-		case (eequals_token)
+		case (double_equals_token)
 			res%v = LLVMBuildICmp(em%bld, LLVM_INT_EQ, l%v, r%v, cs(''))
 		case (bang_equals_token)
 			res%v = LLVMBuildICmp(em%bld, LLVM_INT_NE, l%v, r%v, cs(''))
@@ -4342,7 +4379,7 @@ function binop_vals(em, op, l, r, op_text) result(res)
 	! Shifts are in the width of the left operand, and are logical.  A shift by
 	! as many bits as it has or more is 0, which LLVM leaves undefined.  A negative
 	! count is masked like Fortran's shifts do
-	if (op == lless_token .or. op == ggreater_token) then
+	if (op == double_less_token .or. op == double_greater_token) then
 		if (l%ty /= i32_type .and. l%ty /= i64_type) then
 			call unsupported(em, 'a shift of type `'//kind_name(l%ty)//'`')
 			res = dummy_val(em, l%ty)
@@ -4355,7 +4392,7 @@ function binop_vals(em, op, l, r, op_text) result(res)
 		! The count is masked to the width, so a negative one wraps like in Fortran
 		masked = LLVMBuildAnd(em%bld, b%v, &
 			LLVMConstInt(ll_type(em, l%ty), int(bits - 1, c_int64_t), 0), cs(''))
-		if (op == lless_token) then
+		if (op == double_less_token) then
 			res%v = LLVMBuildShl(em%bld, a%v, masked, cs(''))
 		else
 			res%v = LLVMBuildLShr(em%bld, a%v, masked, cs(''))
@@ -4369,7 +4406,7 @@ function binop_vals(em, op, l, r, op_text) result(res)
 
 	! A power of a float and an i32 is done by repeated multiplication, like
 	! Fortran does.  Everything else converts to the wider type first
-	if (op == sstar_token .and. (l%ty == f32_type .or. l%ty == f64_type) &
+	if (op == double_star_token .and. (l%ty == f32_type .or. l%ty == f64_type) &
 			.and. r%ty == i32_type) then
 		res%ty = l%ty
 		if (l%ty == f64_type) then
@@ -4484,7 +4521,7 @@ function num_binop(em, op, ct, a, b, op_text) result(res)
 			res%v = LLVMBuildSelect(em%bld, is_zero, a, q, cs(''))
 		end if
 
-	case (sstar_token)
+	case (double_star_token)
 		select case (ct)
 		case (i32_type)
 			res%v = rt_call(em, 'sy_ipow_i32', em%t_i32, [a, b])
@@ -4508,12 +4545,12 @@ function num_binop(em, op, ct, a, b, op_text) result(res)
 			res%v = LLVMBuildXor(em%bld, a, b, cs(''))
 		end if
 
-	case (eequals_token, bang_equals_token, less_token, less_equals_token, &
+	case (double_equals_token, bang_equals_token, less_token, less_equals_token, &
 			greater_token, greater_equals_token)
 		res%ty = bool_type
 		if (is_int) then
 			select case (op)
-			case (eequals_token)
+			case (double_equals_token)
 				res%v = LLVMBuildICmp(em%bld, LLVM_INT_EQ, a, b, cs(''))
 			case (bang_equals_token)
 				res%v = LLVMBuildICmp(em%bld, LLVM_INT_NE, a, b, cs(''))
@@ -4529,7 +4566,7 @@ function num_binop(em, op, ct, a, b, op_text) result(res)
 		else
 			! Like Fortran, everything is false for a NaN, except /=
 			select case (op)
-			case (eequals_token)
+			case (double_equals_token)
 				res%v = LLVMBuildFCmp(em%bld, LLVM_REAL_OEQ, a, b, cs(''))
 			case (bang_equals_token)
 				res%v = LLVMBuildFCmp(em%bld, LLVM_REAL_UNE, a, b, cs(''))
@@ -5494,6 +5531,10 @@ recursive function emit_intr_call(em, node) result(r)
 
 	type(nval_t) :: piece, acc, a, b
 
+	type(place_t) :: pl
+
+	type(c_ptr) :: ignored
+
 	name = node%identifier%text
 	base = name
 	if (len(name) > 1) then
@@ -5568,6 +5609,28 @@ recursive function emit_intr_call(em, node) result(r)
 		call dispose(em, a)
 		call dispose(em, b)
 
+	case ('move')
+		! Take the array or str out of its variable or member, and leave an empty one
+		! there.  The value is then owned, like a fn result, so assigning it moves it
+		! with no copy.  The parser checked that the arg is a plain variable or member
+		if (place_of(em, node%args(1), pl)) then
+			r = elem_load(em, pl%ty, pl%p)
+			if (pl%ty == array_type) then
+				r%elem = pl%elem
+				r%rank = pl%rank
+				sizes = store_sizes(em, [(ci64(em, 0_8), i = 1, max(pl%rank, 1))])
+				zero = rt_call(em, 'sy_arr_new', em%t_ptr, &
+					[ci32(em, elem_code(pl%elem)), ci32(em, max(pl%rank, 1)), sizes])
+			else
+				zero = str_literal(em, '')
+			end if
+			ignored = LLVMBuildStore(em%bld, zero, pl%p)
+			r%owned = .true.
+			call place_done(em, pl)
+		else
+			r = dummy_val(em, node%val%type)
+		end if
+
 	case ('lu_factor')
 		! The matrix is changed in place, through the array that the variable holds,
 		! and so is `info`, which is a variable
@@ -5635,25 +5698,32 @@ recursive function emit_intr_call(em, node) result(r)
 		end if
 
 	case ('parse_i32', 'parse_i64', 'parse_f32', 'parse_f64', 'parse_bool')
+		! The `ok` is a variable that the runtime sets, like the `info` of
+		! lu_factor(), or null to make bad text a runtime error
 		a = emit_arg(em, node, 1)
+		if (n >= 2) then
+			valp = var_ptr(em, node%args(2), bool_type)
+		else
+			valp = LLVMConstNull(em%t_ptr)
+		end if
 		r%owned = .false.
 		select case (base)
 		case ('parse_i32')
 			r%ty = i32_type
-			r%v = rt_call(em, 'sy_parse_i32', em%t_i32, [a%v])
+			r%v = rt_call(em, 'sy_parse_i32', em%t_i32, [a%v, valp])
 		case ('parse_i64')
 			r%ty = i64_type
-			r%v = rt_call(em, 'sy_parse_i64', em%t_i64, [a%v])
+			r%v = rt_call(em, 'sy_parse_i64', em%t_i64, [a%v, valp])
 		case ('parse_f32')
 			r%ty = f32_type
-			r%v = rt_call(em, 'sy_parse_f32', em%t_f32, [a%v])
+			r%v = rt_call(em, 'sy_parse_f32', em%t_f32, [a%v, valp])
 		case ('parse_f64')
 			r%ty = f64_type
-			r%v = rt_call(em, 'sy_parse_f64', em%t_f64, [a%v])
+			r%v = rt_call(em, 'sy_parse_f64', em%t_f64, [a%v, valp])
 		case default
 			r%ty = bool_type
 			r%v = LLVMBuildICmp(em%bld, LLVM_INT_NE, rt_call(em, 'sy_parse_bool', em%t_i8, &
-				[a%v]), LLVMConstInt(em%t_i8, 0_c_int64_t, 0), cs(''))
+				[a%v, valp]), LLVMConstInt(em%t_i8, 0_c_int64_t, 0), cs(''))
 		end select
 		call dispose(em, a)
 
@@ -5736,6 +5806,31 @@ recursive function emit_intr_call(em, node) result(r)
 		r%owned = .false.
 		r%v = LLVMBuildICmp(em%bld, LLVM_INT_NE, rt_call(em, 'sy_hasenv', em%t_i8, [a%v]), &
 			LLVMConstInt(em%t_i8, 0_c_int64_t, 0), cs(''))
+		call dispose(em, a)
+
+	case ('read_file')
+		! The text of a file, which is owned like a string is
+		a = emit_arg(em, node, 1)
+		r%ty = str_type
+		r%owned = .true.
+		r%v = rt_call(em, 'sy_read_file', em%t_ptr, [a%v])
+		call dispose(em, a)
+
+	case ('variant_of')
+		! The name of the variant of an enum value.  It's in a table of
+		! constants, which are immortal, so it's owned like any other str
+		a = emit_arg(em, node, 1)
+		r%ty = str_type
+		r%owned = .true.
+		r%v = LLVMBuildLoad2(em%bld, em%t_ptr, LLVMBuildGEP2(em%bld, em%t_ptr, &
+			enum_variant_names(em, a%sk), [a%v], 1, cs('')), cs(''))
+		call dispose(em, a)
+
+	case ('system')
+		a = emit_arg(em, node, 1)
+		r%ty = i32_type
+		r%owned = .false.
+		r%v = rt_call(em, 'sy_system', em%t_i32, [a%v])
 		call dispose(em, a)
 
 	case ('exists')
@@ -6249,17 +6344,17 @@ recursive function emit_assign_val(em, node, as_stmt) result(res)
 	if (node%op%kind /= equals_token) then
 		! `x += y` is `x = x + y`
 		select case (node%op%kind)
-		case (plus_equals_token);    op = plus_token
-		case (minus_equals_token);   op = minus_token
-		case (star_equals_token);    op = star_token
-		case (slash_equals_token);   op = slash_token
-		case (percent_equals_token); op = percent_token
-		case (sstar_equals_token);   op = sstar_token
-		case (lless_equals_token);   op = lless_token
-		case (ggreater_equals_token);op = ggreater_token
-		case (amp_equals_token);     op = amp_token
-		case (pipe_equals_token);    op = pipe_token
-		case (caret_equals_token);   op = caret_token
+		case (plus_equals_token);            op = plus_token
+		case (minus_equals_token);           op = minus_token
+		case (star_equals_token);            op = star_token
+		case (slash_equals_token);           op = slash_token
+		case (percent_equals_token);         op = percent_token
+		case (double_star_equals_token);     op = double_star_token
+		case (double_less_equals_token);     op = double_less_token
+		case (double_greater_equals_token);  op = double_greater_token
+		case (amp_equals_token);             op = amp_token
+		case (pipe_equals_token);            op = pipe_token
+		case (caret_equals_token);           op = caret_token
 		case default
 			call unsupported(em, 'the `'//node%op%text//'` operator')
 			return
@@ -7812,7 +7907,7 @@ recursive subroutine emit_switch(em, node, is_result)
 								em%t_i8, [held%v, v%v]), LLVMConstInt(em%t_i8, 0_c_int64_t, 0), cs(''))
 							call dispose(em, v)
 						else
-							t = binop_vals(em, eequals_token, held, v, '==')
+							t = binop_vals(em, double_equals_token, held, v, '==')
 						end if
 					end if
 				end associate

@@ -31,6 +31,24 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - style guide
+	!    * lowercase for vars, fns, members, methods, and src file (module)
+	!      names
+	!    * CamelCase for structs? or *_t or something else?
+	!    * make a lint script to help check?
+	!  - self-hosted compiler
+	!    * does the lexer differential token dump test use aot or bytecode?
+	!      looks like it runs both in different ci stages. maybe it should only
+	!      do native version for perf, and extend to all os's
+	!    * std::move done
+	!    * std::system() done, as one cmd str (the user quotes).  maybe add a
+	!      std::shell_quote() or an argv overload later
+	!    * port lexer as test, follow scratch/self-host.md
+	!    * sum types and other follow-ups as needed
+	!    * later, might want ffi, a way to interface and call c api libs. for
+	!      now we can generate llvm ir just by writing text with now llvm lib
+	!      dependency. this would not allow a native repl and would require
+	!      shelling out to clang for exe linking
 	!  - llvm compiled backend
 	!    * test (manually) all aoc solutions in its repo
 	!      + done
@@ -62,13 +80,6 @@ module syntran__core_m
 	!    * when/where does the ci fuzz run? either only on master or cron is
 	!      broken
 	!    * periodically check the ci fuzz runs
-	!  - self-hosted compiler
-	!    * pre-req: need a way to interface and call c api libs
-	!  - massive old readme bug:
-	!    * "recursive functions are not possible currently"
-	!    * of course the sentence before is wrong too, which says fns need to be
-	!      declared above their call site
-	!    * i did that pre-ai :/
 	!  - transpiler improvements:
 	!    * cover more OS's and intel in addition to gnu in testing. currently
 	!      only gnu on ubuntu
@@ -166,9 +177,16 @@ module syntran__core_m
 	!    * ANSI color codes, or some other way to color text
 	!    * E, I (after complex numbers)
 	!    * done: PI, std::IN/OUT/ERR
-	!  - built-in `move` fn to move_alloc an array (or struct)? it's useful to
-	!    avoid a copy in many cases, e.g. dynamic vector example
-	!    src/tests/test-src/struct/test-03.syntran
+	!  - std::move follow-ups.  std::move of an array or str is done (see
+	!    doc/intrinsics.md and samples/vec_i32.syntran), and so is moving an
+	!    array or str temporary into a variable or member
+	!    * move a whole struct, e.g. a vec or a linked list
+	!    * the transpiler moves into a temp, so `y = std::move(x)` still copies
+	!      once.  it would need statement-level matching
+	!    * other copies that a move could avoid: `return x` of a local array
+	!      (OP_LOAD_LOCAL copies it), and passing a variable to an intrinsic
+	!    * the other vec/queue/stack copies of this example still say "cannot
+	!      move yet": src/tests/long/aoc/*, samples/queue_*.syntran
 	!  - generics? longshot, lots of design decisions
 	!  - log a known issue that syntran is not threadsafe
 	!    * did some work on feature/parallel branch to try running long tests in
@@ -218,8 +236,6 @@ module syntran__core_m
 	!    * can arrays contain a fn? (E89) -- the array-element storage path
 	!      genuinely has no fn_type case
 	!    * closures and anonymous (lambda) fns?
-	!  - i like claude's "double_colon_token" name. i should change things like
-	!    "sstar_token", "pplus_token", etc. to "double_star_token" ...
 	!  - minloc, maxloc, findloc std:: fns
 	!    * useful for aoc
 	!  - add ci/cd tests for gfortran 15. maybe phase out 10 or 11 for managable
@@ -512,9 +528,9 @@ module syntran__core_m
 	!
 	!****************************************
 
-	! A note on naming: Immo calls '==' equals_equals_token, but I think that
-	! invites tab-completion mistakes so I went with eequals_token.  Same for
-	! sstar_token (and upcoming pplus_token, mminus_token, etc.)
+	! A note on naming: doubled operators are spelled out as double_*_token, e.g.
+	! double_equals_token for '==' and double_star_token for '**'.  Immo's
+	! equals_equals_token would invite tab-completion mistakes with equals_token.
 
 !===============================================================================
 

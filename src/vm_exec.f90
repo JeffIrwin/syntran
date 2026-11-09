@@ -169,17 +169,40 @@ end subroutine vm_pop_discard
 function store_can_move(prog, ip, tos, slot) result(can)
 	! Whether OP_STORE_* at `ip` can move TOS into `slot` instead of
 	! deep-copying it.  TOS is kept on the stack after a store, but when the
-	! next op is OP_POP nobody reads it again.  Only struct/null values, which
-	! are the ones that can be arbitrarily large (a linked list) and whose
-	! assign_() is a plain copy anyway
+	! next op is OP_POP nobody reads it again.  Only the values that can be
+	! arbitrarily large, and where assign_() is a plain copy anyway:
+	!
+	! - struct/null values (a linked list)
+	! - strs
+	! - arrays, unless assign_() would cast their elements to the slot's type
+	!
+	! That is also what makes `data = std::move(new_data)` and `x = [0; n]` cheap
 	type(program_t), intent(in) :: prog
 	integer, intent(in) :: ip
 	type(value_t), intent(in) :: tos, slot
 	logical :: can
 
 	can = .false.
-	if (.not. any(tos%type == [struct_type, null_type])) return
-	if (.not. any(slot%type == [struct_type, null_type, unknown_type])) return
+	select case (tos%type)
+	case (struct_type, null_type)
+		if (.not. any(slot%type == [struct_type, null_type, unknown_type])) return
+
+	case (str_type)
+		if (.not. any(slot%type == [str_type, unknown_type])) return
+
+	case (array_type)
+		if (.not. allocated(tos%array)) return
+		if (slot%type == array_type) then
+			if (.not. allocated(slot%array)) return
+			if (slot%array%type /= tos%array%type) return
+			if (slot%array%rank /= tos%array%rank) return
+		else if (slot%type /= unknown_type) then
+			return
+		end if
+
+	case default
+		return
+	end select
 	can = next_op_is_pop(prog, ip)
 
 end function store_can_move
@@ -464,7 +487,7 @@ subroutine do_binop(left, right, op_kind, restype, res, rt_err)
 		call mul(left, right, res, '*')
 	case (matmul_token)
 		call matmul_(left, right, res, '@', rt_err)
-	case (sstar_token)
+	case (double_star_token)
 		call pow(left, right, res, '**')
 	case (slash_token)
 		call div(left, right, res, '/')
@@ -474,7 +497,7 @@ subroutine do_binop(left, right, op_kind, restype, res, rt_err)
 		call and_(left, right, res, 'and')
 	case (or_keyword)
 		call or_(left, right, res, 'or')
-	case (eequals_token)
+	case (double_equals_token)
 		call is_eq(left, right, res, '==')
 	case (bang_equals_token)
 		call is_ne(left, right, res, '!=')
@@ -486,9 +509,9 @@ subroutine do_binop(left, right, op_kind, restype, res, rt_err)
 		call is_gt(left, right, res, '>')
 	case (greater_equals_token)
 		call is_ge(left, right, res, '>=')
-	case (lless_token)
+	case (double_less_token)
 		call left_shift(left, right, res, '<<')
-	case (ggreater_token)
+	case (double_greater_token)
 		call right_shift(left, right, res, '>>')
 	case (caret_token)
 		call bit_xor(left, right, res, '^')
@@ -517,20 +540,20 @@ function op_text(op_kind) result(text)
 	case (plus_token);           text = '+'
 	case (minus_token);          text = '-'
 	case (star_token);           text = '*'
-	case (sstar_token);          text = '**'
+	case (double_star_token);    text = '**'
 	case (slash_token);          text = '/'
 	case (percent_token);        text = '%'
 	case (matmul_token);         text = '@'
 	case (and_keyword);          text = 'and'
 	case (or_keyword);           text = 'or'
-	case (eequals_token);        text = '=='
+	case (double_equals_token);  text = '=='
 	case (bang_equals_token);    text = '!='
 	case (less_token);           text = '<'
 	case (less_equals_token);    text = '<='
 	case (greater_token);        text = '>'
 	case (greater_equals_token); text = '>='
-	case (lless_token);          text = '<<'
-	case (ggreater_token);       text = '>>'
+	case (double_less_token);    text = '<<'
+	case (double_greater_token); text = '>>'
 	case (caret_token);          text = '^'
 	case (pipe_token);           text = '|'
 	case (amp_token);            text = '&'
@@ -646,7 +669,7 @@ subroutine do_array_binop_typed(left, right, op_kind, elem_type, res, rt_err)
 		case (f32_type); res%array%bool = left%array%f32 >= right%array%f32
 		case (f64_type); res%array%bool = left%array%f64 >= right%array%f64
 		end select
-	case (eequals_token)
+	case (double_equals_token)
 		res%array = mold(left%array, bool_type)
 		select case (elem_type)
 		case (i32_type);  res%array%bool = left%array%i32  == right%array%i32
@@ -1083,6 +1106,28 @@ module subroutine vm_run(prog, state, res)
 				call move_member_out(n, state%locs%vals(n%id_index), state, val)
 			else
 				call move_member_out(n, state%vars%vals(n%id_index), state, val)
+			end if
+			end associate
+			if (state%rt_halt) exit
+			call vm_push_move(stack, val)
+
+		! --- std::move(x): move an array or str out of x onto the stack ---------
+		! Unlike OP_LOAD_REF_*, nothing is written back, so x is left an empty
+		! array or str instead of a hollow value
+		case (OP_MOVE_GLOBAL)
+			call move_take(state%vars%vals(instr%a), val)
+			call vm_push_move(stack, val)
+
+		case (OP_MOVE_LOCAL)
+			call move_take(state%locs%vals(instr%a), val)
+			call vm_push_move(stack, val)
+
+		case (OP_MOVE_MEMBER)
+			associate(n => prog%nodes(instr%a))
+			if (n%is_loc) then
+				call move_member_take(n, state%locs%vals(n%id_index), state, val)
+			else
+				call move_member_take(n, state%vars%vals(n%id_index), state, val)
 			end if
 			end associate
 			if (state%rt_halt) exit

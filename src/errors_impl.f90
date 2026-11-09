@@ -332,6 +332,7 @@ module procedure get_all_error_codes
 	call codes%push(EC_NULL_ARRAY)
 	call codes%push(EC_UNTYPED_NULL)
 	call codes%push(EC_NATIVE_UNSUPPORTED)
+	call codes%push(EC_MOVE_NOT_VAR)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -1398,6 +1399,18 @@ module procedure err_untyped_null
 		//underline(context, span)//" untyped null"//color_reset
 
 end procedure err_untyped_null
+
+!===============================================================================
+
+module procedure err_move_not_var
+
+	err = err_pre(EC_MOVE_NOT_VAR) &
+		//'`std::move()` takes a plain variable or struct member, like `x` or ' &
+		//'`v.data`, not a subscript or other expression, because it moves the ' &
+		//'value out of the variable and leaves it empty' &
+		//underline(context, span)//" not a variable"//color_reset
+
+end procedure err_move_not_var
 
 !===============================================================================
 

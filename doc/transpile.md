@@ -56,13 +56,15 @@ This is a subset of the language so far:
   returning structs, and printing.  Methods, const methods, and implicit access
   of the members of `self`
 - Enums: declarations (with explicit values and aliases), `Suit.Hearts`, the
-  casts `i32(Suit.Hearts)` and `Suit(2)`, comparison, printing, arrays of
-  enums, a bare enum name as in `for v in Suit`, and `switch` on an enum
+  casts `i32(Suit.Hearts)` and `Suit(2)`, comparison, printing, `std::variant_of`,
+  arrays of enums, a bare enum name as in `for v in Suit`, and `switch` on an
+  enum
 - File I/O: `open`, `std::try_open`, `close`, `std::write`, `std::writef`, `writeln`, `readln`, `eof`,
-  `std::exists`, the members `f.is_open`, `f.eof`, and `f.name`, and `readln()`
+  `std::exists`, `std::read_file`, the `ok` argument of `parse_<type>()`, the
+  members `f.is_open`, `f.eof`, and `f.name`, and `readln()`
   and `eof()` of standard input.  Binary files, with a `b` in the mode of `open`,
   and `std::read_i32`, `std::read_i64`, `std::read_f32`, and `std::read_f64`.
-  `std::IN`, `std::OUT`, `std::ERR`, `std::PI`, `std::getenv`, `std::hasenv`, and
+  `std::IN`, `std::OUT`, `std::ERR`, `std::PI`, `std::getenv`, `std::hasenv`, `std::system`, and
   `std::args()`
 - Function pointers: a variable of a fn type, passing and returning one, a member
   of a struct that is one, calling one, and comparing two with `==` and `!=`
@@ -74,7 +76,11 @@ This is a subset of the language so far:
   `maxval` (with `dim` and `mask` too), `norm2`, `dot`, `min`, `max`, `abs`,
   `exp`, `log`, `log2`, `log10`, `sqrt`, the trigonometric functions and their
   inverses in radians and in degrees, `i32`, `i64`, `f32`, `f64`, `parse_i32`,
-  `parse_i64`, `parse_f32`, `parse_f64`, `parse_bool`, `exit`
+  `parse_i64`, `parse_f32`, `parse_f64`, `parse_bool`, `exit`, and `std::move` of an array or
+  a str (the array or str is moved into a temporary, so assigning that still copies once).
+  The move happens before the rest of its statement runs, so a statement that also
+  reads the variable, like `println(x, std::move(x))`, sees it empty, unlike in the
+  interpreter.  Move in a statement of its own, like `y = std::move(x);`
 
 ## What isn't supported yet
 

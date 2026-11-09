@@ -37,6 +37,7 @@
 #include <io.h>
 #define sy_isatty(f) _isatty(_fileno(f))
 #else
+#include <sys/wait.h>
 #include <unistd.h>
 #define sy_isatty(f) isatty(fileno(f))
 #endif
@@ -601,9 +602,10 @@ void sy_exit(int32_t code)
 
 /*============================================================================*/
 
-/* parse_i32() and friends.  A string that isn't a number is a fatal error.  Like
- * Fortran's list-directed read, which the interpreter uses, the number may have
- * blanks around it, and may be followed by a comma or slash and anything */
+/* parse_i32() and friends.  A string that isn't a number is a fatal error, unless there
+ * is an `ok` to set instead, and then the result is 0.  Like Fortran's list-directed
+ * read, which the interpreter uses, the number may have blanks around it, and may be
+ * followed by a comma or slash and anything */
 static const char *sy_blanks(const char *p)
 {
     while (*p == ' ' || *p == '\t') p++;
@@ -625,31 +627,44 @@ static void sy_parse_fail(const char *fn, const sy_str *s)
     sy_rt_error(code, " cannot %s() for argument `%s`", fn, s->data);
 }
 
-static int64_t sy_parse_int(const char *fn, const sy_str *s, int64_t lo, int64_t hi)
+/* The end of every parse.  With an `ok`, `good` is stored there and returned, and without
+ * one a bad parse is a fatal error */
+static int sy_parse_done(const char *fn, const sy_str *s, int good, int8_t *ok)
+{
+    if (ok != NULL) {
+        *ok = good != 0;
+        return good;
+    }
+    if (!good) sy_parse_fail(fn, s);
+    return 1;
+}
+
+static int64_t sy_parse_int(const char *fn, const sy_str *s, int64_t lo, int64_t hi, int8_t *ok)
 {
     char *end;
     long long x;
 
     errno = 0;
     x = strtoll(sy_blanks(s->data), &end, 10);
-    if (end == sy_blanks(s->data) || errno != 0 || x < lo || x > hi || !sy_end_ok(end)) {
-        sy_parse_fail(fn, s);
+    if (!sy_parse_done(fn, s, end != sy_blanks(s->data) && errno == 0 && x >= lo && x <= hi &&
+        sy_end_ok(end), ok)) {
+        return 0;
     }
     return (int64_t)x;
 }
 
-int32_t sy_parse_i32(const sy_str *s)
+int32_t sy_parse_i32(const sy_str *s, int8_t *ok)
 {
-    return (int32_t)sy_parse_int("parse_i32", s, INT32_MIN, INT32_MAX);
+    return (int32_t)sy_parse_int("parse_i32", s, INT32_MIN, INT32_MAX, ok);
 }
 
-int64_t sy_parse_i64(const sy_str *s)
+int64_t sy_parse_i64(const sy_str *s, int8_t *ok)
 {
-    return sy_parse_int("parse_i64", s, INT64_MIN, INT64_MAX);
+    return sy_parse_int("parse_i64", s, INT64_MIN, INT64_MAX, ok);
 }
 
 /* A Fortran exponent can be introduced by d or D */
-static double sy_parse_real(const char *fn, const sy_str *s)
+static double sy_parse_real(const char *fn, const sy_str *s, int8_t *ok)
 {
     char buf[512], *end, *q;
     const char *p = sy_blanks(s->data);
@@ -660,30 +675,31 @@ static double sy_parse_real(const char *fn, const sy_str *s)
         if (*q == 'd' || *q == 'D') *q = 'e';
     }
     x = strtod(buf, &end);
-    if (end == buf || !sy_end_ok(end)) sy_parse_fail(fn, s);
+    if (!sy_parse_done(fn, s, end != buf && sy_end_ok(end), ok)) return 0.0;
     return x;
 }
 
-float sy_parse_f32(const sy_str *s)
+float sy_parse_f32(const sy_str *s, int8_t *ok)
 {
-    return (float)sy_parse_real("parse_f32", s);
+    return (float)sy_parse_real("parse_f32", s, ok);
 }
 
-double sy_parse_f64(const sy_str *s)
+double sy_parse_f64(const sy_str *s, int8_t *ok)
 {
-    return sy_parse_real("parse_f64", s);
+    return sy_parse_real("parse_f64", s, ok);
 }
 
-int8_t sy_parse_bool(const sy_str *s)
+int8_t sy_parse_bool(const sy_str *s, int8_t *ok)
 {
     const char *p = sy_blanks(s->data);
     size_t n = strlen(p);
+    int is_true, is_false;
 
     while (n > 0 && p[n - 1] == ' ') n--;
-    if (n == 4 && strncmp(p, "true", 4) == 0) return 1;
-    if (n == 5 && strncmp(p, "false", 5) == 0) return 0;
-    sy_parse_fail("parse_bool", s);
-    return 0;
+    is_true = n == 4 && strncmp(p, "true", 4) == 0;
+    is_false = n == 5 && strncmp(p, "false", 5) == 0;
+    sy_parse_done("parse_bool", s, is_true || is_false, ok);
+    return is_true;
 }
 
 /*============================================================================*/
@@ -2249,6 +2265,24 @@ int8_t sy_hasenv(const sy_str *name)
     return getenv(name->data) != NULL;
 }
 
+/* std::system() is the exit status of the command, or -1 if it can't be started.  Flush
+ * first so that output stays in order */
+int32_t sy_system(const sy_str *cmd)
+{
+    int r;
+
+    fflush(NULL);
+    r = system(cmd->data);
+    if (r == -1)
+        return -1;
+#ifndef _WIN32
+    /* A command that is killed by a signal is the number of the signal, like libgfortran's
+     * exitstat in the VM */
+    r = WIFEXITED(r) ? WEXITSTATUS(r) : WIFSIGNALED(r) ? WTERMSIG(r) : r;
+#endif
+    return (int32_t)r;
+}
+
 /* Reductions: sum, product, minval, maxval, count, all, and any of an array along
  * the zero-based dimension `dim`, or of all of it if `dim` is negative, and only of
  * the elements where `mask` is true, if there is one.  The result has the other
@@ -2507,6 +2541,53 @@ int8_t sy_exists(const sy_str *path)
     found = stat(full, &st) == 0;
     free(full);
     return found;
+}
+
+/* std::read_file() is the exact bytes of a file.  A directory, or a file that can't be
+ * read, is the same error as open() */
+sy_str *sy_read_file(const sy_str *name)
+{
+    struct stat st;
+    char *path = sy_resolve_path(name->data);
+    FILE *fp = NULL;
+    sy_str *s;
+    char *buf;
+    size_t cap, n = 0;
+    int err = 0;
+
+    if (stat(path, &st) != 0) {
+        err = errno;
+    } else if (S_ISDIR(st.st_mode)) {
+        err = EISDIR;
+    } else if ((fp = fopen(path, "rb")) == NULL) {
+        err = errno;
+    }
+    if (err != 0) sy_rt_error("R8", "cannot open file \"%s\" (iostat = %d)", path, err);
+
+    /* st_size is 0 for a named pipe, which can only be read once, to the end.  So read
+     * until EOF instead of trusting it, and start from it so a file is one read */
+    cap = st.st_size > 0 ? (size_t)st.st_size : 4096;
+    buf = (char *)malloc(cap);
+    if (buf == NULL) sy_fatal("out of memory");
+    for (;;) {
+        size_t got = fread(buf + n, 1, cap - n, fp);
+        n += got;
+        if (n < cap) {
+            if (ferror(fp)) {
+                err = errno;
+                sy_rt_error("R8", "cannot open file \"%s\" (iostat = %d)", path, err);
+            }
+            break;
+        }
+        cap *= 2;
+        buf = (char *)realloc(buf, cap);
+        if (buf == NULL) sy_fatal("out of memory");
+    }
+    fclose(fp);
+    free(path);
+    s = sy_str_from(buf, (int64_t)n);
+    free(buf);
+    return s;
 }
 
 void sy_file_close(sy_file *f)

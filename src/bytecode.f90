@@ -233,7 +233,10 @@ module syntran__bytecode_m
 		OP_IS_NULL          = 1249, &
 		OP_IS_NULL_MEMBER   = 1250, &
 		OP_TAKE_MEMBER      = 1251, &
-		OP_LOAD_REF_MEMBER  = 1252
+		OP_LOAD_REF_MEMBER  = 1252, &
+		OP_MOVE_LOCAL       = 1253, &
+		OP_MOVE_GLOBAL      = 1254, &
+		OP_MOVE_MEMBER      = 1255
 
 	! Moves instead of copies for recursive structs (linked lists).  A struct
 	! variable load deep-copies the whole value, so `cur != null` and
@@ -530,6 +533,19 @@ module syntran__bytecode_m
 	integer, parameter :: INTR_PARSE_BOOL = 158, &
 		INTR_F32_SCA = 159, INTR_F32_ARR = 160, &
 		INTR_F64_SCA = 161, INTR_F64_ARR = 162
+
+	! std::move(x) of an array or str.  The VM compiles it to OP_MOVE_*, not to
+	! OP_CALL_INTR
+	integer, parameter :: INTR_MOVE = 163
+
+	! std::system(cmd)
+	integer, parameter :: INTR_SYSTEM = 164
+
+	! std::read_file(path)
+	integer, parameter :: INTR_READ_FILE = 165
+
+	! std::variant_of(e)
+	integer, parameter :: INTR_VARIANT_OF = 166
 
 	!********
 
@@ -1108,8 +1124,12 @@ pure integer function intr_id_from_name(name) result(id)
 	case ("transpose");      id = INTR_TRANSPOSE
 	case ("shape");          id = INTR_SHAPE
 	case ("getenv");         id = INTR_GETENV
+	case ("move");           id = INTR_MOVE
 	case ("hasenv");         id = INTR_HASENV
+	case ("system");         id = INTR_SYSTEM
 	case ("exists");         id = INTR_EXISTS
+	case ("read_file");      id = INTR_READ_FILE
+	case ("variant_of");     id = INTR_VARIANT_OF
 	case ("try_open");       id = INTR_TRY_OPEN
 	case ("print_trace");    id = INTR_PRINT_TRACE
 	case ("stack_trace");    id = INTR_STACK_TRACE
@@ -1183,7 +1203,7 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 			case (f32_type); op = OP_MOD_F32
 			case (f64_type); op = OP_MOD_F64
 			end select
-		case (sstar_token)
+		case (double_star_token)
 			select case (ltype)
 			case (i32_type); op = OP_POW_I32
 			case (i64_type); op = OP_POW_I64
@@ -1222,7 +1242,7 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 			case (f64_type); op = OP_GE_F64
 			case (str_type); op = OP_GE_STR
 			end select
-		case (eequals_token)
+		case (double_equals_token)
 			select case (ltype)
 			case (i32_type); op = OP_EQ_I32
 			case (i64_type); op = OP_EQ_I64
@@ -1279,7 +1299,7 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 		case (greater_equals_token)
 			if (ltype == i32_type) then; op = OP_GE_I32_I64
 			else;                         op = OP_GE_I64_I32; end if
-		case (eequals_token)
+		case (double_equals_token)
 			if (ltype == i32_type) then; op = OP_EQ_I32_I64
 			else;                         op = OP_EQ_I64_I32; end if
 		case (bang_equals_token)
@@ -1320,7 +1340,7 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 		case (greater_equals_token)
 			if (ltype == f32_type) then; op = OP_GE_F32_I32
 			else;                         op = OP_GE_I32_F32; end if
-		case (eequals_token)
+		case (double_equals_token)
 			if (ltype == f32_type) then; op = OP_EQ_F32_I32
 			else;                         op = OP_EQ_I32_F32; end if
 		case (bang_equals_token)
@@ -1361,7 +1381,7 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 		case (greater_equals_token)
 			if (ltype == f32_type) then; op = OP_GE_F32_I64
 			else;                         op = OP_GE_I64_F32; end if
-		case (eequals_token)
+		case (double_equals_token)
 			if (ltype == f32_type) then; op = OP_EQ_F32_I64
 			else;                         op = OP_EQ_I64_F32; end if
 		case (bang_equals_token)
@@ -1402,7 +1422,7 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 		case (greater_equals_token)
 			if (ltype == f64_type) then; op = OP_GE_F64_I32
 			else;                         op = OP_GE_I32_F64; end if
-		case (eequals_token)
+		case (double_equals_token)
 			if (ltype == f64_type) then; op = OP_EQ_F64_I32
 			else;                         op = OP_EQ_I32_F64; end if
 		case (bang_equals_token)
@@ -1443,7 +1463,7 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 		case (greater_equals_token)
 			if (ltype == f64_type) then; op = OP_GE_F64_I64
 			else;                         op = OP_GE_I64_F64; end if
-		case (eequals_token)
+		case (double_equals_token)
 			if (ltype == f64_type) then; op = OP_EQ_F64_I64
 			else;                         op = OP_EQ_I64_F64; end if
 		case (bang_equals_token)
@@ -1503,13 +1523,13 @@ pure integer function arr_binop_typed_opcode(op_kind, elem_type) result(op)
 		select case (op_kind)
 		case (plus_token, minus_token, star_token, slash_token, percent_token, &
 		      less_token, less_equals_token, greater_token, greater_equals_token, &
-		      eequals_token, bang_equals_token)
+		      double_equals_token, bang_equals_token)
 			op = OP_ARR_BINOP
 		end select
 	case (bool_type)
 		! Logical/equality operators for bool arrays
 		select case (op_kind)
-		case (eequals_token, bang_equals_token, and_keyword, or_keyword)
+		case (double_equals_token, bang_equals_token, and_keyword, or_keyword)
 			op = OP_ARR_BINOP
 		end select
 	end select
@@ -1958,6 +1978,32 @@ end function plain_member_chain
 
 !===============================================================================
 
+function member_store_moves(node) result(ok)
+
+	! Whether the assignment `x.a.b = expr`, to a plain dot chain with no
+	! subscripts, can move the value into place with OP_STORE_MEMBER c = 1 instead
+	! of copying it twice or more.  The RHS has to be a struct/null, or an array or
+	! str of exactly the member's type, so that there is no cast or broadcast
+	! to do.  `data = new_data` in a vec's push method is an array
+
+	type(syntax_node_t), intent(in) :: node
+	logical :: ok
+
+	ok = .false.
+	if (node%op%kind /= equals_token) return
+	if (chain_total_nslots(node) /= 0) return
+
+	select case (node%right%val%type)
+	case (struct_type, null_type)
+		ok = .true.
+	case (array_type, str_type)
+		ok = types_match(node%val, node%right%val) == TYPE_MATCH
+	end select
+
+end function member_store_moves
+
+!===============================================================================
+
 function take_member_assign(node) result(ok)
 
 	! Whether the assignment `x = x.a.b` can move the member out of x with
@@ -2274,13 +2320,13 @@ pure integer function compound_to_arith_token(op_kind) result(tok)
 	integer, intent(in) :: op_kind
 
 	select case (op_kind)
-	case (plus_equals_token);    tok = plus_token
-	case (minus_equals_token);   tok = minus_token
-	case (star_equals_token);    tok = star_token
-	case (slash_equals_token);   tok = slash_token
-	case (percent_equals_token); tok = percent_token
-	case (sstar_equals_token);   tok = sstar_token
-	case default;                tok = 0
+	case (plus_equals_token);        tok = plus_token
+	case (minus_equals_token);       tok = minus_token
+	case (star_equals_token);        tok = star_token
+	case (slash_equals_token);       tok = slash_token
+	case (percent_equals_token);     tok = percent_token
+	case (double_star_equals_token); tok = double_star_token
+	case default;                    tok = 0
 	end select
 
 end function compound_to_arith_token

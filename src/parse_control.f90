@@ -963,7 +963,7 @@ subroutine check_case_range_bound(parser, subj_type, subj_val, bound, beg, end_)
 
 	! Shared type check for both ends of a `case lo:hi` range: the bound must
 	! be orderable against the switch subject with `<`, mirroring the
-	! eequals_token check that plain case values get in parse_case_clause()
+	! double_equals_token check that plain case values get in parse_case_clause()
 	! below.  is_binary_op_allowed()'s greater/less-token branch already
 	! restricts ordering to numeric-vs-numeric or str-vs-str, which is exactly
 	! what excludes bool and enum range bounds
@@ -1129,7 +1129,7 @@ recursive subroutine parse_case_clause(parser, subj_type, subj_val, clause)
 				! The _val wrapper also catches two same-kind enum_type values
 				! that belong to different enums, e.g. `Suit.Hearts == Card.Jack`
 				if (is_op_allowed) is_op_allowed = &
-					is_binary_op_allowed_val(subj_val, eequals_token, val_tmp%val)
+					is_binary_op_allowed_val(subj_val, double_equals_token, val_tmp%val)
 			end if
 
 			if (.not. is_op_allowed) then

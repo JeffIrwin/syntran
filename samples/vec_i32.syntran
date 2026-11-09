@@ -17,13 +17,13 @@ struct Vec_i32
 			if cap > 0
 				new_cap = cap * 2;
 
-			// Note syntran cannot move yet, so we need two copies here where
-			// other languages could optimally do only one copy
+			// The loop is the only copy of the elements.  std::move() puts the
+			// new buffer into `data` without a second copy
 			let new_data = [0; new_cap];
 			for i in [0: len]
 				new_data[i] = data[i];
 
-			data = new_data;
+			data = std::move(new_data);
 			cap = new_cap;
 		}
 		data[len] = val;

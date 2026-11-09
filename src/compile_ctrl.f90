@@ -131,7 +131,7 @@ function null_test_operand(node) result(which)
 	integer :: which
 
 	which = 0
-	if (.not. any(node%op%kind == [eequals_token, bang_equals_token])) return
+	if (.not. any(node%op%kind == [double_equals_token, bang_equals_token])) return
 
 	if (is_null_literal(node%right)) then
 		if (is_null_test_var(node%left)) which = 1
@@ -626,7 +626,7 @@ recursive subroutine compile_switch_statement(prog, cs, node)
 					call emit_switch_load_subj(prog, node, subj_type)
 					call compile_node(prog, cs, node%members(i)%elems(j))
 					val_type = node%members(i)%elems(j)%val%type
-					call emit_case_cmp(prog, eequals_token, subj_type, val_type)
+					call emit_case_cmp(prog, double_equals_token, subj_type, val_type)
 				end if
 				match_ips(j) = prog%len_ + 1
 				call emit(prog, OP_JUMP_IF_TRUE, a = 0)
@@ -940,12 +940,10 @@ recursive subroutine compile_node_impl(prog, cs, node)
 			call compile_node(prog, cs, node%right)
 			cs%struct_move_slot = 0
 			idx = add_node(prog, node)
-			! c = 1: plain `=` of a struct onto a plain chain, which the VM can
-			! move into place instead of copying (see OP_STORE_MEMBER)
+			! c = 1: plain `=` of a struct, array, or str onto a plain chain, which
+			! the VM can move into place instead of copying (see OP_STORE_MEMBER)
 			c_ = 0
-			if (node%op%kind == equals_token .and. &
-			    any(node%right%val%type == [struct_type, null_type]) .and. &
-			    chain_total_nslots(node) == 0) c_ = 1
+			if (member_store_moves(node)) c_ = 1
 			call emit(prog, OP_STORE_MEMBER, a = idx, b = node%op%kind, c = int(c_, 8))
 
 		else if (.not. allocated(node%lsubscripts) .and. &
@@ -1783,6 +1781,18 @@ recursive subroutine compile_node_impl(prog, cs, node)
 					slot_c = int(node%args(1)%id_index, 8) * 2 + &
 					         merge(1_8, 0_8, node%args(1)%is_loc)
 					call emit(prog, OP_CALL_INTR, a = intr_id_, b = 1, c = slot_c)
+				end if
+
+			case (INTR_MOVE)
+				! std::move(x): the parser checked that x is a plain variable or
+				! member chain, so there is nothing to push first.  The VM moves
+				! the value out of x and leaves x empty
+				if (node%args(1)%kind == dot_expr) then
+					call emit(prog, OP_MOVE_MEMBER, a = add_node(prog, node%args(1)))
+				else if (node%args(1)%is_loc) then
+					call emit(prog, OP_MOVE_LOCAL,  a = node%args(1)%id_index)
+				else
+					call emit(prog, OP_MOVE_GLOBAL, a = node%args(1)%id_index)
 				end if
 
 			case (INTR_FORMAT)

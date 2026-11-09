@@ -38,7 +38,7 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 	!*******
 
 	integer :: i, io
-	integer :: env_len, env_stat
+	integer :: env_len, env_stat, sys_stat, sys_cstat
 	integer :: red_inner, red_n, red_outer, red_op
 	integer :: solve_n, solve_nrhs, solve_info
 	integer(kind = 8) :: ir, ic, ncopies, bad_len
@@ -482,57 +482,14 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 		if (.not. allocated(res%str)) allocate(res%str)
 		res%str%s = repeat(args(1)%str%s, ncopies)
 
-	case (INTR_PARSE_I32)
-		res%type = i32_type
-		read(args(1)%str%s, *, iostat = io) res%sca%i32
-		if (io /= 0) then
-			call rt_throw(state, err_rt(RC_PARSE_I32, " cannot parse_i32() for argument `"// &
-				args(1)%str%s//"`"))
+	case (INTR_PARSE_I32, INTR_PARSE_I64, INTR_PARSE_F32, INTR_PARSE_F64, INTR_PARSE_BOOL)
+		! Bad text is a runtime error here.  The by-ref `ok` form is in
+		! vm_call_intr_ref()
+		call parse_str_value(intr_id, args(1)%str%s, res, ok_)
+		if (.not. ok_) then
+			call rt_throw(state, parse_err(intr_id, args(1)%str%s))
 			return
 		end if
-
-	case (INTR_PARSE_I64)
-		res%type = i64_type
-		read(args(1)%str%s, *, iostat = io) res%sca%i64
-		if (io /= 0) then
-			call rt_throw(state, err_rt(RC_PARSE_I64, " cannot parse_i64() for argument `"// &
-				args(1)%str%s//"`"))
-			return
-		end if
-
-	case (INTR_PARSE_F32)
-		res%type = f32_type
-		read(args(1)%str%s, *, iostat = io) res%sca%f32
-		if (io /= 0) then
-			call rt_throw(state, err_rt(RC_PARSE_F32, " cannot parse_f32() for argument `"// &
-				args(1)%str%s//"`"))
-			return
-		end if
-
-	case (INTR_PARSE_F64)
-		res%type = f64_type
-		read(args(1)%str%s, *, iostat = io) res%sca%f64
-		if (io /= 0) then
-			call rt_throw(state, err_rt(RC_PARSE_F64, " cannot parse_f64() for argument `"// &
-				args(1)%str%s//"`"))
-			return
-		end if
-
-	case (INTR_PARSE_BOOL)
-		res%type = bool_type
-
-		! Only syntran's own literals, not everything that a list-directed
-		! read of a logical would accept (`t`, `.true.`, `tx`, etc.)
-		select case (trim(adjustl(args(1)%str%s)))
-		case ("true")
-			res%sca%bool = .true.
-		case ("false")
-			res%sca%bool = .false.
-		case default
-			call rt_throw(state, err_rt(RC_PARSE_BOOL, " cannot parse_bool() for argument `"// &
-				args(1)%str%s//"`"))
-			return
-		end select
 
 	case (INTR_CHAR)
 		res%type = str_type
@@ -1118,6 +1075,18 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 		call get_environment_variable(args(1)%str%s, status = env_stat)
 		res%sca%bool = env_stat == 0
 
+	case (INTR_SYSTEM)
+		! std::system(cmd) -- run a command line and return its exit status, or
+		! -1 if it can't be started.  Flush first so that output stays in order
+		res%type = i32_type
+		flush(output_unit)
+		flush(error_unit)
+		sys_stat = -1
+		! libgfortran sets cmdstat for an exit status of 126 or 127 too, but it still
+		! assigns exitstat then.  It only leaves the -1 above if nothing was started
+		call execute_command_line(args(1)%str%s, exitstat = sys_stat, cmdstat = sys_cstat)
+		res%sca%i32 = sys_stat
+
 	case (INTR_EXISTS)
 		! std::exists(path) -- whether a file exists at `path`
 		res%type = bool_type
@@ -1128,6 +1097,23 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 			inquire(file = resolve_path(state%src_dir, args(1)%str%s), exist = exists_)
 			res%sca%bool = exists_
 		end if
+
+	case (INTR_READ_FILE)
+		! std::read_file(path) -- the exact bytes of the file
+		res%type = str_type
+		if (.not. allocated(res%str)) allocate(res%str)
+		res%str%s = read_file(resolve_path(state%src_dir, args(1)%str%s), io)
+		if (io /= 0) then
+			call rt_throw(state, err_rt(RC_OPEN_FILE, "cannot open file """// &
+				resolve_path(state%src_dir, args(1)%str%s)//""" (iostat = "//str(io)//")"))
+			return
+		end if
+
+	case (INTR_VARIANT_OF)
+		! std::variant_of(e) -- the name of the variant, without the enum's
+		res%type = str_type
+		if (.not. allocated(res%str)) allocate(res%str)
+		res%str%s = args(1)%enum_variant
 
 	case default
 		write(*,*) 'VM: unknown intr_id in vm_call_intr: ', intr_id
@@ -1156,11 +1142,17 @@ module subroutine vm_call_intr_ref(intr_id, nargs, args, state, res)
 	integer :: i, n, m, nrhs, info
 	integer, allocatable :: ip1(:)
 
-	logical :: is_f32
+	logical :: is_f32, ok_
 
 	res%type = unknown_type
 
 	select case (intr_id)
+
+	case (INTR_PARSE_I32, INTR_PARSE_I64, INTR_PARSE_F32, INTR_PARSE_F64, INTR_PARSE_BOOL)
+		! parse_<t>(s, &ok) -- `ok` is whether `s` parsed, and the value is 0 if
+		! not, instead of a runtime error
+		call parse_str_value(intr_id, args(1)%str%s, res, ok_)
+		args(2)%sca%bool = ok_
 
 	case (INTR_LU_FACTOR)
 		! std::lu_factor(&A[, &info]) -- A is m x n, overwritten with its L and
@@ -1397,6 +1389,143 @@ function bad_str_cast_len(v) result(len_)
 	end if
 
 end function bad_str_cast_len
+
+!===============================================================================
+
+subroutine parse_str_value(intr_id, s, res, ok)
+
+	! The parse_i32(), parse_i64(), parse_f32(), parse_f64() and parse_bool() of
+	! the text `s`, which are INTR_PARSE_*.  `ok` is whether it parsed, and the
+	! value is 0 or false if not.  The caller decides what to do about a failure,
+	! which is a runtime error for the 1-arg form, and `ok` for the by-ref form
+
+	integer, intent(in) :: intr_id
+	character(len = *), intent(in) :: s
+	type(value_t), intent(inout) :: res
+	logical, intent(out) :: ok
+
+	!********
+
+	integer :: io
+
+	ok = .true.
+
+	select case (intr_id)
+	case (INTR_PARSE_I32)
+		res%type = i32_type
+		ok = starts_with_int(s)
+		if (ok) read(s, *, iostat = io) res%sca%i32
+		if (ok) ok = io == 0
+		if (.not. ok) res%sca%i32 = 0
+
+	case (INTR_PARSE_I64)
+		res%type = i64_type
+		ok = starts_with_int(s)
+		if (ok) read(s, *, iostat = io) res%sca%i64
+		if (ok) ok = io == 0
+		if (.not. ok) res%sca%i64 = 0
+
+	case (INTR_PARSE_F32)
+		res%type = f32_type
+		read(s, *, iostat = io) res%sca%f32
+		ok = io == 0
+		if (.not. ok) res%sca%f32 = 0
+
+	case (INTR_PARSE_F64)
+		res%type = f64_type
+		read(s, *, iostat = io) res%sca%f64
+		ok = io == 0
+		if (.not. ok) res%sca%f64 = 0
+
+	case default
+		res%type = bool_type
+
+		! Only syntran's own literals, not everything that a list-directed
+		! read of a logical would accept (`t`, `.true.`, `tx`, etc.)
+		select case (trim(adjustl(s)))
+		case ("true")
+			res%sca%bool = .true.
+		case ("false")
+			res%sca%bool = .false.
+		case default
+			res%sca%bool = .false.
+			ok = .false.
+		end select
+	end select
+
+end subroutine parse_str_value
+
+!===============================================================================
+
+function starts_with_int(s) result(ok)
+
+	! Does `s` start with an integer, i.e. blanks, an optional sign, and digits,
+	! which are followed by the end or a separator?  A list-directed read of an
+	! integer decides that for itself, but not the same way for every compiler:
+	! ifx and ifort accept `1.5` as an integer, and gfortran doesn't.  So this is
+	! checked here first, and the read only has to convert and detect overflow
+
+	character(len = *), intent(in) :: s
+	logical :: ok
+
+	!********
+
+	integer :: i, nd
+
+	i = 1
+	do while (i <= len(s))
+		if (s(i:i) /= ' ' .and. s(i:i) /= char(9)) exit
+		i = i + 1
+	end do
+
+	if (i <= len(s)) then
+		if (s(i:i) == '+' .or. s(i:i) == '-') i = i + 1
+	end if
+
+	nd = 0
+	do while (i <= len(s))
+		if (s(i:i) < '0' .or. s(i:i) > '9') exit
+		nd = nd + 1
+		i = i + 1
+	end do
+
+	ok = nd > 0
+	if (.not. ok .or. i > len(s)) return
+
+	select case (s(i:i))
+	case (' ', ',', '/', char(9), char(10), char(13))
+	case default
+		ok = .false.
+	end select
+
+end function starts_with_int
+
+!===============================================================================
+
+function parse_err(intr_id, s) result(err)
+
+	! The runtime error for text that a parse_*() can't parse
+
+	integer, intent(in) :: intr_id
+	character(len = *), intent(in) :: s
+	character(len = :), allocatable :: err
+
+	!********
+
+	select case (intr_id)
+	case (INTR_PARSE_I32)
+		err = err_rt(RC_PARSE_I32, " cannot parse_i32() for argument `"//s//"`")
+	case (INTR_PARSE_I64)
+		err = err_rt(RC_PARSE_I64, " cannot parse_i64() for argument `"//s//"`")
+	case (INTR_PARSE_F32)
+		err = err_rt(RC_PARSE_F32, " cannot parse_f32() for argument `"//s//"`")
+	case (INTR_PARSE_F64)
+		err = err_rt(RC_PARSE_F64, " cannot parse_f64() for argument `"//s//"`")
+	case default
+		err = err_rt(RC_PARSE_BOOL, " cannot parse_bool() for argument `"//s//"`")
+	end select
+
+end function parse_err
 
 !===============================================================================
 

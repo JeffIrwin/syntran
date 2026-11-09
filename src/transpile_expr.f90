@@ -645,7 +645,7 @@ module function enum_cmp(em, k, op, l, r) result(s)
 	character(len = :), allocatable :: ops, a, b
 
 	select case (op)
-	case (eequals_token)
+	case (double_equals_token)
 		ops = '=='
 	case (bang_equals_token)
 		ops = '/='
@@ -661,7 +661,7 @@ module function enum_cmp(em, k, op, l, r) result(s)
 
 	a = l
 	b = r
-	if (.not. (op == eequals_token .or. op == bang_equals_token) .or. &
+	if (.not. (op == double_equals_token .or. op == bang_equals_token) .or. &
 			enum_has_alias(em%enums%table(k)%val)) then
 		a = enum_fn(em, k, 'val')//'('//l//')'
 		b = enum_fn(em, k, 'val')//'('//r//')'
@@ -1321,7 +1321,7 @@ function emit_str_binary(em, node, l, r, lvl) result(s)
 		select case (node%op%kind)
 		case (plus_token)
 			s = 'rt_cat('//la//', '//ra//')'
-		case (eequals_token)
+		case (double_equals_token)
 			s = 'rt_eq('//la//', '//ra//')'
 		case (bang_equals_token)
 			s = '(.not. rt_eq('//la//', '//ra//'))'
@@ -1343,7 +1343,7 @@ function emit_str_binary(em, node, l, r, lvl) result(s)
 		case (plus_token)
 			s = '('//l//' // '//r//')'
 			lvl = 6
-		case (eequals_token)
+		case (double_equals_token)
 			s = 'rt_str_eq('//unparen(l)//', '//unparen(r)//')'
 		case (bang_equals_token)
 			s = '(.not. rt_str_eq('//l//', '//r//'))'
@@ -1586,7 +1586,7 @@ recursive function emit_binary_lvl(em, node, lvl) result(s)
 
 	select case (node%op%kind)
 
-	case (plus_token, minus_token, star_token, slash_token, sstar_token, &
+	case (plus_token, minus_token, star_token, slash_token, double_star_token, &
 			percent_token)
 
 		if (.not. is_numeric_type(restype)) then
@@ -1596,7 +1596,7 @@ recursive function emit_binary_lvl(em, node, lvl) result(s)
 			return
 		end if
 
-		if (node%op%kind == sstar_token) then
+		if (node%op%kind == double_star_token) then
 			s = emit_pow(l, r, lp, rp, lt, rt, restype, lvl)
 			return
 		end if
@@ -1625,12 +1625,12 @@ recursive function emit_binary_lvl(em, node, lvl) result(s)
 			s = 'mod('//unparen(l)//', '//unparen(r)//')'
 		end select
 
-	case (eequals_token, bang_equals_token, less_token, less_equals_token, &
+	case (double_equals_token, bang_equals_token, less_token, less_equals_token, &
 			greater_token, greater_equals_token)
 
 		if (lt == bool_type .and. rt == bool_type) then
 			select case (node%op%kind)
-			case (eequals_token)
+			case (double_equals_token)
 				s = '('//operand(l, lp, 1, .true.)//' .eqv. '// &
 					operand(r, rp, 1, .false.)//')'
 				lvl = 1
@@ -1646,7 +1646,7 @@ recursive function emit_binary_lvl(em, node, lvl) result(s)
 		end if
 
 		if (lt == fn_type .and. rt == fn_type) then
-			if (node%op%kind /= eequals_token .and. node%op%kind /= bang_equals_token) then
+			if (node%op%kind /= double_equals_token .and. node%op%kind /= bang_equals_token) then
 				call em_unsupported(em, 'ordering comparison of fn pointers')
 				s = '.false.'
 				return
@@ -1701,7 +1701,7 @@ recursive function emit_binary_lvl(em, node, lvl) result(s)
 		r = operand(r, rp, 5, .false.)
 
 		select case (node%op%kind)
-		case (eequals_token)
+		case (double_equals_token)
 			s = '('//l//' == '//r//')'
 		case (bang_equals_token)
 			s = '('//l//' /= '//r//')'
@@ -1746,7 +1746,7 @@ recursive function emit_binary_lvl(em, node, lvl) result(s)
 			s = 'ieor('//l//', '//r//')'
 		end select
 
-	case (lless_token, ggreater_token)
+	case (double_less_token, double_greater_token)
 		if (.not. (lt == i32_type .or. lt == i64_type)) then
 			call em_unsupported(em, 'a bitwise shift of type `'//kind_name(lt)//'`')
 			s = '0'
@@ -1756,7 +1756,7 @@ recursive function emit_binary_lvl(em, node, lvl) result(s)
 		! The result is in the width of the left operand, even if the right
 		! operand is an i64 (so the convert() below is a no-op).  Both are logical
 		! shifts, so a `>>` doesn't extend the sign bit
-		if (node%op%kind == lless_token) then
+		if (node%op%kind == double_less_token) then
 			s = convert('shiftl('//unparen(l)//', '//unparen(r)//')', lt, restype)
 		else
 			s = convert('shiftr('//unparen(l)//', '//unparen(r)//')', lt, restype)
@@ -2974,7 +2974,9 @@ recursive function emit_intr_call(em, node) result(s)
 	character(len = :), allocatable :: name, base, suffix, a1, a2, args, kind_str, &
 		arg_i, spec_i, fmt_call
 
-	integer :: i, n, iu, t, ferr
+	integer :: i, n, iu, t, ferr, ek
+
+	logical :: ok
 
 	type(rt_str_t), allocatable :: fpieces(:), fspecs(:)
 
@@ -3100,7 +3102,12 @@ recursive function emit_intr_call(em, node) result(s)
 		s = 'achar('//convert(a1, elem_type(node%args(1)%val), i32_type)//')'
 
 	case ('parse_i32', 'parse_i64', 'parse_f32', 'parse_f64', 'parse_bool')
-		s = 'rt_'//base//'('//a1//')'
+		! With an `ok` arg, a2 is the variable that rt_parse_*() sets
+		if (n >= 2) then
+			s = 'rt_'//base//'('//a1//', '//a2//')'
+		else
+			s = 'rt_'//base//'('//a1//')'
+		end if
 
 	case ('size')
 		if (n == 2) then
@@ -3203,7 +3210,37 @@ recursive function emit_intr_call(em, node) result(s)
 	case ('exists')
 		s = 'rt_exists('//a1//')'
 
-	case ('getenv', 'hasenv')
+	case ('read_file')
+		s = 'rt_read_file('//a1//')'
+
+	case ('variant_of')
+		! The name of the variant, from the helper of the enum's type
+		ek = enum_slot_of(em, node%args(1)%val)
+		if (ek == 0) call em_unsupported(em, 'an enum of unknown type')
+		s = enum_fn(em, max(ek, 1), 'name')//'('//a1//')'
+
+	case ('move')
+		! The temp takes the array or str out of the variable with move_alloc(),
+		! which doesn't copy, and the variable gets an empty one, like in the
+		! interpreter.  a1 is the variable or member, and both lines are hoisted
+		! before the statement
+		em%tmp_count = em%tmp_count + 1
+		s = 'mv_t'//str(em%tmp_count)
+		call em%decls%push(decl_line(em, node%val, s, ok))
+		if (.not. ok) call em_unsupported(em, 'a move of type `'//kind_name(node%val%type)//'`', &
+			node%identifier%pos)
+		call em_line(em, 'call move_alloc('//a1//', '//s//')')
+		if (is_arr(node%val)) then
+			args = '0'
+			do i = 2, node%val%array%rank
+				args = args//', 0'
+			end do
+			call em_line(em, 'allocate('//a1//'('//args//'))')
+		else
+			call em_line(em, a1//" = ''")
+		end if
+
+	case ('getenv', 'hasenv', 'system')
 		s = 'rt_'//base//'('//a1//')'
 
 	case ('args')
