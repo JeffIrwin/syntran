@@ -31,8 +31,15 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - style guide
+	!    * lowercase for vars, fns, members, methods, and src file (module)
+	!      names
+	!    * CamelCase for structs? or *_t or something else?
+	!    * make a lint script to help check?
 	!  - self-hosted compiler
-	!    * wip
+	!    * does the lexer differential token dump test use aot or bytecode?
+	!      looks like it runs both in different ci stages. maybe it should only
+	!      do native version for perf, and extend to all os's
 	!    * std::move done
 	!    * std::system() done, as one cmd str (the user quotes).  maybe add a
 	!      std::shell_quote() or an argv overload later
@@ -73,11 +80,6 @@ module syntran__core_m
 	!    * when/where does the ci fuzz run? either only on master or cron is
 	!      broken
 	!    * periodically check the ci fuzz runs
-	!  - massive old readme bug:
-	!    * "recursive functions are not possible currently"
-	!    * of course the sentence before is wrong too, which says fns need to be
-	!      declared above their call site
-	!    * i did that pre-ai :/
 	!  - transpiler improvements:
 	!    * cover more OS's and intel in addition to gnu in testing. currently
 	!      only gnu on ubuntu
