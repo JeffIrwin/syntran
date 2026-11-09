@@ -12,9 +12,8 @@ The examples below are indented with tabs, like real source.
 
 ## Files and layout
 
-- A file starts with a blank line, then a comment that says what the file is
-  and how it relates to the rest.  A blank line at the end of the file is common
-  too.  The file ends with a newline either way
+- A file starts with a comment that says what the file is and how it relates to
+  the rest.  The file ends with a newline
 - Then `use` lines, then the code
 - Sections of a file are separated by `//` and 78 `=`, which is 80 columns:
 
@@ -29,8 +28,8 @@ The examples below are indented with tabs, like real source.
 
 ## Formatting
 
-- **Tabs** indent.  Spaces may follow tabs to align things, but never lead a
-  line
+- **Tabs** indent.  Spaces are fine after the first non-whitespace character,
+  e.g. to align columns on consecutive lines, but they never indent a line
 - **Allman braces**: `{` goes on its own line, at the indent of the statement
   that it belongs to.  A short body on one line is fine as long as the `{` is
   not the last thing on a line that has code before it:
@@ -65,11 +64,12 @@ The examples below are indented with tabs, like real source.
   ```
 
 - Slices and ranges have a space after the colon, like `s[a: b]` and
-  `[0: len(s)]`.  An open end leaves it off, like `s[i:]`
-- Line length is 80 columns, with a hard limit of 100.  A tab is 4 columns wide
-  for counting
-- To wrap a fn signature that is too long, open the paren, put the params on
-  indented lines, and close with `)` at the indent of the `fn`:
+  `[0: len(s)]`.  A colon is spaced like a comma, and like the colon in a type
+  annotation or struct declaration.  An open end leaves it off, like `s[i:]`
+- A line is at most 80 columns.  A tab is 4 columns wide for counting
+- To wrap a fn signature or a call that is too long, open the paren, put the
+  params or args on indented lines, and close with `)` at the indent of the
+  `fn` or the statement:
 
   ```rust
   fn lex_radix(
@@ -101,7 +101,7 @@ The examples below are indented with tabs, like real source.
 | enum variant                      | `snake_case`             | `double_equals`, `Keyword.let_`       |
 | fn, method                        | `snake_case`             | `lex_all`, `push_diag`                |
 | variable, param, struct member    | `snake_case`             | `new_cap`, `has_val`                  |
-| `const`                           | `snake_case` or `UPPER_SNAKE_CASE` | `filename`, `NDIRS`          |
+| `const`                           | `snake_case` or `UPPER_SNAKE_CASE` | `filename`, `STACK_CAP`      |
 | module (the file name)            | `snake_case`             | `lex`, `utils`                        |
 
 A `const` may be `UPPER_SNAKE_CASE`, at the top level or in a fn, but it doesn't
@@ -116,8 +116,7 @@ Besides the case:
   `StrVec`, `TokenVec`
 - A predicate starts with `is_` or `has_`, like `is_digit()` and
   `has_radix_digit()`
-- A constant that is a count starts with `N`, and one that is a capacity ends
-  in `_CAP`, e.g. `NDIRS` and `STACK_CAP`
+- A constant that is a capacity ends in `_CAP`, like `STACK_CAP`
 - When code is a port of the Fortran source, keep the Fortran name (without the
   `_t` of a type), so that the two can be read side by side, like
   `compiler/lex.syntran` and `src/lex.f90`
@@ -137,11 +136,12 @@ Besides the case:
 
 ## Modules, structs, and constructors
 
-- A module has **one public struct**, like a class, and the module is named
-  after it in `snake_case`.  `token.syntran` has `struct Token`.  Enums and
-  helpers that the struct needs can sit beside it
-- Its constructor is called **`new()`**, with no type in the name, since the
-  module already says it
+- A module has **one main struct**, like a class, and the module is named
+  after it in `snake_case`.  `token.syntran` has `struct Token`.  Enums,
+  helpers, and smaller structs that the main struct needs can sit beside it
+- The main struct's constructor is called **`new()`**, with no type in the name,
+  since the module already says it.  A smaller struct's constructor is
+  `new_<type>()`, like `new_span()` for a `Span`
 - A consumer imports the module with a **qualified** `use token;` and refers to
   everything through the module name.  Avoid `use token::*;`
 
@@ -190,16 +190,28 @@ show(&t);
 ```
 
 Qualified names are the point: they say where a thing is from at the call site,
-they can't clash, and one struct per module keeps them short enough that nobody
-wants the glob.
+they can't clash, and one main struct per module keeps them short enough that
+nobody wants the glob.
 
 ## Comments
 
 - Use `//` only.  There are no block comments, and the language is not going to
   get them.  Comment out a range of lines with block insertion in your editor
-- Put a comment above every fn, struct, and enum whose purpose or edge cases
-  aren't obvious from the name, and describe what it returns or does, e.g.
-  `// The keyword that `text` is, or Keyword.none for an identifier`
+- Put a comment inside every fn, struct, and enum whose purpose or edge cases
+  aren't obvious from the name, as the first thing in its body, not on the line
+  above it.  Describe what it returns or does:
+
+  ```rust
+  fn keyword_of(text: &const str): Keyword
+  {
+  	// The keyword that `text` is, or Keyword.none for an identifier
+  	switch text
+  	{
+  		...
+  	}
+  }
+  ```
+
 - Write sentences, with two spaces after a period.  A comment of one sentence
   doesn't need a period at the end.  Quote code in `backticks`
 - A comment on the same line as code is separated from it by two spaces, like
@@ -238,12 +250,12 @@ It prints `path:line:col: rule: message` for each violation, sorted, and exits
 | `indent`         | a line doesn't start with a space                                      |
 | `trailing-ws`    | no whitespace at the end of a line                                     |
 | `crlf`           | no CR LF line endings, reported once per file                          |
-| `line-length`    | at most 100 columns, with a tab as 4                                   |
+| `line-length`    | at most 80 columns, with a tab as 4                                    |
 | `final-newline`  | the file ends with a newline                                           |
 
-Not checked, because they take judgment: comments, the 80-column goal, braces
-on single statements, `const` vs `let`, `&const` params, the `std::` prefix, and
-everything in [the section on modules](#modules-structs-and-constructors).
+Not checked, because they take judgment: comments, braces on single statements,
+`const` vs `let`, `&const` params, the `std::` prefix, and everything in
+[the section on modules](#modules-structs-and-constructors).
 
 Names in a test that exists to exercise odd syntax, such as the files in
 `src/tests/test-src/errors/`, will trip it.  That's expected, and they are not
