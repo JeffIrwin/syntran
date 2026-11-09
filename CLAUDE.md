@@ -264,6 +264,18 @@ has the `pos` of its last char, so a mismatch is a bug in one or the other.  The
 `pos` in the dump is 0-based.  `src/tests/test-src/errors/lex-edge-cases.syntran`
 is a corpus of odd literals and operators.
 
+### Syntran code style
+`doc/style.md` is the style guide for syntran source: tabs, Allman braces,
+`CamelCase` structs/enums, `snake_case` everything else (including enum variants),
+and, for new modules, one public struct per module with a `new()` constructor
+that consumers call as `module::new()` through a qualified `use`, not `use *`.
+`compiler/lint.syntran` checks the mechanical rules, and it has to stay clean on
+`compiler/`.  CI runs it, and so can you, without a Fortran compiler:
+```bash
+bash utils/lint.sh build/v1/bin/syntran                  # compiler/ by default
+bash utils/lint.sh build/v1/bin/syntran path/to/file.syntran
+```
+
 ### Fuzzing
 `utils/fuzz.c` mutates the `.syntran` files under `src/tests/test-src`,
 `samples`, and `src/tests/long` (token-aware, so most mutants get past the

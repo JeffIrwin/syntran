@@ -1,0 +1,385 @@
+
+// Style linter for syntran source, written in syntran on top of the lexer port,
+// compiler/lex.syntran.  The rules are the ones that doc/style.md calls checkable.
+// It prints one line per violation, `path:line:col: rule: message`, and exits 1
+// if there were any
+//
+// Usage:
+//
+//     syntran -q compiler/lint.syntran -- <file>...
+//
+// or use utils/lint.sh, which also takes dirs and can compile this with --native
+
+use lex::*;
+
+//==============================================================================
+
+fn is_lower(c: str): bool
+{
+	return "a" <= c and c <= "z";
+}
+
+fn is_upper(c: str): bool
+{
+	return "A" <= c and c <= "Z";
+}
+
+// ^[A-Z][A-Za-z0-9]*$
+fn is_camel(s: &const str): bool
+{
+	// at() is char(0) past the end, since `and` and `or` don't short-circuit
+	if not is_upper(at(s, 0))
+		return false;
+	for i in [1: len(s)]
+		if not is_alphanum(s[i])
+			return false;
+	return true;
+}
+
+// ^[a-z][a-z0-9_]*$
+fn is_snake(s: &const str): bool
+{
+	if not is_lower(at(s, 0))
+		return false;
+	for i in [1: len(s)]
+		if not (is_lower(s[i]) or is_digit(s[i]) or s[i] == "_")
+			return false;
+	return true;
+}
+
+// ^[A-Z][A-Z0-9_]*$
+fn is_upper_snake(s: &const str): bool
+{
+	if not is_upper(at(s, 0))
+		return false;
+	for i in [1: len(s)]
+		if not (is_upper(s[i]) or is_digit(s[i]) or s[i] == "_")
+			return false;
+	return true;
+}
+
+// `style` is one of "CamelCase", "snake_case", or "snake_case or
+// UPPER_SNAKE_CASE", which is also how the messages name it
+fn name_ok(style: &const str, s: &const str): bool
+{
+	if style == "CamelCase"
+		return is_camel(s);
+	if style == "snake_case"
+		return is_snake(s);
+	return is_snake(s) or is_upper_snake(s);
+}
+
+//==============================================================================
+
+struct Lint
+{
+	path: str,
+	text: str,
+	count: i32,
+
+	// Report a violation at a 0-based `pos` in the text
+	fn report(pos: i32, rule: &const str, msg: &const str)
+	{
+		let line = 1;
+		let col = 1;
+		for i in [0: pos]
+		{
+			if text[i] == char(10)
+			{
+				line += 1;
+				col = 1;
+			}
+			else
+			{
+				col += 1;
+			}
+		}
+		println(path, ":", line, ":", col, ": ", rule, ": ", msg);
+		count += 1;
+	}
+
+	// Report the name token `t` if it doesn't match `style`.  `what` is the
+	// kind of thing that is named, for the message
+	fn check_name(t: &const Token, rule: &const str, what: &const str, style: &const str)
+	{
+		if t.kind == TokenKind.identifier and not name_ok(style, t.text)
+			report(t.pos, rule, what + " `" + t.text + "` should be " + style);
+	}
+}
+
+//==============================================================================
+
+fn is_trivia(t: &const Token): bool
+{
+	return t.kind == TokenKind.whitespace or t.kind == TokenKind.comment;
+}
+
+// The index of the first token after `i` that isn't whitespace or a comment.
+// The last token is eof, which isn't trivia, so this never goes past it
+fn next_code(tokens: &const TokenVec, i: i32): i32
+{
+	let j = i + 1;
+	while j < tokens.len - 1
+	{
+		if not is_trivia(tokens.data[j])
+			break;
+		j += 1;
+	}
+	return j;
+}
+
+fn has_newline(s: &const str): bool
+{
+	for i in [0: len(s)]
+		if s[i] == char(10)
+			return true;
+	return false;
+}
+
+// Is the next token after `i`, other than whitespace or comments, on a later
+// line?  So is the `{` at `i` the last thing on its line?
+fn ends_line(tokens: &const TokenVec, i: i32): bool
+{
+	const next = next_code(tokens, i);
+	for j in [i + 1: next]
+		if tokens.data[j].kind == TokenKind.whitespace and has_newline(tokens.data[j].text)
+			return true;
+	return tokens.data[next].kind == TokenKind.eof;
+}
+
+// The rules about names and braces, which need tokens
+fn lint_tokens(lint: &Lint, tokens: &const TokenVec)
+{
+	let depth = 0;        // brace depth
+	let parens = 0;
+	let body = "";        // "struct" or "enum" inside the braces of one
+	let body_depth = 0;   // the depth that the members or variants are at
+	let pending = "";     // after `struct` or `enum`, until its `{`
+	let in_sig = false;   // from `fn` to the `{` of its body
+	let line_code = 0;    // code tokens so far on this line
+	let prev = TokenKind.eof;
+
+	for i in [0: tokens.len]
+	{
+		const t = tokens.data[i];
+
+		if t.kind == TokenKind.whitespace
+		{
+			if has_newline(t.text)
+				line_code = 0;
+			continue;
+		}
+		if t.kind == TokenKind.comment
+			continue;
+		if t.kind == TokenKind.eof
+			break;
+
+		const nt = tokens.data[next_code(tokens, i)];
+
+		if t.kind == TokenKind.keyword
+		{
+			// `&const T` is a param type, not a declaration
+			const is_const = t.keyword == Keyword.const_ and prev != TokenKind.amp;
+
+			if t.keyword == Keyword.struct_
+			{
+				pending = "struct";
+				lint.check_name(nt, "struct-name", "struct", "CamelCase");
+			}
+			else if t.keyword == Keyword.enum_
+			{
+				pending = "enum";
+				lint.check_name(nt, "enum-name", "enum", "CamelCase");
+			}
+			else if t.keyword == Keyword.fn_
+			{
+				in_sig = true;
+				lint.check_name(nt, "fn-name", "fn", "snake_case");
+			}
+			else if t.keyword == Keyword.for_
+			{
+				lint.check_name(nt, "var-name", "variable", "snake_case");
+			}
+			else if is_const
+			{
+				// A `const` can be a constant like NDIRS, at any depth.  `const fn`
+				// is not a variable, but check_name() skips it, since `fn` is a
+				// keyword
+				lint.check_name(nt, "var-name", "constant", "snake_case or UPPER_SNAKE_CASE");
+			}
+			else if t.keyword == Keyword.let_
+			{
+				lint.check_name(nt, "var-name", "variable", "snake_case");
+			}
+		}
+		else if t.kind == TokenKind.identifier
+		{
+			const in_body = body != "" and depth == body_depth;
+			const after_sep = prev == TokenKind.lbrace or prev == TokenKind.comma;
+
+			if in_body and body == "enum" and after_sep
+				lint.check_name(t, "variant-name", "enum variant", "snake_case");
+
+			if in_body and body == "struct" and parens == 0 and nt.kind == TokenKind.colon
+				lint.check_name(t, "member-name", "struct member", "snake_case");
+
+			if in_sig and parens == 1 and nt.kind == TokenKind.colon
+				lint.check_name(t, "param-name", "parameter", "snake_case");
+		}
+		else if t.kind == TokenKind.lparen
+		{
+			parens += 1;
+		}
+		else if t.kind == TokenKind.rparen
+		{
+			parens -= 1;
+		}
+		else if t.kind == TokenKind.lbrace
+		{
+			// A `{` that isn't the first thing on its line, and that ends it,
+			// like K&R.  `case "x" { return y; }` doesn't end the line
+			if line_code > 0 and ends_line(tokens, i)
+				lint.report(t.pos, "brace-eol", "`{` should be on its own line");
+
+			depth += 1;
+			if pending != ""
+			{
+				body = pending;
+				body_depth = depth;
+				pending = "";
+			}
+			in_sig = false;
+		}
+		else if t.kind == TokenKind.rbrace
+		{
+			if body != "" and depth == body_depth
+			{
+				body = "";
+				body_depth = 0;
+			}
+			depth -= 1;
+		}
+
+		prev = t.kind;
+		line_code += 1;
+	}
+}
+
+//==============================================================================
+
+// The width of a line in columns, with a tab stop every 4
+fn line_width(line: &const str): i32
+{
+	let w = 0;
+	for i in [0: len(line)]
+	{
+		if line[i] == char(9)
+			w = (w / 4 + 1) * 4;
+		else
+			w += 1;
+	}
+	return w;
+}
+
+// The last char of `s`, or char(0) if it is empty
+fn last_char(s: &const str): str
+{
+	return at(s, i32(len(s)) - 1);
+}
+
+// Does the line have anything but whitespace?
+fn indents_code(line: &const str): bool
+{
+	for i in [0: len(line)]
+		if line[i] != " " and line[i] != char(9)
+			return true;
+	return false;
+}
+
+// The rules about whitespace, which only need the text
+fn lint_lines(lint: &Lint)
+{
+	const text = lint.text;
+	const n = i32(len(text));
+	let reported_cr = false;
+
+	let start = 0;
+	while start < n
+	{
+		let end_ = start;
+		while end_ < n
+		{
+			if text[end_] == char(10)
+				break;
+			end_ += 1;
+		}
+
+		// A CRLF file is one violation, not one for every line
+		let line = text[start: end_];
+		if last_char(line) == char(13)
+		{
+			if not reported_cr
+				lint.report(end_ - 1, "crlf", "line ends with CR LF, but should be LF");
+			reported_cr = true;
+			line = line[0: i32(len(line)) - 1];
+		}
+
+		const last = last_char(line);
+		if last == " " or last == char(9)
+			lint.report(start + i32(len(line)) - 1, "trailing-ws", "trailing whitespace");
+
+		// Tabs indent, and spaces can only come after them, to align
+		// (a line of only whitespace is a trailing-ws, not an indent)
+		if at(line, 0) == " " and indents_code(line)
+			lint.report(start, "indent", "indent with tabs, not spaces");
+
+		const w = line_width(line);
+		if w > 100
+			lint.report(start, "line-length", "line is " + str(w) + " columns, but the max is 100");
+
+		start = end_ + 1;
+	}
+
+	if n > 0 and at(text, n - 1) != char(10)
+		lint.report(n - 1, "final-newline", "file doesn't end with a newline");
+}
+
+//==============================================================================
+
+// Lint one file, and return its number of violations
+fn lint_file(path: &const str): i32
+{
+	let lint = Lint
+	{
+		path = path,
+		text = std::read_file(path),
+		count = 0,
+	};
+
+	let lexer = new_lexer(lint.text);
+	const tokens = lex_all(&lexer);
+
+	lint_tokens(&lint, &tokens);
+	lint_lines(&lint);
+	return lint.count;
+}
+
+fn main()
+{
+	const args = std::args();
+	if size(args) < 1
+	{
+		println("usage: lint.syntran -- <file>...");
+		std::exit(2);
+	}
+
+	let count = 0;
+	for i in [0: size(args)]
+		count += lint_file(args[i]);
+
+	if count > 0
+		std::exit(1);
+}
+
+main();
+
