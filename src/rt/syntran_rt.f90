@@ -425,12 +425,43 @@ subroutine rt_parse_check(good, ok, name, s)
     end if
 end subroutine rt_parse_check
 
+! Does `s` start with an integer: blanks, an optional sign, digits, and then the
+! end or a separator?  A list-directed read of an integer accepts `1.5` with ifx
+! and ifort, but not with gfortran, so check it here like the interpreter does
+function rt_starts_with_int(s) result(r)
+    character(len = *), intent(in) :: s
+    logical :: r
+    integer :: i, nd
+    i = 1
+    do while (i <= len(s))
+        if (s(i:i) /= ' ' .and. s(i:i) /= char(9)) exit
+        i = i + 1
+    end do
+    if (i <= len(s)) then
+        if (s(i:i) == '+' .or. s(i:i) == '-') i = i + 1
+    end if
+    nd = 0
+    do while (i <= len(s))
+        if (s(i:i) < '0' .or. s(i:i) > '9') exit
+        nd = nd + 1
+        i = i + 1
+    end do
+    r = nd > 0
+    if (.not. r .or. i > len(s)) return
+    select case (s(i:i))
+    case (' ', ',', '/', char(9), char(10), char(13))
+    case default
+        r = .false.
+    end select
+end function rt_starts_with_int
+
 function rt_parse_i32(s, ok) result(r)
     character(len = *), intent(in) :: s
     logical, intent(out), optional :: ok
     integer(int32) :: r
     integer :: io
-    read(s, *, iostat = io) r
+    io = 1
+    if (rt_starts_with_int(s)) read(s, *, iostat = io) r
     if (io /= 0) r = 0
     call rt_parse_check(io == 0, ok, 'i32', s)
 end function rt_parse_i32
@@ -440,7 +471,8 @@ function rt_parse_i64(s, ok) result(r)
     logical, intent(out), optional :: ok
     integer(int64) :: r
     integer :: io
-    read(s, *, iostat = io) r
+    io = 1
+    if (rt_starts_with_int(s)) read(s, *, iostat = io) r
     if (io /= 0) r = 0
     call rt_parse_check(io == 0, ok, 'i64', s)
 end function rt_parse_i64
@@ -1330,17 +1362,36 @@ end function rt_exists
 function rt_read_file(path) result(s)
     character(len = *), intent(in) :: path
     character(len = :), allocatable :: s
+    character(len = :), allocatable :: tmp
+    character :: c
     integer :: iu, io
-    integer(int64) :: n
+    integer(int64) :: n, k
     open(newunit = iu, file = path, status = 'old', action = 'read', &
         access = 'stream', form = 'unformatted', iostat = io)
     if (io /= 0) call rt_fatal('cannot open file "' // path // '"')
     inquire(unit = iu, size = n)
-    if (n < 0) call rt_fatal('cannot open file "' // path // '"')
-    allocate(character(len = n) :: s)
     if (n > 0) then
+        allocate(character(len = n) :: s)
         read(iu, iostat = io) s
         if (io /= 0) call rt_fatal('cannot open file "' // path // '"')
+    else
+        ! An empty file, or one with no size like a named pipe, which can only be
+        ! read once, to the end
+        allocate(character(len = 64) :: s)
+        k = 0
+        do
+            read(iu, iostat = io) c
+            if (io /= 0) exit
+            if (k == len(s)) then
+                allocate(character(len = 2 * k) :: tmp)
+                tmp(1: k) = s
+                call move_alloc(tmp, s)
+            end if
+            k = k + 1
+            s(k: k) = c
+        end do
+        if (io /= iostat_end) call rt_fatal('cannot open file "' // path // '"')
+        s = s(1: k)
     end if
     close(iu)
 end function rt_read_file
@@ -1370,8 +1421,9 @@ function rt_system(cmd) result(r)
     flush(output_unit)
     flush(error_unit)
     st = -1
+    ! cmdstat is set for an exit status of 126 or 127 too, but exitstat is still
+    ! assigned then, and is only left as the -1 above if nothing was started
     call execute_command_line(cmd, exitstat = st, cmdstat = cst)
-    if (cst /= 0) st = -1
     r = int(st, int32)
 end function rt_system
 

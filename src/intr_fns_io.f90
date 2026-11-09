@@ -28,7 +28,8 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 		char_fn, i32_sca_fn, i32_arr_fn, i64_sca_fn, i64_arr_fn, &
 		f32_sca_fn, f32_arr_fn, f64_sca_fn, f64_arr_fn, &
 		open_fn, readln_fn, writeln_fn, eof_fn, close_fn, exit_fn, &
-		getenv_fn, hasenv_fn, system_fn, exists_fn, read_file_fn, variant_of_fn, try_open_fn, &
+		getenv_fn, hasenv_fn, system_fn, exists_fn, read_file_fn, variant_of_fn, &
+		try_open_fn, &
 		print_trace_fn, stack_trace_fn, caller_fn, print_fn, write_fn, format_fn, printf_fn, writef_fn
 
 	! std::read_<type>(): the stub that is registered as the std-only name, then
@@ -637,7 +638,8 @@ subroutine declare_io_fns(fns, id_index, fn_array)
 			char_fn, i32_sca_fn, i32_arr_fn, i64_sca_fn, i64_arr_fn, &
 			f32_sca_fn, f32_arr_fn, f64_sca_fn, f64_arr_fn, &
 			open_fn, readln_fn, writeln_fn, eof_fn, close_fn, exit_fn, &
-			getenv_fn, hasenv_fn, system_fn, exists_fn, read_file_fn, variant_of_fn, try_open_fn, &
+			getenv_fn, hasenv_fn, system_fn, exists_fn, read_file_fn, variant_of_fn, &
+			try_open_fn, &
 			print_trace_fn, stack_trace_fn, caller_fn, print_fn, write_fn, format_fn, printf_fn, writef_fn, read_fns &
 		]
 

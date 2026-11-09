@@ -800,7 +800,9 @@ data = std::move(new_data);
 See [`samples/vec_i32.syntran`](../samples/vec_i32.syntran) for a complete example.
 
 The Fortran backend (`--transpile`) moves it with `move_alloc()` into a temporary,
-and an assignment from that temporary still copies once.
+and an assignment from that temporary still copies once.  It does the move before
+the rest of the statement runs, so `println(x, std::move(x))` prints `x` empty there,
+unlike in the interpreter.  Use `std::move()` in a statement of its own.
 
 ## `norm2`
 ```rust
@@ -1324,8 +1326,9 @@ fn system(cmd: str): i32
 ```
 
 Run the command line `cmd` through the shell (`sh -c` on Unix, `cmd /c` on
-Windows) and return its exit status.  The result is `-1` if the command can't be
-started.  Standard output and error are flushed first, so that output stays in
+Windows) and return its exit status.  A command that the shell can't find or run
+is an ordinary exit status, `127` or `126`.  The result is `-1` only if the shell
+itself can't be started.  Standard output and error are flushed first, so that output stays in
 order.  Pipes, redirection, and `&&` work as they do in the shell, and quoting
 is up to the caller.  Close a file that you wrote before a command reads it.
 Must be called with the `std::` prefix, e.g. `std::system("ls -l")`.

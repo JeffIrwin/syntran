@@ -382,8 +382,12 @@ module procedure read_file
 
 	!********
 
+	character :: c
+
 	integer :: io, iu
 	integer(kind = 8) :: n
+
+	type(char_vector_t) :: sb  ! string builder
 
 	! str_ must be allocated on every return path.  Callers assign the result
 	! directly (e.g. `source_text = read_file(file, iostat)`) and only check
@@ -409,6 +413,18 @@ module procedure read_file
 		deallocate(str_)
 		allocate(character(len = n) :: str_)
 		read(iu, iostat = io) str_
+		if (io /= exit_success) str_ = ''
+	else
+		! An empty file, or one with no size like a named pipe, which can only be
+		! read once, to the end
+		sb = new_char_vector()
+		do
+			read(iu, iostat = io) c
+			if (io /= exit_success) exit
+			call sb%push(c)
+		end do
+		if (io == iostat_end) io = exit_success
+		str_ = sb%trim()
 		if (io /= exit_success) str_ = ''
 	end if
 	close(iu)

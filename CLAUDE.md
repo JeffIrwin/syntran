@@ -249,7 +249,7 @@ bash utils/test-readme.sh --update     # regenerate the hidden expected output f
 
 ### Testing the syntran lexer port
 `compiler/lex.syntran` is a port of `src/lex.f90` to syntran, the first piece of
-the eventual self-hosted compiler (see `scratch/self-host.md`).  The hidden flag
+the eventual self-hosted compiler (see `doc/compiler-roadmap.md`).  The hidden flag
 `syntran --lex file.syntran` dumps the Fortran lexer's raw tokens, one per line
 (`lex_dump()` in `src/lex.f90` has the format), and `compiler/lex-dump.syntran`
 dumps the port's in the same format.  To diff them over every file in

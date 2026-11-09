@@ -7853,6 +7853,8 @@ subroutine unit_test_system(npass, nfail)
 			interpret('std::system("exit 0");') == '0', &
 			interpret('std::system("exit 3");') == '3', &
 			interpret('let s = std::system("exit 7"); s + 1;') == '8', &
+			interpret('std::system("exit 127");') == '127', &
+			interpret('std::system("exit 126");') == '126', &
 
 			! std-only
 			diag_has_code(get_diags('system("exit 0");'), EC_STD_ONLY_FN), &

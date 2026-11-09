@@ -61,7 +61,6 @@ else
 	run_port() { "$syntran_bin" -q compiler/lex-dump.syntran -- "$1"; }
 fi
 
-# Not the dirs that are only there as module paths for the errors tests
 files=()
 for input in "${inputs[@]}" ; do
 	while IFS= read -r f ; do
