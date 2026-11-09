@@ -122,11 +122,13 @@ subroutine set_ansi_colors(is_color_in)
 		fg_bold            = FG_BOLD_
 		fg_bright_red      = FG_BRIGHT_RED_
 		fg_bold_bright_red = FG_BOLD_BRIGHT_RED_
+		fg_bold_bright_green = FG_BOLD_BRIGHT_GREEN_
 		fg_bright_green    = FG_BRIGHT_GREEN_
 		fg_green           = FG_GREEN_
 		fg_bright_blue     = FG_BRIGHT_BLUE_
 		fg_bright_magenta  = FG_BRIGHT_MAGENTA_
 		fg_bright_cyan     = FG_BRIGHT_CYAN_
+		fg_bold_bright_cyan = FG_BOLD_BRIGHT_CYAN_
 		fg_bright_white    = FG_BRIGHT_WHITE_
 		fg_bold_yellow     = FG_BOLD_YELLOW_
 		color_reset        = COLOR_RESET_
@@ -134,11 +136,13 @@ subroutine set_ansi_colors(is_color_in)
 		fg_bold            = ""
 		fg_bright_red      = ""
 		fg_bold_bright_red = ""
+		fg_bold_bright_green = ""
 		fg_bright_green    = ""
 		fg_green           = ""
 		fg_bright_blue     = ""
 		fg_bright_magenta  = ""
 		fg_bright_cyan     = ""
+		fg_bold_bright_cyan = ""
 		fg_bright_white    = ""
 		fg_bold_yellow     = ""
 		color_reset        = ""
@@ -184,6 +188,33 @@ subroutine print_version_row(label, val)
 		repeat(" ", max(width - len(label), 1))//trim(val)
 
 end subroutine print_version_row
+
+!===============================================================================
+
+subroutine print_help_opt(short, long, arg, desc, desc2)
+
+	! One option of `--help`, in the style of `cargo -h`.  The flags are on one
+	! line and the description is indented below.  `short` is blank for an option
+	! without a short flag, which keeps the long flags aligned
+
+	character(len = *), intent(in) :: short, long, arg, desc
+	character(len = *), intent(in), optional :: desc2
+
+	character(len = :), allocatable :: line
+
+	if (len(short) > 0) then
+		line = "  "//fg_bold_bright_cyan//short//color_reset//", "
+	else
+		line = repeat(" ", 6)
+	end if
+	line = line//fg_bold_bright_cyan//long//color_reset
+	if (len(arg) > 0) line = line//" "//fg_bright_cyan//arg//color_reset
+
+	write(*,*) line
+	write(*,*) repeat(" ", 10)//desc
+	if (present(desc2)) write(*,*) repeat(" ", 10)//desc2
+
+end subroutine print_help_opt
 
 !===============================================================================
 
@@ -299,6 +330,13 @@ function parse_args() result(args)
 			exit
 
 		case default
+
+			! `syntran help`, like `-h`.  Only as the first positional arg, so
+			! a file named `help` has to be run as `./help`
+			if (ipos == 0 .and. argv == "help") then
+				args%help = .true.
+				cycle
+			end if
 
 			! Positional arg
 			ipos = ipos + 1
@@ -515,33 +553,47 @@ function parse_args() result(args)
 
 	if (error .or. args%help) then
 
-		write(*,*) fg_bold//"Usage:"//color_reset
-		write(*,*) "    syntran <file.syntran> [options] [-- <script args>...]"
-		write(*,*) "    syntran"
-		write(*,*) "    syntran -c <cmd> | --command <cmd>"
-		write(*,*) "    syntran -h | --help"
-		write(*,*) "    syntran --version"
+		write(*,*) fg_bold_bright_green//"Usage:"//color_reset//" "// &
+			fg_bold_bright_cyan//"syntran"//color_reset//" "// &
+			fg_bright_cyan//"[OPTIONS] [FILE] [-- <ARGS>...]"//color_reset
+		write(*,*) "       "// &
+			fg_bold_bright_cyan//"syntran"//color_reset//" "// &
+			fg_bright_cyan//"[OPTIONS]"//color_reset//" "// &
+			fg_bold_bright_cyan//"-c"//color_reset//" "// &
+			fg_bright_cyan//"<CMD>"//color_reset
+		write(*,*) "       "// &
+			fg_bold_bright_cyan//"syntran help"//color_reset
 		write(*,*)
-		write(*,*) fg_bold//"Options:"//color_reset
-		write(*,*) "    -h --help           Show this help"
-		write(*,*) "    --version           Show version and build details"
-		write(*,*) "    -c --command <cmd>  Run program passed in as string"
-		write(*,*) "    --color (off|on)    Set ANSI text color [default: auto]"
-		write(*,*) "    --fmax-errors <n>   Limit max " &
-			//"error messages to <n> [default: "//str(maxerr_def)//"]"
-		write(*,*) "    -i --interactive    Interpret a file then start an interactive shell"
-		write(*,*) "    -q --quiet          Don't print the banner, only errors and println calls"
-		write(*,*) "    --permissive-return Downgrade missing-return errors to warnings"
-		write(*,*) "    --cd                Resolve the script's relative file paths against"
-		write(*,*) "                        its own directory"
-		write(*,*) "    -s --syntax-only    Parse and type check without running the program"
-		write(*,*) "    -t --transpile <f>  Write the program as Fortran source to <f> ('-' for"
-		write(*,*) "                        stdout) instead of running it"
-		write(*,*) "    --keep-unused-fns   With --transpile, also write fns that nothing calls"
-		write(*,*) "    -o --native <f>     Compile the program with LLVM to an executable <f>"
-		write(*,*) "                        (or an object <f>.o, or LLVM IR <f>.ll)"
-		write(*,*) "    -j --jit            Compile the program with LLVM and run it right away"
-		write(*,*) "    -- <args>...        Pass remaining arguments to script via std::args()"
+		write(*,*) fg_bold_bright_green//"Options:"//color_reset
+		call print_help_opt("-h", "--help", "", "Show this help")
+		call print_help_opt("", "--version", "", "Show version and build details")
+		call print_help_opt("-c", "--command", "<CMD>", "Run program passed in as string")
+		call print_help_opt("", "--color", "<WHEN>", &
+			"Set ANSI text color [possible values: auto, on, off] [default: auto]")
+		call print_help_opt("", "--fmax-errors", "<N>", &
+			"Limit max error messages to <N> [default: "//str(maxerr_def)//"]")
+		call print_help_opt("-i", "--interactive", "", &
+			"Interpret a file then start an interactive shell")
+		call print_help_opt("-q", "--quiet", "", &
+			"Don't print the banner, only errors and println calls")
+		call print_help_opt("", "--permissive-return", "", &
+			"Downgrade missing-return errors to warnings")
+		call print_help_opt("", "--cd", "", &
+			"Resolve the script's relative file paths against its own directory")
+		call print_help_opt("-s", "--syntax-only", "", &
+			"Parse and type check without running the program")
+		call print_help_opt("-t", "--transpile", "<FILE>", &
+			"Write the program as Fortran source to <FILE> ('-' for stdout)", &
+			"instead of running it")
+		call print_help_opt("", "--keep-unused-fns", "", &
+			"With --transpile, also write fns that nothing calls")
+		call print_help_opt("-o", "--native", "<FILE>", &
+			"Compile the program with LLVM to an executable <FILE>", &
+			"(or an object <FILE>.o, or LLVM IR <FILE>.ll)")
+		call print_help_opt("-j", "--jit", "", &
+			"Compile the program with LLVM and run it right away")
+		call print_help_opt("", "--", "<ARGS>...", &
+			"Pass remaining arguments to script via std::args()")
 		write(*,*)
 
 		if (.not. args%help) call exit(EXIT_FAILURE)

@@ -37,13 +37,16 @@ module syntran__core_m
 	!    * CamelCase for structs? or *_t or something else?
 	!    * make a lint script to help check?
 	!  - self-hosted compiler
-	!    * does the lexer differential token dump test use aot or bytecode?
-	!      looks like it runs both in different ci stages. maybe it should only
-	!      do native version for perf, and extend to all os's
-	!    * std::move done
-	!    * std::system() done, as one cmd str (the user quotes).  maybe add a
-	!      std::shell_quote() or an argv overload later
-	!    * port lexer as test, follow scratch/self-host.md
+	!    * readme still says "interpreter written in fortran". can already
+	!      update the "interpreter" part now
+	!    * the vars/locs distinction is probably an anti pattern. maybe "global"
+	!      vars could get an implicit outer block scope to make them just
+	!      another kind of "local" var. don't need to change fortran impl, just
+	!      don't propogate the anti pattern into new syntran compiler
+	!    * run utils/test-lex.sh on all os's
+	!    * follow plan in doc/compiler-roadmap.md
+	!    * compiler/ dir organization? apps (lex-dump, later parse-dump) are
+	!      mixed in with library modules
 	!    * sum types and other follow-ups as needed
 	!    * later, might want ffi, a way to interface and call c api libs. for
 	!      now we can generate llvm ir just by writing text with now llvm lib
