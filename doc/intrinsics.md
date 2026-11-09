@@ -1327,8 +1327,10 @@ fn system(cmd: str): i32
 
 Run the command line `cmd` through the shell (`sh -c` on Unix, `cmd /c` on
 Windows) and return its exit status.  A command that the shell can't find or run
-is an ordinary exit status, `127` or `126`.  The result is `-1` only if the shell
-itself can't be started.  Standard output and error are flushed first, so that output stays in
+is an ordinary exit status, `127` or `126`, but the Fortran runtime of the Intel
+compilers doesn't return `127` like gfortran and the native backend do, so don't
+rely on telling it apart there.  The result is `-1` if the shell itself can't be
+started.  Standard output and error are flushed first, so that output stays in
 order.  Pipes, redirection, and `&&` work as they do in the shell, and quoting
 is up to the caller.  Close a file that you wrote before a command reads it.
 Must be called with the `std::` prefix, e.g. `std::system("ls -l")`.

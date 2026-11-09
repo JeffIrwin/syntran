@@ -7853,7 +7853,10 @@ subroutine unit_test_system(npass, nfail)
 			interpret('std::system("exit 0");') == '0', &
 			interpret('std::system("exit 3");') == '3', &
 			interpret('let s = std::system("exit 7"); s + 1;') == '8', &
-			interpret('std::system("exit 127");') == '127', &
+
+			! 126 is a status like any other.  127 isn't tested, because the Intel
+			! runtimes treat it as a command that wasn't found, and don't give it
+			! back as gfortran does
 			interpret('std::system("exit 126");') == '126', &
 
 			! std-only
