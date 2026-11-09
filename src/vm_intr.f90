@@ -1082,8 +1082,9 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 		flush(output_unit)
 		flush(error_unit)
 		sys_stat = -1
+		! libgfortran sets cmdstat for an exit status of 126 or 127 too, but it still
+		! assigns exitstat then.  It only leaves the -1 above if nothing was started
 		call execute_command_line(args(1)%str%s, exitstat = sys_stat, cmdstat = sys_cstat)
-		if (sys_cstat /= 0) sys_stat = -1
 		res%sca%i32 = sys_stat
 
 	case (INTR_EXISTS)

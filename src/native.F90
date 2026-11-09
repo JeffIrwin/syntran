@@ -6344,17 +6344,17 @@ recursive function emit_assign_val(em, node, as_stmt) result(res)
 	if (node%op%kind /= equals_token) then
 		! `x += y` is `x = x + y`
 		select case (node%op%kind)
-		case (plus_equals_token);    op = plus_token
-		case (minus_equals_token);   op = minus_token
-		case (star_equals_token);    op = star_token
-		case (slash_equals_token);   op = slash_token
-		case (percent_equals_token); op = percent_token
-		case (double_star_equals_token);   op = double_star_token
-		case (double_less_equals_token);   op = double_less_token
-		case (double_greater_equals_token);op = double_greater_token
-		case (amp_equals_token);     op = amp_token
-		case (pipe_equals_token);    op = pipe_token
-		case (caret_equals_token);   op = caret_token
+		case (plus_equals_token);            op = plus_token
+		case (minus_equals_token);           op = minus_token
+		case (star_equals_token);            op = star_token
+		case (slash_equals_token);           op = slash_token
+		case (percent_equals_token);         op = percent_token
+		case (double_star_equals_token);     op = double_star_token
+		case (double_less_equals_token);     op = double_less_token
+		case (double_greater_equals_token);  op = double_greater_token
+		case (amp_equals_token);             op = amp_token
+		case (pipe_equals_token);            op = pipe_token
+		case (caret_equals_token);           op = caret_token
 		case default
 			call unsupported(em, 'the `'//node%op%text//'` operator')
 			return

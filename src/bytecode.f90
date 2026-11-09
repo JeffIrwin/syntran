@@ -2320,13 +2320,13 @@ pure integer function compound_to_arith_token(op_kind) result(tok)
 	integer, intent(in) :: op_kind
 
 	select case (op_kind)
-	case (plus_equals_token);    tok = plus_token
-	case (minus_equals_token);   tok = minus_token
-	case (star_equals_token);    tok = star_token
-	case (slash_equals_token);   tok = slash_token
-	case (percent_equals_token); tok = percent_token
-	case (double_star_equals_token);   tok = double_star_token
-	case default;                tok = 0
+	case (plus_equals_token);        tok = plus_token
+	case (minus_equals_token);       tok = minus_token
+	case (star_equals_token);        tok = star_token
+	case (slash_equals_token);       tok = slash_token
+	case (percent_equals_token);     tok = percent_token
+	case (double_star_equals_token); tok = double_star_token
+	case default;                    tok = 0
 	end select
 
 end function compound_to_arith_token

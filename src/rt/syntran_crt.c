@@ -2551,6 +2551,8 @@ sy_str *sy_read_file(const sy_str *name)
     char *path = sy_resolve_path(name->data);
     FILE *fp = NULL;
     sy_str *s;
+    char *buf;
+    size_t cap, n = 0;
     int err = 0;
 
     if (stat(path, &st) != 0) {
@@ -2562,13 +2564,29 @@ sy_str *sy_read_file(const sy_str *name)
     }
     if (err != 0) sy_rt_error("R8", "cannot open file \"%s\" (iostat = %d)", path, err);
 
-    s = sy_str_alloc((int64_t)st.st_size);
-    if (fread(s->data, 1, (size_t)st.st_size, fp) != (size_t)st.st_size) {
-        err = errno;
-        sy_rt_error("R8", "cannot open file \"%s\" (iostat = %d)", path, err);
+    /* st_size is 0 for a named pipe, which can only be read once, to the end.  So read
+     * until EOF instead of trusting it, and start from it so a file is one read */
+    cap = st.st_size > 0 ? (size_t)st.st_size : 4096;
+    buf = (char *)malloc(cap);
+    if (buf == NULL) sy_fatal("out of memory");
+    for (;;) {
+        size_t got = fread(buf + n, 1, cap - n, fp);
+        n += got;
+        if (n < cap) {
+            if (ferror(fp)) {
+                err = errno;
+                sy_rt_error("R8", "cannot open file \"%s\" (iostat = %d)", path, err);
+            }
+            break;
+        }
+        cap *= 2;
+        buf = (char *)realloc(buf, cap);
+        if (buf == NULL) sy_fatal("out of memory");
     }
     fclose(fp);
     free(path);
+    s = sy_str_from(buf, (int64_t)n);
+    free(buf);
     return s;
 }
 

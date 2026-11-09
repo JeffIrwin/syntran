@@ -1,6 +1,6 @@
 
 // Syntran lexer, written in syntran.  This is a port of src/lex.f90, and it is
-// the first piece of the self-hosted compiler.  See scratch/self-host.md
+// the first piece of the self-hosted compiler.  See doc/compiler-roadmap.md
 //
 // It's tested against the Fortran lexer by dumping both of their token streams
 // (see compiler/lex-dump.syntran, `syntran --lex`, and utils/test-lex.sh).

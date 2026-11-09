@@ -77,7 +77,10 @@ This is a subset of the language so far:
   `exp`, `log`, `log2`, `log10`, `sqrt`, the trigonometric functions and their
   inverses in radians and in degrees, `i32`, `i64`, `f32`, `f64`, `parse_i32`,
   `parse_i64`, `parse_f32`, `parse_f64`, `parse_bool`, `exit`, and `std::move` of an array or
-  a str (the array or str is moved into a temporary, so assigning that still copies once)
+  a str (the array or str is moved into a temporary, so assigning that still copies once).
+  The move happens before the rest of its statement runs, so a statement that also
+  reads the variable, like `println(x, std::move(x))`, sees it empty, unlike in the
+  interpreter.  Move in a statement of its own, like `y = std::move(x);`
 
 ## What isn't supported yet
 
