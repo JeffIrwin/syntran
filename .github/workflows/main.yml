@@ -363,6 +363,16 @@
 				"
 			},
 			{
+				"if": "matrix.os != 'windows-latest'",
+				"name": "Lint syntran style",
+				"shell": "bash",
+				"run":
+				"
+					# Check that the self-hosted compiler follows doc/style.md \n
+					bash ./utils/lint.sh ./build/Debug/syntran \n
+				"
+			},
+			{
 				"if": "matrix.os == 'ubuntu-24.04'",
 				"name": "Test transpiler",
 				"shell": "bash",

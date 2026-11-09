@@ -1,0 +1,265 @@
+# Syntran style guide
+
+This is the style of syntran source code, as it has evolved in the self-hosted
+compiler in [`compiler/`](../compiler/), which is the reference.  It is mostly a
+description of what that code already does, plus a few things marked
+**(prescribed)** that are a decision for new code, not yet a habit.
+
+It is semi-official: follow it in `compiler/` and in new code, and don't feel
+obliged to restyle old code.  Much of [`samples/`](../samples/) and the
+long tests predate it, e.g. `Vec_i32` and `K&R` braces.  The unit tests under
+`src/tests/test-src/` are exempt too, since many of them exist to exercise odd
+syntax on purpose.
+
+The checkable rules are enforced by a [linter](#the-linter), which is written in
+syntran.
+
+The examples below are indented with tabs, like real source.
+
+## Files and layout
+
+- A file starts with a blank line, then a comment that says what the file is
+  and how it relates to the rest.  A blank line at the end of the file is common
+  too.  The file ends with a newline either way
+- Then `use` lines, then the code
+- Sections of a file are separated by `//` and 78 `=`, which is 80 columns:
+
+  ```rust
+  //==============================================================================
+  ```
+
+- A script ends with `fn main()`, then a call to it on the last line, `main();`
+- File names are lowercase.  A module file has to be a valid identifier, so it
+  uses underscores, e.g. `str_vec.syntran`.  Scripts and tests, which nothing
+  imports, can use hyphens, e.g. `lex-dump.syntran` and `test-01.syntran`
+
+## Formatting
+
+- **Tabs** indent.  Spaces may follow tabs to align things, but never lead a
+  line
+- **Allman braces**: `{` goes on its own line, at the indent of the statement
+  that it belongs to.  A short body on one line is fine as long as the `{` is
+  not the last thing on a line that has code before it:
+
+  ```rust
+  switch text
+  {
+  	case "true"  { return Keyword.true_; }
+  	case "false" { return Keyword.false_; }
+  }
+  ```
+
+- No parentheses around the condition of an `if` or `while`, and no
+  parentheses around a `for` range
+- A body that is one statement doesn't need braces.  A body of several
+  statements does.  If any branch of an `if`/`else` chain needs braces, they
+  all have them:
+
+  ```rust
+  if cap > 0
+  	new_cap = cap * 2;
+
+  if float and current() == "f"
+  {
+  	float32 = true;
+  	pos += 1;
+  }
+  else if float
+  {
+  	float64 = true;
+  }
+  ```
+
+- Slices and ranges have a space after the colon, like `s[a: b]` and
+  `[0: len(s)]`.  An open end leaves it off, like `s[i:]`
+- Line length is 80 columns, with a hard limit of 100.  A tab is 4 columns wide
+  for counting
+- To wrap a fn signature that is too long, open the paren, put the params on
+  indented lines, and close with `)` at the indent of the `fn`:
+
+  ```rust
+  fn lex_radix(
+  	start: i32, radix_name: &const str, k: i32,
+  	err32: &const str, err64: &const str,
+  ): Token
+  ```
+
+- A struct literal is one field per line, with a trailing comma, unless it is
+  short enough to stay on one line:
+
+  ```rust
+  return TokenVec
+  {
+  	len = 0,
+  	cap = 0,
+  	data = [new_token(TokenKind.eof, 0, ""); 0],
+  };
+  ```
+
+  The same goes for a multi-line array literal
+- No trailing whitespace, and LF line endings, not CRLF
+
+## Naming
+
+| What                              | Case                     | Examples                              |
+|-----------------------------------|--------------------------|---------------------------------------|
+| struct, enum                      | `CamelCase`              | `Token`, `Lexer`, `TokenKind`         |
+| enum variant                      | `snake_case`             | `double_equals`, `Keyword.let_`       |
+| fn, method                        | `snake_case`             | `lex_all`, `push_diag`                |
+| variable, param, struct member    | `snake_case`             | `new_cap`, `has_val`                  |
+| `const`                           | `snake_case` or `UPPER_SNAKE_CASE` | `filename`, `NDIRS`          |
+| module (the file name)            | `snake_case`             | `lex`, `utils`                        |
+
+A `const` may be `UPPER_SNAKE_CASE`, at the top level or in a fn, but it doesn't
+have to be.  A `let` is always `snake_case`.
+
+Besides the case:
+
+- A trailing `_` avoids a clash with a keyword, a type name, or an intrinsic,
+  like `Keyword.let_`, `str_`, `i32_`, and `sum_`.  Prefer a different name if
+  there is a good one
+- A container that is specialized by its element puts the element first:
+  `StrVec`, `TokenVec`
+- A predicate starts with `is_` or `has_`, like `is_digit()` and
+  `has_radix_digit()`
+- A constant that is a count starts with `N`, and one that is a capacity ends
+  in `_CAP`, e.g. `NDIRS` and `STACK_CAP`
+- When code is a port of the Fortran source, keep the Fortran name (without the
+  `_t` of a type), so that the two can be read side by side, like
+  `compiler/lex.syntran` and `src/lex.f90`
+
+## Declarations
+
+- Variables have no type annotation.  Types are inferred
+- Use `const` for anything that isn't reassigned, and `let` for what is
+- A parameter that a fn only reads is `&const`, which avoids a copy.  A
+  parameter that it modifies is `&`.  Small scalars are passed by value
+- A method that doesn't change any member is a `const fn`
+- Prefer `std::move()` to a copy when handing over an array that you're done
+  with, like when growing a vector
+- Always call the standard library with the `std::` prefix, e.g.
+  `std::parse_i64()`.  Don't `use std::*;`, since a future version of syntran
+  may add a function that clashes with one of yours
+
+## Modules, structs, and constructors (prescribed)
+
+This is the one place that the guide asks for something that old code doesn't
+do yet.  For new code:
+
+- A module has **one public struct**, like a class, and the module is named
+  after it in `snake_case`.  `token.syntran` has `struct Token`.  Enums and
+  helpers that the struct needs can sit beside it
+- Its constructor is called **`new()`**, with no type in the name, since the
+  module already says it
+- A consumer imports the module with a **qualified** `use token;` and refers to
+  everything through the module name.  Avoid `use token::*;`
+
+```rust
+// token.syntran
+
+enum Kind
+{
+	num,
+	word,
+}
+
+struct Token
+{
+	kind: Kind,
+	text: str,
+
+	const fn is_word(): bool
+	{
+		return kind == Kind.word;
+	}
+}
+
+fn new(kind: Kind, text: str): Token
+{
+	return Token
+	{
+		kind = kind,
+		text = text,
+	};
+}
+```
+
+```rust
+// main.syntran
+
+use token;
+
+fn show(t: &const token::Token)
+{
+	println(t.text, " ", t.is_word());
+}
+
+const t = token::new(token::Kind.word, "hi");
+show(&t);
+```
+
+Where the old style had `new_token(...)` and `use lex::*;`, this has
+`token::new(...)`.  Qualified names are the point: they say where a thing is from
+at the call site, they can't clash, and one struct per module keeps them short
+enough that nobody wants the glob.
+
+Existing code in `compiler/` doesn't follow this yet.  `lex.syntran` has several
+structs, and constructors such as `new_token()` and `new_lexer()`.  It can be
+migrated when it is split up.  The linter doesn't check this part.
+
+## Comments
+
+- Use `//` only.  There are no block comments, and the language is not going to
+  get them.  Comment out a range of lines with block insertion in your editor
+- Put a comment above every fn, struct, and enum whose purpose or edge cases
+  aren't obvious from the name, and describe what it returns or does, e.g.
+  `// The keyword that `text` is, or Keyword.none for an identifier`
+- Write sentences, with two spaces after a period.  A comment of one sentence
+  doesn't need a period at the end.  Quote code in `backticks`
+- A comment on the same line as code is separated from it by two spaces, like
+  `pos += 2;  // skip the prefix`
+- Say why, or what is surprising.  The code already says what.  For example the
+  `at()` helper in `compiler/utils.syntran` is there because `and` and `or`
+  don't short-circuit
+
+## The linter
+
+[`compiler/lint.syntran`](../compiler/lint.syntran) checks the rules below with
+the syntran lexer, [`compiler/lex.syntran`](../compiler/lex.syntran).  Run it
+with `utils/lint.sh`, which finds the interpreter, takes files or dirs (default
+`compiler/`), and can compile the linter natively:
+
+```bash
+bash utils/lint.sh                              # lints compiler/
+bash utils/lint.sh build/v1/bin/syntran samples/foo.syntran
+bash utils/lint.sh --native build/native/bin/syntran compiler
+```
+
+It prints `path:line:col: rule: message` for each violation, sorted, and exits
+1 if there are any.  Directly, with no wrapper:
+`syntran -q compiler/lint.syntran -- <file>...`.  CI keeps `compiler/` clean.
+
+| Rule             | Checks                                                                 |
+|------------------|------------------------------------------------------------------------|
+| `struct-name`    | name after `struct` is `CamelCase`                                     |
+| `enum-name`      | name after `enum` is `CamelCase`                                       |
+| `variant-name`   | enum variants are `snake_case`                                         |
+| `fn-name`        | name after `fn` is `snake_case`                                        |
+| `param-name`     | fn params are `snake_case`                                             |
+| `member-name`    | struct members are `snake_case`                                        |
+| `var-name`       | `let`, `const`, and `for` names are `snake_case`, and a `const` may be `UPPER_SNAKE_CASE` too |
+| `brace-eol`      | `{` is not at the end of a line that has code before it                |
+| `indent`         | a line doesn't start with a space                                      |
+| `trailing-ws`    | no whitespace at the end of a line                                     |
+| `crlf`           | no CR LF line endings, reported once per file                          |
+| `line-length`    | at most 100 columns, with a tab as 4                                   |
+| `final-newline`  | the file ends with a newline                                           |
+
+Not checked, because they take judgment or the old code would fail: comments,
+the 80-column goal, braces on single statements, `const` vs `let`, `&const`
+params, the `std::` prefix, and everything in
+[the section on modules](#modules-structs-and-constructors-prescribed).
+
+Names in a test that exists to exercise odd syntax, such as the files in
+`src/tests/test-src/errors/`, will trip it.  That's expected, and they are not
+meant to be linted.

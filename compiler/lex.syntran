@@ -418,7 +418,10 @@ struct Lexer
 	// Lex a hex (k = 4), octal (k = 3), or binary (k = 1) literal.  The
 	// Fortran lexer has a copy of this for each radix.  `err32` and `err64` are
 	// the codes of the diagnostics for a value that doesn't fit
-	fn lex_radix(start: i32, radix_name: &const str, k: i32, err32: &const str, err64: &const str): Token
+	fn lex_radix(
+		start: i32, radix_name: &const str, k: i32,
+		err32: &const str, err64: &const str,
+	): Token
 	{
 		pos += 2;  // skip the prefix
 

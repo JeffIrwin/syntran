@@ -10,6 +10,8 @@ pages below go into more detail on specific topics.
 - [Error code index](errors.md):  every diagnostic, with its code and an example
 - [Include files](include-files.md):  `#include` preprocessing, which is
   superseded by [modules](../README.md#modules)
+- [Style guide](style.md):  naming, formatting, and module conventions for
+  syntran source, and the linter that checks them
 
 ## Using syntran from other languages
 
