@@ -32,10 +32,13 @@ Two build systems are supported: FPM (Fortran Package Manager) and CMake.
 ```bash
 fpm build --profile debug   # Debug build, preferred for development
 fpm build --profile release # Release build
-fpm run --profile debug     # Build and run interpreter
-fpm run --profile debug -- file.syntran     # Run a syntran file
+fpm run --target syntran --profile debug     # Build and run interpreter
+fpm run --target syntran --profile debug -- file.syntran     # Run a syntran file
 yes | fpm clean             # Clean build artifacts
 ```
+
+`fpm run` needs `--target syntran` now that `synup` is a second executable.
+Without it, fpm runs both, and `synup` rejects syntran's args and exits 1.
 
 #### build.sh
 
@@ -211,7 +214,7 @@ looping the whole suite:
 ### Running a single test file
 Syntran script tests are in `src/tests/test-src/` organized by category. To run one:
 ```bash
-fpm run --profile debug -- src/tests/test-src/modules/test-01.syntran
+fpm run --target syntran --profile debug -- src/tests/test-src/modules/test-01.syntran
 ```
 
 ### Testing the Fortran backend
@@ -355,7 +358,7 @@ it nightly, separately from `main.yml` so that a find never blocks a push.
 ### Evaluating a script as a command-line string
 To run a syntran script without saving it as a file:
 ```bash
-fpm run -- -c 'println(\"hello world\");'
+fpm run --target syntran -- -c 'println(\"hello world\");'
 ```
 FPM requires escaping quotes within command arguments.
 

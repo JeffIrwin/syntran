@@ -105,25 +105,25 @@
 					# output.  Maybe add a '-qq' option to make it even quieter?
 					# Or keep grepping with well-formatted printed output
 					# \n
-					ans=$(fpm run --profile debug --link-flag \"$lflags\"
+					ans=$(fpm run --target syntran --profile debug --link-flag \"$lflags\"
 						< samples/arithmetic2.syntran
 						| grep -o \"{ans = '.*'}\" | grep -o '[0-9]*'
 					) \n
 					[[ \"$ans\" != \"175\" ]] && exit 1 \n
 
-					ans=$(fpm run --profile debug --link-flag \"$lflags\"
+					ans=$(fpm run --target syntran --profile debug --link-flag \"$lflags\"
 						< samples/arrays.syntran
 						| grep -o \"{ans = '.*'}\" | grep -o \"'.*'\"  | grep -o \"[^']*\"
 					) \n
 					[[ \"$ans\" != \"[101, 104, 107, 110]\" ]] && exit 1 \n
 
 					# No-arg readln()/eof() should read from stdin \n
-					ans=$(printf 'a\\nb\\nc\\n' | fpm run --profile debug --link-flag \"$lflags\"
+					ans=$(printf 'a\\nb\\nc\\n' | fpm run --target syntran --profile debug --link-flag \"$lflags\"
 						-- -c 'let n = 0; for i in [0: 3] { let line = readln(); n += 1; } println(n);'
 					) \n
 					[[ \"$(echo $ans)\" != \"3\" ]] && exit 1 \n
 
-					ans=$(printf 'x\\n' | fpm run --profile debug --link-flag \"$lflags\"
+					ans=$(printf 'x\\n' | fpm run --target syntran --profile debug --link-flag \"$lflags\"
 						-- -c 'readln(); readln(); println(eof());'
 					) \n
 					[[ \"$(echo $ans)\" != \"true\" ]] && exit 1 \n
@@ -132,7 +132,7 @@
 					# TODO: test this in the release binary \n
 					dir_='src/tests/test-src/explorer/' \n
 					for f in $dir_/*.syntran ; do
-						fpm run --profile debug --link-flag \"$lflags\"
+						fpm run --target syntran --profile debug --link-flag \"$lflags\"
 							-- -q $f > ${f%.syntran}.out \n
 						diff ${f%.syntran}.out ${f%.syntran}.exp \n
 					done
@@ -198,7 +198,7 @@
 
 					dir_='src/tests/test-src/explorer/' \n
 					for f in $dir_/*.syntran ; do
-						fpm run
+						fpm run --target syntran
 							--profile release
 							--link-flag
 							'-L/opt/blas-static -static-libgcc -static-libgfortran -static-libquadmath'

@@ -37,8 +37,8 @@
 #
 #     # `runner` is a prefix to the syntran cmd.  anything after `-- ` is a cmd
 #     # arg passed after `syntran`, e.g. the syntran filename
-#     fpm run
-#     fpm run -- samples/primes-3.syntran
+#     fpm run --target syntran
+#     fpm run --target syntran -- samples/primes-3.syntran
 #
 #     fpm test       # all tests
 #     fpm test test  # "short" tests only
