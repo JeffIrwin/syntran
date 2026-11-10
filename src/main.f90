@@ -4,6 +4,7 @@
 program main
 
 	use syntran__app_m
+	use syntran__synup_m, only: syntran_update
 	use syntran
 
 	implicit none
@@ -29,6 +30,12 @@ program main
 
 	if (args%version .or. args%help) then
 		call exit(EXIT_SUCCESS)
+	end if
+
+	if (args%update) then
+		! The toolchain manager does the work, so that this syntran can be
+		! replaced while it's running
+		call exit(syntran_update())
 	end if
 
 	maxerr            = args%maxerr

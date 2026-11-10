@@ -31,11 +31,6 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
-	!  - style guide
-	!    * lowercase for vars, fns, members, methods, and src file (module)
-	!      names
-	!    * CamelCase for structs? or *_t or something else?
-	!    * make a lint script to help check?
 	!  - self-hosted compiler
 	!    * readme still says "interpreter written in fortran". can already
 	!      update the "interpreter" part now
@@ -83,6 +78,9 @@ module syntran__core_m
 	!    * when/where does the ci fuzz run? either only on master or cron is
 	!      broken
 	!    * periodically check the ci fuzz runs
+	!  - style guide
+	!    * lint script is non-exhaustive. some things are tricky to check or
+	!      require judgment
 	!  - transpiler improvements:
 	!    * cover more OS's and intel in addition to gnu in testing. currently
 	!      only gnu on ubuntu
@@ -246,15 +244,18 @@ module syntran__core_m
 	!    * gfortran 15 is now the default for Windows github actions
 	!    * available in recent docker images, but gfortran 15 is not available
 	!      in github ubuntu runners as of 2026-06-06
-	!  - built-in syntran update:
-	!    * add checksum verification
-	!    * currently ./utils/syup.sh can do it
-	!    * make this built-in to syntran binary, maybe invoke like
-	!      `syntran --update`.  think carefully. don't want to break this by
-	!      changing the name of the script or arg
-	!    * this would only work on linux, since windows can't overwrite a
-	!      running exe
-	!    * apparently it's possible on windows too.  til:  https://stackoverflow.com/a/459860/4347028
+	!  - synup (toolchain manager, see doc/synup.md) and `syntran --update`
+	!    * done: install/default/update/list/remove/run, checksums, `dev` build
+	!    * test-synup.sh doesn't run on windows yet, since its stub syntran is a
+	!      shell script.  Needs a stub exe, or a real syntran per version
+	!    * windows and linux paths are untested outside of CI.  Try the real
+	!      network on each once a release has synup and SHA256SUMS
+	!    * backfill SHA256SUMS on releases 1.3.0 through 1.7.0 with
+	!      utils/release-sums.sh, so `synup install 1.6.0` works
+	!    * no prebuilt binary for macOS on intel, or for arm linux
+	!    * per-project version pinning, like rustup's `+toolchain`
+	!    * `synup self-uninstall`, and `synup list --available` marking what's
+	!      installed
 	!  - enable plugging in to nvim linting.  `--syntax-only`/`-s` now exists,
 	!    but diagnostics still need a 1-line-per-error format with filename,
 	!    line, and column indices to work with gfortran-style nvim linting
@@ -306,7 +307,8 @@ module syntran__core_m
 	!      ubuntu builds
 	!    * add version summary as a text file (major.minor.patch, git hash,
 	!      build date)
-	!    * list sha256 checksums of binaries somewhere
+	!    * sha256 checksums of the zips are in SHA256SUMS, made by
+	!      utils/release-sums.sh
 	!    * doc. autogenerate pdf and/or html from markdown via pandoc or similar
 	!      + see utils/build-doc.sh
 	!    * readme?

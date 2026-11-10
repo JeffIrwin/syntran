@@ -450,6 +450,135 @@ end subroutine unit_test_levenshtein
 
 !===============================================================================
 
+subroutine unit_test_synup(npass, nfail)
+
+	! The pure parts of the toolchain manager, src/synup.f90.  The downloads,
+	! links, and updates are covered by utils/test-synup.sh, which needs a
+	! shell and curl
+
+	use syntran__synup_m
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: file = 'synup-test.tmp'
+
+	character(len = 64) :: h_empty, h_abc, h_two, h_missing
+	character(len = :), allocatable :: sums
+
+	integer :: iu, v(3), v1(3), v2(3)
+
+	logical :: ok_empty, ok_abc, ok_two, ok_missing, ok1, ok2
+	logical, parameter :: quiet = .true.
+
+	type(string_vector_t) :: names, tags, none
+
+	! FIPS 180-4 examples.  The second needs two blocks of padding
+	open(newunit = iu, file = file, status = 'replace', access = 'stream', &
+		form = 'unformatted')
+	close(iu)
+	ok_empty = sha256_of(file, h_empty)
+
+	open(newunit = iu, file = file, status = 'replace', access = 'stream', &
+		form = 'unformatted')
+	write(iu) 'abc'
+	close(iu)
+	ok_abc = sha256_of(file, h_abc)
+
+	open(newunit = iu, file = file, status = 'replace', access = 'stream', &
+		form = 'unformatted')
+	write(iu) 'abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq'
+	close(iu)
+	ok_two = sha256_of(file, h_two)
+
+	open(newunit = iu, file = file, status = 'old')
+	close(iu, status = 'delete')
+	ok_missing = sha256_of(file, h_missing)
+
+	call unit_test_coda([ &
+		ok_empty, &
+		h_empty == 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', &
+		ok_abc, &
+		h_abc == 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad', &
+		ok_two, &
+		h_two == '248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1', &
+		.not. ok_missing &
+		], "synup sha256", npass, nfail)
+
+	! sha256sum's format, with a binary-mode `*` and CRLF line ends
+	sums = repeat('A', 64)//'  a.zip'//line_feed// &
+		repeat('b', 64)//' *b.zip'//carriage_return//line_feed// &
+		'not a line'//line_feed// &
+		repeat('c', 64)//'  c.zip'
+	call unit_test_coda([ &
+		sums_hash(sums, 'a.zip') == repeat('a', 64), &
+		sums_hash(sums, 'b.zip') == repeat('b', 64), &
+		sums_hash(sums, 'c.zip') == repeat('c', 64), &
+		sums_hash(sums, 'd.zip') == '', &
+		sums_hash(sums, '.zip') == '', &
+		sums_hash('', 'a.zip') == '' &
+		], "synup SHA256SUMS", npass, nfail)
+
+	! Not in the array below, because the order that it evaluates the calls in
+	! (which set v) isn't defined
+	ok1 = ver_parse('1.7.0', v1)
+	ok2 = ver_parse('10.20.30', v2)
+
+	call unit_test_coda([ &
+		ok1, &
+		all(v1 == [1, 7, 0]), &
+		ok2, &
+		all(v2 == [10, 20, 30]), &
+		.not. ver_parse('1.7', v), &
+		.not. ver_parse('1.7.0.1', v), &
+		.not. ver_parse('1..0', v), &
+		.not. ver_parse('1.7.x', v), &
+		.not. ver_parse('dev', v), &
+		.not. ver_parse('', v), &
+		ver_cmp('1.7.0', '1.7.0') == 0, &
+		ver_cmp('1.7.1', '1.7.0') == 1, &
+		ver_cmp('1.7.0', '1.7.1') == -1, &
+		ver_cmp('1.10.0', '1.9.0') == 1, &
+		ver_cmp('9.9.10', '9.9.9') == 1, &
+		ver_cmp('dev', '0.0.1') == -1, &
+		ver_cmp('0.0.1', 'dev') == 1 &
+		], "synup versions", npass, nfail)
+
+	names = new_string_vector()
+	call names%push('dev')
+	call names%push('1.6.0')
+	call names%push('1.10.0')
+	call names%push('1.7.0')
+
+	call unit_test_coda([ &
+		newest_of(names) == '1.10.0', &
+		newest_of(new_string_vector()) == '', &
+		parse_version(' syntran 1.7.0'//line_feed) == '1.7.0', &
+		parse_version(esc//'[95msyntran 10.0.1'//esc//'[0m') == '10.0.1', &
+		parse_version('synup 1.7.0') == '', &
+		parse_version('syntran dev') == '', &
+		parse_version('') == '' &
+		], "synup newest version", npass, nfail)
+
+	tags = tag_names('[{"url": "u", "tag_name": "dev-latest", "name": "d"},' &
+		//'{"tag_name":"1.7.0"},{"tag_name" : "1.6.0"}]')
+	none = tag_names('[]')
+
+	call unit_test_coda([ &
+		tags%len_ == 3, &
+		tags%v(1)%s == 'dev-latest', &
+		tags%v(2)%s == '1.7.0', &
+		tags%v(3)%s == '1.6.0', &
+		none%len_ == 0 &
+		], "synup release tags", npass, nfail)
+
+end subroutine unit_test_synup
+
+!===============================================================================
+
 subroutine unit_test_overload_display_name(npass, nfail)
 
 	! Test the overload_display_name() helper that de-mangles internal
@@ -13327,6 +13456,7 @@ subroutine unit_tests(iostat)
 	nfail = 0
 
 	if (run_group('levenshtein')) call unit_test_levenshtein(npass, nfail)
+	if (run_group('synup')) call unit_test_synup(npass, nfail)
 	if (run_group('overload_display_name')) call unit_test_overload_display_name(npass, nfail)
 	if (run_group('unqualified_name')) call unit_test_unqualified_name(npass, nfail)
 	if (run_group('bbcode_escape')) call unit_test_bbcode_escape(npass, nfail)

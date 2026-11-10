@@ -276,6 +276,52 @@ bash utils/lint.sh build/v1/bin/syntran                  # compiler/ by default
 bash utils/lint.sh build/v1/bin/syntran path/to/file.syntran
 ```
 
+### Toolchain manager (`synup`)
+`synup` is a second executable (`src/synup_main.f90`, in `fpm.toml` and
+`CMakeLists.txt`) that installs versions of syntran side by side under
+`~/.syntran` and links one as `bin/syntran`.  It ships in every release zip, and
+`syntran --update` runs `synup update`.  User docs are in `doc/synup.md`.
+- `src/synup.f90` - `syntran__synup_m`, all of the logic.  It's in the library,
+  so `unit_test_synup` can test the pure parts.  It's `private` by default, so
+  add a name to its `public` list to test it
+- `src/c/synup.c` - platform asset name, path of the running exe, SHA-256, and
+  the file system calls.  **Spaces, not tabs**, lines under 100 chars
+- Downloads shell out to the system `curl`, never libcurl.  A download is
+  refused unless `SHA256SUMS` has a matching line for its zip
+
+**Lasting contract:** every synup that has shipped fetches these forever, so
+never rename them: the assets `syntran-linux.zip`, `syntran-macos.zip`,
+`syntran-windows.zip`, and `SHA256SUMS`, at
+`releases/latest/download/<asset>` and `releases/download/<tag>/<asset>`, with
+bare-version tags (`1.7.0`) and the rolling `dev-latest` tag.
+
+A new release needs its `SHA256SUMS` uploaded after the zips:
+```bash
+bash utils/release-sums.sh syntran-linux.zip syntran-macos.zip syntran-windows.zip
+gh release upload <tag> SHA256SUMS
+```
+CI's `publish-dev` job does this for the `dev-latest` prerelease on every green
+push to `dev`.
+
+`SYNUP_HOME` and `SYNUP_RELEASES_URL` (e.g. `file:///...`) override the install
+dir and the release URL, which is how `utils/test-synup.sh` runs every command
+offline.  It's run by CI on ubuntu and macOS, not Windows yet:
+```bash
+bash utils/test-synup.sh path/to/synup
+fpm test test --profile debug -- --only synup
+```
+
+Gotchas in `src/synup.f90`:
+- A function that runs a command (`run_cmd()` flushes stdout) must not be called
+  inside a `write` to stdout, or it deadlocks on the unit.  Assign it first
+- Fortran evaluates the operands of `.or.` in any order and without
+  short-circuiting, so `make_dir(a) .or. make_dir(a//'/b')` can try the child
+  first.  Do dependent steps one at a time
+- Windows can't replace a running exe, but it can rename it, so
+  `replace_exe()` renames to `.old` there, and every command deletes the leftover
+- `execute_command_line()` on Windows needs the whole command wrapped in an
+  extra pair of quotes when it starts with one
+
 ### Fuzzing
 `utils/fuzz.c` mutates the `.syntran` files under `src/tests/test-src`,
 `samples`, and `src/tests/long` (token-aware, so most mutants get past the
@@ -420,6 +466,8 @@ Bitwise operations follow the same pattern in `src/math_bit_*.f90`.
 ### Entry Points
 - `src/main.f90` - CLI entry point
 - `src/app.f90` - Application-level utilities (argument parsing, etc.)
+- `src/synup.f90`, `src/synup_main.f90`, `src/c/synup.c` - The `synup` toolchain
+  manager, see "Toolchain manager" above
 
 ## Module Import System
 

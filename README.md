@@ -94,6 +94,23 @@ More or less any terminal on Windows should work, but [Windows Terminal](https:/
 
 <!-- mac works too but i don't want to encourage apple usery -->
 
+### Toolchain manager
+
+The release zips also have `synup`, which installs several versions of syntran side by side, and switches between them.  It downloads with the `curl` that is already on your system, and checks every download against the release's `SHA256SUMS`.
+
+<!-- syntran-begin mode=skip reason="shell installation command, not syntran code" -->
+```
+./synup init                # installs the latest release in ~/.syntran
+synup install 1.6.0         # an older release
+synup install dev           # the latest build of the dev branch
+synup default 1.6.0         # which one `syntran` runs.  Or `stable`, or `dev`
+synup update                # newest release, and `dev` if installed
+synup list
+```
+<!-- syntran-end -->
+
+`syntran --update` is the same as `synup update`.  [More details](doc/synup.md).
+
 ### Path and environment settings
 
 Feel free to add the directory to your PATH environment variable, or type the

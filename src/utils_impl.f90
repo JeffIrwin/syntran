@@ -867,6 +867,37 @@ module procedure replace_all
 
 end procedure replace_all
 
+!===============================================================================
+
+module procedure is_windows
+
+	! gfortran doesn't define _WIN32 for the preprocessor, so ask the environment
+	! instead.  Windows sets OS for every process, including under Git Bash
+
+	character(len = 16) :: os
+
+	call get_environment_variable('OS', os)
+	r = trim(os) == 'Windows_NT'
+
+end procedure is_windows
+
+!===============================================================================
+
+module procedure sh_quote
+
+	! `execute_command_line()` runs the command in cmd.exe on Windows, which
+	! doesn't treat single quotes as quotes.  A path can't have a double quote
+	! there, and callers reject one.  In a POSIX shell a single quote ends the
+	! quoted string, so it's closed, escaped, and opened again: 'it'\''s'
+
+	if (is_windows()) then
+		r = '"'//s//'"'
+	else
+		r = "'"//replace_all(s, "'", "'\''")//"'"
+	end if
+
+end procedure sh_quote
+
 
 !===============================================================================
 

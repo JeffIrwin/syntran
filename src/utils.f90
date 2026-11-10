@@ -358,6 +358,15 @@ module syntran__utils_m
 			character(len = :), allocatable :: str_out
 		end function replace_all
 
+		module function is_windows() result(r)
+			logical :: r
+		end function is_windows
+
+		module function sh_quote(s) result(r)
+			character(len = *), intent(in) :: s
+			character(len = :), allocatable :: r
+		end function sh_quote
+
 		module function tabs2spaces(str_) result(str_out)
 			character(len = *), intent(in)  :: str_
 			character(len = :), allocatable :: str_out
