@@ -392,6 +392,13 @@ add_executable(${SYNUP_EXE}
 )
 target_link_libraries(${SYNUP_EXE} ${LINK_LIBS})
 
+if(APPLE)
+	# -fopenmp, from add_link_options() above, makes a load command for libgomp,
+	# which synup doesn't use.  syntran gets @executable_path/libgomp.1.dylib in
+	# CI, but ~/.syntran/bin/synup has no libgomp next to it, so drop it
+	target_link_options(${SYNUP_EXE} PRIVATE -Wl,-dead_strip_dylibs)
+endif()
+
 set_target_properties(${SYNUP_EXE} PROPERTIES
 	Fortran_MODULE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/mod/${SYNUP_EXE}
 )

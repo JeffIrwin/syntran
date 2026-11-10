@@ -900,6 +900,27 @@ end function fetch_release
 
 !===============================================================================
 
+function self_exe() result(path)
+
+	! The path of the running exe, or empty if the OS won't say
+
+	character(len = :), allocatable :: path
+
+	character(kind = c_char) :: cbuf(4096)
+
+	integer :: i
+
+	path = ''
+	if (c_self_exe(cbuf, 4096) /= 0) return
+	do i = 1, 4096
+		if (cbuf(i) == c_null_char) exit
+		path = path//cbuf(i)
+	end do
+
+end function self_exe
+
+!===============================================================================
+
 function find_unpacked(x) result(dir)
 
 	! The dir of an unpacked release that holds syntran.  It's flat now, but the
@@ -928,10 +949,11 @@ function synup_install(home, spec, quiet) result(status)
 	logical, intent(in) :: quiet
 	integer :: status
 
-	character(len = :), allocatable :: base, label, tmp, dir, name, vtext, dest
+	character(len = :), allocatable :: base, label, tmp, dir, name, vtext, dest, &
+		dest_dir, old_dir
 	character(len = 64) :: hash, old_hash
 	integer :: io, v(3)
-	logical :: ok
+	logical :: ok, had_old
 
 	status = exit_failure
 	base = releases_url()
@@ -1015,11 +1037,29 @@ function synup_install(home, spec, quiet) result(status)
 		return
 	end if
 
-	! The new one is good, so the old one can go
-	call remove_tree(versions_dir(home)//'/'//dest)
-	if (c_rename(cs(dir), cs(versions_dir(home)//'/'//dest)) /= 0) then
+	! The new one is good, but the old one only goes once the new one is in
+	! place, so that a failed rename can't lose a version that may be the default
+	dest_dir = versions_dir(home)//'/'//dest
+	old_dir = tmp//'/old'
+	had_old = path_kind(dest_dir) /= 0
+	if (had_old) then
+		if (c_rename(cs(dest_dir), cs(old_dir)) /= 0) then
+			call remove_tree(tmp)
+			status = fail('cannot replace `'//dest_dir//'`')
+			return
+		end if
+	end if
+	if (c_rename(cs(dir), cs(dest_dir)) /= 0) then
+		if (had_old) then
+			if (c_rename(cs(old_dir), cs(dest_dir)) /= 0) then
+				! Leave tmp alone, since the old version is in it
+				status = fail('cannot install into `'//dest_dir//'`, and the old one is in `' &
+					//old_dir//'`')
+				return
+			end if
+		end if
 		call remove_tree(tmp)
-		status = fail('cannot install into `'//versions_dir(home)//'/'//dest//'`')
+		status = fail('cannot install into `'//dest_dir//'`')
 		return
 	end if
 	call remove_tree(tmp)
@@ -1152,10 +1192,7 @@ function synup_init(home) result(status)
 	integer :: status
 
 	character(len = :), allocatable :: self, dst, other
-	character(kind = c_char) :: cbuf(4096)
-	character(len = 4096) :: buf
 
-	integer :: i
 	logical :: ok
 
 	if (.not. make_tree(home)) then
@@ -1164,13 +1201,8 @@ function synup_init(home) result(status)
 	end if
 
 	dst = home//'/bin/'//exe_name('synup')
-	if (c_self_exe(cbuf, 4096) == 0) then
-		buf = ''
-		do i = 1, 4096
-			if (cbuf(i) == c_null_char) exit
-			buf(i:i) = cbuf(i)
-		end do
-		self = trim(buf)
+	self = self_exe()
+	if (len(self) > 0) then
 		if (.not. replace_exe(self, dst)) then
 			status = fail('cannot copy synup to `'//dst//'`')
 			return
@@ -1180,9 +1212,12 @@ function synup_init(home) result(status)
 	status = synup_install(home, 'latest', .false.)
 	if (status /= exit_success) return
 
-	if (.not. write_text(home//'/default', SYNUP_STABLE)) then
-		status = fail('cannot write to `'//home//'`')
-		return
+	! A second `init`, to repair bin/synup say, keeps the default that was chosen
+	if (len(read_default(home)) == 0) then
+		if (.not. write_text(home//'/default', SYNUP_STABLE)) then
+			status = fail('cannot write to `'//home//'`')
+			return
+		end if
 	end if
 	status = relink(home)
 	if (status /= exit_success) return
@@ -1366,6 +1401,8 @@ function syntran_update() result(status)
 
 	integer :: status
 
+	character(len = :), allocatable :: self, home
+
 	logical :: ok
 
 	if (is_windows()) then
@@ -1380,6 +1417,23 @@ function syntran_update() result(status)
 	end if
 
 	status = merge(exit_success, exit_failure, run_cmd('synup update'))
+	if (status /= exit_success) return
+
+	! synup installs into $SYNUP_HOME, so a syntran from anywhere else, like an
+	! unzipped release, is still the old one the next time it runs
+	self = self_exe()
+	home = synup_home()//'/'
+	if (is_windows()) then
+		self = to_lower(npath(self))
+		home = to_lower(npath(home))
+	end if
+	if (len(self) > 0) then
+		if (index(self, home) /= 1) then
+			write(*,'(a)') warn_prefix//'this syntran is not in `'//synup_home()// &
+				'`, so it was not updated.  Put `'//npath(synup_home()//'/bin')// &
+				'` in your PATH, and run `synup init` if it is not set up yet'//color_reset
+		end if
+	end if
 
 end function syntran_update
 
@@ -1388,9 +1442,8 @@ end function syntran_update
 subroutine synup_colors()
 
 	! Color the output like syntran does, when stdout is a terminal.  This is
-	! the `--color auto` of set_ansi_colors() in src/app.f90, which can't be
-	! used here: it's in a module that pulls in the whole interpreter, and
-	! synup is a small exe
+	! the `--color auto` of set_ansi_colors() in src/app.f90, which is part of
+	! the syntran CLI's module, and synup doesn't use that
 
 	if (is_stdout_tty()) then
 		call enable_vt_processing()
@@ -1523,10 +1576,19 @@ function synup_cli(argv, version) result(status)
 	case ('install')
 		spec = 'latest'
 		if (argv%len_ >= 2) spec = argv%v(2)%s
+		if (argv%len_ > 2) then
+			status = fail('`synup install` takes one version at most')
+			return
+		end if
 		status = synup_install(home, spec, .false.)
 		if (status == exit_success .and. len(read_default(home)) == 0) then
-			! The first install is the default, so that `synup install` is enough
-			status = synup_set_default(home, SYNUP_STABLE)
+			! The first install is the default, so that `synup install` is
+			! enough.  `stable` never means `dev`, so a first `dev` is its own
+			if (spec == SYNUP_DEV) then
+				status = synup_set_default(home, SYNUP_DEV)
+			else
+				status = synup_set_default(home, SYNUP_STABLE)
+			end if
 		else if (status == exit_success) then
 			status = relink(home)
 		end if
@@ -1534,6 +1596,8 @@ function synup_cli(argv, version) result(status)
 	case ('default')
 		if (argv%len_ < 2) then
 			status = fail('`synup default` needs a version')
+		else if (argv%len_ > 2) then
+			status = fail('`synup default` takes one version')
 		else
 			status = synup_set_default(home, argv%v(2)%s)
 		end if
@@ -1542,11 +1606,17 @@ function synup_cli(argv, version) result(status)
 		status = synup_update(home)
 
 	case ('list')
-		status = synup_list(home, argv%len_ >= 2 .and. any_arg(argv, '--available'))
+		if (argv%len_ > 2 .or. (argv%len_ == 2 .and. .not. any_arg(argv, '--available'))) then
+			status = fail('`synup list` takes only `--available`')
+		else
+			status = synup_list(home, argv%len_ == 2)
+		end if
 
 	case ('remove')
 		if (argv%len_ < 2) then
 			status = fail('`synup remove` needs a version')
+		else if (argv%len_ > 2) then
+			status = fail('`synup remove` takes one version')
 		else
 			status = synup_remove(home, argv%v(2)%s)
 		end if

@@ -250,12 +250,16 @@ module syntran__core_m
 	!      shell script.  Needs a stub exe, or a real syntran per version
 	!    * windows and linux paths are untested outside of CI.  Try the real
 	!      network on each once a release has synup and SHA256SUMS
-	!    * backfill SHA256SUMS on releases 1.3.0 through 1.7.0 with
-	!      utils/release-sums.sh, so `synup install 1.6.0` works
+	!    * SHA256SUMS is backfilled on releases 1.0.0 through 1.7.0.  The 0.0.x
+	!      releases have none, so synup can't install them
 	!    * no prebuilt binary for macOS on intel, or for arm linux
 	!    * per-project version pinning, like rustup's `+toolchain`
 	!    * `synup self-uninstall`, and `synup list --available` marking what's
 	!      installed
+	!    * `synup list --available` ignores SYNUP_RELEASES_URL, so it can't be
+	!      tested offline, and it only reads the first 100 tags
+	!    * `synup update` replaces bin/synup with the newest release's even if
+	!      the one in bin is newer, e.g. a dev build copied in by `synup init`
 	!  - enable plugging in to nvim linting.  `--syntax-only`/`-s` now exists,
 	!    but diagnostics still need a 1-line-per-error format with filename,
 	!    line, and column indices to work with gfortran-style nvim linting
