@@ -42,7 +42,15 @@ Windows.
 of `stable` moves to the new release by itself.  Installing an older release
 doesn't change the default.
 
-`syntran --update` runs `synup update`, which needs `synup` in your `PATH`.
+`syntran --update` runs `synup update`, which needs `synup` in your `PATH`.  It
+installs into `$SYNUP_HOME`, so if the `syntran` that you ran came from
+somewhere else, like an unzipped release, it prints a warning that this one
+wasn't updated.  Put `~/.syntran/bin` first in your `PATH` to use the updated
+one.
+
+A first `synup install dev` makes `dev` the default, since `stable` never means
+`dev`.  Running `synup init` again, e.g. to repair `bin/synup`, keeps the default
+that you chose.
 
 ## Where things go
 

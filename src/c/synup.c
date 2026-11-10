@@ -73,11 +73,17 @@ int synup_self_exe(char *buf, int n)
 #endif
 }
 
-/* 0 if the path doesn't exist, 1 for a file, 2 for a dir */
+/* 0 if the path doesn't exist, 1 for a file, 2 for a dir.  A symlink to a dir is a dir, and a
+ * dangling symlink counts as a file, so that it can be found and removed */
 int synup_exists(const char *path)
 {
     struct stat st;
-    if (stat(path, &st) != 0) return 0;
+    if (stat(path, &st) != 0) {
+#ifndef _WIN32
+        if (lstat(path, &st) == 0) return 1;
+#endif
+        return 0;
+    }
     return S_ISDIR(st.st_mode) ? 2 : 1;
 }
 

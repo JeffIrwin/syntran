@@ -437,6 +437,13 @@
 					objdump -p .\\syntran.exe | Select-String \"DLL Name\" \n
 					if (objdump -p .\\syntran.exe | Select-String -Pattern \"DLL Name: (lib|zlib)\") { exit 1 } \n
 
+					# synup.exe is installed on its own into ~/.syntran/bin, so it \n
+					# has the same rule about DLLs \n
+					objdump -p .\\synup.exe | Select-String \"DLL Name\" \n
+					if (objdump -p .\\synup.exe | Select-String -Pattern \"DLL Name: (lib|zlib)\") { exit 1 } \n
+					.\\synup.exe --version \n
+					if ($LASTEXITCODE -ne 0) { exit 1 } \n
+
 					# Same as the ldd check on Linux: a static BLAS is invisible to objdump \n
 					.\\syntran.exe --version \n
 					if (-not (.\\syntran.exe --version | Select-String -Pattern \"blas\\s+OpenBLAS\")) { exit 1 } \n
@@ -487,6 +494,14 @@
 					# may come from outside of the system \n
 					otool -L ./syntran \n
 					if otool -L ./syntran | grep -E 'LLVM|zstd|z3|/opt/homebrew|/usr/local' | grep -v libgomp ; then exit 1 ; fi \n
+
+					# synup is installed on its own into ~/.syntran/bin, with no \n
+					# libgomp next to it, so it can't depend on anything outside of \n
+					# the system \n
+					otool -L ./synup \n
+					if otool -L ./synup | grep -E 'LLVM|zstd|z3|libgomp|/opt/homebrew|/usr/local' ; then exit 1 ; fi \n
+					chmod +x ./synup \n
+					./synup --version \n
 
 					chmod +x ./syntran \n
 					./syntran --version \n
@@ -611,6 +626,13 @@
 		"if": "github.ref == 'refs/heads/dev'",
 		"needs": ["test-os", "build-rocky", "test-windows-branch-bin", "test-macos-branch-bin"],
 		"runs-on": "ubuntu-latest",
+		# One publish at a time, in order, and never cancelled in the middle of an
+		# upload.  A run can still start late, e.g. when its tests were slow, so
+		# the "Zip and upload" step skips itself if a newer push is already there
+		"concurrency": {
+			"group": "publish-dev",
+			"cancel-in-progress": false
+		},
 		"permissions": {
 			"contents": "write"
 		},
@@ -627,6 +649,14 @@
 				"run":
 				"
 					set -exu \n
+
+					# A newer push to dev owns dev-latest now, and moving the tag \n
+					# back to this commit would undo it \n
+					tip=$(git ls-remote origin refs/heads/dev | cut -f1) \n
+					if [[ \"$tip\" != \"$GITHUB_SHA\" ]] ; then
+						echo \"dev has moved on to $tip, so $GITHUB_SHA is not published\" \n
+						exit 0 \n
+					fi
 
 					# Artifacts lose the exec bits, and a zip keeps them \n
 					chmod +x dist/linux/syntran dist/linux/synup dist/macos/syntran dist/macos/synup \n

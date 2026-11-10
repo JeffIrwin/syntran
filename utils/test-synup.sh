@@ -118,6 +118,33 @@ check "run a version"             has_out "syntran 9.9.8" "$synup" run 9.9.8 -- 
 check "list marks the default"    has_out "9.9.9  (default: stable)" "$synup" list
 fails "run a missing version"     "$synup" run 9.9.7
 
+echo "first install of dev"
+home2="$work/home2"
+dev_ver() { [[ "$("$home2/bin/syntran" --version)" == "syntran $1" ]]; }
+check "install dev into a fresh home"  env SYNUP_HOME="$home2" "$synup" install dev
+check "dev is its own default"         dev_ver 10.0.0
+rm -rf "$home2"
+
+echo "init keeps the default"
+check "default 9.9.8"             "$synup" default 9.9.8
+check "init again"                "$synup" init
+check "default is still 9.9.8"    is_ver 9.9.8
+check "default stable"            "$synup" default stable
+
+echo "a dangling link is replaced"
+ln -s "$work/nothing" "$SYNUP_HOME/bin/.syntran.tmp"
+check "default works anyway"      "$synup" default 9.9.8
+check "bin/syntran follows"       is_ver 9.9.8
+check "default stable (2)"        "$synup" default stable
+
+echo "extra args"
+fails "install two versions"      "$synup" install 9.9.8 9.9.9
+fails "default two versions"      "$synup" default 9.9.8 9.9.9
+fails "remove two versions"       "$synup" remove 9.9.8 dev
+fails "list typo"                 "$synup" list --avail
+fails "list extra"                "$synup" list --available more
+check "nothing was removed"       test -d "$SYNUP_HOME/versions/9.9.8"
+
 echo "specs are never paths"
 mkdir -p "$SYNUP_HOME/versions/9.9.8/sub"
 fails "remove x/../.."            "$synup" remove "9.9.8/../.."
@@ -145,7 +172,7 @@ mk_release "$rel/latest/download" 9.9.11
 echo "0000000000000000000000000000000000000000000000000000000000000000  $asset" \
 	> "$rel/latest/download/SHA256SUMS"
 fails "a mismatch is refused"     "$synup" install latest
-check "mismatch says so"          has_out "checksum mismatch" "$synup" install latest || true
+check "mismatch says so"          has_out "checksum mismatch" "$synup" install latest
 check "nothing was installed"     test ! -e "$SYNUP_HOME/versions/9.9.11"
 check "no temp dir is left"       test ! -e "$SYNUP_HOME/versions/.tmp"
 check "bin/syntran is unchanged"  is_ver 9.9.10
