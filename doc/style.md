@@ -123,9 +123,11 @@ Besides the case:
 - A method that doesn't change any member is a `const fn`
 - Prefer `std::move()` to a copy when handing over an array that you're done
   with, like when growing a vector
-- Always call the standard library with the `std::` prefix, e.g.
-  `std::parse_i64()`.  Don't `use std::*;`, since a future version of syntran
-  may add a function that clashes with one of yours
+- Call the standard library with the `std::` prefix, e.g. `std::parse_i64()`.
+  Don't `use std::*;`, since a future version of syntran may add a function
+  that clashes with one of yours.  Importing the specific names that you use is
+  fine, like `use std::printf;` and `use std::reshape;`, since a list of names
+  can't pick up a new function by surprise
 
 ## Modules, structs, and constructors
 
@@ -136,7 +138,9 @@ Besides the case:
   since the module already says it.  A smaller struct's constructor is
   `new_<type>()`, like `new_span()` for a `Span`
 - A consumer imports the module with a **qualified** `use token;` and refers to
-  everything through the module name.  Avoid `use token::*;`
+  everything through the module name.  A glob like `use token::*;` is fine for
+  a module of the same project, case by case, but avoid it for an external
+  dependency, whose names can change and clash
 
 ```rust
 // token.syntran
@@ -183,8 +187,8 @@ show(&t);
 ```
 
 Qualified names are the point: they say where a thing is from at the call site,
-they can't clash, and one main struct per module keeps them short enough that
-nobody wants the glob.
+they can't clash, and one main struct per module keeps them short enough that a
+glob is rarely worth it.
 
 ## Comments
 
