@@ -555,6 +555,8 @@ Run `syntran -h` to see a comprehensive listing of syntran command-line argument
            (or an object <FILE>.o, or LLVM IR <FILE>.ll)
    -j, --jit
            Compile the program with LLVM and run it right away
+       --update
+           Update to the latest release, by running `synup update`
        -- <ARGS>...
            Pass remaining arguments to script via std::args()
 -->
