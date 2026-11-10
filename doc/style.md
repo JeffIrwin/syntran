@@ -1,9 +1,9 @@
 # Syntran style guide
 
-This is the style of syntran source code.  Follow it in the self-hosted
-compiler in [`compiler/`](../compiler/) and in new code.  The unit tests under
-`src/tests/test-src/` are exempt, since many of them exist to exercise odd
-syntax on purpose.
+This is the suggested style of syntran source code.  Follow it in the
+self-hosted compiler in [`compiler/`](../compiler/) and in new code.  The unit
+tests under `src/tests/test-src/` are exempt, since many of them exist to
+exercise odd syntax on purpose.
 
 The checkable rules are enforced by a [linter](#the-linter), which is written in
 syntran.
@@ -15,14 +15,8 @@ The examples below are indented with tabs, like real source.
 - A file starts with a comment that says what the file is and how it relates to
   the rest.  The file ends with a newline
 - Then `use` lines, then the code
-- Sections of a file are separated by `//` and 78 `=`, which is 80 columns:
-
-  ```rust
-  //==============================================================================
-  ```
-
 - A script ends with `fn main()`, then a call to it on the last line, `main();`
-- File names are lowercase.  A module file has to be a valid identifier, so it
+- Filenames are lowercase.  A module file has to be a valid identifier, so it
   uses underscores, e.g. `str_vec.syntran`.  Scripts and tests, which nothing
   imports, can use hyphens, e.g. `lex-dump.syntran` and `test-01.syntran`
 
@@ -91,7 +85,7 @@ The examples below are indented with tabs, like real source.
   ```
 
   The same goes for a multi-line array literal
-- No trailing whitespace, and LF line endings, not CRLF
+- No trailing whitespace
 
 ## Naming
 
@@ -102,7 +96,7 @@ The examples below are indented with tabs, like real source.
 | fn, method                        | `snake_case`             | `lex_all`, `push_diag`                |
 | variable, param, struct member    | `snake_case`             | `new_cap`, `has_val`                  |
 | `const`                           | `snake_case` or `UPPER_SNAKE_CASE` | `filename`, `STACK_CAP`      |
-| module (the file name)            | `snake_case`             | `lex`, `utils`                        |
+| module (the filename)            | `snake_case`             | `lex`, `utils`                        |
 
 A `const` may be `UPPER_SNAKE_CASE`, at the top level or in a fn, but it doesn't
 have to be.  A `let` is always `snake_case`.
@@ -110,8 +104,7 @@ have to be.  A `let` is always `snake_case`.
 Besides the case:
 
 - A trailing `_` avoids a clash with a keyword, a type name, or an intrinsic,
-  like `Keyword.let_`, `str_`, `i32_`, and `sum_`.  Prefer a different name if
-  there is a good one
+  like `Keyword.let_`, `str_`, `i32_`, and `sum_`
 - A container that is specialized by its element puts the element first:
   `StrVec`, `TokenVec`
 - A predicate starts with `is_` or `has_`, like `is_digit()` and
