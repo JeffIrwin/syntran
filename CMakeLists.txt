@@ -201,6 +201,7 @@ set(LIB "${PROJECT}")
 set(LIB_SRC
 	${SRC_DIR}/c/blas_info.c
 	${SRC_DIR}/c/isocline_wrap.c
+	${SRC_DIR}/c/synup.c
 	${SRC_DIR}/c/llvm_shim.c
 	${SRC_DIR}/rt/syntran_crt.c
 	# Compiled here (once), instead of duplicated into each of
@@ -259,6 +260,7 @@ set(LIB_SRC
 	${SRC_DIR}/runtime_control.f90
 	${SRC_DIR}/runtime_expr.f90
 	${SRC_DIR}/syntran.f90
+	${SRC_DIR}/synup.f90
 	${SRC_DIR}/transpile.f90
 	${SRC_DIR}/transpile_expr.f90
 	${SRC_DIR}/transpile_rt.f90
@@ -382,6 +384,20 @@ set_target_properties("${EXE_BIN}" PROPERTIES OUTPUT_NAME "${EXE}")
 
 #===============================================================================
 
+# The toolchain manager, src/synup.f90.  It ships next to syntran in every
+# release zip
+set(SYNUP_EXE "synup")
+add_executable(${SYNUP_EXE}
+	${SRC_DIR}/synup_main.f90
+)
+target_link_libraries(${SYNUP_EXE} ${LINK_LIBS})
+
+set_target_properties(${SYNUP_EXE} PROPERTIES
+	Fortran_MODULE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/mod/${SYNUP_EXE}
+)
+
+#===============================================================================
+
 # Unit test exe
 set(TEST_EXE "test")
 set(TEST_SRC
@@ -429,4 +445,5 @@ target_compile_options(${LONG_EXE} PRIVATE "-Wno-integer-division")
 #     https://stackoverflow.com/questions/40767212/use-fortran-linker-in-cmake-mixed-language-project
 #
 set_property(TARGET ${EXE_BIN} PROPERTY LINKER_LANGUAGE Fortran)
+set_property(TARGET ${SYNUP_EXE} PROPERTY LINKER_LANGUAGE Fortran)
 

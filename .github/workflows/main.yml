@@ -177,6 +177,9 @@
 
 					# TODO: copy to a subdir for easier upload \n
 					cp $HOME/bin/syntran . \n
+					cp $HOME/bin/synup . \n
+					chmod +x ./synup \n
+					bash utils/test-synup.sh ./synup \n
 					which syntran \n
 					which patchelf \n
 					chmod +x ./syntran \n
@@ -424,6 +427,7 @@
 					fpm install --features release,llvm-blas --flag $flags --prefix ./build/ \n
 
 					copy .\\build\\bin\\syntran.exe .\\ \n
+					copy .\\build\\bin\\synup.exe .\\ \n
 
 					# OpenBLAS, LLVM, libgomp, libgfortran, libstdc++, etc. must be \n
 					# linked in statically, or the exe won't run without the toolchain \n
@@ -461,6 +465,8 @@
 					# TODO: copy to a subdir for easier upload \n
 
 					cp ./build/Release/syntran . \n
+					cp ./build/Release/synup . \n
+					bash utils/test-synup.sh ./synup \n
 
 					otool -L ./syntran \n
 
@@ -492,7 +498,7 @@
 				"uses": "actions/upload-artifact@v7",
 				"if": "matrix.os == 'macOS-latest'",
 				"with": {
-					"path": "./syntran\n./libgomp.1.dylib\n./LICENSE\n./THIRD_PARTY_NOTICES.md",
+					"path": "./syntran\n./synup\n./libgomp.1.dylib\n./LICENSE\n./THIRD_PARTY_NOTICES.md",
 					"name": "syntran-macos"
 				}
 			},
@@ -500,7 +506,7 @@
 				"uses": "actions/upload-artifact@v7",
 				"if": "matrix.os == 'windows-latest'",
 				"with": {
-					"path": "./syntran.exe\n./LICENSE\n./THIRD_PARTY_NOTICES.md",
+					"path": "./syntran.exe\n./synup.exe\n./LICENSE\n./THIRD_PARTY_NOTICES.md",
 					"name": "syntran-windows"
 				}
 			},
@@ -508,7 +514,7 @@
 				"uses": "actions/upload-artifact@v7",
 				"if": "matrix.os == 'ubuntu-24.04'",
 				"with": {
-					"path": "./syntran\n./LICENSE\n./THIRD_PARTY_NOTICES.md",
+					"path": "./syntran\n./synup\n./LICENSE\n./THIRD_PARTY_NOTICES.md",
 					"name": "syntran-ubuntu"
 				}
 			},
@@ -571,7 +577,7 @@
 			{
 				"uses": "actions/upload-artifact@v7",
 				"with": {
-					"path": "./bin/syntran\n./bin/LICENSE\n./bin/THIRD_PARTY_NOTICES.md",
+					"path": "./bin/syntran\n./bin/synup\n./bin/LICENSE\n./bin/THIRD_PARTY_NOTICES.md",
 					"name": "syntran-linux"
 				}
 			},
@@ -589,6 +595,61 @@
 				"run":
 				"
 					bash ./utils/test-branch.sh \n
+				"
+			},
+		]
+	},
+	"publish-dev": {
+		# Publish the build of every push to the dev branch as the rolling
+		# `dev-latest` prerelease, which `synup install dev` downloads.  The
+		# assets are replaced in place, so their URLs never change.  This is a
+		# prerelease, so it doesn't become GitHub's "latest" release.  SHA256SUMS
+		# is uploaded last, so that a synup that downloads in the middle of an
+		# upload sees a checksum mismatch and refuses, instead of installing a
+		# half-updated build
+		"name": "Publish dev build",
+		"if": "github.ref == 'refs/heads/dev'",
+		"needs": ["test-os", "build-rocky", "test-windows-branch-bin", "test-macos-branch-bin"],
+		"runs-on": "ubuntu-latest",
+		"permissions": {
+			"contents": "write"
+		},
+		"env": {
+			"GH_TOKEN": "${{ github.token }}"
+		},
+		"steps": [
+			{"uses": "actions/checkout@v7"},
+			{"uses": "actions/download-artifact@v7", "with": {"name": "syntran-linux", "path": "dist/linux"}},
+			{"uses": "actions/download-artifact@v7", "with": {"name": "syntran-macos", "path": "dist/macos"}},
+			{"uses": "actions/download-artifact@v7", "with": {"name": "syntran-windows", "path": "dist/windows"}},
+			{
+				"name": "Zip and upload",
+				"run":
+				"
+					set -exu \n
+
+					# Artifacts lose the exec bits, and a zip keeps them \n
+					chmod +x dist/linux/syntran dist/linux/synup dist/macos/syntran dist/macos/synup \n
+
+					mkdir out \n
+					for os in linux macos windows ; do
+						(cd dist/$os && zip -r -X ../../out/syntran-$os.zip .) \n
+					done
+
+					bash utils/release-sums.sh out/*.zip \n
+
+					# The tag moves to this commit.  Creating the release is only \n
+					# needed once \n
+					git tag -f dev-latest $GITHUB_SHA \n
+					git push -f origin refs/tags/dev-latest \n
+					gh release view dev-latest || gh release create dev-latest
+						--prerelease
+						--target $GITHUB_SHA
+						--title 'Latest dev build'
+						--notes 'Rolling build of the dev branch, for `synup install dev`.  Not a stable release.' \n
+
+					gh release upload dev-latest out/*.zip --clobber \n
+					gh release upload dev-latest out/SHA256SUMS --clobber \n
 				"
 			},
 		]

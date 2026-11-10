@@ -36,6 +36,7 @@ module syntran__app_m
 			syntax_only        = .false., &
 			syntran_file_arg   = .false., &
 			transpile          = .false., &
+			update             = .false., &
 			version            = .false., &
 			help               = .false.
 
@@ -321,6 +322,10 @@ function parse_args() result(args)
 		case ("--version")
 			args%version = .true.
 
+		case ("--update")
+			! Runs `synup update`, instead of a program
+			args%update = .true.
+
 		case ("--")
 			! Capture all remaining arguments as script arguments
 			do while (i < argc)
@@ -481,6 +486,18 @@ function parse_args() result(args)
 		error = .true.
 	end if
 
+	! --update is an alternative to running a program, so anything that is about a
+	! program would be silently dropped
+	if (args%update .and. .not. args%help .and. .not. args%version) then
+		if (args%syntran_file_arg .or. args%command_arg .or. args%transpile .or. &
+			args%native .or. args%jit .or. args%syntax_only .or. args%interactive .or. &
+			args%lex) then
+			write(*,*) err_prefix//"--update cannot be used with a <file.syntran>, "// &
+				"--command, --transpile, --native, --jit, --syntax-only, or --interactive"
+			error = .true.
+		end if
+	end if
+
 	! The hidden --lex needs a file, and it's an alternative to running the program
 	if (args%lex .and. .not. args%help .and. .not. args%version) then
 		if (.not. args%syntran_file_arg) then
@@ -519,13 +536,14 @@ function parse_args() result(args)
 				args%transpile        .or. &
 				args%native           .or. &
 				args%jit              .or. &
+				args%update           .or. &
 				args%version          .or. &
 				args%syntran_file_arg .or. &
 				args%help                  &
 			)
 
 		if (.not. args%command_arg .and. .not. args%syntax_only .and. &
-			.not. args%lex .and. &
+			.not. args%lex .and. .not. args%update .and. &
 			.not. args%transpile .and. .not. args%native .and. .not. args%jit) then
 			write(*,*)
 			write(*,*) fg_bright_magenta//lang_name//' '//version//color_reset
@@ -592,6 +610,8 @@ function parse_args() result(args)
 			"(or an object <FILE>.o, or LLVM IR <FILE>.ll)")
 		call print_help_opt("-j", "--jit", "", &
 			"Compile the program with LLVM and run it right away")
+		call print_help_opt("", "--update", "", &
+			"Update to the latest release, by running `synup update`")
 		call print_help_opt("", "--", "<ARGS>...", &
 			"Pass remaining arguments to script via std::args()")
 		write(*,*)

@@ -179,6 +179,14 @@ RUN ls -l ./bin/syntran \
 	&& ls -l ./bin/syntran \
 	&& size ./bin/syntran
 
+# `fpm install` also put the toolchain manager in ./bin, and the tar below
+# ships it.  It has no LLVM or BLAS in it, but it's linked with the same flags.
+# It only needs to run on a bare distro, like syntran
+RUN strip --strip-all ./bin/synup \
+	&& ls -l ./bin/synup \
+	&& ./bin/synup --version \
+	&& ! ldd ./bin/synup | grep -E 'LLVM|stdc\+\+|libz|zstd|tinfo|openblas|gfortran|quadmath'
+
 ## Package other binary dependencies, if any
 #RUN cp /lib64/libquadmath.so.0 ./bin/
 #RUN cp /lib64/libgfortran.so.5 ./bin/

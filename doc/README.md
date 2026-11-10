@@ -24,6 +24,8 @@ pages below go into more detail on specific topics.
 ## Installing and building
 
 - [Docker](docker.md):  running syntran in a container
+- [synup](synup.md):  the toolchain manager, to install several versions side by
+  side
 - [Shared libraries](shared-libs.md):  notes on the binary packages
 - [Automatic source generation](src-gen.md):  which Fortran sources are
   generated, and how

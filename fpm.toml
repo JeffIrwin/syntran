@@ -140,6 +140,13 @@ name = "syntran"
 source-dir = "src"
 main = "main.f90"
 
+# The toolchain manager, src/synup.f90.  It ships next to syntran in every
+# release zip
+[[executable]]
+name = "synup"
+source-dir = "src"
+main = "synup_main.f90"
+
 [[test]]
 name = "test"
 source-dir = "src/tests/"

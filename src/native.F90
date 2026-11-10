@@ -8543,42 +8543,6 @@ end subroutine jit_run
 
 !===============================================================================
 
-function is_windows() result(r)
-
-	! gfortran doesn't define _WIN32 for the preprocessor, so ask the environment
-	! instead.  Windows sets OS for every process, including under Git Bash
-
-	logical :: r
-
-	character(len = 16) :: os
-
-	call get_environment_variable('OS', os)
-	r = trim(os) == 'Windows_NT'
-
-end function is_windows
-
-!===============================================================================
-
-function sh_quote(s) result(r)
-
-	! `execute_command_line()` runs the command in cmd.exe on Windows, which
-	! doesn't treat single quotes as quotes.  A path can't have a double quote
-	! there, and finish() rejects one.  In a POSIX shell a single quote ends the
-	! quoted string, so it's closed, escaped, and opened again: 'it'\''s'
-
-	character(len = *), intent(in) :: s
-	character(len = :), allocatable :: r
-
-	if (is_windows()) then
-		r = '"'//s//'"'
-	else
-		r = "'"//replace_all(s, "'", "'\''")//"'"
-	end if
-
-end function sh_quote
-
-!===============================================================================
-
 subroutine delete_file(filename)
 
 	character(len = *), intent(in) :: filename
