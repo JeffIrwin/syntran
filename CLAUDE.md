@@ -266,7 +266,7 @@ is a corpus of odd literals and operators.
 
 ### Syntran code style
 `doc/style.md` is the style guide for syntran source: tabs, Allman braces,
-`CamelCase` structs/enums, `snake_case` everything else (including enum variants),
+`PascalCase` structs/enums, `snake_case` everything else (including enum variants),
 and, for new modules, one public struct per module with a `new()` constructor
 that consumers call as `module::new()` through a qualified `use`, not `use *`.
 `compiler/lint.syntran` checks the mechanical rules, and it has to stay clean on

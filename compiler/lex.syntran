@@ -1,4 +1,3 @@
-
 // Syntran lexer, written in syntran.  This is a port of src/lex.f90, and it is
 // the first piece of the self-hosted compiler.  See doc/compiler-roadmap.md
 //
@@ -80,9 +79,11 @@ enum TokenKind
 	keyword,
 }
 
-// A keyword can't be the name of an enum variant, so they have a trailing `_`
 enum Keyword
 {
+	// A keyword can't be the name of an enum variant, so they have a trailing
+	// `_`
+
 	none,
 	true_,
 	false_,
@@ -111,9 +112,10 @@ enum Keyword
 	null_,
 }
 
-// The type of a literal, from its apostrophe suffix
 enum NumType
 {
+	// The type of a literal, from its apostrophe suffix
+
 	unknown,
 	i32,
 	i64,
@@ -123,11 +125,12 @@ enum NumType
 
 //==============================================================================
 
-// Like syntax_token_t.  Only one of the literal values is meaningful, as
-// indicated by `kind`.  `has_val` is set for the literals.  `keyword` is only
-// meaningful if `kind` is `keyword`
 struct Token
 {
+	// Like `syntax_token_t`.  Only one of the literal values is meaningful, as
+	// indicated by `kind`.  `has_val` is set for the literals.  `keyword` is
+	// only meaningful if `kind` is `keyword`
+
 	kind: TokenKind,
 	keyword: Keyword,
 	pos: i32,
@@ -140,7 +143,7 @@ struct Token
 	str_: str,
 }
 
-fn new_token(kind: TokenKind, pos: i32, text: str): Token
+fn new_token(kind: TokenKind, pos: i32, text: &const str): Token
 {
 	return Token
 	{
@@ -157,14 +160,14 @@ fn new_token(kind: TokenKind, pos: i32, text: str): Token
 	};
 }
 
-fn new_keyword_token(pos: i32, text: str, keyword: Keyword): Token
+fn new_keyword_token(pos: i32, text: &const str, keyword: Keyword): Token
 {
 	let token = new_token(TokenKind.keyword, pos, text);
 	token.keyword = keyword;
 	return token;
 }
 
-fn new_i32_token(pos: i32, text: str, val: i32): Token
+fn new_i32_token(pos: i32, text: &const str, val: i32): Token
 {
 	let token = new_token(TokenKind.i32, pos, text);
 	token.has_val = true;
@@ -172,7 +175,7 @@ fn new_i32_token(pos: i32, text: str, val: i32): Token
 	return token;
 }
 
-fn new_i64_token(pos: i32, text: str, val: i64): Token
+fn new_i64_token(pos: i32, text: &const str, val: i64): Token
 {
 	let token = new_token(TokenKind.i64, pos, text);
 	token.has_val = true;
@@ -180,7 +183,7 @@ fn new_i64_token(pos: i32, text: str, val: i64): Token
 	return token;
 }
 
-fn new_f32_token(pos: i32, text: str, val: f32): Token
+fn new_f32_token(pos: i32, text: &const str, val: f32): Token
 {
 	let token = new_token(TokenKind.f32, pos, text);
 	token.has_val = true;
@@ -188,7 +191,7 @@ fn new_f32_token(pos: i32, text: str, val: f32): Token
 	return token;
 }
 
-fn new_f64_token(pos: i32, text: str, val: f64): Token
+fn new_f64_token(pos: i32, text: &const str, val: f64): Token
 {
 	let token = new_token(TokenKind.f64, pos, text);
 	token.has_val = true;
@@ -196,7 +199,7 @@ fn new_f64_token(pos: i32, text: str, val: f64): Token
 	return token;
 }
 
-fn new_str_token(pos: i32, text: str, val: str): Token
+fn new_str_token(pos: i32, text: &const str, val: &const str): Token
 {
 	let token = new_token(TokenKind.str, pos, text);
 	token.has_val = true;
@@ -206,9 +209,10 @@ fn new_str_token(pos: i32, text: str, val: str): Token
 
 //==============================================================================
 
-// A growable array of tokens, like samples/vec_i32.syntran
 struct TokenVec
 {
+	// A growable array of tokens, like samples/vec_i32.syntran
+
 	len: i32,
 	cap: i32,
 	data: [Token; :],
@@ -246,9 +250,9 @@ fn new_token_vec(): TokenVec
 
 //==============================================================================
 
-// The keyword that `text` is, or Keyword.none for an identifier
 fn get_keyword(text: &const str): Keyword
 {
+	// The keyword that `text` is, or `Keyword.none` for an identifier
 	switch text
 	{
 		case "true"     { return Keyword.true_; }
@@ -282,10 +286,11 @@ fn get_keyword(text: &const str): Keyword
 
 //==============================================================================
 
-// The result of lex_type_suffix().  `start` and `end_` are the range of the
-// suffix text in the source, not including the apostrophe
 struct Suffix
 {
+	// The result of `lex_type_suffix()`.  `start` and `end_` are the range of
+	// the suffix text in the source, not including the apostrophe
+
 	type: NumType,
 	suffix: str,
 	start: i32,
@@ -308,12 +313,13 @@ struct Lexer
 		return;
 	}
 
-	// Get the char `offset` from the current one, or char(0) if out of range
 	const fn peek(offset: i32): str
 	{
+		// Get the char `offset` from the current one, or `NULL_CHAR` if out
+		// of range
 		const i = pos + offset;
 		if i < 0 or i >= len(text)
-			return char(0);
+			return NULL_CHAR;
 		return text[i];
 	}
 
@@ -327,10 +333,10 @@ struct Lexer
 		return peek(1);
 	}
 
-	// `start` and `end_` are offsets from the current pos.  The start offset is
-	// inclusive and end_ is exclusive
 	const fn get_text(start: i32, end_: i32): str
 	{
+		// `start` and `end_` are offsets from the current `pos`.  The start
+		// offset is inclusive and `end_` is exclusive
 		let a = pos + start;
 		if a < 0
 			a = 0;
@@ -342,26 +348,27 @@ struct Lexer
 		return text[a: b];
 	}
 
-	// I am NOT planning on implementing multi-line comments.  Use
-	// block-insertion in your editor to comment-out multiple lines with "//"
 	fn read_single_line_comment()
 	{
+		// I am NOT planning on implementing multi-line comments.  Use
+		// block-insertion in your editor to comment-out multiple lines with
+		// `//`
 		pos += 2;
 		while true
 		{
-			let c = current();
-			if c == char(0) or c == char(13) or c == char(10)
+			const c = current();
+			if c == NULL_CHAR or c == CARRIAGE_RETURN or c == LINE_FEED
 				break;
 			pos += 1;
 		}
 		return;
 	}
 
-	// Is the `0x`/`0o`/`0b` prefix at pos followed by at least one digit of
-	// that radix (not counting `_` separators)?  A bare prefix has no value,
-	// so it isn't lexed as a prefixed literal
 	const fn has_radix_digit(radix: str): bool
 	{
+		// Is the `0x`/`0o`/`0b` prefix at `pos` followed by at least one digit
+		// of that radix (not counting `_` separators)?  A bare prefix has no
+		// value, so it isn't lexed as a prefixed literal
 		let i = 2;
 		let c = peek(i);
 		while c == "_"
@@ -377,12 +384,13 @@ struct Lexer
 		return is_bin_under(c);
 	}
 
-	// Lex an optional apostrophe type-ascription suffix, e.g. `'i32` in
-	// `0x1'i32` or `1.0'f64`.  Pushes E18 if the suffix text isn't a recognized
-	// type, or isn't one of the types allowed for this literal's radix
-	// (allow_float is false for hex/octal/binary, which only accept i32/i64)
 	fn lex_type_suffix(allow_float: bool): Suffix
 	{
+		// Lex an optional apostrophe type-ascription suffix, e.g. `'i32` in
+		// `0x1'i32` or `1.0'f64`.  Pushes E18 if the suffix text isn't a
+		// recognized type, or isn't one of the types allowed for this literal's
+		// radix (`allow_float` is false for hex/octal/binary, which only accept
+		// i32/i64)
 		let sfx = Suffix
 		{
 			type = NumType.unknown,
@@ -424,14 +432,14 @@ struct Lexer
 		return sfx;
 	}
 
-	// Lex a hex (k = 4), octal (k = 3), or binary (k = 1) literal.  The
-	// Fortran lexer has a copy of this for each radix.  `err32` and `err64` are
-	// the codes of the diagnostics for a value that doesn't fit
 	fn lex_radix(
 		start: i32, radix_name: &const str, k: i32,
 		err32: &const str, err64: &const str,
 	): Token
 	{
+		// Lex a hex (`k` = 4), octal (`k` = 3), or binary (`k` = 1) literal.
+		// The Fortran lexer has a copy of this for each radix.  `err32` and
+		// `err64` are the codes of the diagnostics for a value that doesn't fit
 		pos += 2;  // skip the prefix
 
 		// Lex literal body
@@ -485,9 +493,9 @@ struct Lexer
 		return new_token(TokenKind.bad, pos, lit);
 	}
 
-	// Numeric decimal integer or float
 	fn lex_decimal(start: i32): Token
 	{
+		// Numeric decimal integer or float
 		let float = false;
 
 		while is_float_under(current())
@@ -522,7 +530,8 @@ struct Lexer
 			// An integer suffix on a literal that's already shaped like a float
 			// is a different mistake than an out-of-range integer
 			push_diag("E104");
-			return new_token(TokenKind.bad, pos, text[start: sfx.end_]);
+			const bad = text[start: sfx.end_];
+			return new_token(TokenKind.bad, pos, bad);
 		}
 
 		const lit = text[start: end_];
@@ -574,11 +583,11 @@ struct Lexer
 		return new_token(TokenKind.bad, pos, lit);
 	}
 
-	// A decimal literal with an explicit type suffix
 	fn lex_typed(
 		start: i32, lit: &const str, strip: &const str, type: NumType,
 	): Token
 	{
+		// A decimal literal with an explicit type suffix
 		switch type
 		{
 			case NumType.f32
@@ -617,12 +626,14 @@ struct Lexer
 		return new_token(TokenKind.bad, pos, lit);
 	}
 
-	// Raw string literal: r"...", r#"..."#, r##"..."##, etc.  Count the '#'
-	// chars after 'r'; the same count must precede the closing '"'.  The
-	// content is taken verbatim, with no doubled-quote escape processing
 	fn lex_raw_str(start: i32, n_hashes: i32): Token
 	{
-		// Advance past 'r', the n_hashes '#' chars, and the opening '"'
+		// Raw string literal: `r"..."`, `r#"..."#`, `r##"..."##`, etc.  Count
+		// the `#` chars after `r`; the same count must precede the closing `"`.
+		// The content is taken verbatim, with no doubled-quote escape
+		// processing
+
+		// Advance past `r`, the `n_hashes` `#` chars, and the opening `"`
 		pos += n_hashes + 2;
 
 		let val = "";
@@ -631,7 +642,7 @@ struct Lexer
 		{
 			if current() == """"
 			{
-				// Check whether the next n_hashes chars are all '#'
+				// Check whether the next `n_hashes` chars are all `#`
 				terminated = true;
 				for j in [1: n_hashes + 1]
 				{
@@ -643,7 +654,7 @@ struct Lexer
 				}
 				if terminated
 				{
-					// Advance past the closing '"' and its n_hashes '#' chars
+					// Advance past the closing `"` and its `n_hashes` `#` chars
 					pos += n_hashes + 1;
 					break;
 				}
@@ -665,6 +676,9 @@ struct Lexer
 
 	fn lex_str(start: i32): Token
 	{
+		// A str literal, where a doubled quote is a literal quote.  Pushes E10
+		// if it isn't terminated
+
 		// Skip the current quote
 		pos += 1;
 
@@ -702,11 +716,11 @@ struct Lexer
 		return new_str_token(start, lit, val);
 	}
 
-	// Get the next token.  c.f. lex_impl() and lex_wrap()
 	fn lex(): Token
 	{
+		// Get the next token.  c.f. `lex_impl()` and `lex_wrap()`
 		if pos >= len(text)
-			return new_token(TokenKind.eof, pos, char(0));
+			return new_token(TokenKind.eof, pos, NULL_CHAR);
 
 		const start = pos;
 
@@ -740,7 +754,8 @@ struct Lexer
 		{
 			while is_whitespace(current())
 				pos += 1;
-			return new_token(TokenKind.whitespace, start, text[start: pos]);
+			const ws = text[start: pos];
+			return new_token(TokenKind.whitespace, start, ws);
 		}
 
 		if is_letter(current()) or current() == "_"
@@ -762,7 +777,8 @@ struct Lexer
 			// beginning of the file.  Ignore the rest of the line.  The line
 			// feed after it is the next token, a whitespace
 			read_single_line_comment();
-			return new_token(TokenKind.comment, start, text[start: pos]);
+			const comment = text[start: pos];
+			return new_token(TokenKind.comment, start, comment);
 		}
 
 		// Operators.  Most of them are 1 or 2 chars, and a few are 3, in which
@@ -1032,7 +1048,7 @@ struct Lexer
 	}
 }
 
-fn new_lexer(text: str): Lexer
+fn new_lexer(text: &const str): Lexer
 {
 	return Lexer
 	{
@@ -1042,10 +1058,10 @@ fn new_lexer(text: str): Lexer
 	};
 }
 
-// Lex everything up to and including the eof token, and keep every token,
-// including whitespace, comments, and bad tokens
 fn lex_all(lexer: &Lexer): TokenVec
 {
+	// Lex everything up to and including the eof token, and keep every token,
+	// including whitespace, comments, and bad tokens
 	let tokens = new_token_vec();
 	while true
 	{
@@ -1056,4 +1072,3 @@ fn lex_all(lexer: &Lexer): TokenVec
 	}
 	return tokens;
 }
-
