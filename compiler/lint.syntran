@@ -1,4 +1,3 @@
-
 // Style linter for syntran source, written in syntran on top of the lexer port,
 // compiler/lex.syntran.  The rules are the ones that doc/style.md calls
 // checkable.  It prints one line per violation, `path:line:col: rule: message`,
@@ -24,10 +23,10 @@ fn is_upper(c: str): bool
 	return "A" <= c and c <= "Z";
 }
 
-// ^[A-Z][A-Za-z0-9]*$
-fn is_camel(s: &const str): bool
+fn is_pascal(s: &const str): bool
 {
-	// at() is char(0) past the end, since `and` and `or` don't short-circuit
+	// Does `s` match `^[A-Z][A-Za-z0-9]*$`?  `at()` is `NULL_CHAR` past the
+	// end, since `and` and `or` don't short-circuit
 	if not is_upper(at(s, 0))
 		return false;
 	for i in [1: len(s)]
@@ -36,9 +35,9 @@ fn is_camel(s: &const str): bool
 	return true;
 }
 
-// ^[a-z][a-z0-9_]*$
 fn is_snake(s: &const str): bool
 {
+	// Does `s` match `^[a-z][a-z0-9_]*$`?
 	if not is_lower(at(s, 0))
 		return false;
 	for i in [1: len(s)]
@@ -47,9 +46,9 @@ fn is_snake(s: &const str): bool
 	return true;
 }
 
-// ^[A-Z][A-Z0-9_]*$
 fn is_upper_snake(s: &const str): bool
 {
+	// Does `s` match `^[A-Z][A-Z0-9_]*$`?
 	if not is_upper(at(s, 0))
 		return false;
 	for i in [1: len(s)]
@@ -58,12 +57,12 @@ fn is_upper_snake(s: &const str): bool
 	return true;
 }
 
-// `style` is one of "CamelCase", "snake_case", or "snake_case or
-// UPPER_SNAKE_CASE", which is also how the messages name it
-fn name_ok(style: &const str, s: &const str): bool
+fn has_style(s: &const str, style: &const str): bool
 {
-	if style == "CamelCase"
-		return is_camel(s);
+	// `style` is one of `"PascalCase"`, `"snake_case"`, or `"snake_case or
+	// UPPER_SNAKE_CASE"`, which is also how the messages name it
+	if style == "PascalCase"
+		return is_pascal(s);
 	if style == "snake_case"
 		return is_snake(s);
 	return is_snake(s) or is_upper_snake(s);
@@ -73,18 +72,21 @@ fn name_ok(style: &const str, s: &const str): bool
 
 struct Lint
 {
+	// The state of linting one file.  `count` is the number of violations so
+	// far
+
 	path: str,
 	text: str,
 	count: i32,
 
-	// Report a violation at a 0-based `pos` in the text
 	fn report(pos: i32, rule: &const str, msg: &const str)
 	{
+		// Report a violation at a 0-based `pos` in the text
 		let line = 1;
 		let col = 1;
 		for i in [0: pos]
 		{
-			if text[i] == char(10)
+			if text[i] == LINE_FEED
 			{
 				line += 1;
 				col = 1;
@@ -98,13 +100,13 @@ struct Lint
 		count += 1;
 	}
 
-	// Report the name token `t` if it doesn't match `style`.  `what` is the
-	// kind of thing that is named, for the message
 	fn check_name(
 		t: &const Token, rule: &const str, what: &const str, style: &const str,
 	)
 	{
-		if t.kind == TokenKind.identifier and not name_ok(style, t.text)
+		// Report the name token `t` if it doesn't match `style`.  `what` is the
+		// kind of thing that is named, for the message
+		if t.kind == TokenKind.identifier and not has_style(t.text, style)
 			report(t.pos, rule, what + " `" + t.text + "` should be " + style);
 	}
 }
@@ -116,10 +118,11 @@ fn is_trivia(t: &const Token): bool
 	return t.kind == TokenKind.whitespace or t.kind == TokenKind.comment;
 }
 
-// The index of the first token after `i` that isn't whitespace or a comment.
-// The last token is eof, which isn't trivia, so this never goes past it
 fn next_code(tokens: &const TokenVec, i: i32): i32
 {
+	// The index of the first token after `i` that isn't whitespace or a
+	// comment.  The last token is eof, which isn't trivia, so this never goes
+	// past it
 	let j = i + 1;
 	while j < tokens.len - 1
 	{
@@ -133,15 +136,15 @@ fn next_code(tokens: &const TokenVec, i: i32): i32
 fn has_newline(s: &const str): bool
 {
 	for i in [0: len(s)]
-		if s[i] == char(10)
+		if s[i] == LINE_FEED
 			return true;
 	return false;
 }
 
-// Is the next token after `i`, other than whitespace or comments, on a later
-// line?  So is the `{` at `i` the last thing on its line?
-fn ends_line(tokens: &const TokenVec, i: i32): bool
+fn is_last_on_line(tokens: &const TokenVec, i: i32): bool
 {
+	// Is the next token after `i`, other than whitespace or comments, on a
+	// later line?  So is the `{` at `i` the last thing on its line?
 	const next = next_code(tokens, i);
 	for j in [i + 1: next]
 	{
@@ -152,10 +155,10 @@ fn ends_line(tokens: &const TokenVec, i: i32): bool
 	return tokens.data[next].kind == TokenKind.eof;
 }
 
-// The rules about names and braces, which need tokens
 fn lint_tokens(lint: &Lint, tokens: &const TokenVec)
 {
-	let depth = 0;        // brace depth
+	// The rules about names and braces, which need tokens
+	let depth = 0;       // brace depth
 	let parens = 0;
 	let body = "";        // "struct" or "enum" inside the braces of one
 	let body_depth = 0;   // the depth that the members or variants are at
@@ -189,12 +192,12 @@ fn lint_tokens(lint: &Lint, tokens: &const TokenVec)
 			if t.keyword == Keyword.struct_
 			{
 				pending = "struct";
-				lint.check_name(nt, "struct-name", "struct", "CamelCase");
+				lint.check_name(nt, "struct-name", "struct", "PascalCase");
 			}
 			else if t.keyword == Keyword.enum_
 			{
 				pending = "enum";
-				lint.check_name(nt, "enum-name", "enum", "CamelCase");
+				lint.check_name(nt, "enum-name", "enum", "PascalCase");
 			}
 			else if t.keyword == Keyword.fn_
 			{
@@ -208,7 +211,7 @@ fn lint_tokens(lint: &Lint, tokens: &const TokenVec)
 			else if t.keyword == Keyword.const_ and not after_amp
 			{
 				// A `const` can be an UPPER_SNAKE_CASE constant, at any depth.
-				// `const fn` is not a variable, but check_name() skips it,
+				// `const fn` is not a variable, but `check_name()` skips it,
 				// since `fn` is a keyword
 				const style = "snake_case or UPPER_SNAKE_CASE";
 				lint.check_name(nt, "var-name", "constant", style);
@@ -253,7 +256,7 @@ fn lint_tokens(lint: &Lint, tokens: &const TokenVec)
 		{
 			// A `{` that isn't the first thing on its line, and that ends it,
 			// like K&R.  `case "x" { return y; }` doesn't end the line
-			if line_code > 0 and ends_line(tokens, i)
+			if line_code > 0 and is_last_on_line(tokens, i)
 			{
 				lint.report(
 					t.pos, "brace-eol", "`{` should be on its own line",
@@ -286,13 +289,13 @@ fn lint_tokens(lint: &Lint, tokens: &const TokenVec)
 
 //==============================================================================
 
-// The width of a line in columns, with a tab stop every 4
 fn line_width(line: &const str): i32
 {
+	// The width of a line in columns, with a tab stop every 4
 	let w = 0;
 	for i in [0: len(line)]
 	{
-		if line[i] == char(9)
+		if line[i] == TAB
 			w = (w / 4 + 1) * 4;
 		else
 			w += 1;
@@ -300,24 +303,24 @@ fn line_width(line: &const str): i32
 	return w;
 }
 
-// The last char of `s`, or char(0) if it is empty
 fn last_char(s: &const str): str
 {
+	// The last char of `s`, or `NULL_CHAR` if it is empty
 	return at(s, i32(len(s)) - 1);
 }
 
-// Does the line have anything but whitespace?
-fn indents_code(line: &const str): bool
+fn has_code(line: &const str): bool
 {
+	// Does the line have anything but whitespace?
 	for i in [0: len(line)]
-		if line[i] != " " and line[i] != char(9)
+		if line[i] != " " and line[i] != TAB
 			return true;
 	return false;
 }
 
-// The rules about whitespace, which only need the text
 fn lint_lines(lint: &Lint)
 {
+	// The rules about whitespace, which only need the text
 	const text = lint.text;
 	const n = i32(len(text));
 	let reported_cr = false;
@@ -328,14 +331,14 @@ fn lint_lines(lint: &Lint)
 		let end_ = start;
 		while end_ < n
 		{
-			if text[end_] == char(10)
+			if text[end_] == LINE_FEED
 				break;
 			end_ += 1;
 		}
 
 		// A CRLF file is one violation, not one for every line
 		let line = text[start: end_];
-		if last_char(line) == char(13)
+		if last_char(line) == CARRIAGE_RETURN
 		{
 			if not reported_cr
 				lint.report(end_ - 1, "crlf", "CR LF line ending");
@@ -344,15 +347,15 @@ fn lint_lines(lint: &Lint)
 		}
 
 		const last = last_char(line);
-		if last == " " or last == char(9)
+		if last == " " or last == TAB
 		{
 			const pos = start + i32(len(line)) - 1;
 			lint.report(pos, "trailing-ws", "trailing whitespace");
 		}
 
 		// Tabs indent, and spaces can only come after them, to align
-		// (a line of only whitespace is a trailing-ws, not an indent)
-		if at(line, 0) == " " and indents_code(line)
+		// (a line of only whitespace is a `trailing-ws`, not an `indent`)
+		if at(line, 0) == " " and has_code(line)
 			lint.report(start, "indent", "indent with tabs, not spaces");
 
 		const w = line_width(line);
@@ -365,15 +368,15 @@ fn lint_lines(lint: &Lint)
 		start = end_ + 1;
 	}
 
-	if n > 0 and at(text, n - 1) != char(10)
+	if n > 0 and at(text, n - 1) != LINE_FEED
 		lint.report(n - 1, "final-newline", "file doesn't end with a newline");
 }
 
 //==============================================================================
 
-// Lint one file, and return its number of violations
 fn lint_file(path: &const str): i32
 {
+	// Lint one file, and return its number of violations
 	let lint = Lint
 	{
 		path = path,
@@ -395,7 +398,7 @@ fn main()
 	if size(args) < 1
 	{
 		println("usage: lint.syntran -- <file>...");
-		std::exit(2);
+		exit(2);
 	}
 
 	let count = 0;
@@ -403,8 +406,8 @@ fn main()
 		count += lint_file(args[i]);
 
 	if count > 0
-		std::exit(1);
+		exit(1);
 }
 
 main();
-
+exit(0);

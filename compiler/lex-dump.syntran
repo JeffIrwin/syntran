@@ -1,7 +1,6 @@
-
 // Dump the tokens of a file from the syntran lexer, in the same format as
 // `syntran --lex` does for the Fortran lexer, so the two can be diffed.  See
-// lex_dump() in src/lex.f90 for the format, and utils/test-lex.sh
+// `lex_dump()` in src/lex.f90 for the format, and utils/test-lex.sh
 //
 // Usage:
 //
@@ -9,24 +8,24 @@
 
 use lex::*;
 
-// Escape a token's text or value so that a token is always one line, with no
-// tabs in it.  Bytes >= 128 are left alone.  Syntran strs have no escapes, so a
-// lone backslash is "\"
 fn escape(s: &const str): str
 {
+	// Escape a token's text or value so that a token is always one line, with
+	// no tabs in it.  Bytes >= 128 are left alone.  Syntran strs have no
+	// escapes, so a lone backslash is `"\"`
 	let out = "";
 	for i in [0: len(s)]
 	{
 		const c = s[i];
 		if c == r#"\"#
 			out += "\\";
-		else if c == char(10)
+		else if c == LINE_FEED
 			out += "\n";
-		else if c == char(13)
+		else if c == CARRIAGE_RETURN
 			out += "\r";
-		else if c == char(9)
+		else if c == TAB
 			out += "\t";
-		else if c == char(0)
+		else if c == NULL_CHAR
 			out += "\0";
 		else
 			out += c;
@@ -34,31 +33,31 @@ fn escape(s: &const str): str
 	return out;
 }
 
-// The name of an enum variant without the trailing `_` of a keyword, which
-// avoids a clash with a syntran keyword, e.g. "plus"
-fn bare_name(name: str): str
+fn bare_name(name: &const str): str
 {
+	// The name of an enum variant without the trailing `_` of a keyword, which
+	// avoids a clash with a syntran keyword, e.g. `"plus"`
 	if name[len(name) - 1] == "_"
 		return name[0: len(name) - 1];
 	return name;
 }
 
-// The name of a token's kind in the Fortran lexer, e.g. "plus_token" or
-// "let_keyword".  The enums here leave off the suffixes
 fn kind_name(token: &const Token): str
 {
+	// The name of a token's kind in the Fortran lexer, e.g. `"plus_token"` or
+	// `"let_keyword"`.  The enums here leave off the suffixes
 	if token.kind == TokenKind.keyword
 		return bare_name(std::variant_of(token.keyword)) + "_keyword";
 	return bare_name(std::variant_of(token.kind)) + "_token";
 }
 
-fn main()
+fn main(): i32
 {
 	const args = std::args();
 	if size(args) < 1
 	{
 		println("usage: lex-dump.syntran -- <file>");
-		std::exit(1);
+		exit(1);
 	}
 
 	const text = std::read_file(args[0]);
@@ -87,6 +86,7 @@ fn main()
 
 	for i in [0: lexer.diags.len]
 		println("diag ", lexer.diags.data[i]);
+	return 0;
 }
 
-main();
+return main();

@@ -91,7 +91,7 @@ The examples below are indented with tabs, like real source.
 
 | What                              | Case                     | Examples                              |
 |-----------------------------------|--------------------------|---------------------------------------|
-| struct, enum                      | `CamelCase`              | `Token`, `Lexer`, `TokenKind`         |
+| struct, enum                      | `PascalCase`             | `Token`, `Lexer`, `TokenKind`         |
 | enum variant                      | `snake_case`             | `double_equals`, `Keyword.let_`       |
 | fn, method                        | `snake_case`             | `lex_all`, `push_diag`                |
 | variable, param, struct member    | `snake_case`             | `new_cap`, `has_val`                  |
@@ -201,7 +201,7 @@ glob is rarely worth it.
   ```rust
   fn keyword_of(text: &const str): Keyword
   {
-  	// The keyword that `text` is, or Keyword.none for an identifier
+  	// The keyword that `text` is, or `Keyword.none` for an identifier
   	switch text
   	{
   		...
@@ -236,8 +236,8 @@ It prints `path:line:col: rule: message` for each violation, sorted, and exits
 
 | Rule             | Checks                                                                 |
 |------------------|------------------------------------------------------------------------|
-| `struct-name`    | name after `struct` is `CamelCase`                                     |
-| `enum-name`      | name after `enum` is `CamelCase`                                       |
+| `struct-name`    | name after `struct` is `PascalCase`                                    |
+| `enum-name`      | name after `enum` is `PascalCase`                                      |
 | `variant-name`   | enum variants are `snake_case`                                         |
 | `fn-name`        | name after `fn` is `snake_case`                                        |
 | `param-name`     | fn params are `snake_case`                                             |
