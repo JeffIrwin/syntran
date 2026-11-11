@@ -82,6 +82,7 @@ module syntran__core_m
 	!    * lint script is non-exhaustive. some things are tricky to check or
 	!      require judgment
 	!  - transpiler improvements:
+	!    * maybe just deprecate and remove soon since we have llvm now
 	!    * cover more OS's and intel in addition to gnu in testing. currently
 	!      only gnu on ubuntu
 	!    * readln implementation is technically O(n**2), although the 256 char
@@ -144,7 +145,9 @@ module syntran__core_m
 	!    * i thought about making a 'List' struct example containing references
 	!      to head and tail nodes while working on recursive data structs, but i
 	!      believe such references are not possible without adding pointers to
-	!      the language
+	!      the language. can also be done with a "memory arena" (?) where objs
+	!      list references as int indices into a large array of all the objs,
+	!      but this is not oop
 	!    * can this be done safely and without massively complicating the
 	!      language? are there real applications that can't be refactored to not
 	!      require pointers?
@@ -190,6 +193,7 @@ module syntran__core_m
 	!      move yet": src/tests/long/aoc/*, samples/queue_*.syntran
 	!  - generics? longshot, lots of design decisions
 	!  - log a known issue that syntran is not threadsafe
+	!    * this applies to bytecode vm. try testing llvm jit/aot
 	!    * did some work on feature/parallel branch to try running long tests in
 	!      parallel but it's a deep rabbit hole of issues. fix most (?)
 	!      str-to-num and num-to-str conversion, even tried gfortran 13 in
@@ -239,27 +243,29 @@ module syntran__core_m
 	!    * closures and anonymous (lambda) fns?
 	!  - minloc, maxloc, findloc std:: fns
 	!    * useful for aoc
+	!  - possible breaking changes if 2.0 ever happens:
+	!    * put all current std::* symbols in global namespace (and then anything
+	!      new after 2.0 is still std namespaced)
+	!    * short-circuit logic
+	!    * escape '\n' and related sequences in all strs, not just fmt strs.
+	!      maybe also '\"'
 	!  - add ci/cd tests for gfortran 15. maybe phase out 10 or 11 for managable
 	!    compute usage
 	!    * gfortran 15 is now the default for Windows github actions
 	!    * available in recent docker images, but gfortran 15 is not available
 	!      in github ubuntu runners as of 2026-06-06
 	!  - synup (toolchain manager, see doc/synup.md) and `syntran --update`
-	!    * done: install/default/update/list/remove/run, checksums, `dev` build
-	!    * test-synup.sh doesn't run on windows yet, since its stub syntran is a
-	!      shell script.  Needs a stub exe, or a real syntran per version
-	!    * windows and linux paths are untested outside of CI.  Try the real
-	!      network on each once a release has synup and SHA256SUMS
-	!    * SHA256SUMS is backfilled on releases 1.0.0 through 1.7.0.  The 0.0.x
-	!      releases have none, so synup can't install them
-	!    * no prebuilt binary for macOS on intel, or for arm linux
-	!    * per-project version pinning, like rustup's `+toolchain`
-	!    * `synup self-uninstall`, and `synup list --available` marking what's
-	!      installed
-	!    * `synup list --available` ignores SYNUP_RELEASES_URL, so it can't be
-	!      tested offline, and it only reads the first 100 tags
-	!    * `synup update` replaces bin/synup with the newest release's even if
-	!      the one in bin is newer, e.g. a dev build copied in by `synup init`
+	!    * mvp done
+	!    * synup.exe on windows is awkward. it worked on cmd but in git bash it
+	!      said unzip not found. os platform detection bug?
+	!    * think about post-release versioning. maybe update v# on dev
+	!      immediately after release because rolling dev release is now visible,
+	!      maybe even mark it as "beta" somehow
+	!    * is linking libcurl worth it? currently shelling out to curl.exe
+	!    * does it make sense to provide a one-liner bash install, curl,
+	!      self-extracting sh/tgz? currently readme provides 3-liners but
+	!      putting it in ~/.syntran/bin/ (or somewhere else) is left up to the
+	!      user
 	!  - enable plugging in to nvim linting.  `--syntax-only`/`-s` now exists,
 	!    but diagnostics still need a 1-line-per-error format with filename,
 	!    line, and column indices to work with gfortran-style nvim linting
@@ -286,17 +292,8 @@ module syntran__core_m
 	!  - print improvements:
 	!    * is there a way to repeat a format, something like
 	!      `printf("3{{} }", 1, 2, 3);` ?
-	!    * newline shortcut in fmt str? char(10) can be interpolated into "{}"
-	!      fmt at end but it's a bit awkward
-	!      + \n would be a breaking change but i might do it anyway. currently
-	!        "\n" is just literal "\n" two char string. anything like a
-	!        hard-coded windows path would break
 	!    * still might need file_stat? what happens after write errors e.g. with
 	!      a full disk
-	!    * std::print(), std::write(), std::format(), std::printf(), and
-	!      std::writef() (std::-only so they don't clash with user fns) with
-	!      Rust-style `{:spec}` placeholders
-	!      (hex/bin/oct, width, fill, precision, sci notation) are done
 	!    * std::format() only takes a literal format string for now, so it is checked
 	!      at parse time.  Non-literal formats, positional `{0}` and named
 	!      `{name}` placeholders, and padding with a fill char that is not ascii
@@ -306,13 +303,12 @@ module syntran__core_m
 	!  - file reading/writing
 	!    * add seek() and helper to get file size, at least for binary mode
 	!  - installer packaging:
-	!    * bin exists.  nest it in a `bin` folder
+	!    * bin exists.  nest it in a `bin` folder. mostly obviated by synup
+	!      manager
 	!    * add build os to `--version` output, to distinguish between rocky vs
 	!      ubuntu builds
 	!    * add version summary as a text file (major.minor.patch, git hash,
 	!      build date)
-	!    * sha256 checksums of the zips are in SHA256SUMS, made by
-	!      utils/release-sums.sh
 	!    * doc. autogenerate pdf and/or html from markdown via pandoc or similar
 	!      + see utils/build-doc.sh
 	!    * readme?
@@ -325,10 +321,13 @@ module syntran__core_m
 	!    * samples could be updated, e.g. sorting in place would be a lot more
 	!      efficient without copying large array vals in and out.  don't update
 	!      tests though.  if anything, add tests, but don't remove coverage
-	!  - type() or typeof() fn to get type name as str?  could be useful for
+	!  - type_of() fn to get type name as str?  could be useful for
 	!    debugging, but I don't want to encourage its use for actual program
 	!    logic. also nameof() to return a variable (or fn or struct) name. c#
 	!    has this
+	!    * also name_of()
+	!    * already did "variant_of()" for enums, as opposed to str(enum) which
+	!      returns "Suit.Heart" rather than just variant_of's "Heart"
 	!  - complex number type(s)
 	!    * basically required for FFT, which could be a fun example/test. see:
 	!        https://github.com/JeffIrwin/numerical-analysis/blob/7067e5fe7d331f817c5c9f9cf922b44af7a18aa9/src/interp.F90#L337
