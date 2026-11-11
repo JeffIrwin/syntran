@@ -11756,7 +11756,7 @@ subroutine unit_test_fuzz_regressions(npass, nfail)
 
 	type(string_vector_t) :: diags_empty, diags_comment, diags_ws, diags_radix, diags_compound, &
 		diags_unif, diags_shadow, diags_stale, diags_stale2, diags_arr_assign, &
-		diags_fn_shadow, diags_deep_list
+		diags_fn_shadow, diags_deep_list, diags_scoped
 
 	write(*,*) 'Unit testing '//label//' ...'
 
@@ -11774,6 +11774,7 @@ subroutine unit_test_fuzz_regressions(npass, nfail)
 		'let f = [0]; f = [1, 2]; f = 7; let g = [1.0]; g = [2.0, 3.0]; let h = [1''i64]; h = [2];')
 	diags_fn_shadow = get_diags('fn sq(x: i32): i32 { return x * x; } let sq = sq;')
 	diags_deep_list = get_diags_file(P//'fuzz-deep-list.syntran')
+	diags_scoped    = get_diags('let c = true; if c let x = 1; else let x = 2;')
 
 	tests = &
 		[   &
@@ -11965,7 +11966,27 @@ subroutine unit_test_fuzz_regressions(npass, nfail)
 
 			! Freeing a struct that nests one level per node recursed once per node,
 			! and overflowed the stack at ~30k of them
-			diags_deep_list%len_ == 0 &
+			diags_deep_list%len_ == 0, &
+
+			! A braceless `if`/`else`/`while`/`case`/`default` body didn't have a scope,
+			! so its `let` leaked out to code where it never ran, and read an
+			! unallocated value
+			diag_has_code(get_diags_file(P//'fuzz-if-let-scope.syntran'), &
+				EC_UNDECLARE_VAR), &
+			diag_has_code(get_diags('let c = true; if c let x = 1; x;'), EC_UNDECLARE_VAR), &
+			diag_has_code(get_diags('let c = true; if c {} else let x = 1; x;'), &
+				EC_UNDECLARE_VAR), &
+			diag_has_code(get_diags('let c = false; while c let x = 1; x;'), EC_UNDECLARE_VAR), &
+			diag_has_code(get_diags('let c = 1; switch c { case 0 let x = 1; } x;'), &
+				EC_UNDECLARE_VAR), &
+			diag_has_code(get_diags('let c = 1; switch c { default let x = 1; } x;'), &
+				EC_UNDECLARE_VAR), &
+			diags_scoped%len_ == 0, &
+			eval('let n = 0; if (true) n += 1; while n < 3 n += 1; n;') == '3', &
+
+			! A zero-length name is an error in libgfortran's get_environment_variable
+			diag_has_code(get_diags('let v = std::getenv("");'), RC_GETENV_UNSET), &
+			eval('std::hasenv("");') == 'false' &
 		]
 	call unit_test_coda(tests, label, npass, nfail)
 

@@ -1058,7 +1058,13 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 		! std::getenv(name) -- value of env var `name`.  Runtime error if unset
 		res%type = str_type
 		if (.not. allocated(res%str)) allocate(res%str)
-		call get_environment_variable(args(1)%str%s, length = env_len, status = env_stat)
+		if (len(args(1)%str%s) == 0) then
+			! A zero-length name is a libgfortran runtime error, and nothing is
+			! named that anyway
+			env_stat = 1
+		else
+			call get_environment_variable(args(1)%str%s, length = env_len, status = env_stat)
+		end if
 		if (env_stat /= 0) then
 			call rt_throw(state, err_rt(RC_GETENV_UNSET, "getenv() environment variable """// &
 				args(1)%str%s//""" is not set"))
@@ -1072,8 +1078,12 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 	case (INTR_HASENV)
 		! std::hasenv(name) -- whether env var `name` is set
 		res%type = bool_type
-		call get_environment_variable(args(1)%str%s, status = env_stat)
-		res%sca%bool = env_stat == 0
+		if (len(args(1)%str%s) == 0) then
+			res%sca%bool = .false.
+		else
+			call get_environment_variable(args(1)%str%s, status = env_stat)
+			res%sca%bool = env_stat == 0
+		end if
 
 	case (INTR_SYSTEM)
 		! std::system(cmd) -- run a command line and return its exit status, or

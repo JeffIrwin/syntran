@@ -1400,7 +1400,9 @@ function rt_getenv(name) result(s)
     character(len = *), intent(in) :: name
     character(len = :), allocatable :: s
     integer :: n, st
-    call get_environment_variable(name, length = n, status = st)
+    st = 1
+    n = 0
+    if (len(name) > 0) call get_environment_variable(name, length = n, status = st)
     if (st /= 0) call rt_fatal('environment variable "' // name // '" is not set')
     allocate(character(len = n) :: s)
     if (n > 0) call get_environment_variable(name, value = s)
@@ -1410,7 +1412,8 @@ function rt_hasenv(name) result(r)
     character(len = *), intent(in) :: name
     logical :: r
     integer :: st
-    call get_environment_variable(name, status = st)
+    st = 1
+    if (len(name) > 0) call get_environment_variable(name, status = st)
     r = st == 0
 end function rt_hasenv
 
