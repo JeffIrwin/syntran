@@ -748,7 +748,7 @@ recursive module subroutine parse_if_statement(parser, statement)
 			"if-statement"))
 	end if
 
-	call parser%parse_statement(if_clause)
+	call parse_scoped_statement(parser, if_clause)
 
 	statement%kind = if_statement
 	call syntax_node_move(condition, statement%condition)
@@ -756,7 +756,7 @@ recursive module subroutine parse_if_statement(parser, statement)
 
 	if (parser%current_kind() == else_keyword) then
 		call parser%match(else_keyword, else_token)
-		call parser%parse_statement(else_clause)
+		call parse_scoped_statement(parser, else_clause)
 		call syntax_node_move(else_clause, statement%else_clause)
 	end if
 
@@ -764,6 +764,26 @@ recursive module subroutine parse_if_statement(parser, statement)
 	! an else clause which contains another if statement
 
 end subroutine parse_if_statement
+
+!===============================================================================
+
+recursive subroutine parse_scoped_statement(parser, statement)
+
+	! A braceless body, like `if (c) let x = 1;`, gets its own scope like a
+	! block does, so its `let` can't leak out to code where it never ran
+
+	class(parser_t) :: parser
+	type(syntax_node_t), intent(out) :: statement
+
+	call parser%vars%push_scope()
+	call parser%locs%push_scope()
+
+	call parser%parse_statement(statement)
+
+	call parser%vars%pop_scope()
+	call parser%locs%pop_scope()
+
+end subroutine parse_scoped_statement
 
 !===============================================================================
 
@@ -927,7 +947,7 @@ recursive module subroutine parse_while_statement(parser, statement)
 			"while-loop"))
 	end if
 
-	call parser%parse_statement(body)
+	call parse_scoped_statement(parser, body)
 
 	statement%kind = while_statement
 	call syntax_node_move(condition, statement%condition)
@@ -1189,7 +1209,7 @@ recursive subroutine parse_case_clause(parser, subj_type, subj_val, clause)
 
 	end if
 
-	call parser%parse_statement(body)
+	call parse_scoped_statement(parser, body)
 
 	clause%kind = case_clause
 	call syntax_node_move(body, clause%body)
@@ -1303,7 +1323,7 @@ recursive module subroutine parse_switch_statement(parser, statement)
 					parser%context(), span))
 			end if
 
-			call parser%parse_statement(def_body)
+			call parse_scoped_statement(parser, def_body)
 
 			if (.not. has_default) &
 				call syntax_node_move(def_body, statement%else_clause)
