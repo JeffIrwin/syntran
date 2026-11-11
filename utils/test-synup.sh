@@ -90,6 +90,12 @@ mkdir -p "$work/bin"
 cp "$synup" "$work/bin/synup"
 synup="$work/bin/synup"
 
+echo "no args"
+# `fpm test` runs synup with no args, since it's a [[test]], so that must pass
+check "no args succeeds"          "$synup"
+check "no args prints the help"   has_out "Commands:" "$synup"
+check "no args made no home"      test ! -e "$SYNUP_HOME"
+
 echo "init"
 check "init succeeds"             "$synup" init
 check "bin/syntran is the latest" is_ver 9.9.9

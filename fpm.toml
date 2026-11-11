@@ -37,8 +37,8 @@
 #
 #     # `runner` is a prefix to the syntran cmd.  anything after `-- ` is a cmd
 #     # arg passed after `syntran`, e.g. the syntran filename
-#     fpm run --target syntran
-#     fpm run --target syntran -- samples/primes-3.syntran
+#     fpm run
+#     fpm run -- samples/primes-3.syntran
 #
 #     fpm test       # all tests
 #     fpm test test  # "short" tests only
@@ -140,13 +140,6 @@ name = "syntran"
 source-dir = "src"
 main = "main.f90"
 
-# The toolchain manager, src/synup.f90.  It ships next to syntran in every
-# release zip
-[[executable]]
-name = "synup"
-source-dir = "src"
-main = "synup_main.f90"
-
 [[test]]
 name = "test"
 source-dir = "src/tests/"
@@ -157,4 +150,19 @@ main = "test.f90"
 name = "long"
 source-dir = "src/tests/"
 main = "long.f90"
+
+# The toolchain manager, src/synup.f90.  It ships next to syntran in every
+# release zip.  It's a [[test]] and not an [[executable]] because fpm has no
+# default app:  with two executables, a bare `fpm run` runs both, and the
+# documented `fpm run -- file.syntran` would hand its args to synup too.  `fpm
+# install` skips tests, so install it with
+#
+#     fpm install --test --testdir bin --prefix <dir>
+#     rm <dir>/bin/test <dir>/bin/long
+#
+# `fpm test` runs it too, with no args, which prints its help and succeeds
+[[test]]
+name = "synup"
+source-dir = "src/synup/"
+main = "synup_main.f90"
 

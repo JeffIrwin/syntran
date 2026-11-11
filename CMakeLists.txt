@@ -388,7 +388,7 @@ set_target_properties("${EXE_BIN}" PROPERTIES OUTPUT_NAME "${EXE}")
 # release zip
 set(SYNUP_EXE "synup")
 add_executable(${SYNUP_EXE}
-	${SRC_DIR}/synup_main.f90
+	${SRC_DIR}/synup/synup_main.f90
 )
 target_link_libraries(${SYNUP_EXE} ${LINK_LIBS})
 
