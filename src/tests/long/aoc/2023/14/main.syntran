@@ -197,6 +197,10 @@ fn part2(): i32
 
 	let period_steps = -1;
 
+	// Snapshot of the grid at step nstep_min, declared out here because a braceless
+	// `if` body has its own scope
+	let grid_cache = grid;
+
 	let done_cycling = false;
 	let step = 0;
 	while step < nstep_min + buffer and not done_cycling
@@ -285,7 +289,7 @@ fn part2(): i32
 		//}
 
 		if step == nstep_min
-			let grid_cache = grid;
+			grid_cache = grid;
 		else if step > nstep_min and period_steps < 0
 		{
 			// Check if a period has been reached (i.e. if the grid is exactly
