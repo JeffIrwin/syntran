@@ -32,13 +32,10 @@ Two build systems are supported: FPM (Fortran Package Manager) and CMake.
 ```bash
 fpm build --profile debug   # Debug build, preferred for development
 fpm build --profile release # Release build
-fpm run --target syntran --profile debug     # Build and run interpreter
-fpm run --target syntran --profile debug -- file.syntran     # Run a syntran file
+fpm run --profile debug     # Build and run interpreter
+fpm run --profile debug -- file.syntran     # Run a syntran file
 yes | fpm clean             # Clean build artifacts
 ```
-
-`fpm run` needs `--target syntran` now that `synup` is a second executable.
-Without it, fpm runs both, and `synup` rejects syntran's args and exits 1.
 
 #### build.sh
 
@@ -165,6 +162,7 @@ runs a binary built with the wrong flags, or one that no longer exists. Use
 fpm install --test --profile release --flag "-static -Wl,--wrap=setlocale -Wl,--stack,67108864" --prefix ./build/v1/
 ./build/v1/bin/syntran.exe
 ./build/v1/test/test.exe     # --test also installs the test binaries
+./build/v1/test/synup.exe    # including synup, see "Toolchain manager" below
 ```
 
 #### Windows link flags: always pass `-Wl,--wrap=setlocale`
@@ -214,7 +212,7 @@ looping the whole suite:
 ### Running a single test file
 Syntran script tests are in `src/tests/test-src/` organized by category. To run one:
 ```bash
-fpm run --target syntran --profile debug -- src/tests/test-src/modules/test-01.syntran
+fpm run --profile debug -- src/tests/test-src/modules/test-01.syntran
 ```
 
 ### Testing the Fortran backend
@@ -280,10 +278,24 @@ bash utils/lint.sh build/v1/bin/syntran path/to/file.syntran
 ```
 
 ### Toolchain manager (`synup`)
-`synup` is a second executable (`src/synup_main.f90`, in `fpm.toml` and
+`synup` is a second executable (`src/synup/synup_main.f90`, in `fpm.toml` and
 `CMakeLists.txt`) that installs versions of syntran side by side under
 `~/.syntran` and links one as `bin/syntran`.  It ships in every release zip, and
 `syntran --update` runs `synup update`.  User docs are in `doc/synup.md`.
+
+In fpm, it's a `[[test]]`, not an `[[executable]]`, so that a bare `fpm run`
+(which the README documents) still runs only syntran.  fpm has no default app:
+it runs every executable, and passes your args to all of them.  The catches:
+- Its main is in `src/synup/` and not `src/`, because fpm makes an app of every
+  `program` in an executable's `source-dir`, and syntran's is `src`
+- `fpm install` skips tests, so a release install needs `--test --testdir bin`,
+  and then deletes the extra test programs.  Without `--testdir`, it's at
+  `<prefix>/test/synup`, next to `test` and `long`
+- `fpm test` runs it with no args, so that has to print help and succeed
+```bash
+fpm install --test --testdir bin --prefix ./build/rel/
+rm ./build/rel/bin/test ./build/rel/bin/long          # test.exe, long.exe on Windows
+```
 - `src/synup.f90` - `syntran__synup_m`, all of the logic.  It's in the library,
   so `unit_test_synup` can test the pure parts.  It's `private` by default, so
   add a name to its `public` list to test it
@@ -358,7 +370,7 @@ it nightly, separately from `main.yml` so that a find never blocks a push.
 ### Evaluating a script as a command-line string
 To run a syntran script without saving it as a file:
 ```bash
-fpm run --target syntran -- -c 'println(\"hello world\");'
+fpm run -- -c 'println(\"hello world\");'
 ```
 FPM requires escaping quotes within command arguments.
 
@@ -469,7 +481,7 @@ Bitwise operations follow the same pattern in `src/math_bit_*.f90`.
 ### Entry Points
 - `src/main.f90` - CLI entry point
 - `src/app.f90` - Application-level utilities (argument parsing, etc.)
-- `src/synup.f90`, `src/synup_main.f90`, `src/c/synup.c` - The `synup` toolchain
+- `src/synup.f90`, `src/synup/synup_main.f90`, `src/c/synup.c` - The `synup` toolchain
   manager, see "Toolchain manager" above
 
 ## Module Import System

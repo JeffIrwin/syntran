@@ -105,25 +105,25 @@
 					# output.  Maybe add a '-qq' option to make it even quieter?
 					# Or keep grepping with well-formatted printed output
 					# \n
-					ans=$(fpm run --target syntran --profile debug --link-flag \"$lflags\"
+					ans=$(fpm run --profile debug --link-flag \"$lflags\"
 						< samples/arithmetic2.syntran
 						| grep -o \"{ans = '.*'}\" | grep -o '[0-9]*'
 					) \n
 					[[ \"$ans\" != \"175\" ]] && exit 1 \n
 
-					ans=$(fpm run --target syntran --profile debug --link-flag \"$lflags\"
+					ans=$(fpm run --profile debug --link-flag \"$lflags\"
 						< samples/arrays.syntran
 						| grep -o \"{ans = '.*'}\" | grep -o \"'.*'\"  | grep -o \"[^']*\"
 					) \n
 					[[ \"$ans\" != \"[101, 104, 107, 110]\" ]] && exit 1 \n
 
 					# No-arg readln()/eof() should read from stdin \n
-					ans=$(printf 'a\\nb\\nc\\n' | fpm run --target syntran --profile debug --link-flag \"$lflags\"
+					ans=$(printf 'a\\nb\\nc\\n' | fpm run --profile debug --link-flag \"$lflags\"
 						-- -c 'let n = 0; for i in [0: 3] { let line = readln(); n += 1; } println(n);'
 					) \n
 					[[ \"$(echo $ans)\" != \"3\" ]] && exit 1 \n
 
-					ans=$(printf 'x\\n' | fpm run --target syntran --profile debug --link-flag \"$lflags\"
+					ans=$(printf 'x\\n' | fpm run --profile debug --link-flag \"$lflags\"
 						-- -c 'readln(); readln(); println(eof());'
 					) \n
 					[[ \"$(echo $ans)\" != \"true\" ]] && exit 1 \n
@@ -132,7 +132,7 @@
 					# TODO: test this in the release binary \n
 					dir_='src/tests/test-src/explorer/' \n
 					for f in $dir_/*.syntran ; do
-						fpm run --target syntran --profile debug --link-flag \"$lflags\"
+						fpm run --profile debug --link-flag \"$lflags\"
 							-- -q $f > ${f%.syntran}.out \n
 						diff ${f%.syntran}.out ${f%.syntran}.exp \n
 					done
@@ -169,7 +169,10 @@
 					# This is the pack linux stage, but it also does some \n
 					# testing.  CI/CD could use some disentangling \n
 
+					# synup is a [[test]] in fpm.toml, so --test installs it, into \n
+					# $HOME/test with the test programs \n
 					fpm install
+					  --test
 					  --profile release
 					  --link-flag
 					  '-L/opt/blas-static -static-libgcc -static-libgfortran -static-libquadmath'
@@ -177,7 +180,7 @@
 
 					# TODO: copy to a subdir for easier upload \n
 					cp $HOME/bin/syntran . \n
-					cp $HOME/bin/synup . \n
+					cp $HOME/test/synup . \n
 					chmod +x ./synup \n
 					bash utils/test-synup.sh ./synup \n
 					which syntran \n
@@ -198,7 +201,7 @@
 
 					dir_='src/tests/test-src/explorer/' \n
 					for f in $dir_/*.syntran ; do
-						fpm run --target syntran
+						fpm run
 							--profile release
 							--link-flag
 							'-L/opt/blas-static -static-libgcc -static-libgfortran -static-libquadmath'
@@ -424,10 +427,12 @@
 					# it in a predictable location for packaging \n
 					$flags = \"-static -fopenmp -Lbuild/openblas -Lbuild/llvm-static -Wl,build/llvm-static/syntran.def -Wl,--wrap=setlocale -Wl,--stack,67108864 -Wl,--gc-sections -Wl,-s\" \n
 					$env:PATH = \"C:\\msys64\\ucrt64\\bin;$env:PATH\" \n
-					fpm install --features release,llvm-blas --flag $flags --prefix ./build/ \n
+					# synup is a [[test]] in fpm.toml, so --test installs it, into \n
+					# build\\test with the test programs \n
+					fpm install --test --features release,llvm-blas --flag $flags --prefix ./build/ \n
 
 					copy .\\build\\bin\\syntran.exe .\\ \n
-					copy .\\build\\bin\\synup.exe .\\ \n
+					copy .\\build\\test\\synup.exe .\\ \n
 
 					# OpenBLAS, LLVM, libgomp, libgfortran, libstdc++, etc. must be \n
 					# linked in statically, or the exe won't run without the toolchain \n

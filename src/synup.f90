@@ -1549,8 +1549,9 @@ function synup_cli(argv, version) result(status)
 	integer :: i
 
 	if (argv%len_ == 0) then
+		! Not an error, since `fpm test` runs synup without args, and that must pass
 		call synup_help()
-		status = exit_failure
+		status = exit_success
 		return
 	end if
 

@@ -167,7 +167,11 @@ RUN fpm test test $FPM_ARGS --flag "$SECTION_FLAGS" --c-flag "$SECTION_FLAGS" --
 # Also run every unit test program through the LLVM JIT
 RUN fpm test test $FPM_ARGS --flag "$SECTION_FLAGS" --c-flag "$SECTION_FLAGS" --link-flag "$LINK_FLAG" -- --native
 #RUN fpm test long $FPM_ARGS --flag "$SECTION_FLAGS" --c-flag "$SECTION_FLAGS" --link-flag "$LINK_FLAG"
-RUN fpm install --prefix . $FPM_ARGS --flag "$SECTION_FLAGS" --c-flag "$SECTION_FLAGS" --link-flag "$LINK_FLAG"
+# synup is a [[test]] in fpm.toml, so that a bare `fpm run` only runs syntran, and
+# `fpm install` only installs it with --test.  --testdir bin puts it next to
+# syntran, with `test` and `long`, which the tar below would ship if they stayed
+RUN fpm install --test --testdir bin --prefix . $FPM_ARGS --flag "$SECTION_FLAGS" --c-flag "$SECTION_FLAGS" --link-flag "$LINK_FLAG" \
+	&& rm ./bin/test ./bin/long
 
 # Strip the symbol table, which is ~15 MB of a ~110 MB binary.  The dynamic
 # symbols that the JIT needs for dlsym() are not part of it.  The test
@@ -179,7 +183,7 @@ RUN ls -l ./bin/syntran \
 	&& ls -l ./bin/syntran \
 	&& size ./bin/syntran
 
-# `fpm install` also put the toolchain manager in ./bin, and the tar below
+# `fpm install --test` also put the toolchain manager in ./bin, and the tar below
 # ships it.  It has no LLVM or BLAS in it, but it's linked with the same flags.
 # It only needs to run on a bare distro, like syntran
 RUN strip --strip-all ./bin/synup \
