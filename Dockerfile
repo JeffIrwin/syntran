@@ -15,7 +15,7 @@ RUN apk add openblas-dev
 RUN ln -s libopenblas.so /usr/lib/libblas.so
 
 COPY src src
-COPY external external
+COPY external/isocline external/isocline
 COPY CMakeLists.txt .
 COPY fpm.toml .
 
