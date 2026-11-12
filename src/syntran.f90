@@ -1077,6 +1077,189 @@ end function syntran_lex_file
 
 !===============================================================================
 
+function parse_dump_str(text, src_file) result(str_)
+
+	! Parse `text` and dump the typed tree, for `syntran --parse`.  This is used
+	! to test the syntran port of the parser in compiler/parse.syntran, which
+	! prints the same format.  See parse_dump() in src/types_ops.f90 for the
+	! tree, which is followed by the tables that the parser filled, in id order:
+	!
+	!     fn <name>(<type>[&|&const], ...): <return type>
+	!     struct <name> { <member>: <type>, ... }
+	!     enum <name> { <variant>, ... }
+	!
+	! If there are any diagnostics, only their codes are dumped, as `diag <code>`
+	! lines and with no tree, so that the shape of a tree after error recovery
+	! isn't compared.  Nothing is compiled or run, so a module that is pulled in
+	! by `use` doesn't run either
+
+	character(len = *), intent(in) :: text, src_file
+	character(len = :), allocatable :: str_
+
+	!********
+
+	integer :: i
+
+	type(char_vector_t) :: sb
+	type(state_t) :: state
+	type(syntax_node_t) :: tree
+
+	call init_state(state)
+	state%quiet = .true.
+
+	tree = syntax_parse(text, state, src_file, repl = .false.)
+
+	sb = new_char_vector()
+	if (tree%diagnostics%len_ > 0) then
+		do i = 1, tree%diagnostics%len_
+			call sb%push("diag "//diag_code(tree%diagnostics%v(i)%s)//line_feed)
+		end do
+	else
+		call sb%push(parse_dump(tree))
+		call dump_tables(sb, state)
+	end if
+	str_ = sb%trim()
+
+	call state_destroy(state)
+
+end function parse_dump_str
+
+!===============================================================================
+
+subroutine dump_tables(sb, state)
+
+	! The trailer of parse_dump_str(): the user fns, structs, and enums
+
+	type(char_vector_t), intent(inout) :: sb
+	type(state_t), intent(in) :: state
+
+	!********
+
+	integer :: i, j, k
+
+	! The flat array has the intrinsic fns first, and then the user fns in id
+	! order
+	if (allocated(state%fns%fns)) then
+		do i = state%fns%num_intr_fns + 1, size(state%fns%fns)
+			associate (fn => state%fns%fns(i))
+				call sb%push("fn "//fn%node%identifier%text//"(")
+				do j = 1, size(fn%params)
+					if (j > 1) call sb%push(", ")
+					call sb%push(value_type_name(fn%params(j)))
+					if (allocated(fn%node%is_ref)) then
+						if (fn%node%is_ref(j)) call sb%push("&")
+					end if
+					if (allocated(fn%node%is_const_ref)) then
+						if (fn%node%is_const_ref(j)) call sb%push("const")
+					end if
+				end do
+				call sb%push("): "//value_type_name(fn%type)//line_feed)
+			end associate
+		end do
+	end if
+
+	do i = 1, state%structs%num_structs
+		do j = 1, state%structs%capacity
+			if (.not. allocated(state%structs%table(j)%key)) cycle
+			if (state%structs%table(j)%id_index /= i) cycle
+
+			associate (struct => state%structs%table(j)%val)
+				call sb%push("struct "//state%structs%table(j)%key//" {")
+				do k = 1, struct%num_vars
+					if (k == 1) then
+						call sb%push(" ")
+					else
+						call sb%push(", ")
+					end if
+					call sb%push(struct%member_names%v(k)%s//": ")
+					call sb%push(value_type_name(member_type(struct, k)))
+				end do
+				call sb%push(" }"//line_feed)
+			end associate
+		end do
+	end do
+
+	do i = 1, state%enums%num_enums
+		do j = 1, state%enums%capacity
+			if (.not. allocated(state%enums%table(j)%key)) cycle
+			if (state%enums%table(j)%id_index /= i) cycle
+
+			associate (enum => state%enums%table(j)%val)
+				call sb%push("enum "//state%enums%table(j)%key//" {")
+				do k = 1, enum%num_vars
+					if (k == 1) then
+						call sb%push(" ")
+					else
+						call sb%push(", ")
+					end if
+					call sb%push(enum%variant_names%v(k)%s)
+				end do
+				call sb%push(" }"//line_feed)
+			end associate
+		end do
+	end do
+
+end subroutine dump_tables
+
+!===============================================================================
+
+function member_type(struct, id) result(val)
+
+	! The value, which is the type, of the member of `struct` that has this id
+
+	type(struct_t), intent(in) :: struct
+	integer, intent(in) :: id
+
+	type(value_t) :: val
+
+	!********
+
+	integer :: i
+
+	do i = 1, struct%vars%dicts(1)%capacity
+		if (.not. allocated(struct%vars%dicts(1)%table(i)%key)) cycle
+		if (struct%vars%dicts(1)%table(i)%id_index /= id) cycle
+		val = struct%vars%dicts(1)%table(i)%val
+		return
+	end do
+
+end function member_type
+
+!===============================================================================
+
+function syntran_parse_file(filename, io) result(res)
+
+	! Parse a file and return a dump of its typed tree, for `syntran --parse`.
+	! See parse_dump_str() for the format
+
+	character(len = *), intent(in)  :: filename
+	character(len = :), allocatable :: res
+
+	! exit_success/exit_failure status
+	integer, intent(out) :: io
+
+	!********
+
+	character(len = :), allocatable :: source_text
+
+	integer :: iostat
+
+	io = exit_success
+
+	source_text = read_file(filename, iostat)
+	if (iostat /= exit_success) then
+		write(*,*) err_404(filename)
+		io = exit_failure
+		res = ''
+		return
+	end if
+
+	res = parse_dump_str(source_text, filename)
+
+end function syntran_parse_file
+
+!===============================================================================
+
 end module syntran
 
 !===============================================================================

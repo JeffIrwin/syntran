@@ -31,6 +31,7 @@ module syntran__app_m
 			keep_unused_fns    = .false., &
 			lex                = .false., &
 			native             = .false., &
+			parse              = .false., &
 			permissive_return  = .false., &
 			quiet              = .false., &
 			syntax_only        = .false., &
@@ -319,6 +320,11 @@ function parse_args() result(args)
 			! the syntran port of the lexer in compiler/lex.syntran
 			args%lex = .true.
 
+		case ("--parse")
+			! Hidden, so it's not in the help.  Dumps the typed syntax tree, to
+			! test the syntran port of the parser in compiler/parse.syntran
+			args%parse = .true.
+
 		case ("--version")
 			args%version = .true.
 
@@ -491,7 +497,7 @@ function parse_args() result(args)
 	if (args%update .and. .not. args%help .and. .not. args%version) then
 		if (args%syntran_file_arg .or. args%command_arg .or. args%transpile .or. &
 			args%native .or. args%jit .or. args%syntax_only .or. args%interactive .or. &
-			args%lex) then
+			args%lex .or. args%parse) then
 			write(*,*) err_prefix//"--update cannot be used with a <file.syntran>, "// &
 				"--command, --transpile, --native, --jit, --syntax-only, or --interactive"
 			error = .true.
@@ -507,6 +513,24 @@ function parse_args() result(args)
 		if (args%command_arg .or. args%transpile .or. args%native .or. &
 			args%jit .or. args%syntax_only .or. args%interactive) then
 			write(*,*) err_prefix//"--lex cannot be used with --command, "// &
+				"--transpile, --native, --jit, --syntax-only, or --interactive"
+			error = .true.
+		end if
+		if (args%parse) then
+			write(*,*) err_prefix//"--lex cannot be used with --parse"
+			error = .true.
+		end if
+	end if
+
+	! The hidden --parse is the same as --lex
+	if (args%parse .and. .not. args%help .and. .not. args%version) then
+		if (.not. args%syntran_file_arg) then
+			write(*,*) err_prefix//"--parse requires a <file.syntran> argument"
+			error = .true.
+		end if
+		if (args%command_arg .or. args%transpile .or. args%native .or. &
+			args%jit .or. args%syntax_only .or. args%interactive) then
+			write(*,*) err_prefix//"--parse cannot be used with --command, "// &
 				"--transpile, --native, --jit, --syntax-only, or --interactive"
 			error = .true.
 		end if
@@ -533,6 +557,7 @@ function parse_args() result(args)
 				args%command_arg      .or. &
 				args%syntax_only      .or. &
 				args%lex              .or. &
+				args%parse            .or. &
 				args%transpile        .or. &
 				args%native           .or. &
 				args%jit              .or. &
@@ -543,7 +568,7 @@ function parse_args() result(args)
 			)
 
 		if (.not. args%command_arg .and. .not. args%syntax_only .and. &
-			.not. args%lex .and. .not. args%update .and. &
+			.not. args%lex .and. .not. args%parse .and. .not. args%update .and. &
 			.not. args%transpile .and. .not. args%native .and. .not. args%jit) then
 			write(*,*)
 			write(*,*) fg_bright_magenta//lang_name//' '//version//color_reset

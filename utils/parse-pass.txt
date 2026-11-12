@@ -1,0 +1,4 @@
+# Files that compiler/parse-dump.syntran must dump the same as
+# `syntran --parse`.  Written by `utils/test-parse.sh --update-pass-list`
+src/tests/test-src/errors/E16-bad-f64.syntran
+src/tests/test-src/errors/E18-bad-type-suffix.syntran

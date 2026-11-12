@@ -1,0 +1,88 @@
+// The syntax tree of the syntran port of the parser.  It mirrors the typed tree
+// that the Fortran parser builds, `syntax_node_t` in src/types.f90, which
+// `syntran --parse` dumps.  See compiler/parse.syntran and
+// doc/compiler-roadmap.md
+//
+// Differences from the Fortran:
+//
+// - A child is an `i32` index into a `NodeVec`, the arena that owns every node,
+//   instead of an allocatable member, because syntran structs can't hold
+//   themselves and have value semantics
+// - Kinds are an enum, with the Fortran names minus the `_expr`/`_statement`
+//   suffixes that the dump drops
+// - Only the members that milestone 0 needs are here so far.  Each milestone
+//   adds the ones that it needs
+
+//==============================================================================
+
+enum NodeKind
+{
+	unknown,
+	translation_unit,
+}
+
+struct Node
+{
+	kind: NodeKind,
+
+	// The name of the type, as the Fortran `value_type_name()` prints it, like
+	// `"i32"` or `"unknown"`
+	type_name: str,
+
+	// Indices of the children in the arena, in the order of the Fortran
+	// `members(:)`
+	members: [i32; :],
+}
+
+fn new_node(kind: NodeKind): Node
+{
+	return Node
+	{
+		kind = kind,
+		type_name = "unknown",
+		members = [0; 0],
+	};
+}
+
+//==============================================================================
+
+struct NodeVec
+{
+	// A growable array of nodes, like samples/vec_i32.syntran.  It is the arena
+	// of a tree
+
+	len: i32,
+	cap: i32,
+	data: [Node; :],
+
+	fn push(node: &const Node): i32
+	{
+		// Returns the index of the node that was pushed
+		if len >= cap
+		{
+			let new_cap = 16;
+			if cap > 0
+				new_cap = cap * 2;
+
+			let new_data = [
+				data,
+				[new_node(NodeKind.unknown); new_cap - cap],
+			];
+			data = std::move(new_data);
+			cap = new_cap;
+		}
+		data[len] = node;
+		len += 1;
+		return len - 1;
+	}
+}
+
+fn new_node_vec(): NodeVec
+{
+	return NodeVec
+	{
+		len = 0,
+		cap = 0,
+		data = [new_node(NodeKind.unknown); 0],
+	};
+}

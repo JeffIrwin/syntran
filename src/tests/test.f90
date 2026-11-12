@@ -8120,6 +8120,87 @@ end subroutine unit_test_lex_dump
 
 !===============================================================================
 
+subroutine unit_test_parse_dump(npass, nfail)
+
+	! The hidden `--parse` dump, which compiler/parse.syntran has to match.  The
+	! differential test over src/tests/test-src is utils/test-parse.sh
+
+	use syntran, only: parse_dump_str
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'parse_dump'
+
+	character, parameter :: lf = line_feed
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! An empty program.  Positions are 0-based
+			parse_dump_str('', 'a') == &
+				'root translation_unit type=unknown'//lf, &
+
+			! A child's role is the name of the member that holds it
+			parse_dump_str('let x = 1 + 2;', 'a') == &
+				'root translation_unit type=unknown'//lf// &
+				'  members[0] let_expr id=x@4 op==@6 type=i32 slot=g5 pos=0'//lf// &
+				'    right binary_expr op=+@10 type=i32'//lf// &
+				'      left literal_expr type=i32 val=1'//lf// &
+				'      right literal_expr type=i32 val=2'//lf, &
+
+			! Only a subscript has a sub kind, and the lists that it doesn't fill
+			! are left out
+			parse_dump_str('let v = [1, 2];'//lf//'let y = v[0];', 'a') == &
+				'root translation_unit type=unknown'//lf// &
+				'  members[0] let_expr id=v@4 op==@6 type=[i32; :] slot=g5 pos=0'//lf// &
+				'    right array_expr type=[i32; :]'//lf// &
+				'      elems[0] literal_expr type=i32 val=1'//lf// &
+				'      elems[1] literal_expr type=i32 val=2'//lf// &
+				'  members[1] let_expr id=y@20 op==@22 type=i32 slot=g6 pos=16'//lf// &
+				'    right name_expr id=v@24 type=i32 slot=g5'//lf// &
+				'      lsubscripts[0] literal_expr type=i32 val=0 sub=scalar_sub'//lf, &
+
+			! A fn has no slot, since its id counts the intrinsic fns.  It's in the
+			! trailer instead, with its params, which can be refs
+			parse_dump_str('fn f(a: &i32, b: &const [f64; :]): i32 { return a; }', 'a') == &
+				'root translation_unit type=unknown'//lf// &
+				'  members[0] fn_declaration id=f@3 type=unknown ref=rc locs=2 params=1,2 pos=0'//lf// &
+				'    body block_statement type=unknown pos=39'//lf// &
+				'      members[0] return_statement type=unknown pos=41'//lf// &
+				'        right name_expr id=a@48 type=i32 slot=l1'//lf// &
+				'fn f(i32&, [f64; :]&const): i32'//lf, &
+
+			! Structs and enums are only in the trailer
+			parse_dump_str('struct S { m: i32 }'//lf//'enum E { a, b }', 'a') == &
+				'root translation_unit type=unknown'//lf// &
+				'  members[0] struct_declaration type=unknown'//lf// &
+				'  members[1] enum_declaration type=unknown'//lf// &
+				'struct S { m: i32 }'//lf// &
+				'enum E { a, b }'//lf, &
+
+			! With a diagnostic there's only its code, and no tree
+			parse_dump_str('$', 'a') == &
+				'diag E19'//lf, &
+
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_parse_dump
+
+!===============================================================================
+
 subroutine unit_test_ref(npass, nfail)
 
 	implicit none
@@ -13564,6 +13645,7 @@ subroutine unit_tests(iostat)
 	if (run_group('move')) call unit_test_move(npass, nfail)
 	if (run_group('system')) call unit_test_system(npass, nfail)
 	if (run_group('lex_dump')) call unit_test_lex_dump(npass, nfail)
+	if (run_group('parse_dump')) call unit_test_parse_dump(npass, nfail)
 	if (run_group('recursion')) call unit_test_recursion(npass, nfail)
 	if (run_group('args')) call unit_test_args(npass, nfail)
 	if (run_group('reshape')) call unit_test_reshape(npass, nfail)
