@@ -15,9 +15,6 @@
 // a translation unit with no members.  Anything else is parsed as if it were
 // empty, so the differential test only gates the files in utils/parse-pass.txt
 
-// `use lex::*` also brings in `utils::*`.  Importing utils again here would
-// work on the VM, but the native backend can't compile a module that is
-// imported twice
 use ast::*;
 use lex::*;
 

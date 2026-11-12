@@ -146,7 +146,7 @@ recursive module subroutine parse_use_statement(parser, statement)
 	character(len = :), allocatable :: mod_filename, mod_text, src_dir, fn_name
 	character(len = :), allocatable :: insert_name, var_name, struct_name
 	character(len = :), allocatable :: enum_name
-	character(len = :), allocatable :: alias_name, method_alias
+	character(len = :), allocatable :: alias_name, fn_alias
 	type(syntax_token_t) :: use_token, mod_identifier, double_colon, &
 		name_identifier, semi, star, dummy, as_identifier, alias_identifier
 	type(text_span_t) :: span
@@ -538,7 +538,7 @@ recursive module subroutine parse_use_statement(parser, statement)
 		if (qualified_import) then
 			! Methods are already namespaced by struct — adding a module prefix
 			! would break lookup.
-			if (fn%is_method) then
+			if (fn%is_method .or. index(fn_name, "#") > 0) then
 				insert_name = fn_name
 			else
 				insert_name = qualified_prefix // "::" // fn_name
@@ -560,17 +560,22 @@ recursive module subroutine parse_use_statement(parser, statement)
 		if (parser%ipass == 0) call parser%fn_names%push(insert_name)
 
 		! A module imported twice (directly and through another module) is
-		! parsed twice, so its methods have two ids under one unqualified key
-		! "0Struct::method", and the second insert above overwrites the first.
-		! The flat fn array is filled by name (syntax_parse() in core.f90), so
-		! also insert each method under a key that is unique to its id, to
-		! keep both copies alive.  The leading "0" keeps it out of spelling
+		! parsed twice, so its fns have two ids under one key, like `fn` or
+		! "0Struct::method" or `module::fn`, and the second insert above
+		! overwrites the first.  The flat fn array is filled by name
+		! (syntax_parse() in core.f90), so also insert each fn under a key that
+		! is unique to its id, to keep both copies alive.  The VM doesn't care,
+		! since it compiles fn bodies from the declaration nodes, but the native
+		! and Fortran backends read each signature from the flat array.  The
+		! leading "0" (which a method's key already has) keeps it out of spelling
 		! suggestions, and nothing looks it up by name.  A "#" means that this
-		! is already an alias, re-exported from a nested import
-		if (fn%is_method .and. index(fn_name, "#") == 0) then
-			method_alias = fn_name // "#" // str(id_index)
-			call parser%fns%insert(method_alias, fn, id_index)
-			if (parser%ipass == 0) call parser%fn_names%push(method_alias)
+		! is already an alias, re-exported from a nested import, which is
+		! inserted as is above
+		if (index(fn_name, "#") == 0) then
+			fn_alias = insert_name // "#" // str(id_index)
+			if (fn_alias(1:1) /= "0") fn_alias = "0" // fn_alias
+			call parser%fns%insert(fn_alias, fn, id_index)
+			if (parser%ipass == 0) call parser%fn_names%push(fn_alias)
 		end if
 	end do
 

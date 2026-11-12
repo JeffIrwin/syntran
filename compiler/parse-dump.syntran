@@ -7,8 +7,6 @@
 //
 //     syntran -q compiler/parse-dump.syntran -- <file>
 
-// `use parse::*` also brings in `ast::*`, and importing it twice doesn't
-// compile natively
 use parse::*;
 
 fn kind_name(node: &const Node): str

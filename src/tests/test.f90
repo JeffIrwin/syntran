@@ -210,6 +210,17 @@ end function get_diags_native_file
 
 !===============================================================================
 
+function native_file_ok(filename) result(ok)
+	! Does a file compile natively without any diagnostics?
+	character(len = *), intent(in) :: filename
+	logical :: ok
+	type(string_vector_t) :: d
+	d = get_diags_native_file(filename)
+	ok = d%len_ == 0
+end function native_file_ok
+
+!===============================================================================
+
 function native_ir(str_) result(ir)
 
 	! The LLVM IR that a program is compiled to, as one string.  Empty if it
@@ -8325,6 +8336,8 @@ subroutine unit_test_modules(npass, nfail)
 			interpret_file(path//'test-struct-collision-rev.syntran', quiet) == 'true', &
 			interpret_file(path//'test-struct-transitive.syntran', quiet) == 'true', &
 			interpret_file(path//'test-method-diamond.syntran', quiet) == 'true', &
+			interpret_file(path//'test-fn-diamond.syntran', quiet) == 'true', &
+			interpret_file(path//'test-fn-diamond-qual.syntran', quiet) == 'true', &
 			interpret_file(path//'test-enum-mod.syntran', quiet) == 'true', &
 			interpret_file(path//'test-enum-mod-qualified.syntran', quiet) == 'true', &
 			interpret_file(path//'test-qual-assign-ok.syntran', quiet) == 'true', &
@@ -12527,6 +12540,9 @@ subroutine unit_test_transpile(npass, nfail)
 			! A module with struct methods that is imported twice, directly and through
 			! another module, has its methods parsed twice under one name
 			transpiles_ok(T//'modules/test-method-diamond.syntran'), &
+			! Likewise for plain fns, which an import also keys by name
+			transpiles_ok(T//'modules/test-fn-diamond.syntran'), &
+			transpiles_ok(T//'modules/test-fn-diamond-qual.syntran'), &
 
 			! A switch is a named block that each arm leaves once it has run, with
 			! the subject stored once.  An array subject compares the shape and the
@@ -13452,7 +13468,12 @@ subroutine unit_test_native(npass, nfail)
 				//'f.name, std::exists("x"));'), &
 			.not. native_ir_is_empty('let f = open("x.bin", "rb"); println(std::read_i32(f), ' &
 				//'std::read_f64(f, 2));'), &
-			.not. native_ir_is_empty('writeln(std::OUT, "hi"); let s = readln(); println(eof());') &
+			.not. native_ir_is_empty('writeln(std::OUT, "hi"); let s = readln(); println(eof());'), &
+
+			! A module that is imported twice, directly and through another module, has
+			! each of its fns parsed twice under one name
+			native_file_ok('src/tests/test-src/modules/test-fn-diamond.syntran'), &
+			native_file_ok('src/tests/test-src/modules/test-fn-diamond-qual.syntran') &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
