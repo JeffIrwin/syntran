@@ -1,0 +1,26 @@
+// Module with plain fns and a global, to test a module that is imported twice
+// (directly and through another module, a diamond).  Each import is parsed
+// separately, so the fns get two sets of ids
+
+struct Pt
+{
+	x: i32,
+	y: i32,
+}
+
+let base = 100;
+
+fn add_base(k: i32): i32
+{
+	return base + k;
+}
+
+fn make_pt(x: i32, y: i32): Pt
+{
+	return Pt{x = x, y = y};
+}
+
+fn sum_pt(p: &const Pt): i32
+{
+	return p.x + p.y;
+}
