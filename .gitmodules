@@ -1,3 +1,6 @@
 [submodule "external/isocline"]
 	path = external/isocline
 	url = ../../JeffIrwin/isocline
+[submodule "external/aoc-syntran"]
+	path = external/aoc-syntran
+	url = ../../JeffIrwin/aoc-syntran

@@ -902,6 +902,31 @@
 				"
 			},
 			{
+				# The aoc-syntran submodule has a few hundred real programs.  Its
+				# inputs are encrypted, and the ones that pass `-a` check their own
+				# answers.  The rest only have to exit 0.  JIT only, since the VM
+				# would take much longer
+				"if": "matrix.os == 'ubuntu-24.04'",
+				"name": "Test AoC solutions with the JIT",
+				"shell": "bash",
+				"timeout-minutes": 30,
+				"env": {
+					"AOC_GPG_PASSPHRASE": "${{ secrets.AOC_GPG_PASSPHRASE }}"
+				},
+				"run":
+				"
+					set -eu \n
+					# Fail instead of skipping, so that a missing secret can't hide a regression \n
+					if [[ -z \"${AOC_GPG_PASSPHRASE:-}\" ]]; then \n
+						echo \"error: the AOC_GPG_PASSPHRASE secret is not set\" \n
+						exit 1 \n
+					fi \n
+					cd external/aoc-syntran \n
+					bash ./decrypt-everything.sh \n
+					SYNTRAN=\"$PWD/../../build/native/bin/syntran\" bash ./run.sh \n
+				"
+			},
+			{
 				"if": "matrix.os == 'ubuntu-24.04'",
 				"name": "Test cmake with LLVM",
 				"shell": "bash",

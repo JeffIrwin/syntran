@@ -239,6 +239,23 @@ FMA-free interpreter, as for the Fortran backend.  Add `--long` to test the
 programs that `src/tests/long.f90` runs instead, which are listed in
 `utils/native-pass-long.txt` (set `TIMEOUT=<seconds>` if the interpreter is slow).
 
+### Testing AoC solutions
+`external/aoc-syntran` is a submodule of [aoc-syntran](https://github.com/JeffIrwin/aoc-syntran),
+my Advent of Code solutions from 2015 on.  CI's `test-llvm` job runs all of them
+with `--jit`, on ubuntu only.  The inputs are gpg-encrypted, so CI needs the
+`AOC_GPG_PASSPHRASE` secret (`gh secret set AOC_GPG_PASSPHRASE`), and the step
+fails if it's missing.  A day passes if it exits 0, and the years that pass `-a`
+(`--assert`) also check their own answers.  Needs a syntran built with LLVM, and
+the passphrase in your environment:
+```bash
+cd external/aoc-syntran
+bash decrypt-everything.sh            # writes input.txt etc., which are gitignored
+SYNTRAN=$PWD/../../build/native/bin/syntran bash run.sh
+```
+The submodule pins a commit of aoc-syntran, so a change to syntran that breaks
+a solution must fix aoc-syntran and bump the pin in the same commit:
+`git -C external/aoc-syntran pull && git add external/aoc-syntran`.
+
 ### Testing README.md code blocks
 `README.md`'s code blocks are annotated with hidden `<!-- syntran-begin -->`
 markers and run in CI to catch doc drift. Requires a build at
