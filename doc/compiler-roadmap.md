@@ -61,8 +61,8 @@ prints the same format, and a bash script that diffs the two.
 
 ### Syntran side: `compiler/`
 
-- `compiler/ast.syntran`: `enum NodeKind` (Fortran names, minus the
-  `_expr`/`_statement` suffixes that lex-dump also drops), the `Type` struct
+- `compiler/ast.syntran`: `enum NodeKind` (the Fortran names as the dump prints
+  them, suffixes and all, so they match with `std::variant_of()`), the `Type` struct
   (kind, element kind, rank, struct/enum name, fn signature index), and the
   fat `Node` struct mirroring `syntax_node_t`.  Children are `i32` indices
   into a `NodeVec` arena, and list members (`members`, `args`, `elems`,
@@ -108,13 +108,35 @@ VM, ~795 native).
    tree, since the trailer lists those tables in id order and a call is named
    by its `id=`.  A token with no `pos` has no `@pos`, and the empty subscript
    lists are left out.
-1. **Core.** The arena, `Type`, scoped vars with `push_var`/`search`
+1. **Core.** (Done.)  The arena, `Type`, scoped vars with `push_var`/`search`
    (`src/parse_misc.f90:14-76`), std constants, the two-pass driver, `match`
    with E20 de-duping, and `preprocess` minus includes.  Literals, unary and
    binary exprs with result types (`get_binary_op_kind` in `src/types_ops.f90`),
    let and const, assignment and compound assignment (`parse_expr_statement`'s
    speculative LHS and rewind), blocks, if/while/for (ranges), break/continue,
-   and `src_pos` stamping.
+   and `src_pos` stamping.  As built:
+   - `compiler/scopes.syntran` is the scoped var table.  It is one hash table
+     where each name heads a stack of entries, instead of a dict for each scope
+   - A diagnostic is `E28@42`: the code and the 0-based position of its span,
+     since the Fortran merges the pass-0-only diagnostics by comparing the
+     rendered text, which has the location.  The dump prints only the code
+   - A construct from a later milestone (fn, struct, enum, switch, use, a call,
+     `::`, a subscript, `.`, `null`, or any array literal besides a range)
+     pushes the pseudo-diagnostic `unsupported`, which the Fortran parser never
+     does, so such a file can't match by accident
+   - The diagnostics that only add a check are left for stage 2: E48/E50
+     (operand types), E51/E52 (loop and condition types), E56/E58 (ranges),
+     E83 (assign to a const), E41 (return type).  The ones that come with the
+     tree are in: E9, E20, E22, E28, E113, E114
+   - `kind_name()` called a `continue` statement "continue statement", with a
+     space, so it's `continue_statement` in both parsers now
+   - `errors/E16-bad-f64.syntran` left the pass list, since it only had a
+     lexer diagnostic because the port skipped everything else.  It has a fn
+     declaration, which is milestone 2, so the port now reports it as
+     unsupported.  It comes back then.  The list has 67 files
+   - The rest of the files that don't match have a construct from a later
+     milestone, or are a stage 2 diagnostic or an `#include`, except for
+     `errors/dir_mod.syntran`, which is a directory, not a file
 2. **Fns.** The `parse_type` grammar, fn declarations (params, `&`/`&const`,
    `num_locs`, return checks needed for the tree), user calls with
    forward-reference tolerance in pass 0, fn refs, fn-typed vars and ptr calls,
