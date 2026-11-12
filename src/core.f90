@@ -54,9 +54,8 @@ module syntran__core_m
 	!      + aot takes 200+ (slower than transpiler but faster than vm)
 	!    * all aoc jit run fast enough that we might as well add as a submodule
 	!      and always run in ci (not bytecode though)
-	!      + done, external/aoc-syntran is run with the shipped release binary
-	!        by the build-rocky job and by test-os on windows and macos.  needs
-	!        the AOC_GPG_PASSPHRASE secret
+	!      + done
+	!      + decrypt-all.sh takes ~40 s. is there a faster way to batch decrypt?
 	!    * fuse elementwise intrinsics (sqrt, exp, ... for the elem benchmark),
 	!      write into the destination slice/variable in place (small), multi-d
 	!      slices, reductions of fused expressions
@@ -112,12 +111,20 @@ module syntran__core_m
 	!      introducing edge cases like unterminated pre-processor breaking
 	!      comments
 	!  - split or streamline ci/cd:
-	!    * "build on ubuntu-24" stage is now the slowest. i believe this just
-	!      changed after ast removal. previously, windows and intel-compiler
-	!      builds were about as equally slow, while ubuntu is the bottleneck now
-	!    * ubuntu is 9.5 minutes, while windows and intel classic are 7.5 min
-	!    * split into multiple (parallel) stages, or possible remove any stages
+	!    * split into multiple (parallel) stages, or possibly remove any stages
 	!      that are redundant
+	!  - ghcr
+	!    * github container registry
+	!    * mac and windows stages are slower than linux stages, so streamlining
+	!      them (note above) is still priority
+	!    * it's like a free dockerhub! how am i just finding out about this?
+	!    * optimize syntran images to pull from base images with tools
+	!      pre-installed
+	!    * start with rocky, later do alpine as needed. maybe also ubuntu
+	!      instead of running non-docker ci stage in github ubuntu raw
+	!    * downside, need to update base images periodically for coverage of
+	!      modern toolchains
+	!    * ref https://github.com/szaghi/fortran-toolchains/tree/main
 	!  - declare variable types without initializing them, and/or
 	!    conditional initialization.  Rust discourages mutability, instead
 	!    preferring patterns like this:
@@ -229,6 +236,7 @@ module syntran__core_m
 	!
 	!  - migrate ci from ubuntu 24 to 26. rocky should stay on version 9 for the
 	!    time-being for glibc compatibility:  https://github.com/JeffIrwin/syntran/issues/19
+	!    * see ghcr/docker note above
 	!    * updated to ubuntu 24.04 on 2026-06-06. 26 is not available yet
 	!    * related, update wsl ubuntu version. consider updating gfortran
 	!      versions in some places
@@ -428,8 +436,7 @@ module syntran__core_m
 	!      + floor, ceil, fraction, nint
 	!        * nint is not useless. i32 casting truncates (?), it does not round
 	!          like nint!
-	!      + system: multiple out args? iostat and stdout
-	!      + rank. might seem unnecessary but reshape() can create arrays of
+	!      + rank. might seem unnecessary but reshape() can (?) create arrays of
 	!        unknown rank at parse time
 	!      + pack/spread/unpack
 	!      + ternary operator or merge() ?
