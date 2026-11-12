@@ -617,6 +617,38 @@
 					bash ./utils/test-branch.sh \n
 				"
 			},
+			{
+				# The aoc-syntran submodule has a few hundred real programs.  Run all
+				# of them with `--jit`, using the release binary that this job just
+				# built and that ships, inside the image it was built in.  The
+				# inputs are encrypted, and the ones that pass `-a` check their own
+				# answers.  The rest only have to exit 0.  JIT only, since the VM
+				# would take much longer
+				"name": "Test AoC solutions with the JIT",
+				"timeout-minutes": 30,
+				"env": {
+					"AOC_GPG_PASSPHRASE": "${{ secrets.AOC_GPG_PASSPHRASE }}"
+				},
+				"run":
+				"
+					set -eu \n
+					# Fail instead of skipping, so that a missing secret can't hide a regression \n
+					if [[ -z \"${AOC_GPG_PASSPHRASE:-}\" ]]; then \n
+						echo \"error: the AOC_GPG_PASSPHRASE secret is not set\" \n
+						exit 1 \n
+					fi \n
+
+					# Decrypt on the runner, which has gpg, not in the image \n
+					(cd external/aoc-syntran && bash ./decrypt-everything.sh) \n
+
+					docker run --rm
+						--volume \"$PWD/external/aoc-syntran:/aoc\"
+						--env SYNTRAN=/workdir/syntran/bin/syntran
+						--workdir /aoc
+						--entrypoint bash
+						sy ./run.sh \n
+				"
+			},
 		]
 	},
 	"publish-dev": {
@@ -899,31 +931,6 @@
 					set -exu \n
 					# The same as the lexer test above, but compile compiler/lex-dump.syntran \n
 					bash ./utils/test-lex.sh --native -v ./build/native/bin/syntran \n
-				"
-			},
-			{
-				# The aoc-syntran submodule has a few hundred real programs.  Its
-				# inputs are encrypted, and the ones that pass `-a` check their own
-				# answers.  The rest only have to exit 0.  JIT only, since the VM
-				# would take much longer
-				"if": "matrix.os == 'ubuntu-24.04'",
-				"name": "Test AoC solutions with the JIT",
-				"shell": "bash",
-				"timeout-minutes": 30,
-				"env": {
-					"AOC_GPG_PASSPHRASE": "${{ secrets.AOC_GPG_PASSPHRASE }}"
-				},
-				"run":
-				"
-					set -eu \n
-					# Fail instead of skipping, so that a missing secret can't hide a regression \n
-					if [[ -z \"${AOC_GPG_PASSPHRASE:-}\" ]]; then \n
-						echo \"error: the AOC_GPG_PASSPHRASE secret is not set\" \n
-						exit 1 \n
-					fi \n
-					cd external/aoc-syntran \n
-					bash ./decrypt-everything.sh \n
-					SYNTRAN=\"$PWD/../../build/native/bin/syntran\" bash ./run.sh \n
 				"
 			},
 			{
