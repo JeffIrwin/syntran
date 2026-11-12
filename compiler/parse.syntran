@@ -1,0 +1,69 @@
+// Syntran parser, written in syntran.  This is a port of the front end in
+// src/parse*.f90, and the second piece of the self-hosted compiler after
+// compiler/lex.syntran.  See doc/compiler-roadmap.md
+//
+// It's tested against the Fortran parser by dumping both of their typed trees
+// (see compiler/parse-dump.syntran, `syntran --parse`, and
+// utils/test-parse.sh).  Its procedure names match the Fortran ones, so they
+// can be read side by side.  Differences:
+//
+// - `pos` is 0-based, like in the lexer port
+// - Diagnostics are only the error code, e.g. "E19", instead of a message
+// - Children are indices into an arena, see compiler/ast.syntran
+//
+// This is milestone 0: it only handles a program with nothing in it, which is
+// a translation unit with no members.  Anything else is parsed as if it were
+// empty, so the differential test only gates the files in utils/parse-pass.txt
+
+// `use lex::*` also brings in `utils::*`.  Importing utils again here would
+// work on the VM, but the native backend can't compile a module that is
+// imported twice
+use ast::*;
+use lex::*;
+
+//==============================================================================
+
+struct Parser
+{
+	// The tokens, without any whitespace or comments, like the Fortran
+	// `new_parser()`, and up to and including eof
+	tokens: TokenVec,
+	pos: i32,
+
+	nodes: NodeVec,
+	diags: StrVec,
+}
+
+fn new_parser(text: &const str): Parser
+{
+	let lexer = new_lexer(text);
+	const all = lex_all(&lexer);
+
+	let tokens = new_token_vec();
+	for i in [0: all.len]
+	{
+		const kind = all.data[i].kind;
+		if kind != TokenKind.whitespace and kind != TokenKind.comment
+			tokens.push(all.data[i]);
+	}
+
+	// Every lexer diagnostic is a parser diagnostic
+	let diags = new_str_vec();
+	for i in [0: lexer.diags.len]
+		diags.push(lexer.diags.data[i]);
+
+	return Parser
+	{
+		tokens = tokens,
+		pos = 0,
+		nodes = new_node_vec(),
+		diags = diags,
+	};
+}
+
+fn parse_unit(parser: &Parser): i32
+{
+	// Parse a whole program, and return the index of its translation unit in
+	// `parser.nodes`
+	return parser.nodes.push(new_node(NodeKind.translation_unit));
+}

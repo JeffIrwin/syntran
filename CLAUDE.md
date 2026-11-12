@@ -285,6 +285,24 @@ has the `pos` of its last char, so a mismatch is a bug in one or the other.  The
 `pos` in the dump is 0-based.  `src/tests/test-src/errors/lex-edge-cases.syntran`
 is a corpus of odd literals and operators.
 
+### Testing the syntran parser port
+`compiler/parse.syntran` is the port of the front end in `src/parse*.f90`, in
+milestones (see `doc/compiler-roadmap.md`), and it's tested the same way as the
+lexer.  The hidden flag `syntran --parse file.syntran` dumps the Fortran parser's
+typed tree and its fn/struct/enum tables (`parse_dump()` in `src/types_ops.f90`
+and `parse_dump_str()` in `src/syntran.f90` have the format), and
+`compiler/parse-dump.syntran` dumps the port's.  With any diagnostic, only the
+`diag <code>` lines are dumped.  Unlike the lexer, the port is unfinished, so
+only the files in `utils/parse-pass.txt` have to match, and the list grows with
+each milestone:
+```bash
+bash utils/test-parse.sh -v build/v1/bin/syntran                 # on the VM, ~2 min
+bash utils/test-parse.sh --native build/native/bin/syntran       # compiled
+bash utils/test-parse.sh --update-pass-list build/v1/bin/syntran # after the port grows
+```
+A new child member of `syntax_node_t` has to be added to `dump_node()` in
+`src/types_ops.f90`, or exempted in `utils/check-node-sync.sh`, which CI runs.
+
 ### Syntran code style
 `doc/style.md` is the style guide for syntran source: tabs, Allman braces,
 `PascalCase` structs/enums, `snake_case` everything else (including enum variants),

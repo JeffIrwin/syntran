@@ -1125,48 +1125,6 @@ end function new_lexer
 
 !===============================================================================
 
-function escape_dump(str_) result(esc)
-
-	! Escape a token's text or value for lex_dump(), so that a token is always
-	! exactly one line, with no tabs in it.  Bytes >= 128 are left alone
-
-	character(len = *), intent(in) :: str_
-	character(len = :), allocatable :: esc
-
-	!********
-
-	integer :: i
-
-	type(char_vector_t) :: sb
-
-	sb = new_char_vector()
-	do i = 1, len(str_)
-		select case (str_(i:i))
-		case ("\")
-			call sb%push("\")
-			call sb%push("\")
-		case (line_feed)
-			call sb%push("\")
-			call sb%push("n")
-		case (carriage_return)
-			call sb%push("\")
-			call sb%push("r")
-		case (tab)
-			call sb%push("\")
-			call sb%push("t")
-		case (null_char)
-			call sb%push("\")
-			call sb%push("0")
-		case default
-			call sb%push(str_(i:i))
-		end select
-	end do
-	esc = sb%trim()
-
-end function escape_dump
-
-!===============================================================================
-
 function diag_code(diag) result(code)
 
 	! Get the `E##` out of a diagnostic like "Error[E42]: ..."

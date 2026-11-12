@@ -100,9 +100,14 @@ VM, ~795 native).
 
 ## Milestones (each one is a commit, and the pass list grows)
 
-0. **Infrastructure.** The `--parse` dump with its unit test, `test-parse.sh`
-   with an empty pass list, the CI steps, and skeletons for `ast`/`parse`/
-   `parse-dump` that handle an empty file.
+0. **Infrastructure.** (Done.)  The `--parse` dump with its unit test,
+   `test-parse.sh` with a pass list, the CI steps, and skeletons for `ast`/
+   `parse`/`parse-dump` that handle an empty file.  No file in the corpora is
+   empty, so the pass list starts with the two that only have lexer
+   diagnostics.  As built, the fn, struct, and enum ids are not dumped on the
+   tree, since the trailer lists those tables in id order and a call is named
+   by its `id=`.  A token with no `pos` has no `@pos`, and the empty subscript
+   lists are left out.
 1. **Core.** The arena, `Type`, scoped vars with `push_var`/`search`
    (`src/parse_misc.f90:14-76`), std constants, the two-pass driver, `match`
    with E20 de-duping, and `preprocess` minus includes.  Literals, unary and

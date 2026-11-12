@@ -1,0 +1,63 @@
+// Dump the typed tree of a file from the syntran parser, in the same format as
+// `syntran --parse` does for the Fortran parser, so the two can be diffed.  See
+// `parse_dump()` in src/types_ops.f90 and `parse_dump_str()` in src/syntran.f90
+// for the format, and utils/test-parse.sh
+//
+// Usage:
+//
+//     syntran -q compiler/parse-dump.syntran -- <file>
+
+// `use parse::*` also brings in `ast::*`, and importing it twice doesn't
+// compile natively
+use parse::*;
+
+fn kind_name(node: &const Node): str
+{
+	return std::variant_of(node.kind);
+}
+
+fn dump_node(nodes: &const NodeVec, id: i32, role: &const str, depth: i32)
+{
+	const node = nodes.data[id];
+
+	let indent = "";
+	for i in [0: depth]
+		indent += "  ";
+
+	println(indent, role, " ", kind_name(node), " type=", node.type_name);
+
+	for i in [0: size(node.members)]
+		dump_node(nodes, node.members[i], "members[" + str(i) + "]", depth + 1);
+	return;
+}
+
+fn main(): i32
+{
+	const args = std::args();
+	if size(args) < 1
+	{
+		println("usage: parse-dump.syntran -- <file>");
+		exit(1);
+	}
+
+	const text = std::read_file(args[0]);
+
+	let parser = new_parser(text);
+	const root = parse_unit(&parser);
+
+	// With any diagnostics, only their codes are dumped, and no tree
+	if parser.diags.len > 0
+	{
+		for i in [0: parser.diags.len]
+			println("diag ", parser.diags.data[i]);
+		return 0;
+	}
+
+	dump_node(parser.nodes, root, "root", 0);
+
+	// The tables of user fns, structs, and enums come next, and there are none
+	// until milestone 2
+	return 0;
+}
+
+return main();

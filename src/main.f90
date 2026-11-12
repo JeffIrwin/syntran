@@ -63,6 +63,12 @@ program main
 		res = syntran_lex_file(args%syntran_file, io)
 		if (io == EXIT_SUCCESS) write(*,'(a)', advance = 'no') res
 
+	else if (args%parse) then
+		! Hidden: dump the typed syntax tree instead of running the program.  See
+		! parse_dump().  parse_args() has already guaranteed a file
+		res = syntran_parse_file(args%syntran_file, io)
+		if (io == EXIT_SUCCESS) write(*,'(a)', advance = 'no') res
+
 	else if (args%transpile) then
 		! Write the program as Fortran source for the user to compile, instead of
 		! running it.  The value of the last statement is only printed by the

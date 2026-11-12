@@ -370,6 +370,18 @@
 			},
 			{
 				"if": "matrix.os != 'windows-latest'",
+				"name": "Test parser port",
+				"shell": "bash",
+				"run":
+				"
+					# Dump the typed tree of every test program with the syntran port of the \n
+					# parser, compiler/parse.syntran, and compare it with the Fortran parser's. \n
+					# Only the files in utils/parse-pass.txt have to match for now \n
+					bash ./utils/test-parse.sh -v ./build/Debug/syntran \n
+				"
+			},
+			{
+				"if": "matrix.os != 'windows-latest'",
 				"name": "Lint syntran style",
 				"shell": "bash",
 				"run":
@@ -967,6 +979,17 @@
 					set -exu \n
 					# The same as the lexer test above, but compile compiler/lex-dump.syntran \n
 					bash ./utils/test-lex.sh --native -v ./build/native/bin/syntran \n
+				"
+			},
+			{
+				"if": "matrix.os == 'ubuntu-24.04'",
+				"name": "Test parser port natively",
+				"shell": "bash",
+				"run":
+				"
+					set -exu \n
+					# The same as the parser test above, but compile compiler/parse-dump.syntran \n
+					bash ./utils/test-parse.sh --native -v ./build/native/bin/syntran \n
 				"
 			},
 			{
