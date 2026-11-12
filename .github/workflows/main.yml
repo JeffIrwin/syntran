@@ -531,6 +531,42 @@
 				}
 			},
 			{
+				# The same as the AoC step of build-rocky, with the release binary that
+				# "Pack Windows" and "Pack macOS" just built and that ships.  It's
+				# after the uploads, so that a failure still leaves the binary to
+				# download
+				"if": "matrix.os != 'ubuntu-24.04'",
+				"name": "Test AoC solutions with the JIT",
+				"shell": "bash",
+				"timeout-minutes": 45,
+				"env": {
+					"AOC_GPG_PASSPHRASE": "${{ secrets.AOC_GPG_PASSPHRASE }}"
+				},
+				"run":
+				"
+					set -eu \n
+					# Fail instead of skipping, so that a missing secret can't hide a regression \n
+					if [[ -z \"${AOC_GPG_PASSPHRASE:-}\" ]]; then \n
+						echo \"error: the AOC_GPG_PASSPHRASE secret is not set\" \n
+						exit 1 \n
+					fi \n
+
+					syntran=\"$PWD/syntran\" \n
+					cd external/aoc-syntran \n
+
+					# The submodule's repo has no .gitattributes, so the runner's \n
+					# autocrlf turns its scripts into CRLF, which bash can't run. \n
+					# This repo's .gitattributes doesn't reach into a submodule \n
+					if [[ \"$RUNNER_OS\" == Windows ]]; then \n
+						syntran=\"$syntran.exe\" \n
+						find . -type f \\( -name '*.sh' -o -name '*.syntran' \\) -not -path './.git/*' -exec sed -i 's/\\r$//' {} + \n
+					fi \n
+
+					bash ./decrypt-everything.sh \n
+					SYNTRAN=\"$syntran\" bash ./run.sh \n
+				"
+			},
+			{
 				"uses": "actions/upload-artifact@v7",
 				"if": "matrix.os == 'ubuntu-24.04'",
 				"with": {
