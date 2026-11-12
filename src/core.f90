@@ -54,8 +54,9 @@ module syntran__core_m
 	!      + aot takes 200+ (slower than transpiler but faster than vm)
 	!    * all aoc jit run fast enough that we might as well add as a submodule
 	!      and always run in ci (not bytecode though)
-	!      + done, external/aoc-syntran is run by the build-rocky job with the
-	!        shipped release binary.  needs the AOC_GPG_PASSPHRASE secret
+	!      + done, external/aoc-syntran is run with the shipped release binary
+	!        by the build-rocky job and by test-os on windows and macos.  needs
+	!        the AOC_GPG_PASSPHRASE secret
 	!    * fuse elementwise intrinsics (sqrt, exp, ... for the elem benchmark),
 	!      write into the destination slice/variable in place (small), multi-d
 	!      slices, reductions of fused expressions
