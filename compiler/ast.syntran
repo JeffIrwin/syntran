@@ -7,11 +7,17 @@
 //
 // - A child is an `i32` index into a `NodeVec`, the arena that owns every node,
 //   instead of an allocatable member, because syntran structs can't hold
-//   themselves and have value semantics
-// - Kinds are an enum, with the Fortran names minus the `_expr`/`_statement`
-//   suffixes that the dump drops
-// - Only the members that milestone 0 needs are here so far.  Each milestone
+//   themselves and have value semantics.  An index of -1 is a child that isn't
+//   there, where the Fortran member isn't allocated
+// - Kinds are an enum with the same names as the Fortran kinds, which the dump
+//   prints with `std::variant_of()`
+// - A type is a `Type` struct instead of a `value_t`, since a type is all of a
+//   value that the tree needs so far.  `type_name()` is `value_type_name()`
+// - A literal's value is its text, as the Fortran `value_t%to_str()` prints it
+// - Only the members that the milestones so far need are here.  Each milestone
 //   adds the ones that it needs
+
+use lex::*;
 
 //==============================================================================
 
@@ -19,15 +25,159 @@ enum NodeKind
 {
 	unknown,
 	translation_unit,
+	literal_expr,
+	name_expr,
+	unary_expr,
+	binary_expr,
+	let_expr,
+	assignment_expr,
+	block_statement,
+	if_statement,
+	while_statement,
+	for_statement,
+	array_expr,
+	return_statement,
+	break_statement,
+	continue_statement,
 }
+
+enum TypeKind
+{
+	// The Fortran `*_type` parameters, minus the suffix, and `null_` has a
+	// trailing `_` since `null` is a keyword
+
+	unknown,
+	void,
+	bool,
+	i32,
+	i64,
+	f32,
+	f64,
+	str,
+	array,
+	any,
+	null_,
+	file,
+}
+
+struct Type
+{
+	// Like the type part of `value_t`.  For an array, `kind` is `array` and
+	// `elem` and `rank` say what is in it.  `elem` and `rank` are only
+	// meaningful for an array
+
+	kind: TypeKind,
+	elem: TypeKind,
+	rank: i32,
+}
+
+fn new_type(kind: TypeKind): Type
+{
+	return Type
+	{
+		kind = kind,
+		elem = TypeKind.unknown,
+		rank = 0,
+	};
+}
+
+fn new_array_type(elem: TypeKind, rank: i32): Type
+{
+	return Type
+	{
+		kind = TypeKind.array,
+		elem = elem,
+		rank = rank,
+	};
+}
+
+fn type_name_primitive(kind: TypeKind): str
+{
+	// Like `value_type_name_primitive()`.  Only some kinds have a name, and
+	// the rest are `"unknown"`, including a file
+	if kind == TypeKind.void
+		return "void";
+	if kind == TypeKind.bool
+		return "bool";
+	if kind == TypeKind.i32
+		return "i32";
+	if kind == TypeKind.i64
+		return "i64";
+	if kind == TypeKind.f32
+		return "f32";
+	if kind == TypeKind.f64
+		return "f64";
+	if kind == TypeKind.str
+		return "str";
+	if kind == TypeKind.any
+		return "any";
+	if kind == TypeKind.null_
+		return "null";
+	return "unknown";
+}
+
+fn type_name(ty: &const Type): str
+{
+	// Like `value_type_name()`, e.g. `"i32"`, `"[f64; :]"`, or `"[i32; :, :]"`
+	if ty.kind != TypeKind.array
+		return type_name_primitive(ty.kind);
+
+	let name = "[" + type_name_primitive(ty.elem) + "; ";
+	for i in [1: ty.rank]
+		name += ":, ";
+	return name + ":]";
+}
+
+fn is_num_type(kind: TypeKind): bool
+{
+	return kind == TypeKind.i32 or kind == TypeKind.i64 or
+		kind == TypeKind.f32 or kind == TypeKind.f64;
+}
+
+fn is_int_type(kind: TypeKind): bool
+{
+	return kind == TypeKind.i32 or kind == TypeKind.i64;
+}
+
+//==============================================================================
 
 struct Node
 {
+	// Like `syntax_node_t`
+
 	kind: NodeKind,
 
-	// The name of the type, as the Fortran `value_type_name()` prints it, like
-	// `"i32"` or `"unknown"`
-	type_name: str,
+	// The tokens, which are only meaningful if the `has_` flag is set, like
+	// the Fortran members that are allocated
+	has_id: bool,
+	identifier: Token,
+	has_op: bool,
+	op: Token,
+
+	type_: Type,
+
+	// The slot of a variable, which is 1-based like the Fortran, and 0 if there
+	// isn't one
+	id_index: i32,
+	is_loc: bool,
+
+	// The value of a literal
+	val: str,
+
+	// The 0-based position of a statement in the source, or -1
+	src_pos: i32,
+
+	// Indices of the children in the arena, or -1
+	left: i32,
+	right: i32,
+	condition: i32,
+	if_clause: i32,
+	else_clause: i32,
+	body: i32,
+	array: i32,
+	lbound: i32,
+	step: i32,
+	ubound: i32,
 
 	// Indices of the children in the arena, in the order of the Fortran
 	// `members(:)`
@@ -39,7 +189,25 @@ fn new_node(kind: NodeKind): Node
 	return Node
 	{
 		kind = kind,
-		type_name = "unknown",
+		has_id = false,
+		identifier = new_token(TokenKind.eof, 0, ""),
+		has_op = false,
+		op = new_token(TokenKind.eof, 0, ""),
+		type_ = new_type(TypeKind.unknown),
+		id_index = 0,
+		is_loc = false,
+		val = "",
+		src_pos = -1,
+		left = -1,
+		right = -1,
+		condition = -1,
+		if_clause = -1,
+		else_clause = -1,
+		body = -1,
+		array = -1,
+		lbound = -1,
+		step = -1,
+		ubound = -1,
 		members = [0; 0],
 	};
 }
@@ -85,4 +253,247 @@ fn new_node_vec(): NodeVec
 		cap = 0,
 		data = [new_node(NodeKind.unknown); 0],
 	};
+}
+
+//==============================================================================
+
+struct I32Vec
+{
+	// A growable array of i32s, like samples/vec_i32.syntran.  It collects the
+	// indices of a node's list members
+
+	len: i32,
+	cap: i32,
+	data: [i32; :],
+
+	fn push(x: i32)
+	{
+		if len >= cap
+		{
+			let new_cap = 16;
+			if cap > 0
+				new_cap = cap * 2;
+
+			let new_data = [data, [0; new_cap - cap]];
+			data = std::move(new_data);
+			cap = new_cap;
+		}
+		data[len] = x;
+		len += 1;
+		return;
+	}
+
+	const fn to_array(): [i32; :]
+	{
+		return data[0: len];
+	}
+}
+
+fn new_i32_vec(): I32Vec
+{
+	return I32Vec
+	{
+		len = 0,
+		cap = 0,
+		data = [0; 0],
+	};
+}
+
+//==============================================================================
+
+fn is_assignment_op(token: &const Token): bool
+{
+	// Is the operator an assignment operator, either regular or compound?
+	const k = token.kind;
+	return k == TokenKind.equals or k == TokenKind.plus_equals or
+		k == TokenKind.minus_equals or k == TokenKind.star_equals or
+		k == TokenKind.slash_equals or k == TokenKind.double_star_equals or
+		k == TokenKind.percent_equals or k == TokenKind.amp_equals or
+		k == TokenKind.pipe_equals or k == TokenKind.caret_equals or
+		k == TokenKind.double_less_equals or
+		k == TokenKind.double_greater_equals;
+}
+
+fn get_unary_op_prec(token: &const Token): i32
+{
+	// Unary operator precedence, which is below `**` but above every other
+	// binary operator.  See the Fortran for why
+	const k = token.kind;
+	if k == TokenKind.plus or k == TokenKind.minus or k == TokenKind.bang
+		return 11;
+	if k == TokenKind.keyword and token.keyword == Keyword.not_
+		return 11;
+	return 0;
+}
+
+fn get_binary_op_prec(token: &const Token): i32
+{
+	// Binary operator precedence.  A higher number is a higher precedence
+	const k = token.kind;
+	if k == TokenKind.double_star
+		return 12;
+	if k == TokenKind.star or k == TokenKind.slash or
+		k == TokenKind.percent or k == TokenKind.matmul
+		return 10;
+	if k == TokenKind.plus or k == TokenKind.minus
+		return 9;
+	if k == TokenKind.double_less or k == TokenKind.double_greater
+		return 8;
+	if k == TokenKind.amp
+		return 7;
+	if k == TokenKind.caret
+		return 6;
+	if k == TokenKind.pipe
+		return 5;
+	if k == TokenKind.less or k == TokenKind.less_equals or
+		k == TokenKind.greater or k == TokenKind.greater_equals
+		return 4;
+	if k == TokenKind.double_equals or k == TokenKind.bang_equals
+		return 3;
+	if k == TokenKind.keyword and token.keyword == Keyword.and_
+		return 2;
+	if k == TokenKind.keyword and token.keyword == Keyword.or_
+		return 1;
+	return 0;
+}
+
+//==============================================================================
+
+fn is_comparison_op(token: &const Token): bool
+{
+	const k = token.kind;
+	return k == TokenKind.double_equals or k == TokenKind.bang_equals or
+		k == TokenKind.less or k == TokenKind.less_equals or
+		k == TokenKind.greater or k == TokenKind.greater_equals;
+}
+
+fn is_array_elem(kind: TypeKind): bool
+{
+	// Does an array of these have an array type in the Fortran?  The others,
+	// like a struct, have no `*_array_type`
+	return kind == TypeKind.bool or kind == TypeKind.f32 or
+		kind == TypeKind.f64 or kind == TypeKind.i32 or
+		kind == TypeKind.i64 or kind == TypeKind.str;
+}
+
+fn get_binary_scalar_kind(left: TypeKind, right: TypeKind): TypeKind
+{
+	// The default case of the Fortran `get_binary_op_kind()` for two scalars:
+	// the same type, or promoted to the wider one
+	if left == TypeKind.unknown or right == TypeKind.unknown
+		return TypeKind.unknown;
+	if left == right
+		return left;
+	if left == TypeKind.f64 or right == TypeKind.f64
+		return TypeKind.f64;
+	if left == TypeKind.f32 or right == TypeKind.f32
+		return TypeKind.f32;
+	if (left == TypeKind.i64 and is_int_type(right)) or
+		(right == TypeKind.i64 and is_int_type(left))
+		return TypeKind.i64;
+	return TypeKind.unknown;
+}
+
+fn array_rank(left: &const Type, right: &const Type): i32
+{
+	// The rank of the result of an elementwise operation, which is the left
+	// operand's if it is an array
+	if left.kind == TypeKind.array
+		return left.rank;
+	return right.rank;
+}
+
+fn get_binary_op_kind(
+	left: &const Type, op: &const Token, right: &const Type,
+): Type
+{
+	// The type of the result of `left op right`.  This is the Fortran
+	// `get_binary_op_kind()` followed by what `new_binary_expr()` makes of it
+	// (but not for `@`, see `get_matmul_kind()`)
+	if left.kind == TypeKind.unknown or right.kind == TypeKind.unknown
+		return new_type(TypeKind.unknown);
+
+	const either_array = left.kind == TypeKind.array or
+		right.kind == TypeKind.array;
+
+	if is_comparison_op(op)
+	{
+		// Always a bool of some rank
+		if either_array
+			return new_array_type(TypeKind.bool, array_rank(left, right));
+		return new_type(TypeKind.bool);
+	}
+
+	if op.kind == TokenKind.double_less or op.kind == TokenKind.double_greater
+	{
+		// A shift is the type of its left operand if both are scalars
+		if not either_array
+			return left;
+
+		let elem = TypeKind.i64;
+		if left.kind == TypeKind.array
+		{
+			if left.elem == TypeKind.i32
+				elem = TypeKind.i32;
+		}
+		else if left.kind == TypeKind.i32
+		{
+			elem = TypeKind.i32;
+		}
+		return new_array_type(elem, array_rank(left, right));
+	}
+
+	// An array operand is combined with the other operand elementwise, and an
+	// element that has no array type makes the result unknown
+	let lkind = left.kind;
+	if left.kind == TypeKind.array
+		lkind = left.elem;
+	let rkind = right.kind;
+	if right.kind == TypeKind.array
+		rkind = right.elem;
+
+	const kind = get_binary_scalar_kind(lkind, rkind);
+	if not either_array
+		return new_type(kind);
+	if is_array_elem(kind)
+		return new_array_type(kind, array_rank(left, right));
+	return new_type(TypeKind.unknown);
+}
+
+fn matmul_out_rank(lrank: i32, rrank: i32): i32
+{
+	// The rank of `@`:  matrix @ matrix is a matrix, vector @ vector is a
+	// scalar, and the rest are vectors
+	if lrank == 1 and rrank == 1
+		return 0;
+	if lrank == 2 and rrank == 2
+		return 2;
+	return 1;
+}
+
+fn get_matmul_kind(left: &const Type, right: &const Type): Type
+{
+	// The type of `left @ right`, from the Fortran `new_binary_expr()`.  The
+	// element type is promoted like `*` does, and the rank comes from the
+	// operands.  An operand that isn't an array has no element type or rank
+	let lelem = TypeKind.unknown;
+	let lrank = -1;
+	if left.kind == TypeKind.array
+	{
+		lelem = left.elem;
+		lrank = left.rank;
+	}
+	let relem = TypeKind.unknown;
+	let rrank = -1;
+	if right.kind == TypeKind.array
+	{
+		relem = right.elem;
+		rrank = right.rank;
+	}
+
+	const elem = get_binary_scalar_kind(lelem, relem);
+	const rank = matmul_out_rank(lrank, rrank);
+	if rank == 0
+		return new_type(elem);
+	return new_array_type(elem, rank);
 }

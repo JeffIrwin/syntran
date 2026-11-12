@@ -274,7 +274,7 @@ module procedure kind_name
 			"break_keyword              ", & ! 103
 			"break_statement            ", & ! 104
 			"continue_keyword           ", & ! 105
-			"continue statement         ", & ! 106
+			"continue_statement         ", & ! 106
 			"double_less_token          ", & ! 107
 			"double_greater_token       ", & ! 108
 			"amp_token                  ", & ! 109

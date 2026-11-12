@@ -1,0 +1,221 @@
+// The scoped table of variables for the syntran port of the parser, like
+// `vars_t` in src/types.f90 and src/types_dict.f90.  See compiler/parse.syntran
+//
+// Differences from the Fortran:
+//
+// - It is one hash table of names instead of a dict for each scope.  Each name
+//   is the head of a stack of entries, with the innermost scope's declaration
+//   on top, so a search is one probe instead of one for each scope.  Popping
+//   a scope restores what each of its names was before
+// - A search returns the index of an entry, or -1, and the caller reads the
+//   entry from `entries`
+
+use ast::*;
+
+//==============================================================================
+
+const INIT_CAP = 16;
+
+fn fnv1a(s: &const str): i64
+{
+	// FNV-1a, like src/tests/long/aoc/dicts/dict_i64.syntran
+	let h = 2166136261'i64;
+	for c in s
+	{
+		h = h ^ i64(i32(c));
+		h = h * 16777619'i64 % 4294967296'i64;
+	}
+	return h;
+}
+
+struct Entry
+{
+	// A variable that is declared in a scope
+
+	name: str,
+	type_: Type,
+	id_index: i32,
+	is_const: bool,
+
+	// The scope that it is declared in, and the entry that it hides, or -1
+	scope: i32,
+	prev: i32,
+}
+
+fn new_entry(): Entry
+{
+	return Entry
+	{
+		name = "",
+		type_ = new_type(TypeKind.unknown),
+		id_index = 0,
+		is_const = false,
+		scope = 0,
+		prev = -1,
+	};
+}
+
+struct Scopes
+{
+	// The hash table has a power of 2 capacity and linear probing.  `head` is
+	// the newest entry of the name in a used slot, or -1 if its scopes have all
+	// been popped
+
+	cap: i32,
+	used: i32,
+	slot_used: [bool; :],
+	slot_name: [str; :],
+	slot_head: [i32; :],
+
+	// A stack of the entries that are in scope
+	len: i32,
+	entries: [Entry; :],
+
+	// The current scope, where the global one is 1, and `starts[s]` is the
+	// number of entries when scope `s` was pushed
+	scope: i32,
+	starts: [i32; :],
+
+	const fn probe(key: &const str): i32
+	{
+		// The slot that has `key`, or the empty one where it would go
+		let s = i32(fnv1a(key) % i64(cap));
+		while slot_used[s] and slot_name[s] != key
+			s = (s + 1) % cap;
+		return s;
+	}
+
+	fn grow()
+	{
+		// Double the capacity and put the names in again, which keeps their
+		// heads
+		const old_cap = cap;
+		const old_used = slot_used;
+		const old_name = slot_name;
+		const old_head = slot_head;
+		cap *= 2;
+		slot_used = [false; cap];
+		slot_name = [""; cap];
+		slot_head = [-1; cap];
+		for i in [0: old_cap]
+		{
+			if old_used[i]
+			{
+				const s = probe(old_name[i]);
+				slot_used[s] = true;
+				slot_name[s] = old_name[i];
+				slot_head[s] = old_head[i];
+			}
+		}
+		return;
+	}
+
+	fn insert(
+		key: &const str, type_: &const Type, id_index: i32,
+		overwrite: bool, is_const: bool,
+	): bool
+	{
+		// Declare `key` in the current scope.  It is true if that worked, and
+		// false if the scope already has it and `overwrite` isn't set, which
+		// leaves the old one alone
+		if (used + 1) * 4 > cap * 3
+			grow();
+
+		const s = probe(key);
+		if not slot_used[s]
+		{
+			slot_used[s] = true;
+			slot_name[s] = key;
+			slot_head[s] = -1;
+			used += 1;
+		}
+
+		const head = slot_head[s];
+		if head >= 0
+		{
+			if entries[head].scope == scope
+			{
+				if not overwrite
+					return false;
+				entries[head].type_ = type_;
+				entries[head].id_index = id_index;
+				entries[head].is_const = is_const;
+				return true;
+			}
+		}
+
+		if len >= size(entries)
+		{
+			const new_len = size(entries) * 2;
+			let new_entries = [entries, [new_entry(); new_len - size(entries)]];
+			entries = std::move(new_entries);
+		}
+		let entry = new_entry();
+		entry.name = key;
+		entry.type_ = type_;
+		entry.id_index = id_index;
+		entry.is_const = is_const;
+		entry.scope = scope;
+		entry.prev = head;
+		entries[len] = entry;
+		slot_head[s] = len;
+		len += 1;
+		return true;
+	}
+
+	const fn search(key: &const str): i32
+	{
+		// The index of the entry that `key` is, in the innermost scope that has
+		// it, or -1
+		const s = probe(key);
+		if not slot_used[s]
+			return -1;
+		return slot_head[s];
+	}
+
+	fn push_scope()
+	{
+		scope += 1;
+		if scope >= size(starts)
+		{
+			let new_starts = [starts, [0; size(starts)]];
+			starts = std::move(new_starts);
+		}
+		starts[scope] = len;
+		return;
+	}
+
+	fn pop_scope()
+	{
+		// Drop the current scope's entries, newest first, so that each name
+		// is what it was before the scope
+		const first = starts[scope];
+		let i = len - 1;
+		while i >= first
+		{
+			const s = probe(entries[i].name);
+			slot_head[s] = entries[i].prev;
+			i -= 1;
+		}
+		len = first;
+		scope -= 1;
+		return;
+	}
+}
+
+fn new_scopes(): Scopes
+{
+	// There is one scope, the global one
+	return Scopes
+	{
+		cap = INIT_CAP,
+		used = 0,
+		slot_used = [false; INIT_CAP],
+		slot_name = [""; INIT_CAP],
+		slot_head = [-1; INIT_CAP],
+		len = 0,
+		entries = [new_entry(); INIT_CAP],
+		scope = 1,
+		starts = [0; INIT_CAP],
+	};
+}

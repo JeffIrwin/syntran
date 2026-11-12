@@ -8196,6 +8196,17 @@ subroutine unit_test_parse_dump(npass, nfail)
 				'struct S { m: i32 }'//lf// &
 				'enum E { a, b }'//lf, &
 
+			! The kind name of a continue statement has no space in it, like the other
+			! kinds, since the port prints the same names
+			parse_dump_str('for i in [0: 2] { continue; }', 'a') == &
+				'root translation_unit type=unknown'//lf// &
+				'  members[0] for_statement id=i@4 type=unknown slot=g5 pos=0'//lf// &
+				'    body block_statement type=unknown pos=16'//lf// &
+				'      members[0] continue_statement type=unknown pos=18'//lf// &
+				'    array array_expr type=[i32; :]'//lf// &
+				'      lbound literal_expr type=i32 val=0'//lf// &
+				'      ubound literal_expr type=i32 val=2'//lf, &
+
 			! With a diagnostic there's only its code, and no tree
 			parse_dump_str('$', 'a') == &
 				'diag E19'//lf, &
