@@ -880,8 +880,12 @@ recursive module subroutine parse_primary_expr(parser, expr)
 				if (parser%current_kind() == lbracket_token) then
 					call parser%parse_subscripts(expr)
 				end if
+				! A fn that is called before it is declared has an unknown type in
+				! pass 0.  parse_dot() swallows the member chain of an unknown
+				! receiver, instead of leaving a stray `.name` for an E28
 				if (parser%current_kind() == dot_token .and. &
-						expr%val%type == struct_type) then
+						(expr%val%type == struct_type .or. &
+						expr%val%type == unknown_type)) then
 					call parser%parse_dot(expr)
 				end if
 			else if (parser%peek_kind(1) == lbrace_token) then

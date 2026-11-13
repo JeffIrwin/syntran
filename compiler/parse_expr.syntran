@@ -108,9 +108,9 @@ fn parse_array_expr(parser: &Parser): i32
 		ubound = parse_expr(&parser, 0);
 		expect(&parser, TokenKind.rbracket);
 
-		const lkind = type_kind_of(parser, lbound);
-		const skind = type_kind_of(parser, step);
-		const ukind = type_kind_of(parser, ubound);
+		const lkind = type_of(parser, lbound).kind;
+		const skind = type_of(parser, step).kind;
+		const ukind = type_of(parser, ubound).kind;
 
 		// A uniform i32, f32, or f64 triple, or else all ints, or else unknown
 		let elem = TypeKind.unknown;
@@ -133,8 +133,8 @@ fn parse_array_expr(parser: &Parser): i32
 	// Implicit form [lbound: ubound]
 	expect(&parser, TokenKind.rbracket);
 
-	const lkind = type_kind_of(parser, lbound);
-	const ukind = type_kind_of(parser, ubound);
+	const lkind = type_of(parser, lbound).kind;
+	const ukind = type_of(parser, ubound).kind;
 	let elem = TypeKind.unknown;
 	if lkind == TypeKind.i32 and ukind == TypeKind.i32
 		elem = TypeKind.i32;

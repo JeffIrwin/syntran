@@ -237,11 +237,6 @@ fn type_of(parser: &const Parser, node: i32): Type
 	return parser.nodes.data[node].type_;
 }
 
-fn type_kind_of(parser: &const Parser, node: i32): TypeKind
-{
-	return parser.nodes.data[node].type_.kind;
-}
-
 fn push_diag(parser: &Parser, code: &const str, pos: i32)
 {
 	parser.diags.push(new_diag(code, pos));
