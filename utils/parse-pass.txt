@@ -21,6 +21,7 @@ src/tests/test-src/errors/E19-unexpected-char.syntran
 src/tests/test-src/errors/E20-unexpected-token.syntran
 src/tests/test-src/errors/E22-redeclare-var.syntran
 src/tests/test-src/errors/E28-undeclare-var.syntran
+src/tests/test-src/errors/E51-non-array-loop.syntran
 src/tests/test-src/errors/e86_mod_return.syntran
 src/tests/test-src/errors/E9-bad-expr.syntran
 src/tests/test-src/errors/fuzz-compound-no-rhs.syntran

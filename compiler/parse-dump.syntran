@@ -18,18 +18,15 @@ fn escape(s: &const str): str
 	for i in [0: len(s)]
 	{
 		const c = s[i];
-		if c == r#"\"#
-			out += "\\";
-		else if c == LINE_FEED
-			out += "\n";
-		else if c == CARRIAGE_RETURN
-			out += "\r";
-		else if c == TAB
-			out += "\t";
-		else if c == NULL_CHAR
-			out += "\0";
-		else
-			out += c;
+		switch c
+		{
+			case r#"\"#          { out += "\\"; }
+			case LINE_FEED       { out += "\n"; }
+			case CARRIAGE_RETURN { out += "\r"; }
+			case TAB             { out += "\t"; }
+			case NULL_CHAR       { out += "\0"; }
+			default              { out += c; }
+		}
 	}
 	return out;
 }
@@ -47,11 +44,8 @@ fn dump_node(nodes: &const NodeVec, id: i32, role: &const str, depth: i32)
 	// the order of the Fortran `syntax_node_t`
 	const node = nodes.data[id];
 
-	let indent = "";
-	for i in [0: depth]
-		indent += "  ";
-
-	let line = indent + role + " " + std::variant_of(node.kind);
+	let line = std::repeat("  ", depth) + role + " " +
+		std::variant_of(node.kind);
 
 	if node.has_id
 		line += token_field("id", node.identifier);
@@ -73,7 +67,7 @@ fn dump_node(nodes: &const NodeVec, id: i32, role: &const str, depth: i32)
 	// The text of a float literal is already in its id, and it has more digits
 	// than its value does
 	if node.kind == NodeKind.literal_expr and
-		node.type_.kind != TypeKind.f32 and node.type_.kind != TypeKind.f64
+		not any(node.type_.kind == [TypeKind.f32, TypeKind.f64])
 		line += " val=" + escape(node.val);
 
 	if node.src_pos >= 0

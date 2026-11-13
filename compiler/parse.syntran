@@ -69,8 +69,9 @@ fn new_parser(text: &const str): Parser
 	for i in [0: all.len]
 	{
 		const kind = all.data[i].kind;
-		if kind != TokenKind.whitespace and kind != TokenKind.comment and
-			kind != TokenKind.bad
+		if not any(kind == [
+			TokenKind.whitespace, TokenKind.comment, TokenKind.bad,
+		])
 			tokens.push(all.data[i]);
 	}
 
@@ -107,10 +108,7 @@ fn new_parser(text: &const str): Parser
 
 fn peek_index(parser: &const Parser, offset: i32): i32
 {
-	let i = parser.pos + offset;
-	if i > parser.tokens.len - 1
-		i = parser.tokens.len - 1;
-	return i;
+	return min(parser.pos + offset, parser.tokens.len - 1);
 }
 
 fn peek_kind(parser: &const Parser, offset: i32): TokenKind
@@ -314,8 +312,7 @@ fn parse_name_expr(parser: &Parser): i32
 	const expr = parser.nodes.push(node);
 
 	// Subscripts and members are milestones 3 and 4
-	const kind = peek_kind(parser, 0);
-	if kind == TokenKind.lbracket or kind == TokenKind.dot
+	if any(peek_kind(parser, 0) == [TokenKind.lbracket, TokenKind.dot])
 		return unsupported(&parser);
 	return expr;
 }
@@ -353,8 +350,7 @@ fn parse_array_expr(parser: &Parser): i32
 		// A uniform i32, f32, or f64 triple, or else all ints, or else unknown
 		let elem = TypeKind.unknown;
 		if lkind == skind and skind == ukind and
-			(lkind == TypeKind.i32 or lkind == TypeKind.f32 or
-			lkind == TypeKind.f64)
+			any(lkind == [TypeKind.i32, TypeKind.f32, TypeKind.f64])
 			elem = lkind;
 		else if is_int_type(lkind) and is_int_type(skind) and
 			is_int_type(ukind)
@@ -387,70 +383,71 @@ fn parse_array_expr(parser: &Parser): i32
 
 fn parse_primary_expr(parser: &Parser): i32
 {
-	const kind = peek_kind(parser, 0);
+	const current = peek_token(parser, 0);
 
-	if kind == TokenKind.lparen
+	switch current.kind
 	{
-		// The parens are not nodes of the tree, they just change how it is
-		// connected
-		skip(&parser);
-		const expr = parse_expr_statement(&parser);
-		expect(&parser, TokenKind.rparen);
-		return expr;
-	}
+		case TokenKind.lparen
+		{
+			// The parens are not nodes of the tree, they just change how it is
+			// connected
+			skip(&parser);
+			const expr = parse_expr_statement(&parser);
+			expect(&parser, TokenKind.rparen);
+			return expr;
+		}
+		case TokenKind.lbracket { return parse_array_expr(&parser); }
+		case TokenKind.keyword when current.keyword == Keyword.true_
+		{
+			skip(&parser);
+			return new_literal(&parser, TypeKind.bool, "true");
+		}
+		case TokenKind.keyword when current.keyword == Keyword.false_
+		{
+			skip(&parser);
+			return new_literal(&parser, TypeKind.bool, "false");
+		}
 
-	if kind == TokenKind.lbracket
-		return parse_array_expr(&parser);
-
-	if is_keyword(parser, 0, Keyword.true_)
-	{
-		skip(&parser);
-		return new_literal(&parser, TypeKind.bool, "true");
-	}
-	if is_keyword(parser, 0, Keyword.false_)
-	{
-		skip(&parser);
-		return new_literal(&parser, TypeKind.bool, "false");
-	}
-
-	// An optional that holds nothing is for structs
-	if is_keyword(parser, 0, Keyword.null_)
-		return unsupported(&parser);
-
-	if kind == TokenKind.identifier
-	{
-		// A qualified name, an enum, and a call are milestones 2 and 5.  A
-		// `{` after a name can only be a block until there are structs
-		const next_kind = peek_kind(parser, 1);
-		if next_kind == TokenKind.double_colon or next_kind == TokenKind.lparen
+		// An optional that holds nothing is for structs
+		case TokenKind.keyword when current.keyword == Keyword.null_
+		{
 			return unsupported(&parser);
-		return parse_name_expr(&parser);
-	}
-
-	if kind == TokenKind.f32
-	{
-		const token = match(&parser, TokenKind.f32);
-		return new_float_literal(&parser, TypeKind.f32, token);
-	}
-	if kind == TokenKind.f64
-	{
-		const token = match(&parser, TokenKind.f64);
-		return new_float_literal(&parser, TypeKind.f64, token);
-	}
-	if kind == TokenKind.str
-	{
-		const token = match(&parser, TokenKind.str);
-		return new_literal(&parser, TypeKind.str, token.str_);
-	}
-	if kind == TokenKind.i64
-	{
-		const token = match(&parser, TokenKind.i64);
-		return new_literal(&parser, TypeKind.i64, str(token.i64_));
-	}
-	if kind == TokenKind.i32
-	{
-		const token = match(&parser, TokenKind.i32);
-		return new_literal(&parser, TypeKind.i32, str(token.i32_));
+		}
+		case TokenKind.identifier
+		{
+			// A qualified name, an enum, and a call are milestones 2 and 5.  A
+			// `{` after a name can only be a block until there are structs
+			if any(peek_kind(parser, 1) == [
+				TokenKind.double_colon, TokenKind.lparen,
+			])
+				return unsupported(&parser);
+			return parse_name_expr(&parser);
+		}
+		case TokenKind.f32
+		{
+			const token = match(&parser, TokenKind.f32);
+			return new_float_literal(&parser, TypeKind.f32, token);
+		}
+		case TokenKind.f64
+		{
+			const token = match(&parser, TokenKind.f64);
+			return new_float_literal(&parser, TypeKind.f64, token);
+		}
+		case TokenKind.str
+		{
+			const token = match(&parser, TokenKind.str);
+			return new_literal(&parser, TypeKind.str, token.str_);
+		}
+		case TokenKind.i64
+		{
+			const token = match(&parser, TokenKind.i64);
+			return new_literal(&parser, TypeKind.i64, str(token.i64_));
+		}
+		case TokenKind.i32
+		{
+			const token = match(&parser, TokenKind.i32);
+			return new_literal(&parser, TypeKind.i32, str(token.i32_));
+		}
 	}
 
 	// Every other kind of token can't start an expression at all, so naming
@@ -526,8 +523,7 @@ fn parse_let_expr(parser: &Parser, is_const: bool): i32
 		// No name at all, e.g. `let 5 = 3;` or `let = 3;`
 		push_diag(&parser, "E114", peek_pos(parser, 0));
 
-		const kind = peek_kind(parser, 0);
-		if kind != TokenKind.rbrace and kind != TokenKind.eof
+		if not any(peek_kind(parser, 0) == [TokenKind.rbrace, TokenKind.eof])
 		{
 			// Discard the bad "name" token
 			skip(&parser);
@@ -541,9 +537,9 @@ fn parse_let_expr(parser: &Parser, is_const: bool): i32
 			{
 				// No `=` either.  Resync to the next statement boundary
 				// without consuming it
-				while peek_kind(parser, 0) != TokenKind.semicolon and
-					peek_kind(parser, 0) != TokenKind.rbrace and
-					peek_kind(parser, 0) != TokenKind.eof
+				while not any(peek_kind(parser, 0) == [
+					TokenKind.semicolon, TokenKind.rbrace, TokenKind.eof,
+				])
 					skip(&parser);
 			}
 		}
@@ -556,54 +552,57 @@ fn parse_let_expr(parser: &Parser, is_const: bool): i32
 
 	let op = new_token(TokenKind.equals, identifier.pos, "=");
 	let right = -1;
-	if peek_kind(parser, 0) == TokenKind.eof
+	switch peek_kind(parser, 0)
 	{
-		// Incomplete interactive line, see above
-		op = match(&parser, TokenKind.equals);
-		right = parse_expr_statement(&parser);
-	}
-	else if peek_kind(parser, 0) == TokenKind.equals
-	{
-		op = next_token(&parser);
-		right = parse_expr_statement(&parser);
-	}
-	else
-	{
-		// A name was parsed, but it isn't followed by `=`, e.g.
-		// `let foobar 4;`, `let x;`, `let x: i32 = 4;`, or `let x == 4;`
-		push_diag(&parser, "E113", peek_pos(parser, 0));
-
-		const current = peek_token(parser, 0);
-		if current.kind == TokenKind.colon
+		case TokenKind.eof
 		{
-			// Skip the `: type` annotation up to the `=` it should have
-			while peek_kind(parser, 0) != TokenKind.equals and
-				peek_kind(parser, 0) != TokenKind.semicolon and
-				peek_kind(parser, 0) != TokenKind.rbrace and
-				peek_kind(parser, 0) != TokenKind.eof
-				skip(&parser);
-		}
-		else if is_assignment_op(current) or
-			current.kind == TokenKind.double_equals
-		{
-			// Typo'd operator, e.g. `let x == 4;` or `let x += 4;`
-			skip(&parser);
-		}
-
-		if peek_kind(parser, 0) == TokenKind.equals
-			skip(&parser);
-
-		if peek_kind(parser, 0) == TokenKind.semicolon or
-			peek_kind(parser, 0) == TokenKind.rbrace or
-			peek_kind(parser, 0) == TokenKind.eof
-		{
-			// No initializer left to parse.  Its type is unknown, which keeps
-			// a later use from cascading an E28
-			right = parser.nodes.push(new_node(NodeKind.literal_expr));
-		}
-		else
-		{
+			// Incomplete interactive line, see above
+			op = match(&parser, TokenKind.equals);
 			right = parse_expr_statement(&parser);
+		}
+		case TokenKind.equals
+		{
+			op = next_token(&parser);
+			right = parse_expr_statement(&parser);
+		}
+		default
+		{
+			// A name was parsed, but it isn't followed by `=`, e.g.
+			// `let foobar 4;`, `let x;`, `let x: i32 = 4;`, or `let x == 4;`
+			push_diag(&parser, "E113", peek_pos(parser, 0));
+
+			const current = peek_token(parser, 0);
+			if current.kind == TokenKind.colon
+			{
+				// Skip the `: type` annotation up to the `=` it should have
+				while not any(peek_kind(parser, 0) == [
+					TokenKind.equals, TokenKind.semicolon, TokenKind.rbrace,
+					TokenKind.eof,
+				])
+					skip(&parser);
+			}
+			else if is_assignment_op(current) or
+				current.kind == TokenKind.double_equals
+			{
+				// Typo'd operator, e.g. `let x == 4;` or `let x += 4;`
+				skip(&parser);
+			}
+
+			if peek_kind(parser, 0) == TokenKind.equals
+				skip(&parser);
+
+			if any(peek_kind(parser, 0) == [
+				TokenKind.semicolon, TokenKind.rbrace, TokenKind.eof,
+			])
+			{
+				// No initializer left to parse.  Its type is unknown, which
+				// keeps a later use from cascading an E28
+				right = parser.nodes.push(new_node(NodeKind.literal_expr));
+			}
+			else
+			{
+				right = parse_expr_statement(&parser);
+			}
 		}
 	}
 
@@ -654,8 +653,7 @@ fn parse_expr_statement(parser: &Parser): i32
 	const found = search(parser, identifier.text);
 
 	// Subscripts and members are milestones 3 and 4
-	if peek_kind(parser, 0) == TokenKind.lbracket or
-		peek_kind(parser, 0) == TokenKind.dot
+	if any(peek_kind(parser, 0) == [TokenKind.lbracket, TokenKind.dot])
 	{
 		const node = unsupported(&parser);
 	}
@@ -776,6 +774,7 @@ fn parse_for_statement(parser: &Parser): i32
 	let node = new_node(NodeKind.for_statement);
 	node.has_id = true;
 	node.identifier = identifier;
+	const array_pos = peek_pos(parser, 0);
 	node.array = parse_primary_expr(&parser);
 
 	// The iterator is declared after the array, so the array can't use it
@@ -794,6 +793,11 @@ fn parse_for_statement(parser: &Parser): i32
 	const ok = parser.vars.insert(
 		identifier.text, iter_type, node.id_index, true, false
 	);
+
+	// Only an array or a str can be looped over, like the Fortran E51, which
+	// is also pushed for an unknown type
+	if not any(array_type.kind == [TypeKind.array, TypeKind.str])
+		push_diag(&parser, "E51", array_pos);
 
 	node.body = parse_statement(&parser);
 
@@ -818,8 +822,7 @@ fn parse_block_statement(parser: &Parser): i32
 	expect(&parser, TokenKind.lbrace);
 	parser.vars.push_scope();
 
-	while peek_kind(parser, 0) != TokenKind.eof and
-		peek_kind(parser, 0) != TokenKind.rbrace
+	while not any(peek_kind(parser, 0) == [TokenKind.eof, TokenKind.rbrace])
 	{
 		const pos0 = parser.pos;
 		members.push(parse_statement(&parser));
@@ -843,55 +846,61 @@ fn parse_statement(parser: &Parser): i32
 	// stack traces at runtime
 	const src_pos = peek_pos(parser, 0);
 
-	let statement = -1;
-	if peek_kind(parser, 0) == TokenKind.lbrace
-	{
-		statement = parse_block_statement(&parser);
-	}
-	else if is_keyword(parser, 0, Keyword.if_)
-	{
-		statement = parse_if_statement(&parser);
-	}
-	else if is_keyword(parser, 0, Keyword.for_)
-	{
-		statement = parse_for_statement(&parser);
-	}
-	else if is_keyword(parser, 0, Keyword.while_)
-	{
-		statement = parse_while_statement(&parser);
-	}
-	else if is_keyword(parser, 0, Keyword.return_)
-	{
-		statement = parse_return_statement(&parser);
-	}
-	else if is_keyword(parser, 0, Keyword.break_)
-	{
-		statement = parse_break_statement(&parser);
-	}
-	else if is_keyword(parser, 0, Keyword.continue_)
-	{
-		statement = parse_continue_statement(&parser);
-	}
-	else if is_keyword(parser, 0, Keyword.switch_) or
-		is_keyword(parser, 0, Keyword.use_)
-	{
-		// A switch is milestone 5, and a use is milestone 6
-		statement = unsupported(&parser);
-	}
-	else
-	{
-		statement = parse_expr_statement(&parser);
-		expect(&parser, TokenKind.semicolon);
+	const current = peek_token(parser, 0);
 
-		// Ban expression statements, which are only allowed in the REPL.  It's
-		// easier to parse one unconditionally and check it afterwards.  A
-		// statement of unknown type was tainted by a prior error, so skip it
-		// to avoid cascading an E9
-		const kind = parser.nodes.data[statement].kind;
-		const type_kind = parser.nodes.data[statement].type_.kind;
-		if parser.ipass > 0 and type_kind != TypeKind.unknown and
-			kind != NodeKind.let_expr and kind != NodeKind.assignment_expr
-			push_diag(&parser, "E9", src_pos);
+	let statement = -1;
+	switch current.kind
+	{
+		case TokenKind.lbrace
+		{
+			statement = parse_block_statement(&parser);
+		}
+		case TokenKind.keyword when current.keyword == Keyword.if_
+		{
+			statement = parse_if_statement(&parser);
+		}
+		case TokenKind.keyword when current.keyword == Keyword.for_
+		{
+			statement = parse_for_statement(&parser);
+		}
+		case TokenKind.keyword when current.keyword == Keyword.while_
+		{
+			statement = parse_while_statement(&parser);
+		}
+		case TokenKind.keyword when current.keyword == Keyword.return_
+		{
+			statement = parse_return_statement(&parser);
+		}
+		case TokenKind.keyword when current.keyword == Keyword.break_
+		{
+			statement = parse_break_statement(&parser);
+		}
+		case TokenKind.keyword when current.keyword == Keyword.continue_
+		{
+			statement = parse_continue_statement(&parser);
+		}
+
+		// A switch is milestone 5, and a use is milestone 6
+		case TokenKind.keyword when
+			any(current.keyword == [Keyword.switch_, Keyword.use_])
+		{
+			statement = unsupported(&parser);
+		}
+		default
+		{
+			statement = parse_expr_statement(&parser);
+			expect(&parser, TokenKind.semicolon);
+
+			// Ban expression statements, which are only allowed in the REPL.
+			// It's easier to parse one unconditionally and check it afterwards.
+			// A statement of unknown type was tainted by a prior error, so skip
+			// it to avoid cascading an E9
+			const kind = parser.nodes.data[statement].kind;
+			const type_kind = parser.nodes.data[statement].type_.kind;
+			if parser.ipass > 0 and type_kind != TypeKind.unknown and
+				not any(kind == [NodeKind.let_expr, NodeKind.assignment_expr])
+				push_diag(&parser, "E9", src_pos);
+		}
 	}
 
 	parser.nodes.data[statement].src_pos = src_pos;
@@ -906,8 +915,7 @@ fn is_pass0_only_diag(diag: &const str): bool
 	// `is_pass0_only_diag()`.  They are the redeclarations, a use before the
 	// declaration, and a var that clashes with a type
 	const code = diag_code(diag);
-	return code == "E22" or code == "E24" or code == "E26" or code == "E92" or
-		code == "E28" or code == "E98";
+	return any(code == ["E22", "E24", "E26", "E92", "E28", "E98"]);
 }
 
 fn diag_code(diag: &const str): str
@@ -926,10 +934,12 @@ fn parse_unit_pass(parser: &Parser): I32Vec
 	while peek_kind(parser, 0) != TokenKind.eof
 	{
 		const pos0 = parser.pos;
+		const current = peek_token(parser, 0);
 
-		if is_keyword(parser, 0, Keyword.fn_) or
-			is_keyword(parser, 0, Keyword.struct_) or
-			is_keyword(parser, 0, Keyword.enum_)
+		if current.kind == TokenKind.keyword and
+			any(current.keyword == [
+			Keyword.fn_, Keyword.struct_, Keyword.enum_,
+		])
 		{
 			// The declarations are milestones 2, 4, and 5
 			members.push(unsupported(&parser));
@@ -997,11 +1007,8 @@ fn parse_unit(parser: &Parser): i32
 		{
 			if is_pass0_only_diag(diags0.data[i])
 			{
-				let found = false;
-				for j in [0: parser.diags.len]
-					if parser.diags.data[j] == diags0.data[i]
-						found = true;
-				if not found
+				const seen = parser.diags.data[0: parser.diags.len];
+				if not any(seen == diags0.data[i])
 					parser.diags.push(diags0.data[i]);
 			}
 		}
