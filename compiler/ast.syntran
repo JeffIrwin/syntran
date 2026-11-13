@@ -294,6 +294,66 @@ fn new_i32_vec(): I32Vec
 
 //==============================================================================
 
+struct Diag
+{
+	// A diagnostic of the parser, like the Fortran one but without the message
+	// text.  `pos` is the 0-based position of its span in the source, or -1 for
+	// a lexer diagnostic, which has none.  `len` is the length of the span,
+	// which is 0 until a check needs it for its caret
+
+	code: str,
+	pos: i32,
+	len: i32,
+}
+
+fn new_diag(code: &const str, pos: i32): Diag
+{
+	return Diag
+	{
+		code = code,
+		pos = pos,
+		len = 0,
+	};
+}
+
+struct DiagVec
+{
+	// A growable array of diagnostics, like samples/vec_i32.syntran
+
+	len: i32,
+	cap: i32,
+	data: [Diag; :],
+
+	fn push(diag: &const Diag)
+	{
+		if len >= cap
+		{
+			let new_cap = 16;
+			if cap > 0
+				new_cap = cap * 2;
+
+			let new_data = [data, [new_diag("", -1); new_cap - cap]];
+			data = std::move(new_data);
+			cap = new_cap;
+		}
+		data[len] = diag;
+		len += 1;
+		return;
+	}
+}
+
+fn new_diag_vec(): DiagVec
+{
+	return DiagVec
+	{
+		len = 0,
+		cap = 0,
+		data = [new_diag("", -1); 0],
+	};
+}
+
+//==============================================================================
+
 fn is_assignment_op(token: &const Token): bool
 {
 	// Is the operator an assignment operator, either regular or compound?

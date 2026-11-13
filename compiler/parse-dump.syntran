@@ -113,14 +113,15 @@ fn main(): i32
 
 	const text = std::read_file(args[0]);
 
-	let parser = new_parser(text);
+	let parser = new_parser(false);
+	set_input(&parser, text);
 	const root = parse_unit(&parser);
 
 	// With any diagnostics, only their codes are dumped, and no tree
 	if parser.diags.len > 0
 	{
 		for i in [0: parser.diags.len]
-			println("diag ", diag_code(parser.diags.data[i]));
+			println("diag ", parser.diags.data[i].code);
 		return 0;
 	}
 

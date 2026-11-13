@@ -77,12 +77,12 @@ prints the same format, and a bash script that diffs the two.
   constants from `declare_intr_vars`, which pre-seed the global slots.
 - `compiler/parse.syntran`: the parser, `use lex::*;`.  Its procedure names
   match the Fortran ones, so the two read side by side.  The parser is mutually
-  recursive, so it's one module.  If `#include` works inside a `use`d module,
-  split it into `parse_expr`/`parse_fn`/`parse_control`/... files that mirror
-  `src/parse_*.f90`.  Otherwise it stays one file.  The two-pass driver is
-  faithful: pass 0 parses the whole unit, then the arena and slot counters are
-  reset, the tables are kept, and pass 1 reparses, with the same hide-later-globals
-  rule as `search()` (`src/parse_misc.f90:62-76`).
+  recursive, so it's one module, but `#include` works inside a `use`d module, so
+  it is split into files that mirror `src/parse_*.f90`:  `parse.syntran` (the
+  `Parser`, tokens, `match`, the driver), `parse_expr.syntran`, and
+  `parse_stmt.syntran`.  Later milestones add `parse_fn`, `parse_array`, and so
+  on, and `#include` them in `parse.syntran`.  The driver isn't a port of the
+  two passes: it scans the declarations and parses once, see milestone 1.
 - `compiler/parse-dump.syntran`: the driver.  It prints the same format, with
   the escape and kind-name helpers copied from `compiler/lex-dump.syntran`.
 - Header comment: list the differences from the Fortran, like lex.syntran does
@@ -109,7 +109,7 @@ VM, ~795 native).
    by its `id=`.  A token with no `pos` has no `@pos`, and the empty subscript
    lists are left out.
 1. **Core.** (Done.)  The arena, `Type`, scoped vars with `push_var`/`search`
-   (`src/parse_misc.f90:14-76`), std constants, the two-pass driver, `match`
+   (`src/parse_misc.f90:14-76`), std constants, the driver, `match`
    with E20 de-duping, and `preprocess` minus includes.  Literals, unary and
    binary exprs with result types (`get_binary_op_kind` in `src/types_ops.f90`),
    let and const, assignment and compound assignment (`parse_expr_statement`'s
@@ -117,9 +117,9 @@ VM, ~795 native).
    and `src_pos` stamping.  As built:
    - `compiler/scopes.syntran` is the scoped var table.  It is one hash table
      where each name heads a stack of entries, instead of a dict for each scope
-   - A diagnostic is `E28@42`: the code and the 0-based position of its span,
-     since the Fortran merges the pass-0-only diagnostics by comparing the
-     rendered text, which has the location.  The dump prints only the code
+   - A diagnostic is a `Diag` (`compiler/ast.syntran`): the code, the 0-based
+     position of its span, and a length that is 0 until stage 2 needs it for
+     carets.  The dump prints only the code
    - A construct from a later milestone (fn, struct, enum, switch, use, a call,
      `::`, a subscript, `.`, `null`, or any array literal besides a range)
      pushes the pseudo-diagnostic `unsupported`, which the Fortran parser never
@@ -137,11 +137,56 @@ VM, ~795 native).
    - The rest of the files that don't match have a construct from a later
      milestone, or are a stage 2 diagnostic or an `#include`, except for
      `errors/dir_mod.syntran`, which is a directory, not a file
+
+   Refactors that were made right after, before milestone 2 built on them:
+   - **One parse, not two.**  The Fortran keeps its tables from pass 0 into
+     pass 1, which is why it needs the hide-later-globals rule in `search()`,
+     `overwrite` on insert, the merge of the pass-0-only diagnostics, and about
+     40 `ipass` tests.  The port runs `scan_decls()`, which declares what can
+     be used before it is declared (nothing yet, so it only skips), and then
+     parses once.  `Scopes.insert()` never changes an entry, and the E9 test
+     is `not parser.repl`.  `drop_pass1_only_diags()` mimics the Fortran not
+     running pass 1 for an incomplete input, and each `ipass` test that a
+     milestone meets adds its code there.  A diagnostic is raised once, where
+     it happens, so `utils/test-parse.sh` sorts a diagnostics-only dump before
+     it compares, since the Fortran appends the pass-0-only ones at the end.
+     A few forward references are expected to differ, see the milestone 2 notes
+   - **A parser can outlive its input**, for a self-hosted REPL later.
+     `new_parser(repl)` makes the session (scopes, arena, slot counter) and
+     `set_input()` lexes an input and resets only what is the input's.  The
+     arena is never reset, since a later input reaches nodes of an earlier one,
+     like the body of a fn that it calls.  The Fortran REPL round-trips
+     `state%vars/fns/structs/enums` through `syntax_parse()` the same way
+     (`src/core.f90:559`)
+   - **`Checkpoint` and `rewind()`** undo a speculative parse (the LHS of an
+     assignment) or an incomplete REPL input: position, diagnostics, nodes,
+     scope entries (`Scopes.truncate()`), and the slot counter.  Every table
+     that a later milestone adds must be in it, and must only grow, like the
+     Fortran `rollback(num_fns0)`
 2. **Fns.** The `parse_type` grammar, fn declarations (params, `&`/`&const`,
-   `num_locs`, return checks needed for the tree), user calls with
-   forward-reference tolerance in pass 0, fn refs, fn-typed vars and ptr calls,
-   intrinsic calls with overload mangling, `std::` qualification,
-   `use std::*`/`use std::name`, and the printf/writef desugaring.
+   `num_locs`, return checks needed for the tree), user calls, fn refs,
+   fn-typed vars and ptr calls, intrinsic calls with overload mangling,
+   `std::` qualification, `use std::*`/`use std::name`, and the printf/writef
+   desugaring.  Notes:
+   - `scan_decls()` registers the signatures, so a call before the fn resolves
+     without the Fortran's pass-0 tolerance.  Register the struct and enum
+     names first, so a signature can use a type that is declared later.  Expect
+     a few divergences from the Fortran, where its pass 1 used a pass-0
+     signature that had unknown types, and list them in `scratch/self-host.md`
+   - Locals don't get a second table like the Fortran `locs`.  Add `is_loc` to
+     `Entry`, a `num_locs` counter, and a scope for a fn body.  A local is
+     always in an inner scope, so the innermost-first search is the Fortran's
+     locs-then-vars
+   - `Type` gets an `id` that is an index into the struct, enum, or fn
+     signature table, instead of a name, since a struct can't nest, and an int
+     is cheap to copy and compare.  `type_name()` then takes the tables
+   - The parser emits only the diagnostics that come with the tree.  Where a
+     later checker needs a parse-time fact, like the const-ness of a slot or a
+     fn's return type, record it in a table or on the node.  Whether stage 2 is
+     a separate walker over the tree or is interleaved is decided then
+   - Session state for the REPL (the fn table, `std_glob`, the `use std::name`
+     list) is added to `Checkpoint`, and is never overwritten, so a
+     redeclaration across lines is E22 like in the Fortran REPL
 3. **Arrays.** Every `array_expr` form (unif/expl/bound/step/len/size), typed
    arrays (`at_typed_array`, `src/parse_array.f90:937`), and subscripts
    (scalar/range/step/all, omits), with rank and type propagation.

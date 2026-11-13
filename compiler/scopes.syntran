@@ -111,13 +111,13 @@ struct Scopes
 	}
 
 	fn insert(
-		key: &const str, type_: &const Type, id_index: i32,
-		overwrite: bool, is_const: bool,
+		key: &const str, type_: &const Type, id_index: i32, is_const: bool,
 	): bool
 	{
 		// Declare `key` in the current scope.  It is true if that worked, and
-		// false if the scope already has it and `overwrite` isn't set, which
-		// leaves the old one alone
+		// false if the scope already has it, which leaves the old one alone.
+		// An entry is never changed after it is made, so that dropping the
+		// newest ones restores exactly what the table was
 		if (used + 1) * 4 > cap * 3
 			grow();
 
@@ -134,14 +134,7 @@ struct Scopes
 		if head >= 0
 		{
 			if entries[head].scope == scope
-			{
-				if not overwrite
-					return false;
-				entries[head].type_ = type_;
-				entries[head].id_index = id_index;
-				entries[head].is_const = is_const;
-				return true;
-			}
+				return false;
 		}
 
 		if len >= size(entries)
@@ -185,19 +178,26 @@ struct Scopes
 		return;
 	}
 
-	fn pop_scope()
+	fn truncate(mark: i32)
 	{
-		// Drop the current scope's entries, newest first, so that each name
-		// is what it was before the scope
-		const first = starts[scope];
+		// Drop the entries from `mark` on, newest first, so that each name is
+		// what it was before them.  `mark` is a `len` from earlier, so it is at
+		// most the current one
 		let i = len - 1;
-		while i >= first
+		while i >= mark
 		{
 			const s = probe(entries[i].name);
 			slot_head[s] = entries[i].prev;
 			i -= 1;
 		}
-		len = first;
+		len = mark;
+		return;
+	}
+
+	fn pop_scope()
+	{
+		// Drop the current scope's entries
+		truncate(starts[scope]);
 		scope -= 1;
 		return;
 	}

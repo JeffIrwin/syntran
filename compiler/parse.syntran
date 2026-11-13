@@ -10,16 +10,22 @@
 // - `pos` is 0-based, like in the lexer port, and so is `parser.pos`, the index
 //   of the current token.  The Fortran `last_e20_pos` that starts at 0 starts
 //   at -1 here
-// - Diagnostics are the error code and the 0-based position of its span, like
-//   "E28@42", instead of a message.  The position is what the Fortran compares,
-//   along with the code, to merge the pass-0-only diagnostics.  The lexer's
-//   diagnostics have no position, since nothing compares them
-// - Children are indices into an arena, see compiler/ast.syntran.  Each pass
-//   starts with a new arena
+// - A diagnostic is a `Diag`, the error code and the 0-based position of its
+//   span, instead of a message.  The lexer's diagnostics have no position,
+//   since nothing uses it yet
+// - Children are indices into an arena, see compiler/ast.syntran
+// - There is one parse, after `scan_decls()` has declared what can be used
+//   before it is declared, instead of two passes that share their tables.  So
+//   there is no `ipass`, nothing to hide from pass 1 in `search()`, no
+//   `overwrite` when a name is declared, and no pass-0-only diagnostics to
+//   merge.  A diagnostic is raised once, where it happens, which can be in a
+//   different order than the Fortran's, see utils/test-parse.sh
 // - Parsing fns return the index of the node that they made, and `-1` isn't
 //   ever returned
 // - The `parse_*` fns that take a `parser` are not methods, since they are
-//   mutually recursive
+//   mutually recursive, and they are in `#include`d files that aren't modules,
+//   like the Fortran submodules:  compiler/parse_expr.syntran and
+//   compiler/parse_stmt.syntran
 //
 // This is milestone 1, the core: literals, unary and binary exprs, let and
 // const, assignment, blocks, if/while/for over ranges, break/continue, and
@@ -36,32 +42,71 @@ use scopes::*;
 
 struct Parser
 {
+	// A parser outlives its input, so that an interactive interpreter can parse
+	// one input after another with the declarations of the earlier ones, like
+	// the Fortran REPL does by round-tripping `state%vars` and the rest.  The
+	// first group is what `set_input()` replaces, and the second is the
+	// session, which only grows, so `rewind()` can take back what an input
+	// added
+
 	// The tokens, without any whitespace or comments, like the Fortran
 	// `new_parser()`, and up to and including eof
 	tokens: TokenVec,
 	pos: i32,
+	diags: DiagVec,
 
-	nodes: NodeVec,
-	diags: StrVec,
-
-	vars: Scopes,
-	num_vars: i32,
-
-	// 0 or 1, and the position of the token of the last E20, which de-dupes
-	// them
-	ipass: i32,
+	// The position of the token of the last E20, which de-dupes them
 	last_e20_pos: i32,
 
 	// Set if a token was missing at eof, i.e. the input is incomplete
 	expecting: bool,
+
+	// The arena of every input, since a later one reaches nodes of an earlier
+	// one, e.g. the body of a fn that it calls
+	nodes: NodeVec,
+
+	vars: Scopes,
+	num_vars: i32,
+
+	// Is the input from the interactive interpreter?  Only there is an
+	// expression statement allowed, since its value is printed
+	repl: bool,
 }
 
 // The number of `std::` constants that are declared before any variable of
 // the program, c.f. NUM_INTR_VARS in src/intr_vars.f90
 const NUM_INTR_VARS = 4;
 
-fn new_parser(text: &const str): Parser
+fn new_parser(repl: bool): Parser
 {
+	// The session of a parser, with no input yet, see `set_input()`
+
+	// Slot 1 is `std::PI`, and slots 2 to 4 are `std::IN`, `std::OUT`, and
+	// `std::ERR`, c.f. declare_intr_vars()
+	let vars = new_scopes();
+	let ok = vars.insert("std::PI", new_type(TypeKind.f64), 1, true);
+	ok = vars.insert("std::IN", new_type(TypeKind.file), 2, true);
+	ok = vars.insert("std::OUT", new_type(TypeKind.file), 3, true);
+	ok = vars.insert("std::ERR", new_type(TypeKind.file), 4, true);
+
+	return Parser
+	{
+		tokens = new_token_vec(),
+		pos = 0,
+		diags = new_diag_vec(),
+		last_e20_pos = -1,
+		expecting = false,
+		nodes = new_node_vec(),
+		vars = vars,
+		num_vars = NUM_INTR_VARS,
+		repl = repl,
+	};
+}
+
+fn set_input(parser: &Parser, text: &const str)
+{
+	// Lex the next input to parse, and forget everything about the last one
+	// that is not a declaration
 	let lexer = new_lexer(text);
 	const all = lex_all(&lexer);
 
@@ -74,32 +119,69 @@ fn new_parser(text: &const str): Parser
 		])
 			tokens.push(all.data[i]);
 	}
+	parser.tokens = tokens;
+	parser.pos = 0;
 
 	// Every lexer diagnostic is a parser diagnostic
-	let diags = new_str_vec();
+	let diags = new_diag_vec();
 	for i in [0: lexer.diags.len]
-		diags.push(lexer.diags.data[i]);
+		diags.push(new_diag(lexer.diags.data[i], -1));
+	parser.diags = diags;
 
-	// Slot 1 is `std::PI`, and slots 2 to 4 are `std::IN`, `std::OUT`, and
-	// `std::ERR`, c.f. declare_intr_vars()
-	let vars = new_scopes();
-	let ok = vars.insert("std::PI", new_type(TypeKind.f64), 1, true, false);
-	ok = vars.insert("std::IN", new_type(TypeKind.file), 2, true, false);
-	ok = vars.insert("std::OUT", new_type(TypeKind.file), 3, true, false);
-	ok = vars.insert("std::ERR", new_type(TypeKind.file), 4, true, false);
+	parser.last_e20_pos = -1;
+	parser.expecting = false;
+	return;
+}
 
-	return Parser
+//==============================================================================
+
+struct Checkpoint
+{
+	// What `rewind()` goes back to:  where the parse was, and how much of the
+	// session existed.  It's for a speculative parse that may have to be
+	// undone, and for an input that turns out to be incomplete, which is parsed
+	// again from its start when the rest of it is typed
+
+	pos: i32,
+	ndiags: i32,
+	nnodes: i32,
+	nentries: i32,
+	scope: i32,
+	num_vars: i32,
+}
+
+fn checkpoint(parser: &const Parser): Checkpoint
+{
+	return Checkpoint
 	{
-		tokens = tokens,
-		pos = 0,
-		nodes = new_node_vec(),
-		diags = diags,
-		vars = vars,
-		num_vars = NUM_INTR_VARS,
-		ipass = 0,
-		last_e20_pos = -1,
-		expecting = false,
+		pos = parser.pos,
+		ndiags = parser.diags.len,
+		nnodes = parser.nodes.len,
+		nentries = parser.vars.len,
+		scope = parser.vars.scope,
+		num_vars = parser.num_vars,
 	};
+}
+
+fn rewind(parser: &Parser, cp: &const Checkpoint)
+{
+	// Take back everything that was done since the checkpoint.  Diagnostics, so
+	// that they aren't duplicated by a parse of the same tokens again, and
+	// nodes, so that they don't pile up.  The scopes that were pushed go first,
+	// since each one drops its entries down to where it started
+	parser.pos = cp.pos;
+	parser.diags.len = cp.ndiags;
+	parser.nodes.len = cp.nnodes;
+	while parser.vars.scope > cp.scope
+		parser.vars.pop_scope();
+	parser.vars.truncate(cp.nentries);
+	parser.num_vars = cp.num_vars;
+
+	// An E20 whose position is remembered for de-duping in `match()` has to be
+	// forgotten too, or a parse of the same tokens again would see a "second"
+	// failure at that position and drop its E20
+	parser.last_e20_pos = -1;
+	return;
 }
 
 //==============================================================================
@@ -149,9 +231,20 @@ fn skip(parser: &Parser)
 	return;
 }
 
+fn type_of(parser: &const Parser, node: i32): Type
+{
+	// The type of a node that was made already
+	return parser.nodes.data[node].type_;
+}
+
+fn type_kind_of(parser: &const Parser, node: i32): TypeKind
+{
+	return parser.nodes.data[node].type_.kind;
+}
+
 fn push_diag(parser: &Parser, code: &const str, pos: i32)
 {
-	parser.diags.push(code + "@" + str(pos));
+	parser.diags.push(new_diag(code, pos));
 	return;
 }
 
@@ -225,711 +318,103 @@ fn push_var(parser: &Parser): i32
 
 fn search(parser: &const Parser, key: &const str): i32
 {
-	// The index of the entry of a variable in `parser.vars.entries`, or -1
-	const e = parser.vars.search(key);
-	if e < 0
-		return -1;
-
-	// In pass 1 the table still holds everything pass 0 inserted, but
-	// `num_vars` was reset, so an id past it is a global that isn't declared
-	// yet, e.g. the `count` in `let count = count;`.  Treat it as not found
-	if parser.ipass > 0 and parser.vars.entries[e].id_index > parser.num_vars
-		return -1;
-	return e;
+	// The index of the entry of a variable in `parser.vars.entries`, or -1.  A
+	// global that isn't declared yet, e.g. the `count` in `let count = count;`,
+	// isn't in the table yet, since the scan only declares fns, structs, and
+	// enums
+	return parser.vars.search(key);
 }
 
 //==============================================================================
 
-fn new_literal(parser: &Parser, kind: TypeKind, val: &const str): i32
-{
-	let node = new_node(NodeKind.literal_expr);
-	node.type_ = new_type(kind);
-	node.val = val;
-	return parser.nodes.push(node);
-}
-
-fn new_float_literal(parser: &Parser, kind: TypeKind, token: &const Token): i32
-{
-	// A float keeps the source text, which the Fortran backend writes out as is
-	// instead of the rounded value
-	let node = new_node(NodeKind.literal_expr);
-	node.type_ = new_type(kind);
-	node.has_id = true;
-	node.identifier = token;
-	return parser.nodes.push(node);
-}
-
-fn new_unary_expr(parser: &Parser, op: &const Token, right: i32): i32
-{
-	// All unary operators result in the type of their operand
-	let node = new_node(NodeKind.unary_expr);
-	node.has_op = true;
-	node.op = op;
-	node.right = right;
-	node.type_ = parser.nodes.data[right].type_;
-	return parser.nodes.push(node);
-}
-
-fn new_binary_expr(
-	parser: &Parser, left: i32, op: &const Token, right: i32,
-): i32
-{
-	let node = new_node(NodeKind.binary_expr);
-	node.has_op = true;
-	node.op = op;
-	node.left = left;
-	node.right = right;
-
-	const ltype = parser.nodes.data[left].type_;
-	const rtype = parser.nodes.data[right].type_;
-	if op.kind == TokenKind.matmul
-		node.type_ = get_matmul_kind(ltype, rtype);
-	else
-		node.type_ = get_binary_op_kind(ltype, op, rtype);
-	return parser.nodes.push(node);
-}
+// The rest of the parser is in files of their own, like the Fortran
+// src/parse_*.f90.  They aren't modules, since the fns of both call each
+// other
+#include("parse_expr.syntran");
+#include("parse_stmt.syntran");
 
 //==============================================================================
 
-fn parse_name_expr(parser: &Parser): i32
+fn skip_item(parser: &Parser)
 {
-	const identifier = match(&parser, TokenKind.identifier);
-
-	let node = new_node(NodeKind.name_expr);
-	node.has_id = true;
-	node.identifier = identifier;
-
-	const e = search(parser, identifier.text);
-	if e >= 0
+	// Go past one top-level item without parsing it:  up to and including the
+	// `;` that ends it, or the `}` that closes its outermost brace.  Brackets
+	// nest, so a `;` or `}` inside them doesn't end the item.  It always goes
+	// past at least one token, unless it is at eof
+	let depth = 0;
+	while peek_kind(parser, 0) != TokenKind.eof
 	{
-		node.type_ = parser.vars.entries[e].type_;
-		node.id_index = parser.vars.entries[e].id_index;
-	}
-	else
-	{
-		push_diag(&parser, "E28", identifier.pos);
-	}
-	const expr = parser.nodes.push(node);
+		const kind = peek_kind(parser, 0);
+		skip(&parser);
 
-	// Subscripts and members are milestones 3 and 4
-	if any(peek_kind(parser, 0) == [TokenKind.lbracket, TokenKind.dot])
-		return unsupported(&parser);
-	return expr;
-}
-
-fn parse_array_expr(parser: &Parser): i32
-{
-	// Only the ranges `[lbound: ubound]` and `[lbound: step: ubound]`, so
-	// far.  The rest of the forms are milestone 3
-	expect(&parser, TokenKind.lbracket);
-
-	const lbound = parse_expr(&parser, 0);
-	if peek_kind(parser, 0) != TokenKind.colon
-		return unsupported(&parser);
-
-	expect(&parser, TokenKind.colon);
-	let ubound = parse_expr(&parser, 0);
-	let step = -1;
-
-	let node = new_node(NodeKind.array_expr);
-	node.lbound = lbound;
-
-	if peek_kind(parser, 0) == TokenKind.colon
-	{
-		// Implicit form [lbound: step: ubound], where what was parsed as the
-		// ubound is the step
-		step = ubound;
-		expect(&parser, TokenKind.colon);
-		ubound = parse_expr(&parser, 0);
-		expect(&parser, TokenKind.rbracket);
-
-		const lkind = parser.nodes.data[lbound].type_.kind;
-		const skind = parser.nodes.data[step].type_.kind;
-		const ukind = parser.nodes.data[ubound].type_.kind;
-
-		// A uniform i32, f32, or f64 triple, or else all ints, or else unknown
-		let elem = TypeKind.unknown;
-		if lkind == skind and skind == ukind and
-			any(lkind == [TypeKind.i32, TypeKind.f32, TypeKind.f64])
-			elem = lkind;
-		else if is_int_type(lkind) and is_int_type(skind) and
-			is_int_type(ukind)
-			elem = TypeKind.i64;
-
-		node.type_ = new_array_type(elem, 1);
-		node.step = step;
-		node.ubound = ubound;
-		return parser.nodes.push(node);
-	}
-
-	if peek_kind(parser, 0) == TokenKind.semicolon
-		return unsupported(&parser);
-
-	// Implicit form [lbound: ubound]
-	expect(&parser, TokenKind.rbracket);
-
-	const lkind = parser.nodes.data[lbound].type_.kind;
-	const ukind = parser.nodes.data[ubound].type_.kind;
-	let elem = TypeKind.unknown;
-	if lkind == TypeKind.i32 and ukind == TypeKind.i32
-		elem = TypeKind.i32;
-	else if is_int_type(lkind) and is_int_type(ukind)
-		elem = TypeKind.i64;
-
-	node.type_ = new_array_type(elem, 1);
-	node.ubound = ubound;
-	return parser.nodes.push(node);
-}
-
-fn parse_primary_expr(parser: &Parser): i32
-{
-	const current = peek_token(parser, 0);
-
-	switch current.kind
-	{
-		case TokenKind.lparen
+		switch kind
 		{
-			// The parens are not nodes of the tree, they just change how it is
-			// connected
-			skip(&parser);
-			const expr = parse_expr_statement(&parser);
-			expect(&parser, TokenKind.rparen);
-			return expr;
-		}
-		case TokenKind.lbracket { return parse_array_expr(&parser); }
-		case TokenKind.keyword when current.keyword == Keyword.true_
-		{
-			skip(&parser);
-			return new_literal(&parser, TypeKind.bool, "true");
-		}
-		case TokenKind.keyword when current.keyword == Keyword.false_
-		{
-			skip(&parser);
-			return new_literal(&parser, TypeKind.bool, "false");
-		}
-
-		// An optional that holds nothing is for structs
-		case TokenKind.keyword when current.keyword == Keyword.null_
-		{
-			return unsupported(&parser);
-		}
-		case TokenKind.identifier
-		{
-			// A qualified name, an enum, and a call are milestones 2 and 5.  A
-			// `{` after a name can only be a block until there are structs
-			if any(peek_kind(parser, 1) == [
-				TokenKind.double_colon, TokenKind.lparen,
-			])
-				return unsupported(&parser);
-			return parse_name_expr(&parser);
-		}
-		case TokenKind.f32
-		{
-			const token = match(&parser, TokenKind.f32);
-			return new_float_literal(&parser, TypeKind.f32, token);
-		}
-		case TokenKind.f64
-		{
-			const token = match(&parser, TokenKind.f64);
-			return new_float_literal(&parser, TypeKind.f64, token);
-		}
-		case TokenKind.str
-		{
-			const token = match(&parser, TokenKind.str);
-			return new_literal(&parser, TypeKind.str, token.str_);
-		}
-		case TokenKind.i64
-		{
-			const token = match(&parser, TokenKind.i64);
-			return new_literal(&parser, TypeKind.i64, str(token.i64_));
-		}
-		case TokenKind.i32
-		{
-			const token = match(&parser, TokenKind.i32);
-			return new_literal(&parser, TypeKind.i32, str(token.i32_));
-		}
-	}
-
-	// Every other kind of token can't start an expression at all, so naming
-	// an i32 as what's expected would be misleading
-	const token = match(&parser, TokenKind.i32);
-	return new_literal(&parser, TypeKind.i32, "0");
-}
-
-fn parse_expr(parser: &Parser, parent_prec: i32): i32
-{
-	let expr = -1;
-
-	const unary_token = peek_token(parser, 0);
-	const unary_prec = get_unary_op_prec(unary_token);
-	if unary_prec != 0 and unary_prec >= parent_prec
-	{
-		const op = next_token(&parser);
-		const right = parse_expr(&parser, unary_prec);
-		expr = new_unary_expr(&parser, op, right);
-	}
-	else
-	{
-		expr = parse_primary_expr(&parser);
-	}
-
-	while true
-	{
-		const binary_token = peek_token(parser, 0);
-		const prec = get_binary_op_prec(binary_token);
-		if prec == 0 or prec <= parent_prec
-			break;
-
-		const op = next_token(&parser);
-		let right = -1;
-		if op.kind == TokenKind.double_star
-		{
-			// `**` is right-associative, like Fortran:  `a ** b ** c` is
-			// `a ** (b ** c)`.  Parsing the right operand with a parent
-			// precedence one lower lets another `**` nest into it.  That is
-			// also the precedence of the unary ops, so `a ** -b` still works
-			right = parse_expr(&parser, prec - 1);
-		}
-		else
-		{
-			right = parse_expr(&parser, prec);
-		}
-		expr = new_binary_expr(&parser, expr, op, right);
-	}
-	return expr;
-}
-
-//==============================================================================
-
-fn parse_let_expr(parser: &Parser, is_const: bool): i32
-{
-	// Parse `let x = ...` or, if `is_const`, `const x = ...`.  The keyword
-	// hasn't been matched yet.  A malformed declaration gets its own
-	// diagnostic, E113 or E114, instead of letting `match()` cascade
-	skip(&parser);
-
-	if peek_kind(parser, 0) == TokenKind.eof
-	{
-		// Incomplete interactive line.  Fall back to the ordinary match() path
-		// so that `expecting` is set, instead of reporting E114
-		expect(&parser, TokenKind.identifier);
-		expect(&parser, TokenKind.equals);
-		const right = parse_expr_statement(&parser);
-		return parser.nodes.push(new_node(NodeKind.unknown));
-	}
-
-	if peek_kind(parser, 0) != TokenKind.identifier
-	{
-		// No name at all, e.g. `let 5 = 3;` or `let = 3;`
-		push_diag(&parser, "E114", peek_pos(parser, 0));
-
-		if not any(peek_kind(parser, 0) == [TokenKind.rbrace, TokenKind.eof])
-		{
-			// Discard the bad "name" token
-			skip(&parser);
-
-			if peek_kind(parser, 0) == TokenKind.equals
+			case TokenKind.lbrace, TokenKind.lparen, TokenKind.lbracket
 			{
-				skip(&parser);
-				const right = parse_expr_statement(&parser);
+				depth += 1;
 			}
-			else
+			case TokenKind.rparen, TokenKind.rbracket
 			{
-				// No `=` either.  Resync to the next statement boundary
-				// without consuming it
-				while not any(peek_kind(parser, 0) == [
-					TokenKind.semicolon, TokenKind.rbrace, TokenKind.eof,
-				])
-					skip(&parser);
+				depth -= 1;
 			}
-		}
-
-		// No name was ever parsed, so there is nothing to declare
-		return parser.nodes.push(new_node(NodeKind.literal_expr));
-	}
-
-	const identifier = next_token(&parser);
-
-	let op = new_token(TokenKind.equals, identifier.pos, "=");
-	let right = -1;
-	switch peek_kind(parser, 0)
-	{
-		case TokenKind.eof
-		{
-			// Incomplete interactive line, see above
-			op = match(&parser, TokenKind.equals);
-			right = parse_expr_statement(&parser);
-		}
-		case TokenKind.equals
-		{
-			op = next_token(&parser);
-			right = parse_expr_statement(&parser);
-		}
-		default
-		{
-			// A name was parsed, but it isn't followed by `=`, e.g.
-			// `let foobar 4;`, `let x;`, `let x: i32 = 4;`, or `let x == 4;`
-			push_diag(&parser, "E113", peek_pos(parser, 0));
-
-			const current = peek_token(parser, 0);
-			if current.kind == TokenKind.colon
+			case TokenKind.rbrace
 			{
-				// Skip the `: type` annotation up to the `=` it should have
-				while not any(peek_kind(parser, 0) == [
-					TokenKind.equals, TokenKind.semicolon, TokenKind.rbrace,
-					TokenKind.eof,
-				])
-					skip(&parser);
+				depth -= 1;
+				if depth <= 0
+					return;
 			}
-			else if is_assignment_op(current) or
-				current.kind == TokenKind.double_equals
+			case TokenKind.semicolon
 			{
-				// Typo'd operator, e.g. `let x == 4;` or `let x += 4;`
-				skip(&parser);
-			}
-
-			if peek_kind(parser, 0) == TokenKind.equals
-				skip(&parser);
-
-			if any(peek_kind(parser, 0) == [
-				TokenKind.semicolon, TokenKind.rbrace, TokenKind.eof,
-			])
-			{
-				// No initializer left to parse.  Its type is unknown, which
-				// keeps a later use from cascading an E28
-				right = parser.nodes.push(new_node(NodeKind.literal_expr));
-			}
-			else
-			{
-				right = parse_expr_statement(&parser);
+				if depth <= 0
+					return;
 			}
 		}
 	}
-
-	// new_declaration_expr()
-	let node = new_node(NodeKind.let_expr);
-	node.has_id = true;
-	node.identifier = identifier;
-	node.has_op = true;
-	node.op = op;
-	node.right = right;
-	node.type_ = parser.nodes.data[right].type_;
-
-	node.id_index = push_var(&parser);
-
-	// Pass 1 has to overwrite, since the table holds everything that pass 0
-	// inserted
-	const overwrite = parser.ipass > 0;
-	const ok = parser.vars.insert(
-		identifier.text, node.type_, node.id_index, overwrite, is_const
-	);
-	if not ok
-		push_diag(&parser, "E22", identifier.pos);
-
-	return parser.nodes.push(node);
+	return;
 }
 
-fn parse_expr_statement(parser: &Parser): i32
+fn scan_decls(parser: &Parser)
 {
-	if is_keyword(parser, 0, Keyword.const_)
-		return parse_let_expr(&parser, true);
-	if is_keyword(parser, 0, Keyword.let_)
-		return parse_let_expr(&parser, false);
-
-	if peek_kind(parser, 0) != TokenKind.identifier
-		return parse_expr(&parser, 0);
-
-	// A qualified assignment, like `mod::var = value`, is milestone 2
-	if peek_kind(parser, 1) == TokenKind.double_colon
-		return parse_expr(&parser, 0);
-
-	// There may or may not be a subscript expression after an identifier, so
-	// we can't know how many tokens ahead an equals might be without looking
-	// ahead.  Parse as if it's an assignment, and rewind if it isn't
-	const pos0 = parser.pos;
-	const ndiag0 = parser.diags.len;
-
-	const identifier = match(&parser, TokenKind.identifier);
-	const found = search(parser, identifier.text);
-
-	// Subscripts and members are milestones 3 and 4
-	if any(peek_kind(parser, 0) == [TokenKind.lbracket, TokenKind.dot])
-	{
-		const node = unsupported(&parser);
-	}
-
-	const op_token = peek_token(parser, 0);
-	if not is_assignment_op(op_token)
-	{
-		// Rewind and let parse_expr() do it again.  Discard the diagnostics
-		// that the speculative parse pushed, or they would be duplicated.
-		// That includes an E20 whose position is remembered for de-duping
-		// in match(), so forget it too, or the re-parse is a "second" failure
-		// at that position and its E20 is dropped
-		parser.pos = pos0;
-		parser.diags.len = ndiag0;
-		parser.last_e20_pos = -1;
-		return parse_expr(&parser, 0);
-	}
-
-	const op = next_token(&parser);
-	const right = parse_expr_statement(&parser);
-
-	// The assignment has the type and slot of its variable
-	let node = new_node(NodeKind.assignment_expr);
-	node.has_id = true;
-	node.identifier = identifier;
-	node.has_op = true;
-	node.op = op;
-	node.right = right;
-	if found >= 0
-	{
-		node.type_ = parser.vars.entries[found].type_;
-		node.id_index = parser.vars.entries[found].id_index;
-	}
-	else
-	{
-		push_diag(&parser, "E28", identifier.pos);
-	}
-	return parser.nodes.push(node);
+	// What the Fortran's pass 0 is for, without parsing everything twice:  walk
+	// the top-level items and declare the ones that can be used before they are
+	// declared, which are fns, structs, and enums.  Milestone 2 declares the fn
+	// signatures here, milestones 4 and 5 the structs and enums, and
+	// milestone 6 the names that a `use` brings in.  Until then nothing is
+	// declared, so
+	// the items are only skipped.  The scan pushes no nodes and no diagnostics,
+	// since they are the parse's
+	while peek_kind(parser, 0) != TokenKind.eof
+		skip_item(&parser);
+	return;
 }
 
-//==============================================================================
-
-fn parse_return_statement(parser: &Parser): i32
+fn drop_pass1_only_diags(parser: &Parser)
 {
-	expect_keyword(&parser, Keyword.return_);
-
-	let node = new_node(NodeKind.return_statement);
-	if peek_kind(parser, 0) == TokenKind.semicolon
+	// The Fortran doesn't run pass 1 for an incomplete input, so the
+	// diagnostics that only it raises aren't there.  That is E9 so far, and
+	// each more that is behind an `ipass` test in the Fortran goes here
+	let n = 0;
+	for i in [0: parser.diags.len]
 	{
-		// A void return, which is a node with no kind, and the void type
-		let right = new_node(NodeKind.unknown);
-		right.type_ = new_type(TypeKind.void);
-		node.right = parser.nodes.push(right);
-	}
-	else
-	{
-		node.right = parse_expr(&parser, 0);
-	}
-	expect(&parser, TokenKind.semicolon);
-	return parser.nodes.push(node);
-}
-
-fn parse_break_statement(parser: &Parser): i32
-{
-	expect_keyword(&parser, Keyword.break_);
-	expect(&parser, TokenKind.semicolon);
-	return parser.nodes.push(new_node(NodeKind.break_statement));
-}
-
-fn parse_continue_statement(parser: &Parser): i32
-{
-	expect_keyword(&parser, Keyword.continue_);
-	expect(&parser, TokenKind.semicolon);
-	return parser.nodes.push(new_node(NodeKind.continue_statement));
-}
-
-fn parse_scoped_statement(parser: &Parser): i32
-{
-	// A braceless body, like `if c let x = 1;`, gets its own scope like a block
-	// does, so its `let` can't leak out to code where it never ran
-	parser.vars.push_scope();
-	const statement = parse_statement(&parser);
-	parser.vars.pop_scope();
-	return statement;
-}
-
-fn parse_if_statement(parser: &Parser): i32
-{
-	expect_keyword(&parser, Keyword.if_);
-
-	let node = new_node(NodeKind.if_statement);
-	node.condition = parse_expr(&parser, 0);
-	node.if_clause = parse_scoped_statement(&parser);
-
-	// No more work is needed for "else if".  That's just an else clause that is
-	// another if statement
-	if is_keyword(parser, 0, Keyword.else_)
-	{
-		expect_keyword(&parser, Keyword.else_);
-		node.else_clause = parse_scoped_statement(&parser);
-	}
-	return parser.nodes.push(node);
-}
-
-fn parse_for_statement(parser: &Parser): i32
-{
-	// For loop syntax:
-	//
-	//     for i in [1: 5] { ... }          // 1, 2, 3, 4
-	//     for i in [1: 2: 7] { ... }       // 1, 3, 5
-	expect_keyword(&parser, Keyword.for_);
-
-	parser.vars.push_scope();
-
-	const identifier = match(&parser, TokenKind.identifier);
-	expect_keyword(&parser, Keyword.in_);
-
-	let node = new_node(NodeKind.for_statement);
-	node.has_id = true;
-	node.identifier = identifier;
-	const array_pos = peek_pos(parser, 0);
-	node.array = parse_primary_expr(&parser);
-
-	// The iterator is declared after the array, so the array can't use it
-	node.id_index = push_var(&parser);
-
-	// The type of the iterator is the type of the elements of the array, or
-	// the str itself.  An array of arrays has no scalar to iterate over
-	const array_type = parser.nodes.data[node.array].type_;
-	let iter_type = array_type;
-	if array_type.kind == TypeKind.array
-	{
-		iter_type = new_type(array_type.elem);
-		if array_type.elem == TypeKind.array
-			iter_type = new_type(TypeKind.unknown);
-	}
-	const ok = parser.vars.insert(
-		identifier.text, iter_type, node.id_index, true, false
-	);
-
-	// Only an array or a str can be looped over, like the Fortran E51, which
-	// is also pushed for an unknown type
-	if not any(array_type.kind == [TypeKind.array, TypeKind.str])
-		push_diag(&parser, "E51", array_pos);
-
-	node.body = parse_statement(&parser);
-
-	parser.vars.pop_scope();
-	return parser.nodes.push(node);
-}
-
-fn parse_while_statement(parser: &Parser): i32
-{
-	expect_keyword(&parser, Keyword.while_);
-
-	let node = new_node(NodeKind.while_statement);
-	node.condition = parse_expr(&parser, 0);
-	node.body = parse_scoped_statement(&parser);
-	return parser.nodes.push(node);
-}
-
-fn parse_block_statement(parser: &Parser): i32
-{
-	let members = new_i32_vec();
-
-	expect(&parser, TokenKind.lbrace);
-	parser.vars.push_scope();
-
-	while not any(peek_kind(parser, 0) == [TokenKind.eof, TokenKind.rbrace])
-	{
-		const pos0 = parser.pos;
-		members.push(parse_statement(&parser));
-
-		// Avoid infinite loops on malformed blocks
-		if parser.pos == pos0
-			skip(&parser);
-	}
-
-	parser.vars.pop_scope();
-	expect(&parser, TokenKind.rbrace);
-
-	let node = new_node(NodeKind.block_statement);
-	node.members = members.to_array();
-	return parser.nodes.push(node);
-}
-
-fn parse_statement(parser: &Parser): i32
-{
-	// The position of the statement, which every kind gets stamped with, for
-	// stack traces at runtime
-	const src_pos = peek_pos(parser, 0);
-
-	const current = peek_token(parser, 0);
-
-	let statement = -1;
-	switch current.kind
-	{
-		case TokenKind.lbrace
+		if parser.diags.data[i].code != "E9"
 		{
-			statement = parse_block_statement(&parser);
-		}
-		case TokenKind.keyword when current.keyword == Keyword.if_
-		{
-			statement = parse_if_statement(&parser);
-		}
-		case TokenKind.keyword when current.keyword == Keyword.for_
-		{
-			statement = parse_for_statement(&parser);
-		}
-		case TokenKind.keyword when current.keyword == Keyword.while_
-		{
-			statement = parse_while_statement(&parser);
-		}
-		case TokenKind.keyword when current.keyword == Keyword.return_
-		{
-			statement = parse_return_statement(&parser);
-		}
-		case TokenKind.keyword when current.keyword == Keyword.break_
-		{
-			statement = parse_break_statement(&parser);
-		}
-		case TokenKind.keyword when current.keyword == Keyword.continue_
-		{
-			statement = parse_continue_statement(&parser);
-		}
-
-		// A switch is milestone 5, and a use is milestone 6
-		case TokenKind.keyword when
-			any(current.keyword == [Keyword.switch_, Keyword.use_])
-		{
-			statement = unsupported(&parser);
-		}
-		default
-		{
-			statement = parse_expr_statement(&parser);
-			expect(&parser, TokenKind.semicolon);
-
-			// Ban expression statements, which are only allowed in the REPL.
-			// It's easier to parse one unconditionally and check it afterwards.
-			// A statement of unknown type was tainted by a prior error, so skip
-			// it to avoid cascading an E9
-			const kind = parser.nodes.data[statement].kind;
-			const type_kind = parser.nodes.data[statement].type_.kind;
-			if parser.ipass > 0 and type_kind != TypeKind.unknown and
-				not any(kind == [NodeKind.let_expr, NodeKind.assignment_expr])
-				push_diag(&parser, "E9", src_pos);
+			parser.diags.data[n] = parser.diags.data[i];
+			n += 1;
 		}
 	}
-
-	parser.nodes.data[statement].src_pos = src_pos;
-	return statement;
+	parser.diags.len = n;
+	return;
 }
 
-//==============================================================================
-
-fn is_pass0_only_diag(diag: &const str): bool
+fn parse_unit(parser: &Parser): i32
 {
-	// True for the diagnostics that only pass 0 can raise, see the Fortran
-	// `is_pass0_only_diag()`.  They are the redeclarations, a use before the
-	// declaration, and a var that clashes with a type
-	const code = diag_code(diag);
-	return any(code == ["E22", "E24", "E26", "E92", "E28", "E98"]);
-}
+	// Parse a whole input, and return the index of its translation unit in
+	// `parser.nodes`.  The declarations are scanned first, and then the same
+	// tokens are parsed once
+	scan_decls(&parser);
+	parser.pos = 0;
+	parser.last_e20_pos = -1;
 
-fn diag_code(diag: &const str): str
-{
-	// The code of a diagnostic, without its position
-	for i in [0: len(diag)]
-		if diag[i] == "@"
-			return diag[0: i];
-	return diag;
-}
-
-fn parse_unit_pass(parser: &Parser): I32Vec
-{
-	// The statement loop that is shared by both passes of `parse_unit()`
 	let members = new_i32_vec();
 	while peek_kind(parser, 0) != TokenKind.eof
 	{
@@ -953,66 +438,9 @@ fn parse_unit_pass(parser: &Parser): I32Vec
 		if parser.pos == pos0
 			skip(&parser);
 	}
-	return members;
-}
 
-fn parse_unit(parser: &Parser): i32
-{
-	// Parse a whole program, and return the index of its translation unit in
-	// `parser.nodes`.  There are two passes.  The first is to collect the
-	// signatures, and the second parses the same tokens again, with the tables
-	// that the first filled
-
-	parser.ipass = 0;
-	parser.last_e20_pos = -1;
-
-	// The diagnostics that exist before either pass are the lexer's.  Pass 0's
-	// own output is everything after them, and it is discarded before pass 1
-	const ndiag_pre = parser.diags.len;
-	const num_vars0 = parser.num_vars;
-
-	let members = parse_unit_pass(&parser);
-
-	const diags0 = parser.diags;
-	parser.diags.len = ndiag_pre;
-
-	// Skip pass 1 only for an incomplete interactive line, i.e. a failed
-	// match() at eof
-	if not parser.expecting
-	{
-		parser.pos = 0;
-		parser.ipass = 1;
-		parser.last_e20_pos = -1;
-		parser.num_vars = num_vars0;
-
-		// Resetting the counters, not the tables, is enough:  pass 1 inserts
-		// everything again with overwrite, with the same slots.  The nodes of
-		// pass 0 are not needed anymore
-		parser.nodes = new_node_vec();
-
-		members = parse_unit_pass(&parser);
-	}
-
-	// A few diagnostics are only raised in pass 0, since pass 1 resolves
-	// what they are about.  Everything else that pass 0 pushes is a byproduct
-	// of incomplete type info.  So append only the pass-0-only diagnostics,
-	// and only those that pass 1 didn't already raise itself
 	if parser.expecting
-	{
-		parser.diags = diags0;
-	}
-	else
-	{
-		for i in [ndiag_pre: diags0.len]
-		{
-			if is_pass0_only_diag(diags0.data[i])
-			{
-				const seen = parser.diags.data[0: parser.diags.len];
-				if not any(seen == diags0.data[i])
-					parser.diags.push(diags0.data[i]);
-			}
-		}
-	}
+		drop_pass1_only_diags(&parser);
 
 	let unit = new_node(NodeKind.translation_unit);
 	unit.members = members.to_array();
