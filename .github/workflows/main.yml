@@ -358,39 +358,6 @@
 				"
 			},
 			{
-				"if": "matrix.os != 'windows-latest'",
-				"name": "Test lexer port",
-				"shell": "bash",
-				"run":
-				"
-					# Lex every test program with the syntran port of the lexer, \n
-					# compiler/lex.syntran, and compare its tokens with the Fortran lexer's \n
-					bash ./utils/test-lex.sh -v ./build/Debug/syntran \n
-				"
-			},
-			{
-				"if": "matrix.os != 'windows-latest'",
-				"name": "Test parser port",
-				"shell": "bash",
-				"run":
-				"
-					# Dump the typed tree of every test program with the syntran port of the \n
-					# parser, compiler/parse.syntran, and compare it with the Fortran parser's. \n
-					# Only the files in utils/parse-pass.txt have to match for now \n
-					bash ./utils/test-parse.sh -v ./build/Debug/syntran \n
-				"
-			},
-			{
-				"if": "matrix.os != 'windows-latest'",
-				"name": "Lint syntran style",
-				"shell": "bash",
-				"run":
-				"
-					# Check that the self-hosted compiler follows doc/style.md \n
-					bash ./utils/lint.sh ./build/Debug/syntran \n
-				"
-			},
-			{
 				"if": "matrix.os == 'ubuntu-24.04'",
 				"name": "Test transpiler",
 				"shell": "bash",
@@ -778,7 +745,7 @@
 					"ubuntu-latest"
 				],
 				#"gfortran": [9, 10, 11, 12]  # gfort 9 started segfaulting with the introduction of fortran submodules circa 9ae38b9d
-				"gfortran": [10, 11, 12, 13, 14]  # gfort <= 8 not available by default on github ci workers
+				"gfortran": [11, 12, 13, 14]  # gfort 10 is not packaged on ubuntu 26.04, which ubuntu-latest now is
 			}
 		},
 		"steps": [
@@ -946,6 +913,10 @@
 					# directory named by a hash of the flags \n
 					fpm install --features debug,llvm-blas --flag -Wno-tabs --prefix ./build/native/ \n
 
+					# A release build for the self-hosted compiler tests below, which \n
+					# are too slow on a debug build \n
+					fpm install --features release,llvm-blas --flag -Wno-tabs --prefix ./build/native-release/ \n
+
 					# End to end, with the C compiler that links the program \n
 					./build/native/bin/syntran --quiet --native hello -c 'println(\"hello \", 6 * 7);' \n
 					[[ \"$(./hello)\" == \"hello 42\" ]] \n
@@ -977,8 +948,9 @@
 				"run":
 				"
 					set -exu \n
-					# The same as the lexer test above, but compile compiler/lex-dump.syntran \n
-					bash ./utils/test-lex.sh --native -v ./build/native/bin/syntran \n
+					# Lex every test program with the syntran port of the lexer, compiler/lex.syntran, \n
+					# compiled from compiler/lex-dump.syntran, and compare its tokens with the Fortran lexer's \n
+					bash ./utils/test-lex.sh --native -v ./build/native-release/bin/syntran \n
 				"
 			},
 			{
@@ -988,8 +960,21 @@
 				"run":
 				"
 					set -exu \n
-					# The same as the parser test above, but compile compiler/parse-dump.syntran \n
-					bash ./utils/test-parse.sh --native -v ./build/native/bin/syntran \n
+					# Dump the typed tree of every test program with the syntran port of the parser, \n
+					# compiler/parse.syntran, compiled from compiler/parse-dump.syntran, and compare it \n
+					# with the Fortran parser's.  Only the files in utils/parse-pass.txt have to match for now \n
+					bash ./utils/test-parse.sh --native -v ./build/native-release/bin/syntran \n
+				"
+			},
+			{
+				"if": "matrix.os == 'ubuntu-24.04'",
+				"name": "Lint syntran style natively",
+				"shell": "bash",
+				"run":
+				"
+					set -exu \n
+					# Check that the self-hosted compiler follows doc/style.md \n
+					bash ./utils/lint.sh --native ./build/native-release/bin/syntran \n
 				"
 			},
 			{
