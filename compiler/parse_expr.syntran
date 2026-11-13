@@ -1,0 +1,451 @@
+// Expressions, `let`, and assignment for the syntran port of the parser, like
+// src/parse_expr.f90.  This file isn't a module, it is `#include`d by
+// compiler/parse.syntran, since these fns are mutually recursive with the
+// statements in compiler/parse_stmt.syntran.  See compiler/parse.syntran
+
+//==============================================================================
+
+fn new_literal(parser: &Parser, kind: TypeKind, val: &const str): i32
+{
+	let node = new_node(NodeKind.literal_expr);
+	node.type_ = new_type(kind);
+	node.val = val;
+	return parser.nodes.push(node);
+}
+
+fn new_float_literal(parser: &Parser, kind: TypeKind, token: &const Token): i32
+{
+	// A float keeps the source text, which the Fortran backend writes out as is
+	// instead of the rounded value
+	let node = new_node(NodeKind.literal_expr);
+	node.type_ = new_type(kind);
+	node.has_id = true;
+	node.identifier = token;
+	return parser.nodes.push(node);
+}
+
+fn new_unary_expr(parser: &Parser, op: &const Token, right: i32): i32
+{
+	// All unary operators result in the type of their operand
+	let node = new_node(NodeKind.unary_expr);
+	node.has_op = true;
+	node.op = op;
+	node.right = right;
+	node.type_ = type_of(parser, right);
+	return parser.nodes.push(node);
+}
+
+fn new_binary_expr(
+	parser: &Parser, left: i32, op: &const Token, right: i32,
+): i32
+{
+	let node = new_node(NodeKind.binary_expr);
+	node.has_op = true;
+	node.op = op;
+	node.left = left;
+	node.right = right;
+
+	const ltype = type_of(parser, left);
+	const rtype = type_of(parser, right);
+	if op.kind == TokenKind.matmul
+		node.type_ = get_matmul_kind(ltype, rtype);
+	else
+		node.type_ = get_binary_op_kind(ltype, op, rtype);
+	return parser.nodes.push(node);
+}
+
+//==============================================================================
+
+fn parse_name_expr(parser: &Parser): i32
+{
+	const identifier = match(&parser, TokenKind.identifier);
+
+	let node = new_node(NodeKind.name_expr);
+	node.has_id = true;
+	node.identifier = identifier;
+
+	const e = search(parser, identifier.text);
+	if e >= 0
+	{
+		node.type_ = parser.vars.entries[e].type_;
+		node.id_index = parser.vars.entries[e].id_index;
+	}
+	else
+	{
+		push_diag(&parser, "E28", identifier.pos);
+	}
+	const expr = parser.nodes.push(node);
+
+	// Subscripts and members are milestones 3 and 4
+	if any(peek_kind(parser, 0) == [TokenKind.lbracket, TokenKind.dot])
+		return unsupported(&parser);
+	return expr;
+}
+
+fn parse_array_expr(parser: &Parser): i32
+{
+	// Only the ranges `[lbound: ubound]` and `[lbound: step: ubound]`, so
+	// far.  The rest of the forms are milestone 3
+	expect(&parser, TokenKind.lbracket);
+
+	const lbound = parse_expr(&parser, 0);
+	if peek_kind(parser, 0) != TokenKind.colon
+		return unsupported(&parser);
+
+	expect(&parser, TokenKind.colon);
+	let ubound = parse_expr(&parser, 0);
+	let step = -1;
+
+	let node = new_node(NodeKind.array_expr);
+	node.lbound = lbound;
+
+	if peek_kind(parser, 0) == TokenKind.colon
+	{
+		// Implicit form [lbound: step: ubound], where what was parsed as the
+		// ubound is the step
+		step = ubound;
+		expect(&parser, TokenKind.colon);
+		ubound = parse_expr(&parser, 0);
+		expect(&parser, TokenKind.rbracket);
+
+		const lkind = type_kind_of(parser, lbound);
+		const skind = type_kind_of(parser, step);
+		const ukind = type_kind_of(parser, ubound);
+
+		// A uniform i32, f32, or f64 triple, or else all ints, or else unknown
+		let elem = TypeKind.unknown;
+		if lkind == skind and skind == ukind and
+			any(lkind == [TypeKind.i32, TypeKind.f32, TypeKind.f64])
+			elem = lkind;
+		else if is_int_type(lkind) and is_int_type(skind) and
+			is_int_type(ukind)
+			elem = TypeKind.i64;
+
+		node.type_ = new_array_type(elem, 1);
+		node.step = step;
+		node.ubound = ubound;
+		return parser.nodes.push(node);
+	}
+
+	if peek_kind(parser, 0) == TokenKind.semicolon
+		return unsupported(&parser);
+
+	// Implicit form [lbound: ubound]
+	expect(&parser, TokenKind.rbracket);
+
+	const lkind = type_kind_of(parser, lbound);
+	const ukind = type_kind_of(parser, ubound);
+	let elem = TypeKind.unknown;
+	if lkind == TypeKind.i32 and ukind == TypeKind.i32
+		elem = TypeKind.i32;
+	else if is_int_type(lkind) and is_int_type(ukind)
+		elem = TypeKind.i64;
+
+	node.type_ = new_array_type(elem, 1);
+	node.ubound = ubound;
+	return parser.nodes.push(node);
+}
+
+fn parse_primary_expr(parser: &Parser): i32
+{
+	const current = peek_token(parser, 0);
+
+	switch current.kind
+	{
+		case TokenKind.lparen
+		{
+			// The parens are not nodes of the tree, they just change how it is
+			// connected
+			skip(&parser);
+			const expr = parse_expr_statement(&parser);
+			expect(&parser, TokenKind.rparen);
+			return expr;
+		}
+		case TokenKind.lbracket { return parse_array_expr(&parser); }
+		case TokenKind.keyword when current.keyword == Keyword.true_
+		{
+			skip(&parser);
+			return new_literal(&parser, TypeKind.bool, "true");
+		}
+		case TokenKind.keyword when current.keyword == Keyword.false_
+		{
+			skip(&parser);
+			return new_literal(&parser, TypeKind.bool, "false");
+		}
+
+		// An optional that holds nothing is for structs
+		case TokenKind.keyword when current.keyword == Keyword.null_
+		{
+			return unsupported(&parser);
+		}
+		case TokenKind.identifier
+		{
+			// A qualified name, an enum, and a call are milestones 2 and 5.  A
+			// `{` after a name can only be a block until there are structs
+			if any(peek_kind(parser, 1) == [
+				TokenKind.double_colon, TokenKind.lparen,
+			])
+				return unsupported(&parser);
+			return parse_name_expr(&parser);
+		}
+		case TokenKind.f32
+		{
+			const token = match(&parser, TokenKind.f32);
+			return new_float_literal(&parser, TypeKind.f32, token);
+		}
+		case TokenKind.f64
+		{
+			const token = match(&parser, TokenKind.f64);
+			return new_float_literal(&parser, TypeKind.f64, token);
+		}
+		case TokenKind.str
+		{
+			const token = match(&parser, TokenKind.str);
+			return new_literal(&parser, TypeKind.str, token.str_);
+		}
+		case TokenKind.i64
+		{
+			const token = match(&parser, TokenKind.i64);
+			return new_literal(&parser, TypeKind.i64, str(token.i64_));
+		}
+		case TokenKind.i32
+		{
+			const token = match(&parser, TokenKind.i32);
+			return new_literal(&parser, TypeKind.i32, str(token.i32_));
+		}
+	}
+
+	// Every other kind of token can't start an expression at all, so naming
+	// an i32 as what's expected would be misleading
+	const token = match(&parser, TokenKind.i32);
+	return new_literal(&parser, TypeKind.i32, "0");
+}
+
+fn parse_expr(parser: &Parser, parent_prec: i32): i32
+{
+	let expr = -1;
+
+	const unary_token = peek_token(parser, 0);
+	const unary_prec = get_unary_op_prec(unary_token);
+	if unary_prec != 0 and unary_prec >= parent_prec
+	{
+		const op = next_token(&parser);
+		const right = parse_expr(&parser, unary_prec);
+		expr = new_unary_expr(&parser, op, right);
+	}
+	else
+	{
+		expr = parse_primary_expr(&parser);
+	}
+
+	while true
+	{
+		const binary_token = peek_token(parser, 0);
+		const prec = get_binary_op_prec(binary_token);
+		if prec == 0 or prec <= parent_prec
+			break;
+
+		const op = next_token(&parser);
+		let right = -1;
+		if op.kind == TokenKind.double_star
+		{
+			// `**` is right-associative, like Fortran:  `a ** b ** c` is
+			// `a ** (b ** c)`.  Parsing the right operand with a parent
+			// precedence one lower lets another `**` nest into it.  That is
+			// also the precedence of the unary ops, so `a ** -b` still works
+			right = parse_expr(&parser, prec - 1);
+		}
+		else
+		{
+			right = parse_expr(&parser, prec);
+		}
+		expr = new_binary_expr(&parser, expr, op, right);
+	}
+	return expr;
+}
+
+//==============================================================================
+
+fn parse_let_expr(parser: &Parser, is_const: bool): i32
+{
+	// Parse `let x = ...` or, if `is_const`, `const x = ...`.  The keyword
+	// hasn't been matched yet.  A malformed declaration gets its own
+	// diagnostic, E113 or E114, instead of letting `match()` cascade
+	skip(&parser);
+
+	if peek_kind(parser, 0) == TokenKind.eof
+	{
+		// Incomplete interactive line.  Fall back to the ordinary match() path
+		// so that `expecting` is set, instead of reporting E114
+		expect(&parser, TokenKind.identifier);
+		expect(&parser, TokenKind.equals);
+		const right = parse_expr_statement(&parser);
+		return parser.nodes.push(new_node(NodeKind.unknown));
+	}
+
+	if peek_kind(parser, 0) != TokenKind.identifier
+	{
+		// No name at all, e.g. `let 5 = 3;` or `let = 3;`
+		push_diag(&parser, "E114", peek_pos(parser, 0));
+
+		if not any(peek_kind(parser, 0) == [TokenKind.rbrace, TokenKind.eof])
+		{
+			// Discard the bad "name" token
+			skip(&parser);
+
+			if peek_kind(parser, 0) == TokenKind.equals
+			{
+				skip(&parser);
+				const right = parse_expr_statement(&parser);
+			}
+			else
+			{
+				// No `=` either.  Resync to the next statement boundary
+				// without consuming it
+				while not any(peek_kind(parser, 0) == [
+					TokenKind.semicolon, TokenKind.rbrace, TokenKind.eof,
+				])
+					skip(&parser);
+			}
+		}
+
+		// No name was ever parsed, so there is nothing to declare
+		return parser.nodes.push(new_node(NodeKind.literal_expr));
+	}
+
+	const identifier = next_token(&parser);
+
+	let op = new_token(TokenKind.equals, identifier.pos, "=");
+	let right = -1;
+	switch peek_kind(parser, 0)
+	{
+		case TokenKind.eof
+		{
+			// Incomplete interactive line, see above
+			op = match(&parser, TokenKind.equals);
+			right = parse_expr_statement(&parser);
+		}
+		case TokenKind.equals
+		{
+			op = next_token(&parser);
+			right = parse_expr_statement(&parser);
+		}
+		default
+		{
+			// A name was parsed, but it isn't followed by `=`, e.g.
+			// `let foobar 4;`, `let x;`, `let x: i32 = 4;`, or `let x == 4;`
+			push_diag(&parser, "E113", peek_pos(parser, 0));
+
+			const current = peek_token(parser, 0);
+			if current.kind == TokenKind.colon
+			{
+				// Skip the `: type` annotation up to the `=` it should have
+				while not any(peek_kind(parser, 0) == [
+					TokenKind.equals, TokenKind.semicolon, TokenKind.rbrace,
+					TokenKind.eof,
+				])
+					skip(&parser);
+			}
+			else if is_assignment_op(current) or
+				current.kind == TokenKind.double_equals
+			{
+				// Typo'd operator, e.g. `let x == 4;` or `let x += 4;`
+				skip(&parser);
+			}
+
+			if peek_kind(parser, 0) == TokenKind.equals
+				skip(&parser);
+
+			if any(peek_kind(parser, 0) == [
+				TokenKind.semicolon, TokenKind.rbrace, TokenKind.eof,
+			])
+			{
+				// No initializer left to parse.  Its type is unknown, which
+				// keeps a later use from cascading an E28
+				right = parser.nodes.push(new_node(NodeKind.literal_expr));
+			}
+			else
+			{
+				right = parse_expr_statement(&parser);
+			}
+		}
+	}
+
+	// new_declaration_expr()
+	let node = new_node(NodeKind.let_expr);
+	node.has_id = true;
+	node.identifier = identifier;
+	node.has_op = true;
+	node.op = op;
+	node.right = right;
+	node.type_ = type_of(parser, right);
+
+	node.id_index = push_var(&parser);
+
+	const ok = parser.vars.insert(
+		identifier.text, node.type_, node.id_index, is_const
+	);
+	if not ok
+		push_diag(&parser, "E22", identifier.pos);
+
+	return parser.nodes.push(node);
+}
+
+fn parse_expr_statement(parser: &Parser): i32
+{
+	if is_keyword(parser, 0, Keyword.const_)
+		return parse_let_expr(&parser, true);
+	if is_keyword(parser, 0, Keyword.let_)
+		return parse_let_expr(&parser, false);
+
+	if peek_kind(parser, 0) != TokenKind.identifier
+		return parse_expr(&parser, 0);
+
+	// A qualified assignment, like `mod::var = value`, is milestone 2
+	if peek_kind(parser, 1) == TokenKind.double_colon
+		return parse_expr(&parser, 0);
+
+	// There may or may not be a subscript expression after an identifier, so
+	// we can't know how many tokens ahead an equals might be without looking
+	// ahead.  Parse as if it's an assignment, and rewind if it isn't
+	const cp = checkpoint(parser);
+
+	const identifier = match(&parser, TokenKind.identifier);
+	const found = search(parser, identifier.text);
+
+	// Subscripts and members are milestones 3 and 4
+	if any(peek_kind(parser, 0) == [TokenKind.lbracket, TokenKind.dot])
+	{
+		const node = unsupported(&parser);
+	}
+
+	const op_token = peek_token(parser, 0);
+	if not is_assignment_op(op_token)
+	{
+		// Rewind and let parse_expr() do it again, without what the speculative
+		// parse made
+		rewind(&parser, cp);
+		return parse_expr(&parser, 0);
+	}
+
+	const op = next_token(&parser);
+	const right = parse_expr_statement(&parser);
+
+	// The assignment has the type and slot of its variable
+	let node = new_node(NodeKind.assignment_expr);
+	node.has_id = true;
+	node.identifier = identifier;
+	node.has_op = true;
+	node.op = op;
+	node.right = right;
+	if found >= 0
+	{
+		node.type_ = parser.vars.entries[found].type_;
+		node.id_index = parser.vars.entries[found].id_index;
+	}
+	else
+	{
+		push_diag(&parser, "E28", identifier.pos);
+	}
+	return parser.nodes.push(node);
+}

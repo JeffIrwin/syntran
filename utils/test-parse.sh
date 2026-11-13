@@ -112,6 +112,14 @@ for f in "${files[@]}" ; do
 	"$syntran_bin" --parse "$f" > "$work/expect" 2>&1 || true
 	run_port "$f" > "$work/actual" 2>&1 || true
 
+	# The Fortran appends the diagnostics that only its first pass raises, like
+	# E22, after the others, and the port raises each where it happens.  So the
+	# order of the diagnostics isn't compared, but what and how many are
+	if head -n 1 "$work/expect" | grep -q '^diag ' ; then
+		sort -o "$work/expect" "$work/expect"
+		sort -o "$work/actual" "$work/actual"
+	fi
+
 	is_required=0
 	grep -qxF -- "$f" "$required" && is_required=1
 
