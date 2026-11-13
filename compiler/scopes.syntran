@@ -19,11 +19,11 @@ const INIT_CAP = 16;
 fn fnv1a(s: &const str): i64
 {
 	// FNV-1a, like src/tests/long/aoc/dicts/dict_i64.syntran
-	let h = 2166136261'i64;
+	let h = 0x811c_9dc5'i64;
 	for c in s
 	{
-		h = h ^ i64(i32(c));
-		h = h * 16777619'i64 % 4294967296'i64;
+		h ^= i64(i32(c));
+		h = h * 0x0100_0193'i64 % 0x1_0000_0000'i64;
 	}
 	return h;
 }

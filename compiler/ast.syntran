@@ -95,24 +95,18 @@ fn type_name_primitive(kind: TypeKind): str
 {
 	// Like `value_type_name_primitive()`.  Only some kinds have a name, and
 	// the rest are `"unknown"`, including a file
-	if kind == TypeKind.void
-		return "void";
-	if kind == TypeKind.bool
-		return "bool";
-	if kind == TypeKind.i32
-		return "i32";
-	if kind == TypeKind.i64
-		return "i64";
-	if kind == TypeKind.f32
-		return "f32";
-	if kind == TypeKind.f64
-		return "f64";
-	if kind == TypeKind.str
-		return "str";
-	if kind == TypeKind.any
-		return "any";
-	if kind == TypeKind.null_
-		return "null";
+	switch kind
+	{
+		case TypeKind.void  { return "void"; }
+		case TypeKind.bool  { return "bool"; }
+		case TypeKind.i32   { return "i32"; }
+		case TypeKind.i64   { return "i64"; }
+		case TypeKind.f32   { return "f32"; }
+		case TypeKind.f64   { return "f64"; }
+		case TypeKind.str   { return "str"; }
+		case TypeKind.any   { return "any"; }
+		case TypeKind.null_ { return "null"; }
+	}
 	return "unknown";
 }
 
@@ -122,21 +116,20 @@ fn type_name(ty: &const Type): str
 	if ty.kind != TypeKind.array
 		return type_name_primitive(ty.kind);
 
-	let name = "[" + type_name_primitive(ty.elem) + "; ";
-	for i in [1: ty.rank]
-		name += ":, ";
-	return name + ":]";
+	return "[" + type_name_primitive(ty.elem) + "; " +
+		std::repeat(":, ", ty.rank - 1) + ":]";
 }
 
 fn is_num_type(kind: TypeKind): bool
 {
-	return kind == TypeKind.i32 or kind == TypeKind.i64 or
-		kind == TypeKind.f32 or kind == TypeKind.f64;
+	return any(kind == [
+		TypeKind.i32, TypeKind.i64, TypeKind.f32, TypeKind.f64,
+	]);
 }
 
 fn is_int_type(kind: TypeKind): bool
 {
-	return kind == TypeKind.i32 or kind == TypeKind.i64;
+	return any(kind == [TypeKind.i32, TypeKind.i64]);
 }
 
 //==============================================================================
@@ -304,56 +297,46 @@ fn new_i32_vec(): I32Vec
 fn is_assignment_op(token: &const Token): bool
 {
 	// Is the operator an assignment operator, either regular or compound?
-	const k = token.kind;
-	return k == TokenKind.equals or k == TokenKind.plus_equals or
-		k == TokenKind.minus_equals or k == TokenKind.star_equals or
-		k == TokenKind.slash_equals or k == TokenKind.double_star_equals or
-		k == TokenKind.percent_equals or k == TokenKind.amp_equals or
-		k == TokenKind.pipe_equals or k == TokenKind.caret_equals or
-		k == TokenKind.double_less_equals or
-		k == TokenKind.double_greater_equals;
+	return any(token.kind == [
+		TokenKind.equals, TokenKind.plus_equals, TokenKind.minus_equals,
+		TokenKind.star_equals, TokenKind.slash_equals,
+		TokenKind.double_star_equals, TokenKind.percent_equals,
+		TokenKind.amp_equals, TokenKind.pipe_equals, TokenKind.caret_equals,
+		TokenKind.double_less_equals, TokenKind.double_greater_equals,
+	]);
 }
 
 fn get_unary_op_prec(token: &const Token): i32
 {
 	// Unary operator precedence, which is below `**` but above every other
 	// binary operator.  See the Fortran for why
-	const k = token.kind;
-	if k == TokenKind.plus or k == TokenKind.minus or k == TokenKind.bang
-		return 11;
-	if k == TokenKind.keyword and token.keyword == Keyword.not_
-		return 11;
+	switch token.kind
+	{
+		case TokenKind.plus, TokenKind.minus, TokenKind.bang { return 11; }
+		case TokenKind.keyword when token.keyword == Keyword.not_ { return 11; }
+	}
 	return 0;
 }
 
 fn get_binary_op_prec(token: &const Token): i32
 {
 	// Binary operator precedence.  A higher number is a higher precedence
-	const k = token.kind;
-	if k == TokenKind.double_star
-		return 12;
-	if k == TokenKind.star or k == TokenKind.slash or
-		k == TokenKind.percent or k == TokenKind.matmul
-		return 10;
-	if k == TokenKind.plus or k == TokenKind.minus
-		return 9;
-	if k == TokenKind.double_less or k == TokenKind.double_greater
-		return 8;
-	if k == TokenKind.amp
-		return 7;
-	if k == TokenKind.caret
-		return 6;
-	if k == TokenKind.pipe
-		return 5;
-	if k == TokenKind.less or k == TokenKind.less_equals or
-		k == TokenKind.greater or k == TokenKind.greater_equals
-		return 4;
-	if k == TokenKind.double_equals or k == TokenKind.bang_equals
-		return 3;
-	if k == TokenKind.keyword and token.keyword == Keyword.and_
-		return 2;
-	if k == TokenKind.keyword and token.keyword == Keyword.or_
-		return 1;
+	switch token.kind
+	{
+		case TokenKind.double_star { return 12; }
+		case TokenKind.star, TokenKind.slash, TokenKind.percent,
+			TokenKind.matmul { return 10; }
+		case TokenKind.plus, TokenKind.minus { return 9; }
+		case TokenKind.double_less, TokenKind.double_greater { return 8; }
+		case TokenKind.amp { return 7; }
+		case TokenKind.caret { return 6; }
+		case TokenKind.pipe { return 5; }
+		case TokenKind.less, TokenKind.less_equals, TokenKind.greater,
+			TokenKind.greater_equals { return 4; }
+		case TokenKind.double_equals, TokenKind.bang_equals { return 3; }
+		case TokenKind.keyword when token.keyword == Keyword.and_ { return 2; }
+		case TokenKind.keyword when token.keyword == Keyword.or_ { return 1; }
+	}
 	return 0;
 }
 
@@ -361,19 +344,20 @@ fn get_binary_op_prec(token: &const Token): i32
 
 fn is_comparison_op(token: &const Token): bool
 {
-	const k = token.kind;
-	return k == TokenKind.double_equals or k == TokenKind.bang_equals or
-		k == TokenKind.less or k == TokenKind.less_equals or
-		k == TokenKind.greater or k == TokenKind.greater_equals;
+	return any(token.kind == [
+		TokenKind.double_equals, TokenKind.bang_equals, TokenKind.less,
+		TokenKind.less_equals, TokenKind.greater, TokenKind.greater_equals,
+	]);
 }
 
 fn is_array_elem(kind: TypeKind): bool
 {
 	// Does an array of these have an array type in the Fortran?  The others,
 	// like a struct, have no `*_array_type`
-	return kind == TypeKind.bool or kind == TypeKind.f32 or
-		kind == TypeKind.f64 or kind == TypeKind.i32 or
-		kind == TypeKind.i64 or kind == TypeKind.str;
+	return any(kind == [
+		TypeKind.bool, TypeKind.f32, TypeKind.f64, TypeKind.i32, TypeKind.i64,
+		TypeKind.str,
+	]);
 }
 
 fn get_binary_scalar_kind(left: TypeKind, right: TypeKind): TypeKind
@@ -424,7 +408,7 @@ fn get_binary_op_kind(
 		return new_type(TypeKind.bool);
 	}
 
-	if op.kind == TokenKind.double_less or op.kind == TokenKind.double_greater
+	if any(op.kind == [TokenKind.double_less, TokenKind.double_greater])
 	{
 		// A shift is the type of its left operand if both are scalars
 		if not either_array

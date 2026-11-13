@@ -217,6 +217,26 @@ glob is rarely worth it.
   `at()` helper in `compiler/utils.syntran` is there because `and` and `or`
   don't short-circuit
 
+## Idioms
+
+Prefer the built-in that says what you mean:
+
+- An `if`/`else if` chain that compares one subject to several values is a
+  `switch`.  A condition on top of the value goes in a `when` guard, like
+  `case TokenKind.keyword when token.keyword == Keyword.not_`
+- Several `==` tests of one subject joined with `or` are
+  `any(x == [a, b, c])`.  A loop that only sets a `found` flag is
+  `any(items == x)`
+- "None of these" is `not any(x == [a, b, c])`, not `x != a and x != b and
+  x != c`.  By De Morgan's laws that is the same as `all(x != [a, b, c])`, but
+  prefer `not any(...)`, since it reads as the negation of the positive test.
+  Use `all()` when there is no `==` to negate, e.g. `all(x < [a, b, c])`
+- Clamp with `min`/`max`, not an `if` that reassigns
+- Build a repeated string with `std::repeat()`, not a loop
+- Use compound assignment, `h ^= x;`, not `h = h ^ x;`
+- Write a constant in the base that it's defined in, like a hash's offset basis
+  and bit masks in hex, `0x811c_9dc5`
+
 ## The linter
 
 [`compiler/lint.syntran`](../compiler/lint.syntran) checks the rules below with
