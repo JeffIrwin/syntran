@@ -204,7 +204,7 @@ fn parse_statement(parser: &Parser): i32
 			// A statement of unknown type was tainted by a prior error, so skip
 			// it to avoid cascading an E9
 			const kind = parser.nodes.data[statement].kind;
-			const type_kind = type_kind_of(parser, statement);
+			const type_kind = type_of(parser, statement).kind;
 			if not parser.repl and type_kind != TypeKind.unknown and
 				not any(kind == [NodeKind.let_expr, NodeKind.assignment_expr])
 				push_diag(&parser, "E9", src_pos);

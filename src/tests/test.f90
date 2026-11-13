@@ -4563,6 +4563,12 @@ subroutine unit_test_fns(npass, nfail)
 			! pass-0-fallback then resurrected even though pass 1 (with the
 			! correct rank) was clean
 			interpret_file(path//'test-36.syntran', quiet) == '12', &
+			! Regression: a member of a fwd-referenced fn's struct result was
+			! left unparsed in pass 0, giving a bogus E28 for the member name
+			eval('fn g(): i32 { return f(0).x + f(1).a.b; } ' // &
+			     'struct A { b: i32 } struct S { x: i32, a: A } ' // &
+			     'fn f(i: i32): S { return S{x = 3, a = A{b = 4}}; } g();', &
+			     quiet) == '7', &
 			! Regression: a void fn with no explicit `return` used to leave
 			! its implicit-void-return sentinel on top of the fn body's own
 			! stranded block result (block_statement compilation always
@@ -8889,6 +8895,10 @@ subroutine unit_test_error_codes(npass, nfail)
 				EC_ARRAY_STRUCT_SLICE) == 1, &
 			diag_has_code(get_diags('let a=[1,2,3]; a[1.0];'), EC_NON_INT_SUBSCRIPT), &
 			diag_count_code(get_diags('let a=[1,2,3]; a[1.0];'), EC_NON_INT_SUBSCRIPT) == 1, &
+			! A member of an undeclared fn's result is just the E29, not also an
+			! E28 for the member name
+			diag_count_code(get_diags('h().x;'), EC_UNDECLARE_FN) == 1, &
+			.not. diag_has_code(get_diags('h().x;'), EC_UNDECLARE_VAR), &
 			diag_has_code(get_diags('fn f(x: nope): i32 { return 1; }'), EC_BAD_TYPE), &
 			! A misspelled struct name in a type annotation should suggest the
 			! closest declared struct name

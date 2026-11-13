@@ -754,7 +754,8 @@ recursive module subroutine parse_qualified_expr(parser, expr)
 			call parser%parse_subscripts(expr)
 		end if
 		if (parser%current_kind() == dot_token .and. &
-				expr%val%type == struct_type) then
+				(expr%val%type == struct_type .or. &
+				expr%val%type == unknown_type)) then
 			call parser%parse_dot(expr)
 		end if
 
