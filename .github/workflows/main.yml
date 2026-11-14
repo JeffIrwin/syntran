@@ -745,7 +745,7 @@
 					"ubuntu-latest"
 				],
 				#"gfortran": [9, 10, 11, 12]  # gfort 9 started segfaulting with the introduction of fortran submodules circa 9ae38b9d
-				"gfortran": [11, 12, 13, 14]  # gfort 10 is not packaged on ubuntu 26.04, which ubuntu-latest now is
+				"gfortran": [11, 12, 13, 14, 15]  # gfort 10 is not packaged on ubuntu 26.04, which ubuntu-latest now is
 			}
 		},
 		"steps": [
