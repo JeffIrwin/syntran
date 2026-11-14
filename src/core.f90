@@ -32,8 +32,6 @@ module syntran__core_m
 
 	! TODO:
 	!  - 1.8 release
-	!    * fuzz test gh ci/cd cron? probably don't want it running on main and
-	!      finding the same bug over and over again
 	!  - self-hosted compiler
 	!    * self-host tests need to run on windows too. currently just linux/mac
 	!      iirc
