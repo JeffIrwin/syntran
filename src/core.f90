@@ -31,7 +31,18 @@ module syntran__core_m
 		syntran_patch =  0
 
 	! TODO:
+	!  - 1.8 release
+	!    * duplicate badly-formatted "wrong types for this binary operator" text
+	!      in readme
+	!    * update readme to be more accurate about all backends instead of using
+	!      "interpreter" over-specifically. that's stale now
+	!    * probably note transpiler backend as deprecated in 1.8? remove in
+	!      1.9/1.10
 	!  - self-hosted compiler
+	!    * this seems like it won't scale: "A module imported directly and
+	!      through another module is parsed twice". maybe ok to leave in the
+	!      fortran src, but for a large project (like a self-hosted compiler) we
+	!      should really only parse each module once
 	!    * readme still says "interpreter written in fortran". can already
 	!      update the "interpreter" part now
 	!    * the vars/locs distinction is probably an anti pattern. maybe "global"
@@ -257,6 +268,9 @@ module syntran__core_m
 	!  - possible breaking changes if 2.0 ever happens:
 	!    * put all current std::* symbols in global namespace (and then anything
 	!      new after 2.0 is still std namespaced)
+	!    * pre-reserve any keywords we might add in 2.1+. unlike std:: fn's,
+	!      keywords can't be namespaced, e.g. 'when' addition was technically a
+	!      small breaking change
 	!    * short-circuit logic
 	!    * escape '\n' and related sequences in all strs, not just fmt strs.
 	!      maybe also '\"'

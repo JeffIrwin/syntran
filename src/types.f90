@@ -121,7 +121,7 @@ module syntran__types_m
 
 		integer :: kind
 		type(value_t) :: val
-		integer :: pos
+		integer :: pos = 0
 		!integer :: unit_ = 0  ! translation unit (src file) index for error diagnostic context
 		integer :: unit_   ! translation unit (src file) index for error diagnostic context
 		character(len = :), allocatable :: text
@@ -798,6 +798,11 @@ module syntran__types_m
 			character(len = *), optional :: indent
 			character(len = :), allocatable :: str_
 		end function syntax_node_str
+
+		module function parse_dump(node) result(str_)
+			type(syntax_node_t), intent(in) :: node
+			character(len = :), allocatable :: str_
+		end function parse_dump
 
 		module subroutine log_diagnostics(node, ou)
 			class(syntax_node_t), intent(in) :: node

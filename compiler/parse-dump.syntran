@@ -1,0 +1,113 @@
+// Dump the typed tree of a file from the syntran parser, in the same format as
+// `syntran --parse` does for the Fortran parser, so the two can be diffed.  See
+// `parse_dump()` in src/types_ops.f90 and `parse_dump_str()` in src/syntran.f90
+// for the format, and utils/test-parse.sh
+//
+// Usage:
+//
+//     syntran -q compiler/parse-dump.syntran -- <file>
+
+use parse::*;
+
+fn token_field(name: &const str, token: &const Token): str
+{
+	// ` id=<text>@<pos>` or ` op=<text>@<pos>`
+	return " " + name + "=" + escape(token.text) + "@" + str(token.pos);
+}
+
+fn dump_node(nodes: &const NodeVec, id: i32, role: &const str, depth: i32)
+{
+	// One node of the tree, like the Fortran `dump_node()`.  A field is only
+	// printed when it is set, in a fixed order, and the children are walked in
+	// the order of the Fortran `syntax_node_t`
+	const node = nodes.data[id];
+
+	let line = std::repeat("  ", depth) + role + " " +
+		std::variant_of(node.kind);
+
+	if node.has_id
+		line += token_field("id", node.identifier);
+	if node.has_op
+		line += token_field("op", node.op);
+
+	line += " type=" + type_name(node.type_);
+
+	if node.id_index >= 0
+	{
+		line += " slot=";
+		if node.is_loc
+			line += "l";
+		else
+			line += "g";
+		line += str(node.id_index);
+	}
+
+	// The text of a float literal is already in its id, and it has more digits
+	// than its value does
+	if node.kind == NodeKind.literal_expr and
+		not any(node.type_.kind == [TypeKind.f32, TypeKind.f64])
+		line += " val=" + escape(node.val);
+
+	if node.src_pos >= 0
+		line += " pos=" + str(node.src_pos);
+
+	println(line);
+
+	if node.left >= 0
+		dump_node(nodes, node.left, "left", depth + 1);
+	if node.right >= 0
+		dump_node(nodes, node.right, "right", depth + 1);
+	for i in [0: size(node.members)]
+		dump_node(
+			nodes, node.members[i], "members[" + str(i) + "]", depth + 1
+		);
+	if node.condition >= 0
+		dump_node(nodes, node.condition, "condition", depth + 1);
+	if node.if_clause >= 0
+		dump_node(nodes, node.if_clause, "if_clause", depth + 1);
+	if node.else_clause >= 0
+		dump_node(nodes, node.else_clause, "else_clause", depth + 1);
+	if node.body >= 0
+		dump_node(nodes, node.body, "body", depth + 1);
+	if node.array >= 0
+		dump_node(nodes, node.array, "array", depth + 1);
+	if node.lbound >= 0
+		dump_node(nodes, node.lbound, "lbound", depth + 1);
+	if node.step >= 0
+		dump_node(nodes, node.step, "step", depth + 1);
+	if node.ubound >= 0
+		dump_node(nodes, node.ubound, "ubound", depth + 1);
+	return;
+}
+
+fn main(): i32
+{
+	const args = std::args();
+	if size(args) < 1
+	{
+		println("usage: parse-dump.syntran -- <file>");
+		exit(1);
+	}
+
+	const text = std::read_file(args[0]);
+
+	let parser = new_parser(false);
+	set_input(&parser, text);
+	const root = parse_unit(&parser);
+
+	// With any diagnostics, only their codes are dumped, and no tree
+	if parser.diags.len > 0
+	{
+		for i in [0: parser.diags.len]
+			println("diag ", parser.diags.data[i].code);
+		return 0;
+	}
+
+	dump_node(parser.nodes, root, "root", 0);
+
+	// The tables of user fns, structs, and enums come next, and there are none
+	// until milestone 2
+	return 0;
+}
+
+return main();

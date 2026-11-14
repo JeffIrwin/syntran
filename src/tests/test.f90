@@ -210,6 +210,17 @@ end function get_diags_native_file
 
 !===============================================================================
 
+function native_file_ok(filename) result(ok)
+	! Does a file compile natively without any diagnostics?
+	character(len = *), intent(in) :: filename
+	logical :: ok
+	type(string_vector_t) :: d
+	d = get_diags_native_file(filename)
+	ok = d%len_ == 0
+end function native_file_ok
+
+!===============================================================================
+
 function native_ir(str_) result(ir)
 
 	! The LLVM IR that a program is compiled to, as one string.  Empty if it
@@ -4552,6 +4563,15 @@ subroutine unit_test_fns(npass, nfail)
 			! pass-0-fallback then resurrected even though pass 1 (with the
 			! correct rank) was clean
 			interpret_file(path//'test-36.syntran', quiet) == '12', &
+			! Regression: a member of a fwd-referenced fn's struct result was
+			! left unparsed in pass 0, giving a bogus E28 for the member name
+			eval('fn g(): i32 { return f(0).x + f(1).a.b; } ' // &
+			     'struct A { b: i32 } struct S { x: i32, a: A } ' // &
+			     'fn f(i: i32): S { return S{x = 3, a = A{b = 4}}; } g();', &
+			     quiet) == '7', &
+			! The same from a file, with a method call on the result and a chain
+			! of members, which the eval() above doesn't have
+			interpret_file(path//'test-47.syntran', quiet) == 'true', &
 			! Regression: a void fn with no explicit `return` used to leave
 			! its implicit-void-return sentinel on top of the fn body's own
 			! stranded block result (block_statement compilation always
@@ -8120,6 +8140,113 @@ end subroutine unit_test_lex_dump
 
 !===============================================================================
 
+subroutine unit_test_parse_dump(npass, nfail)
+
+	! The hidden `--parse` dump, which compiler/parse.syntran has to match.  The
+	! differential test over src/tests/test-src is utils/test-parse.sh
+
+	use syntran, only: parse_dump_str
+
+	implicit none
+
+	integer, intent(inout) :: npass, nfail
+
+	!********
+
+	character(len = *), parameter :: label = 'parse_dump'
+
+	character, parameter :: lf = line_feed
+
+	logical, allocatable :: tests(:)
+
+	write(*,*) 'Unit testing '//label//' ...'
+
+	tests = &
+		[   &
+			! An empty program.  Positions are 0-based
+			parse_dump_str('', 'a') == &
+				'root translation_unit type=unknown'//lf, &
+
+			! A child's role is the name of the member that holds it
+			parse_dump_str('let x = 1 + 2;', 'a') == &
+				'root translation_unit type=unknown'//lf// &
+				'  members[0] let_expr id=x@4 op==@6 type=i32 slot=g4 pos=0'//lf// &
+				'    right binary_expr op=+@10 type=i32'//lf// &
+				'      left literal_expr type=i32 val=1'//lf// &
+				'      right literal_expr type=i32 val=2'//lf, &
+
+			! Only a subscript has a sub kind, and the lists that it doesn't fill
+			! are left out
+			parse_dump_str('let v = [1, 2];'//lf//'let y = v[0];', 'a') == &
+				'root translation_unit type=unknown'//lf// &
+				'  members[0] let_expr id=v@4 op==@6 type=[i32; :] slot=g4 pos=0'//lf// &
+				'    right array_expr type=[i32; :]'//lf// &
+				'      elems[0] literal_expr type=i32 val=1'//lf// &
+				'      elems[1] literal_expr type=i32 val=2'//lf// &
+				'  members[1] let_expr id=y@20 op==@22 type=i32 slot=g5 pos=16'//lf// &
+				'    right name_expr id=v@24 type=i32 slot=g4'//lf// &
+				'      lsubscripts[0] literal_expr type=i32 val=0 sub=scalar_sub'//lf, &
+
+			! A fn has no slot, since its id counts the intrinsic fns.  It's in the
+			! trailer instead, with its params, which can be refs
+			parse_dump_str('fn f(a: &i32, b: &const [f64; :]): i32 { return a; }', 'a') == &
+				'root translation_unit type=unknown'//lf// &
+				'  members[0] fn_declaration id=f@3 type=unknown ref=rc locs=2 params=0,1 pos=0'//lf// &
+				'    body block_statement type=unknown pos=39'//lf// &
+				'      members[0] return_statement type=unknown pos=41'//lf// &
+				'        right name_expr id=a@48 type=i32 slot=l0'//lf// &
+				'fn f(i32&, [f64; :]&const): i32'//lf, &
+
+			! Structs and enums are only in the trailer
+			parse_dump_str('struct S { m: i32 }'//lf//'enum E { a, b }', 'a') == &
+				'root translation_unit type=unknown'//lf// &
+				'  members[0] struct_declaration type=unknown'//lf// &
+				'  members[1] enum_declaration type=unknown'//lf// &
+				'struct S { m: i32 }'//lf// &
+				'enum E { a, b }'//lf, &
+
+			! The member of a dot is an index into its struct's members, so it has a
+			! field and not a slot
+			parse_dump_str('struct S { a: i32, b: i32 }'//lf// &
+				'let s = S{a = 1, b = 2};'//lf//'let y = s.b;', 'a') == &
+				'root translation_unit type=unknown'//lf// &
+				'  members[0] struct_declaration type=unknown'//lf// &
+				'  members[1] let_expr id=s@32 op==@34 type=S slot=g4 pos=28'//lf// &
+				'    right struct_instance_expr type=S struct=S'//lf// &
+				'      members[0] literal_expr type=i32 val=1'//lf// &
+				'      members[1] literal_expr type=i32 val=2'//lf// &
+				'  members[2] let_expr id=y@57 op==@59 type=i32 slot=g5 pos=53'//lf// &
+				'    right dot_expr id=s@61 type=i32 slot=g4'//lf// &
+				'      member unknown id=b@63 type=i32 field=1'//lf// &
+				'struct S { a: i32, b: i32 }'//lf, &
+
+			! The kind name of a continue statement has no space in it, like the other
+			! kinds, since the port prints the same names
+			parse_dump_str('for i in [0: 2] { continue; }', 'a') == &
+				'root translation_unit type=unknown'//lf// &
+				'  members[0] for_statement id=i@4 type=unknown slot=g4 pos=0'//lf// &
+				'    body block_statement type=unknown pos=16'//lf// &
+				'      members[0] continue_statement type=unknown pos=18'//lf// &
+				'    array array_expr type=[i32; :]'//lf// &
+				'      lbound literal_expr type=i32 val=0'//lf// &
+				'      ubound literal_expr type=i32 val=2'//lf, &
+
+			! With a diagnostic there's only its code, and no tree
+			parse_dump_str('$', 'a') == &
+				'diag E19'//lf, &
+
+			.false.  & ! so I don't have to bother w/ trailing commas
+		]
+
+	! Trim dummy false element
+	tests = tests(1: size(tests) - 1)
+
+	call unit_test_coda(tests, label, npass, nfail)
+
+end subroutine unit_test_parse_dump
+
+!===============================================================================
+
 subroutine unit_test_ref(npass, nfail)
 
 	implicit none
@@ -8244,6 +8371,8 @@ subroutine unit_test_modules(npass, nfail)
 			interpret_file(path//'test-struct-collision-rev.syntran', quiet) == 'true', &
 			interpret_file(path//'test-struct-transitive.syntran', quiet) == 'true', &
 			interpret_file(path//'test-method-diamond.syntran', quiet) == 'true', &
+			interpret_file(path//'test-fn-diamond.syntran', quiet) == 'true', &
+			interpret_file(path//'test-fn-diamond-qual.syntran', quiet) == 'true', &
 			interpret_file(path//'test-enum-mod.syntran', quiet) == 'true', &
 			interpret_file(path//'test-enum-mod-qualified.syntran', quiet) == 'true', &
 			interpret_file(path//'test-qual-assign-ok.syntran', quiet) == 'true', &
@@ -8784,6 +8913,10 @@ subroutine unit_test_error_codes(npass, nfail)
 				EC_ARRAY_STRUCT_SLICE) == 1, &
 			diag_has_code(get_diags('let a=[1,2,3]; a[1.0];'), EC_NON_INT_SUBSCRIPT), &
 			diag_count_code(get_diags('let a=[1,2,3]; a[1.0];'), EC_NON_INT_SUBSCRIPT) == 1, &
+			! A member of an undeclared fn's result is just the E29, not also an
+			! E28 for the member name
+			diag_count_code(get_diags('h().x;'), EC_UNDECLARE_FN) == 1, &
+			.not. diag_has_code(get_diags('h().x;'), EC_UNDECLARE_VAR), &
 			diag_has_code(get_diags('fn f(x: nope): i32 { return 1; }'), EC_BAD_TYPE), &
 			! A misspelled struct name in a type annotation should suggest the
 			! closest declared struct name
@@ -12446,6 +12579,9 @@ subroutine unit_test_transpile(npass, nfail)
 			! A module with struct methods that is imported twice, directly and through
 			! another module, has its methods parsed twice under one name
 			transpiles_ok(T//'modules/test-method-diamond.syntran'), &
+			! Likewise for plain fns, which an import also keys by name
+			transpiles_ok(T//'modules/test-fn-diamond.syntran'), &
+			transpiles_ok(T//'modules/test-fn-diamond-qual.syntran'), &
 
 			! A switch is a named block that each arm leaves once it has run, with
 			! the subject stored once.  An array subject compares the shape and the
@@ -13371,7 +13507,12 @@ subroutine unit_test_native(npass, nfail)
 				//'f.name, std::exists("x"));'), &
 			.not. native_ir_is_empty('let f = open("x.bin", "rb"); println(std::read_i32(f), ' &
 				//'std::read_f64(f, 2));'), &
-			.not. native_ir_is_empty('writeln(std::OUT, "hi"); let s = readln(); println(eof());') &
+			.not. native_ir_is_empty('writeln(std::OUT, "hi"); let s = readln(); println(eof());'), &
+
+			! A module that is imported twice, directly and through another module, has
+			! each of its fns parsed twice under one name
+			native_file_ok('src/tests/test-src/modules/test-fn-diamond.syntran'), &
+			native_file_ok('src/tests/test-src/modules/test-fn-diamond-qual.syntran') &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)
@@ -13564,6 +13705,7 @@ subroutine unit_tests(iostat)
 	if (run_group('move')) call unit_test_move(npass, nfail)
 	if (run_group('system')) call unit_test_system(npass, nfail)
 	if (run_group('lex_dump')) call unit_test_lex_dump(npass, nfail)
+	if (run_group('parse_dump')) call unit_test_parse_dump(npass, nfail)
 	if (run_group('recursion')) call unit_test_recursion(npass, nfail)
 	if (run_group('args')) call unit_test_args(npass, nfail)
 	if (run_group('reshape')) call unit_test_reshape(npass, nfail)

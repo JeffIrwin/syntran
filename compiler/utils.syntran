@@ -1,7 +1,7 @@
 // Small helpers for the self-hosted compiler that don't depend on any of its
-// types: character classes, digit and number conversion, and a growable array
-// of strs.  The lexer, compiler/lex.syntran, is the first user.  c.f.
-// src/utils_impl.f90 for the character classes
+// types: escaping for the dumps, character classes, digit and number
+// conversion, and a growable array of strs.  The lexer, compiler/lex.syntran,
+// is the first user.  c.f. src/utils_impl.f90 for the character classes
 
 //==============================================================================
 
@@ -20,6 +20,28 @@ fn at(s: &const str, i: i32): str
 	if i < 0 or i >= len(s)
 		return NULL_CHAR;
 	return s[i];
+}
+
+fn escape(s: &const str): str
+{
+	// Escape a token's text or value for the dump of the lexer and the parser,
+	// so that a token or node is always one line, with no tabs in it.  Bytes >=
+	// 128 are left alone.  Syntran strs have no escapes, so a lone backslash is
+	// `"\"`
+	let out = "";
+	for c in s
+	{
+		switch c
+		{
+			case r#"\"#          { out += "\\"; }
+			case LINE_FEED       { out += "\n"; }
+			case CARRIAGE_RETURN { out += "\r"; }
+			case TAB             { out += "\t"; }
+			case NULL_CHAR       { out += "\0"; }
+			default              { out += c; }
+		}
+	}
+	return out;
 }
 
 // Character classes.  A `c` is a str of length 1

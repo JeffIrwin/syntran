@@ -224,6 +224,11 @@ module syntran__utils_m
 			character(len = :), allocatable :: str_
 		end function trim_char_vector
 
+		module function escape_dump(str_) result(esc)
+			character(len = *), intent(in) :: str_
+			character(len = :), allocatable :: esc
+		end function escape_dump
+
 		module subroutine push_all_string(vector, add)
 			class(string_vector_t) :: vector
 			type(string_vector_t), intent(in) :: add

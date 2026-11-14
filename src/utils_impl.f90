@@ -232,6 +232,45 @@ module procedure trim_char_vector
 
 end procedure trim_char_vector
 
+!===============================================================================
+
+module procedure escape_dump
+
+	! Escape a token's text or value for lex_dump() and parse_dump(), so that a
+	! token is always exactly one line, with no tabs in it.  Bytes >= 128 are
+	! left alone
+
+	!********
+
+	integer :: i
+
+	type(char_vector_t) :: sb
+
+	sb = new_char_vector()
+	do i = 1, len(str_)
+		select case (str_(i:i))
+		case ("\")
+			call sb%push("\")
+			call sb%push("\")
+		case (line_feed)
+			call sb%push("\")
+			call sb%push("n")
+		case (carriage_return)
+			call sb%push("\")
+			call sb%push("r")
+		case (tab)
+			call sb%push("\")
+			call sb%push("t")
+		case (null_char)
+			call sb%push("\")
+			call sb%push("0")
+		case default
+			call sb%push(str_(i:i))
+		end select
+	end do
+	esc = sb%trim()
+
+end procedure escape_dump
 
 !===============================================================================
 

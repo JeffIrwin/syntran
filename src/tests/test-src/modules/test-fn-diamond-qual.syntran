@@ -1,0 +1,9 @@
+// Like test-fn-diamond.syntran, but both imports are qualified, so the two
+// copies of each fn collide on `fnmod::fn`
+
+use fnuser_qual as fnuser;
+use fnmod;
+
+let p = fnmod::make_pt(10, 20);
+
+return fnmod::add_base(fnmod::sum_pt(p)) == 130 and fnuser::user_total() == 103;
