@@ -6,18 +6,21 @@ terms require that these notices accompany binary redistributions.
 
 | Component | Where it is in a binary | License |
 |---|---|---|
-| [OpenBLAS](https://github.com/OpenMathLib/OpenBLAS) | Linux and Windows release binaries (statically linked) | BSD 3-Clause |
-| [LAPACK](https://github.com/Reference-LAPACK/lapack) (reference implementation, bundled inside OpenBLAS) | Linux and Windows release binaries (statically linked) | modified BSD |
+| [OpenBLAS](https://github.com/OpenMathLib/OpenBLAS) | Release binaries, except on macOS (statically linked) | BSD 3-Clause |
+| [LAPACK](https://github.com/Reference-LAPACK/lapack) (reference implementation, bundled inside OpenBLAS) | Release binaries, except on macOS (statically linked) | modified BSD |
 | [isocline](https://github.com/daanx/isocline) | All release binaries, unless built with `SYNTRAN_NO_ISOCLINE` | MIT |
-| [LLVM](https://llvm.org) | Linux release binary (statically linked), for `--aot` and `--jit` | Apache 2.0 with LLVM Exceptions |
-| [Zstandard](https://github.com/facebook/zstd) (a dependency of LLVM) | Linux release binary (statically linked) | BSD 3-Clause |
+| [LLVM](https://llvm.org) | All release binaries (statically linked), for `--aot` and `--jit` | Apache 2.0 with LLVM Exceptions |
+| [Zstandard](https://github.com/facebook/zstd) (a dependency of LLVM) | All release binaries (statically linked) | BSD 3-Clause |
 
-The Linux binary also links libstdc++ and zlib statically, which need no notice
-here: libstdc++ is under the GCC Runtime Library Exception, and zlib's license
-only asks that its notice stay in source distributions.
+The binaries also contain GCC's runtime libraries (libstdc++, libgfortran, and
+OpenMP's libgomp, which the macOS package ships next to the binary) and zlib,
+which need no notice here: the GCC libraries are under the GCC Runtime Library
+Exception, and zlib's license only asks that its notice stay in source
+distributions.  On macOS, the C++ runtime and zlib are the system's, and are not
+redistributed.
 
-The macOS binary uses Apple's Accelerate framework for BLAS/LAPACK, which is
-part of the operating system and is not redistributed.  A build from source
+On macOS, BLAS/LAPACK come from Apple's Accelerate framework instead of OpenBLAS.
+It is part of the operating system and is not redistributed.  A build from source
 links whatever BLAS/LAPACK is installed on the build machine.
 
 The license texts below are copied verbatim from the upstream projects.
