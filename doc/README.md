@@ -16,8 +16,8 @@ pages below go into more detail on specific topics.
 ## Using syntran from other languages
 
 - [Fortran API](api.md):  using syntran as a Fortran library
-- [Transpiling to Fortran](transpile.md):  generating a standalone Fortran
-  program instead of running the interpreter
+- [Transpiling to Fortran](transpile.md) (deprecated):  generating a standalone
+  Fortran program instead of running the interpreter
 - [Compiling natively with LLVM](native.md):  generating a native executable
   with LLVM instead of running the interpreter
 

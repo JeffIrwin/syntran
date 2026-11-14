@@ -8,7 +8,7 @@
 
 ## [Syntax translator](https://www.practo.com/medicine-info/syntran-100-mg-capsule-18930)
 
-_An interpreter written in Fortran_
+_An interpreter and compiler written in Fortran_
 
 > Jerry: Fungicide. I mean what could she have?
 >
@@ -16,12 +16,15 @@ _An interpreter written in Fortran_
 >
 > Kramer: Fungus.
 
-Syntran is an interpreted, array-oriented language -- basically MATLAB but with curly braces, type checking, and zero-indexed arrays.
+Syntran is an array-oriented language -- basically MATLAB but with curly braces, type checking, and zero-indexed arrays.
 
-The interpreter is an efficient stack-based bytecode VM with performance roughly on par
-with python. Vectorized array operations use native Fortran constructs, offering
-numpy-like performance without requiring any third-party dependencies.  See the
-[benchmarks](src/benchmarks/README.md).
+By default, syntran runs a program on an efficient stack-based bytecode VM with
+performance roughly on par with python. Vectorized array operations use native
+Fortran constructs, offering numpy-like performance without requiring any
+third-party dependencies.  See the [benchmarks](src/benchmarks/README.md).
+Syntran can also [compile a program to a native
+executable](#compiling-natively-with-llvm), or JIT-compile it and run it right
+away, for much more speed.
 
 Syntran can run standalone scripts, serve as a desktop calculator in its REPL,
 or be embedded in Fortran applications through its [API](doc/api.md).
@@ -39,7 +42,7 @@ described below.
 
 ## Install binary
 
-To run syntran, you can either install a binary or build it from the Fortran source code.  To build it from source, [see the next section](#build-the-interpreter-from-source).
+To run syntran, you can either install a binary or build it from the Fortran source code.  To build it from source, [see the next section](#build-syntran-from-source).
 
 Download the binary from the latest github release for your operating system:
 
@@ -49,7 +52,6 @@ Download the binary from the latest github release for your operating system:
 curl -LO "https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-linux.zip"
 unzip syntran-linux.zip
 chmod +x ./syntran
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.
 ./syntran -h
 ```
 <!-- syntran-end -->
@@ -131,7 +133,7 @@ once per node.
 On macOS, the hard limit is about 64 MB, so `ulimit -s unlimited` fails with
 `value exceeds hard limit`.  Use `ulimit -s 65520` instead.
 
-## Build the interpreter from source
+## Build syntran from source
 
 Using cmake:
 
@@ -227,7 +229,7 @@ If you depend on syntran from your own fpm project, see
 
 ## Run
 
-Start the interpreter.  Adjust the path if you built with fpm or installed a binary:
+Start the REPL.  Adjust the path if you built with fpm or installed a binary:
 
 <!-- syntran-begin mode=skip reason="starts an interactive REPL with no input; nothing to assert" -->
 ```
@@ -235,7 +237,7 @@ Start the interpreter.  Adjust the path if you built with fpm or installed a bin
 ```
 <!-- syntran-end -->
 
-Then enter arithmetic expressions like `1 + 2 * 3;` in the interpreter.  Semicolons are required at the end of statements!
+Then enter arithmetic expressions like `1 + 2 * 3;` in the REPL.  Semicolons are required at the end of statements!
 
 <!-- cpp is the closest match I can find for markdown syntax highlighting -->
 <!-- syntran-begin mode=skip reason="illustrates the syntran$ prompt convention itself, not a `// result` style block" -->
@@ -247,7 +249,7 @@ syntran$ (1 + 2) * 3;
 ```
 <!-- syntran-end -->
 
-Expressions are evaluated immediately and the result is printed to the console.  In the rest of this documentation, we will hide the `syntran$` prompt and show the result as a `// comment`, so you can copy and paste code blocks straight into the interpreter.
+Expressions are evaluated immediately and the result is printed to the console.  In the rest of this documentation, we will hide the `syntran$` prompt and show the result as a `// comment`, so you can copy and paste code blocks straight into the REPL.
 
 Use two asterisks for exponent powers, like Fortran and Scilab:
 
@@ -329,7 +331,7 @@ false
 true
 true
 Error[E48]: binary operator `and` is not defined for types i32 and bool
-  --> <stdin>:1:5
+  --&gt; <stdin>:1:5
    |
  1 | foo and p;
    |     ^^^ wrong types for this binary operator
@@ -422,7 +424,7 @@ vim.cmd.autocmd("BufRead,BufNewFile *.syntran set filetype=rust")
 
 ### Saving scripts in a file
 
-As programs get longer and more complicated, it becomes difficult to enter them into the interactive interpreter.  To interpret a whole file, provide it as a command line argument:
+As programs get longer and more complicated, it becomes difficult to enter them into the REPL.  To run a whole file, provide it as a command line argument:
 
 <!-- syntran-begin mode=skip reason="shell invocation example" -->
 ```
@@ -433,26 +435,6 @@ As programs get longer and more complicated, it becomes difficult to enter them 
 <!--
 Note: global block statement is not required as of 0.0.13.  Multiple statements (and functions) are parsed at the global scope.
 -->
-
-### Transpiling to Fortran
-
-Instead of running a program with the interpreter, `syntran --transpile`
-translates it to a standalone modern Fortran program, which you compile
-yourself with the Fortran compiler of your choice:
-
-<!-- syntran-begin mode=skip reason="shell invocation example" -->
-```
-syntran --transpile fib.f90 fib.syntran
-gfortran -O3 fib.f90 -o fib
-./fib
-```
-<!-- syntran-end -->
-
-Most of the language is supported, including structs, enums, modules, `switch`,
-file I/O, and function pointers.  The interpreter's call stack
-(`std::caller()` and friends) is not.  See [doc/transpile.md](doc/transpile.md)
-for what is supported, and for how the generated program differs from
-interpreting.
 
 ### Compiling natively with LLVM
 
@@ -470,6 +452,29 @@ See [doc/native.md](doc/native.md) for what it supports, and how to build
 syntran with it.
 
 To compile a program in memory and run it right away, use `--jit`.
+
+### Transpiling to Fortran (deprecated)
+
+**Deprecated in 1.8:**  `--transpile` will be removed in a future release, likely
+1.9 or 1.10.  Use `--native` or `--jit` instead.
+
+Instead of running a program, `syntran --transpile`
+translates it to a standalone modern Fortran program, which you compile
+yourself with the Fortran compiler of your choice:
+
+<!-- syntran-begin mode=skip reason="shell invocation example" -->
+```
+syntran --transpile fib.f90 fib.syntran
+gfortran -O3 fib.f90 -o fib
+./fib
+```
+<!-- syntran-end -->
+
+Most of the language is supported, including structs, enums, modules, `switch`,
+file I/O, and function pointers.  The call stack
+(`std::caller()` and friends) is not.  See [doc/transpile.md](doc/transpile.md)
+for what is supported, and for how the generated program differs from
+running the program normally.
 
 ### Other command-line arguments
 
@@ -507,7 +512,7 @@ Run `syntran -h` to see a comprehensive listing of syntran command-line argument
            Parse and type check without running the program
    -t, --transpile <FILE>
            Write the program as Fortran source to <FILE> ('-' for stdout)
-           instead of running it
+           instead of running it (deprecated)
        --keep-unused-fns
            With --transpile, also write fns that nothing calls
    -o, --native <FILE>
@@ -515,6 +520,8 @@ Run `syntran -h` to see a comprehensive listing of syntran command-line argument
            (or an object <FILE>.o, or LLVM IR <FILE>.ll)
    -j, --jit
            Compile the program with LLVM and run it right away
+       --update
+           Update to the latest release, by running `synup update`
        -- <ARGS>...
            Pass remaining arguments to script via std::args()
 ```
@@ -547,7 +554,7 @@ Run `syntran -h` to see a comprehensive listing of syntran command-line argument
            Parse and type check without running the program
    -t, --transpile <FILE>
            Write the program as Fortran source to <FILE> ('-' for stdout)
-           instead of running it
+           instead of running it (deprecated)
        --keep-unused-fns
            With --transpile, also write fns that nothing calls
    -o, --native <FILE>
@@ -667,8 +674,8 @@ for i in [0: 5]
 -->
 <!-- syntran-end -->
 I will often refer to the *starting bound* and *ending bound* as the lower
-and upper bounds respectively.  This is how the variables are named in the
-interpreter.  However, it is a poor choice of words for negative or downward
+and upper bounds respectively.  This is how the variables are named in
+syntran's source code.  However, it is a poor choice of words for negative or downward
 steps:
 <!-- syntran-begin mode=repl group=for-downward -->
 ```rust
@@ -2289,7 +2296,7 @@ println(std::format("{} {:.1} {}", n, x, v));
 -->
 <!-- syntran-end -->
 
-Only ASCII strings are supported because syntran is interpreted in Fortran.  Unicode strings cannot be indexed properly:
+Only ASCII strings are supported because syntran indexes strings byte by byte.  Unicode strings cannot be indexed properly:
 
 <!-- syntran-begin mode=skip reason="unicode indexing is explicitly documented as YMMV / mojibake" -->
 ```rust
@@ -2903,7 +2910,7 @@ len = 3
 <!-- syntran-end -->
 
 Like all other values, structs are copied, so `let cur = list;` copies the whole
-list.  The interpreter avoids the copy when it can tell that the old value is
+list.  Syntran avoids the copy when it can tell that the old value is
 about to be overwritten anyway, so walking a list with `cur = cur.next`, testing
 for `cur != null`, or building one with `list = Node{val = i, next = list}` does
 not copy the rest of the list at every step.  The same goes for a member:
@@ -3129,7 +3136,7 @@ let Suit = 5;
 ```
 <!-- syntran-expect
 Error[E98]: variable `Suit` conflicts with the enum of the same name
-  --> main_enum-name-clash.syntran:2:5
+  --&gt; main_enum-name-clash.syntran:2:5
    |
  2 | let Suit = 5;
    |     ^^^^ name already used by an enum
