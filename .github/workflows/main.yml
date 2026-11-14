@@ -264,7 +264,7 @@
 				"
 					set -exu \n
 
-					# For the native backend (`--native` and `--jit`).  The MSYS2 \n
+					# For the native backend (`--aot` and `--jit`).  The MSYS2 \n
 					# package has LLVM's component archives as well as the DLL, and \n
 					# the release binary links the former, so that it has no DLLs to \n
 					# ship.  Same as /opt/llvm-static in Dockerfile.rocky \n
@@ -781,7 +781,7 @@
 			}
 		]
 	},
-	# The native backend (`syntran --native`) is opt-in, because it needs LLVM, so
+	# The native backend (`syntran --aot`) is opt-in, because it needs LLVM, so
 	# the jobs above never build it.  This one does, and checks it against the
 	# interpreter.  Ubuntu's llvm-dev is LLVM 18, and Homebrew's is the latest, so
 	# together they bracket the versions that src/llvm_c.f90 has to work with
@@ -868,7 +868,7 @@
 					# End to end.  A compiled program is linked with gcc, which \n
 					# needs the same flags as syntran to find BLAS \n
 					export CC=\"gcc -static -fopenmp -L$PWD/build/openblas\" \n
-					./build/native/bin/syntran --quiet --native hello.exe -c 'println(\"hello \", 6 * 7);' \n
+					./build/native/bin/syntran --quiet --aot hello.exe -c 'println(\"hello \", 6 * 7);' \n
 					[[ \"$(./hello.exe)\" == \"hello 42\" ]] \n
 					# The same in memory, with no C compiler or file \n
 					[[ \"$(./build/native/bin/syntran --quiet --jit -c 'println(\"hello \", 6 * 7);')\" == \"hello 42\" ]] \n
@@ -918,7 +918,7 @@
 					fpm install --features release,llvm-blas --flag -Wno-tabs --prefix ./build/native-release/ \n
 
 					# End to end, with the C compiler that links the program \n
-					./build/native/bin/syntran --quiet --native hello -c 'println(\"hello \", 6 * 7);' \n
+					./build/native/bin/syntran --quiet --aot hello -c 'println(\"hello \", 6 * 7);' \n
 					[[ \"$(./hello)\" == \"hello 42\" ]] \n
 					# The same in memory, with no C compiler or file \n
 					[[ \"$(./build/native/bin/syntran --quiet --jit -c 'println(\"hello \", 6 * 7);')\" == \"hello 42\" ]] \n
@@ -986,7 +986,7 @@
 					set -exu \n
 					cmake -S . -B build/llvm -DCMAKE_BUILD_TYPE=Debug -DSYNTRAN_LLVM=ON -DCMAKE_Fortran_COMPILER=gfortran-14 -DCMAKE_PREFIX_PATH=\"$(llvm-config --prefix)\" \n
 					cmake --build build/llvm -j 4 \n
-					./build/llvm/syntran --quiet --native hello-cmake -c 'println(\"hello \", 6 * 7);' \n
+					./build/llvm/syntran --quiet --aot hello-cmake -c 'println(\"hello \", 6 * 7);' \n
 					[[ \"$(./hello-cmake)\" == \"hello 42\" ]] \n
 					# The same in memory, with no C compiler or file \n
 					[[ \"$(./build/llvm/syntran --quiet --jit -c 'println(\"hello \", 6 * 7);')\" == \"hello 42\" ]] \n
@@ -1338,7 +1338,7 @@
 
 					# The native backend, with Homebrew's LLVM hidden \n
 					[[ \"$(./syntran --jit -c 'sum([0:101]);' | tr -d '[:space:]')\" == \"5050\" ]] \n
-					./syntran --native /tmp/hello -c 'println(\"hello native\");' \n
+					./syntran --aot /tmp/hello -c 'println(\"hello native\");' \n
 					[[ \"$(/tmp/hello | tr -d '[:space:]')\" == \"hellonative\" ]] \n
 
 					otool -L ./syntran \n

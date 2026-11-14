@@ -9,7 +9,7 @@ terms require that these notices accompany binary redistributions.
 | [OpenBLAS](https://github.com/OpenMathLib/OpenBLAS) | Linux and Windows release binaries (statically linked) | BSD 3-Clause |
 | [LAPACK](https://github.com/Reference-LAPACK/lapack) (reference implementation, bundled inside OpenBLAS) | Linux and Windows release binaries (statically linked) | modified BSD |
 | [isocline](https://github.com/daanx/isocline) | All release binaries, unless built with `SYNTRAN_NO_ISOCLINE` | MIT |
-| [LLVM](https://llvm.org) | Linux release binary (statically linked), for `--native` and `--jit` | Apache 2.0 with LLVM Exceptions |
+| [LLVM](https://llvm.org) | Linux release binary (statically linked), for `--aot` and `--jit` | Apache 2.0 with LLVM Exceptions |
 | [Zstandard](https://github.com/facebook/zstd) (a dependency of LLVM) | Linux release binary (statically linked) | BSD 3-Clause |
 
 The Linux binary also links libstdc++ and zlib statically, which need no notice

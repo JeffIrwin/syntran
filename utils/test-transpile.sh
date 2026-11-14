@@ -39,7 +39,7 @@
 #                        utils/native-pass-long.txt.  Set $TIMEOUT (seconds, 60 by
 #                        default) for slow ones; a timeout is a SKIP
 #   --backend <name>     fortran (the default) tests `--transpile`.  native tests
-#                        `--native`, which needs a syntran built with LLVM, a C
+#                        `--aot`, which needs a syntran built with LLVM, a C
 #                        compiler instead of a Fortran one, and has its own pass
 #                        list, utils/native-pass.txt.  Skips are E130, not E115
 #   --ref <binary>       interpreter to produce the expected output with, if
@@ -92,7 +92,7 @@ run_one() {
 	# nonzero status
 	if [ "$BACKEND" = native ]; then
 		code=E130
-		"$CUR" --color off --cd --native "$base.exe" "$f" > "$base.tp.log" 2>&1 < /dev/null
+		"$CUR" --color off --cd --aot "$base.exe" "$f" > "$base.tp.log" 2>&1 < /dev/null
 	else
 		code=E115
 		"$CUR" --color off --cd -t "$base.f90" "$f" > "$base.tp.log" 2>&1 < /dev/null

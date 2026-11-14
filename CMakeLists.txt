@@ -50,7 +50,7 @@ if(SYNTRAN_NO_BLAS)
 	add_compile_definitions(SYNTRAN_NO_BLAS)
 endif()
 
-# Build the native backend (`syntran --native`), which compiles through LLVM.
+# Build the native backend (`syntran --aot`), which compiles through LLVM.
 # Only src/native.F90, src/c/llvm_shim.c, and src/rt/syntran_crt.c read this macro.  fpm builds spell
 # it `--features debug,blas,llvm` (see [features] in fpm.toml)
 option(SYNTRAN_LLVM "Build the native backend, which needs LLVM" OFF)

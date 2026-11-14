@@ -9,7 +9,7 @@ set -eu
 # Usage:
 #   utils/test-lex.sh [--native] [-v] [path/to/syntran] [file-or-dir ...]
 #
-#   --native   Compile compiler/lex-dump.syntran once with `syntran --native`
+#   --native   Compile compiler/lex-dump.syntran once with `syntran --aot`
 #              (which needs LLVM), and run that, instead of the VM
 #   -v         Print the first lines of the diff for each failing file, instead
 #              of just the file name
@@ -55,7 +55,7 @@ trap 'rm -rf "$work"' EXIT
 
 # One command that runs the port on a file
 if [[ $native -eq 1 ]]; then
-	"$syntran_bin" -q --native "$work/lex-dump" compiler/lex-dump.syntran
+	"$syntran_bin" -q --aot "$work/lex-dump" compiler/lex-dump.syntran
 	run_port() { "$work/lex-dump" "$1"; }
 else
 	run_port() { "$syntran_bin" -q compiler/lex-dump.syntran -- "$1"; }

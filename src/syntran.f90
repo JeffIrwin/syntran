@@ -514,7 +514,7 @@ subroutine syntran_eval_value(str_, val, quiet, want_type, src_file, chdir_, &
 	! Compile to a native executable (or object, or LLVM IR) with LLVM instead of
 	! evaluating.  Nothing runs, and `val` is unset.  The output goes to the
 	! file that native%out names.  Constructs which are not supported by the
-	! native backend yet are diagnostics.  Backs the `--native` CLI option
+	! native backend yet are diagnostics.  Backs the `--aot` CLI option
 	type(native_t), optional, intent(inout) :: native
 
 	! exit_success/exit_failure status for callers.  Failure means the

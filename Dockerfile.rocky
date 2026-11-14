@@ -11,7 +11,7 @@ WORKDIR /workdir
 #
 # openblas-static is the static BLAS/LAPACK for the `@` operator and
 # std::solve() (see /opt/blas-static below).  llvm-* are for the native backend
-# (`syntran --native` and `--jit`, see doc/native.md).  Rocky's LLVM needs the
+# (`syntran --aot` and `--jit`, see doc/native.md).  Rocky's LLVM needs the
 # libstdc++ of a newer gcc than the system's, so the toolset's static one is
 # used.  The static libs are in the CRB repo
 RUN dnf update -y && dnf install -y --enablerepo=crb \
@@ -232,13 +232,13 @@ RUN ! ldd ./bin/syntran | grep -E 'LLVM|stdc\+\+|libz|zstd|tinfo|openblas|gfortr
 RUN [[ "$(./bin/syntran --jit -c 'sum([0:101]);' | tr -d '[:space:]')" == "5050" ]]
 RUN [[ "$(./bin/syntran --jit -c 'let a = std::args(); size(a);' -- foo bar | tr -d '[:space:]')" == "2" ]]
 
-# `--native` links with the C compiler in $CC, and this image has no `cc`.  `@`
+# `--aot` links with the C compiler in $CC, and this image has no `cc`.  `@`
 # also links BLAS and LAPACK, which gcc resolves to the static ones through the
 # private dir
 ENV CC="gcc -L/opt/blas-static"
-RUN ./bin/syntran --native /tmp/hello -c 'println("hello native");' \
+RUN ./bin/syntran --aot /tmp/hello -c 'println("hello native");' \
 	&& [[ "$(/tmp/hello | tr -d '[:space:]')" == "hellonative" ]]
-RUN ./bin/syntran --native /tmp/mm -c 'let A = [2.0, 1.0, 1.0, 3.0; 2, 2]; println(A @ [1.0, 1.0]);' \
+RUN ./bin/syntran --aot /tmp/mm -c 'let A = [2.0, 1.0, 1.0, 3.0; 2, 2]; println(A @ [1.0, 1.0]);' \
 	&& [[ "$(/tmp/mm | tr -d '[:space:]')" == "[3.000000000000000E+00,4.000000000000000E+00]" ]]
 
 # No-arg readln()/eof() read from stdin

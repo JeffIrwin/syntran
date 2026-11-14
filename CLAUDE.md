@@ -95,8 +95,8 @@ the libraries.  See `doc/api.md`.
 
 #### LLVM (the native backend)
 
-`syntran --native` (see `doc/native.md`) compiles through LLVM.  It's opt-in:
-without LLVM installed, syntran builds as always and `--native` is an error.
+`syntran --aot` (see `doc/native.md`) compiles through LLVM.  It's opt-in:
+without LLVM installed, syntran builds as always and `--aot` is an error.
 Everything that calls LLVM is inside `#ifdef SYNTRAN_LLVM` in `src/native.F90`
 (an uppercase `.F90`) and `src/c/llvm_shim.c`.  `src/llvm_c.f90` is only
 interfaces to the LLVM-C API, so it always compiles.
@@ -481,7 +481,7 @@ block scopes and shadowing never need to be mirrored in Fortran (see
 `collect_names()` and `bare_ok()`).  The emitter reads types from `node%val`, and
 fn signatures from `state%fns`, since a `fn_declaration` node only has slots.
 
-### Native Backend (`--native`)
+### Native Backend (`--aot`, `--jit`)
 Compiles the typed AST straight to machine code with LLVM, calling the LLVM-C
 API from Fortran.  User docs are in `doc/native.md`.
 - `src/llvm_c.f90` - bind(c) interfaces to the LLVM-C functions that are used.

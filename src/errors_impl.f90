@@ -1420,7 +1420,7 @@ module procedure err_native_unsupported
 		//what//' is not supported by the native backend yet' &
 		//underline(context, span)//" unsupported" &
 		//color_reset//line_feed//fg_bright_green//"help"//color_reset &
-		//": run the program with the interpreter instead, i.e. without `--native`"
+		//": run the program with the interpreter instead, i.e. without `--aot` or `--jit`"
 
 end procedure err_native_unsupported
 

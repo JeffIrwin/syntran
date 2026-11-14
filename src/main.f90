@@ -80,7 +80,7 @@ program main
 		! Deprecated in 1.8.  This goes to stderr, because the Fortran source
 		! may be going to stdout with `-t -`
 		write(error_unit, '(a)') warn_prefix//"--transpile is deprecated and will be "// &
-			"removed in a future release.  Use --native instead"//color_reset
+			"removed in a future release.  Use --aot or --jit instead"//color_reset
 
 		if (args%syntran_file_arg) then
 			res = syntran_interpret_file(args%syntran_file, &
