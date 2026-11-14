@@ -39,8 +39,8 @@ executable in the last digits.  Use `--aot` if that matters.
 
 `--jit` honors `--cd`, so a program's relative file paths are resolved against
 the directory of its source file, as in the interpreter.  An executable made by
-`--aot` doesn't, like one made by `--transpile`: its relative paths are
-resolved against the directory that it is run from.
+`--aot` doesn't: its relative paths are resolved against the directory that it is
+run from.
 
 By default, the compiled program prints the value of the last statement of the
 program when it finishes, just like the interpreter does.  Use `--quiet` to leave
@@ -51,26 +51,27 @@ its instruction set, and is optimized with LLVM's `-O2` pipeline.  Floating
 point is not fast-math, and operations are not fused, so the results are the
 same as the interpreter's.
 
-## Official Linux binary
+## Official binaries
 
-The Linux binary from the releases page has the native backend built in, with
-LLVM linked statically, so `--jit` needs nothing else installed.  `--aot`
-also needs a C compiler to link the executable (`cc`, or `$CC`), and a program
-that uses `@` or `std::solve()` needs BLAS and LAPACK for the linker too, e.g.
-`libopenblas-dev`.  `Dockerfile.rocky` builds it.
+The Linux, macOS, and Windows binaries from the releases page all have the native
+backend built in, with LLVM linked statically, so `--jit` needs nothing else
+installed.  `--aot` also needs a C compiler to link the executable (`$CC`, or
+`cc`, or `gcc` on Windows), and a program that uses linear algebra (`@`,
+`std::solve()`, etc.) needs BLAS and LAPACK for the linker too:
 
-The macOS binary has it too, also with LLVM linked statically.  `--aot` links
-with `cc` from Xcode's command line tools, and `@` links Accelerate.  It is built
-with `./build.sh release --llvm --blas -- -DSYNTRAN_LLVM_STATIC=ON`, where
-`SYNTRAN_LLVM_STATIC` takes LLVM's component archives from `llvm-config
---link-static` instead of `libLLVM.dylib`, so the package doesn't need LLVM,
-zstd, or z3 dylibs.
-
-The Windows binary has it too, also with LLVM linked statically, so the package
-is still just `syntran.exe` with no DLLs next to it.  `--aot` links with `gcc`
-(or `$CC`), which Windows doesn't come with, so it needs a mingw gcc on the
-`PATH`.  `--jit` needs nothing.  It is built as in
-[Linking LLVM statically on Windows](#linking-llvm-statically-on-windows).
+- **Linux**: `cc`, and BLAS and LAPACK from e.g. `libopenblas-dev`.
+  `Dockerfile.rocky` builds the binary.
+- **macOS**: `cc` from Xcode's command line tools, and linear algebra links
+  Accelerate, which comes with the system.  The binary is built with
+  `./build.sh release --llvm --blas -- -DSYNTRAN_LLVM_STATIC=ON`, where
+  `SYNTRAN_LLVM_STATIC` takes LLVM's component archives from `llvm-config
+  --link-static` instead of `libLLVM.dylib`, so the package doesn't need LLVM,
+  zstd, or z3 dylibs.
+- **Windows**: a mingw `gcc` on the `PATH`, which Windows doesn't come with, and
+  OpenBLAS for it, e.g. from MSYS2.  See the `$env:CC` example under
+  [Windows](#windows) below.  The package is still just `syntran.exe` with no DLLs
+  next to it, and it is built as in
+  [Linking LLVM statically on Windows](#linking-llvm-statically-on-windows).
 
 ## Building syntran with LLVM
 
@@ -174,8 +175,6 @@ The result imports only Windows system DLLs, which CI checks with `objdump -p`.
 
 ## What is supported
 
-This is a subset of the language so far:
-
 - Types: `i32`, `i64`, `f32`, `f64`, `bool`, `str`, and arrays of those, of any
   rank
 - Variables and assignment, including compound assignment.  Scopes and shadowing
@@ -206,6 +205,7 @@ This is a subset of the language so far:
   `reshape`, `shape`, and `sum`, `product`, `minval`, `maxval`, `all`, `any`, and
   `count` of an array, with a `dim` or a `mask` or both.  The math functions and
   conversions also apply to each element of an array
+- The constant `std::PI`
 - `std::format()`, `std::printf()`, and `std::writef()`, of numbers, bools,
   strings, arrays of those, structs, and enums, with every spec of the
   interpreter's
@@ -235,14 +235,16 @@ This is a subset of the language so far:
   members of structs, including the subscripts of the result of a call.  They
   compare with `==` and print as their type, as in the interpreter
 - Enums, including arrays of them and enums as members of structs.  They compare
-  and print like the interpreter's, and `i32(e)` and `Suit(2)` convert
+  and print like the interpreter's, `i32(e)` and `Suit(2)` convert, and
+  `std::variant_of()` gives the name of a variant
 
 ## What isn't supported yet
 
 Programs which use anything else are rejected with
 [E130](errors.md#e130----native-unsupported), pointing at each statement which
 isn't supported.  Run them with the interpreter instead.  Everything that the
-test programs and samples use is supported, so a program which isn't is rare.
+test programs and samples use is supported, and so are the Advent of Code
+solutions in `external/aoc-syntran`, so a program which isn't is rare.
 
 ## Differences from the interpreter
 
@@ -343,13 +345,17 @@ listed in `src/tests/test.f90`.  Every other test must pass.
 The second kind compiles and links every syntran test program and sample, runs
 it, and compares the output with the interpreter's.  It reports which
 unsupported constructs are the most common among the programs that it can't
-compile yet.  Every file in `utils/native-pass.txt` must keep passing:
+compile yet.  Every file in `utils/native-pass.txt` must keep passing.  Give it a
+syntran that was built with LLVM, since its default, `build/v1/bin/syntran`,
+usually isn't:
 
 ```
-bash utils/test-transpile.sh --backend native
-bash utils/test-transpile.sh --backend native --long
+bash utils/test-transpile.sh --backend native build/native/bin/syntran
+bash utils/test-transpile.sh --backend native --long build/native/bin/syntran
 ```
 
 The second one compiles the programs of the long tests (`src/tests/long.f90`),
 which are bigger programs from Advent of Code, and compares their output to the
-interpreter's.  It takes a few minutes, so CI doesn't run it.
+interpreter's.  It takes a few minutes, so CI doesn't run it.  CI does run all of
+the solutions in `external/aoc-syntran` with `--jit`, as the last check of each
+release binary.
