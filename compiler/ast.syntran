@@ -149,8 +149,8 @@ struct Node
 
 	type_: Type,
 
-	// The slot of a variable, which is 1-based like the Fortran, and 0 if there
-	// isn't one
+	// The slot of a variable, which is 0-based unlike the Fortran's, and -1 if
+	// there isn't one
 	id_index: i32,
 	is_loc: bool,
 
@@ -187,7 +187,7 @@ fn new_node(kind: NodeKind): Node
 		has_op = false,
 		op = new_token(TokenKind.eof, 0, ""),
 		type_ = new_type(TypeKind.unknown),
-		id_index = 0,
+		id_index = -1,
 		is_loc = false,
 		val = "",
 		src_pos = -1,
@@ -424,13 +424,13 @@ fn get_binary_scalar_kind(left: TypeKind, right: TypeKind): TypeKind
 {
 	// The default case of the Fortran `get_binary_op_kind()` for two scalars:
 	// the same type, or promoted to the wider one
-	if left == TypeKind.unknown or right == TypeKind.unknown
+	if any([left, right] == TypeKind.unknown)
 		return TypeKind.unknown;
 	if left == right
 		return left;
-	if left == TypeKind.f64 or right == TypeKind.f64
+	if any([left, right] == TypeKind.f64)
 		return TypeKind.f64;
-	if left == TypeKind.f32 or right == TypeKind.f32
+	if any([left, right] == TypeKind.f32)
 		return TypeKind.f32;
 	if (left == TypeKind.i64 and is_int_type(right)) or
 		(right == TypeKind.i64 and is_int_type(left))

@@ -1,0 +1,32 @@
+// A member, or a method call, on the result of a fn that is declared later.  In
+// the first pass the fn is unknown, so its result has an unknown type, and the
+// parser has to swallow the rest of the chain.  Otherwise the stray `.name`
+// is a bogus E28 that survives into the second pass
+
+fn g(): i32
+{
+	return f(0).x + f(1).a.b + f(2).m(1);
+}
+
+struct A
+{
+	b: i32,
+}
+
+struct S
+{
+	x: i32,
+	a: A,
+
+	const fn m(k: i32): i32
+	{
+		return x + k;
+	}
+}
+
+fn f(i: i32): S
+{
+	return S{x = 3, a = A{b = 4}};
+}
+
+return g() == 11;

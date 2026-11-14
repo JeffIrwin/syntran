@@ -9,28 +9,6 @@
 
 use parse::*;
 
-fn escape(s: &const str): str
-{
-	// Escape a token's text or value so that a node is always one line, with
-	// no tabs in it.  Bytes >= 128 are left alone.  Syntran strs have no
-	// escapes, so a lone backslash is `"\"`
-	let out = "";
-	for i in [0: len(s)]
-	{
-		const c = s[i];
-		switch c
-		{
-			case r#"\"#          { out += "\\"; }
-			case LINE_FEED       { out += "\n"; }
-			case CARRIAGE_RETURN { out += "\r"; }
-			case TAB             { out += "\t"; }
-			case NULL_CHAR       { out += "\0"; }
-			default              { out += c; }
-		}
-	}
-	return out;
-}
-
 fn token_field(name: &const str, token: &const Token): str
 {
 	// ` id=<text>@<pos>` or ` op=<text>@<pos>`
@@ -54,7 +32,7 @@ fn dump_node(nodes: &const NodeVec, id: i32, role: &const str, depth: i32)
 
 	line += " type=" + type_name(node.type_);
 
-	if node.id_index != 0
+	if node.id_index >= 0
 	{
 		line += " slot=";
 		if node.is_loc

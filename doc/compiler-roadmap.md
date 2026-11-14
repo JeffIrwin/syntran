@@ -40,10 +40,11 @@ prints the same format, and a bash script that diffs the two.
     `condition`, ...)
   - Fields are printed only when set, in one fixed order: `id=<text>@<pos0>`,
     `op=<text>@<pos0>`, `type=<value_type_name(val)>` (`src/value.f90:360`),
-    the slot (`g<id>`/`l<id>` from `id_index` + `is_loc`), the literal value
+    the slot (`g<id>`/`l<id>` from `id_index` + `is_loc`, 0-based, and a dot's
+    member has `field=<id>` instead), the literal value
     (the source text for f32/f64, like `expr%identifier`), `sub_kind`, the omit
     flags, the array kind, `is_ref`, `root_kind`, `is_enum_name`, `num_locs`,
-    `params`, and `src_pos`
+    `params` (0-based like the slots), and `src_pos`
   - A generic walker visits every allocated child member in a fixed order, so
     it can't go stale.  Text is escaped like `escape_dump()` (`src/lex.f90:1130`),
     and `pos` is 0-based like the lex dump
@@ -84,10 +85,11 @@ prints the same format, and a bash script that diffs the two.
   on, and `#include` them in `parse.syntran`.  The driver isn't a port of the
   two passes: it scans the declarations and parses once, see milestone 1.
 - `compiler/parse-dump.syntran`: the driver.  It prints the same format, with
-  the escape and kind-name helpers copied from `compiler/lex-dump.syntran`.
+  `escape()` shared with `compiler/lex-dump.syntran` through
+  `compiler/utils.syntran`.
 - Header comment: list the differences from the Fortran, like lex.syntran does
-  (0-based pos, half-open ranges, diags are codes only, arena indices instead of
-  allocatable members).
+  (0-based pos and slots, half-open ranges, diags are codes only, arena indices
+  instead of allocatable members).
 
 ### Test script: `utils/test-parse.sh`
 
