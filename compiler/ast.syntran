@@ -154,7 +154,9 @@ struct Node
 	id_index: i32,
 	is_loc: bool,
 
-	// The value of a literal
+	// The value of a literal. Seems odd that this is a str. Ok in
+	// early milestones, probably should by a Value struct type later like
+	// fortran src
 	val: str,
 
 	// The 0-based position of a statement in the source, or -1
