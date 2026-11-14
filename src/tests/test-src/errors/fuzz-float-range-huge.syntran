@@ -1,5 +1,6 @@
 // A float range whose element count didn't fit in an i32 (the step is
 // tiny), so the allocated capacity was garbage and the fill loop wrote past it
 
-let s = 1e-308;
+// Not 1e-308, which is a subnormal that a fast-math build flushes to a step of 0
+let s = 1e-300;
 let a = [0.0: s: 5.0];

@@ -12200,7 +12200,7 @@ subroutine unit_test_fuzz_regressions(npass, nfail)
 			diag_count_code(get_diags_file(P//'fuzz-float-range-huge.syntran'), &
 				RC_BAD_ARRAY_SIZE) == 1, &
 			diag_has_code(get_diags('let a = [0.0: 1e-300: 5.0];'), RC_BAD_ARRAY_SIZE), &
-			diag_has_code(get_diags('let a = [0.0f: 1e-38f: 5.0f];'), RC_BAD_ARRAY_SIZE), &
+			diag_has_code(get_diags('let a = [0.0f: 1e-30f: 5.0f];'), RC_BAD_ARRAY_SIZE), &
 			diag_has_code(get_diags('let a = [0.0: 1.0: 0.0/0.0];'), RC_BAD_ARRAY_SIZE), &
 			diag_has_code(get_diags('let a = [0.0: 1.0: 1.0/0.0];'), RC_BAD_ARRAY_SIZE), &
 			diag_has_code(get_diags('let a = [0.0: 1.0/0.0: 5.0];'), RC_BAD_ARRAY_SIZE), &
@@ -12215,7 +12215,7 @@ subroutine unit_test_fuzz_regressions(npass, nfail)
 			! count.  A count over 2**31 used to run the body 0 times, and one that
 			! wasn't finite was garbage
 			diag_has_code(get_diags('for x in [0.0: 1e-300: 5.0] { }'), RC_BAD_ARRAY_SIZE), &
-			diag_has_code(get_diags('for x in [0.0f: 1e-38f: 5.0f] { }'), RC_BAD_ARRAY_SIZE), &
+			diag_has_code(get_diags('for x in [0.0f: 1e-30f: 5.0f] { }'), RC_BAD_ARRAY_SIZE), &
 			diag_has_code(get_diags('for x in [0.0: 1.0: 0.0/0.0] { }'), RC_BAD_ARRAY_SIZE), &
 			diag_has_code(get_diags('for x in [0.0: 1.0/0.0: 5.0] { }'), RC_BAD_ARRAY_SIZE), &
 			eval('let n = 0; for x in [0.0: 0.5: 2.0] { n += 1; } n;') == '4', &

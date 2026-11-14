@@ -1370,7 +1370,7 @@ A member was read or assigned through an optional struct (`?Node`) that is `null
 
 ### R48 -- bad-array-size
 
-An array was built with a negative extent, like `[0; n]` with `n = -1`, or with too many elements to allocate: the count overflows an `i64`, or there isn't enough memory for the array.  An extent of zero is fine, and gives an empty array.  A range like `[7: 3]` whose upper bound is below its lower bound is also fine, and is empty.  A float range like `[0.0: 1e-308: 5.0]`, as an array or as the iterable of a `for` loop, is R48 too when it has too many elements to count, or when its bounds or step aren't finite (infinity or NaN).  The sizes can come from the program, so they aren't known until runtime.
+An array was built with a negative extent, like `[0; n]` with `n = -1`, or with too many elements to allocate: the count overflows an `i64`, or there isn't enough memory for the array.  An extent of zero is fine, and gives an empty array.  A range like `[7: 3]` whose upper bound is below its lower bound is also fine, and is empty.  A float range like `[0.0: 1e-300: 5.0]`, as an array or as the iterable of a `for` loop, is R48 too when it has too many elements to count, or when its bounds or step aren't finite (infinity or NaN).  The sizes can come from the program, so they aren't known until runtime.
 
 [Example](../src/tests/test-src/errors/R48-bad-array-size.syntran)
 

@@ -645,7 +645,9 @@ subroutine float_range_cap(state, lb, step, ub, cap)
 	! The count is computed in f64, even for an f32 range, so that `ub - lb`
 	! can't overflow, and it's compared to huge() as a real, since ceiling()
 	! of a big or non-finite count into an integer is undefined.  The
-	! comparisons are written so that a NaN fails them.  The array expression's
+	! comparison to huge() is written so that a NaN fails it.  The bounds and
+	! step are tested by their bits instead of by comparing, which -Ofast /
+	! -ffinite-math-only can fold away.  The array expression's
 	! fill loop stops at cap too, and then shrinks the array to what it filled,
 	! because whole-array ops like `a + b` assume that size(a) == a%len_
 
@@ -653,12 +655,14 @@ subroutine float_range_cap(state, lb, step, ub, cap)
 	real(kind = 8), intent(in) :: lb, step, ub
 	integer(kind = 8), intent(out) :: cap
 
+	integer(kind = 8) :: bits(3)
 	real(kind = 8) :: count_
 
 	cap = 0
 
-	if (.not. (abs(lb) <= huge(lb) .and. abs(step) <= huge(step) &
-			.and. abs(ub) <= huge(ub))) then
+	! An exponent of all ones is inf or NaN
+	bits = iand(transfer([lb, step, ub], bits), huge(0_8))
+	if (any(bits >= int(z'7FF0000000000000', 8))) then
 		call rt_throw(state, err_rt(RC_BAD_ARRAY_SIZE, &
 			'float range has a bound or step that is not finite'))
 		return
