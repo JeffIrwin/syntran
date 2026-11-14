@@ -473,7 +473,8 @@ sy_str *sy_str_repeat(const sy_str *s, int64_t n)
     int64_t i;
 
     if (n < 0) sy_rt_error("R39", "ncopies argument of repeat() is negative: %lld", (long long)n);
-    if (s->len > 0 && n > ((int64_t)INT64_MAX - 64) / s->len)
+    if (s->len == 0 || n == 0) return sy_str_alloc(0);
+    if (n > ((int64_t)INT64_MAX - 64) / s->len)
         sy_rt_error("R50", "repeat() of a string of length %lld %lld times is too long: "
             "the result is too big to allocate", (long long)s->len, (long long)n);
     r = sy_str_alloc(s->len * n);
@@ -803,6 +804,8 @@ static void *sy_eptr_dup(int32_t e, void *p)
     return sy_struct_dup((const sy_struct *)p);
 }
 
+static void sy_arr_size_error(int32_t rank, const int64_t *sizes);
+
 /* An array of the given shape.  The elements are zeroed (and a str is empty), unless the
  * caller is about to overwrite all of them and says `zero` is 0.  That only applies to
  * elements that are not heap objects, since those must always be valid to free */
@@ -823,7 +826,9 @@ static sy_arr *sy_arr_alloc(int32_t elem, int32_t rank, const int64_t *sizes, in
         a->data = (char *)calloc(len > 0 ? (size_t)len : 1, sy_esize(elem));
     else
         a->data = (char *)malloc((len > 0 ? (size_t)len : 1) * sy_esize(elem));
-    if (a->data == NULL) sy_fatal("out of memory");
+    if (a->data == NULL) {
+        sy_arr_size_error(rank, a->size);
+    }
     if (elem == SY_STR) {
         for (i = 0; i < len; i++) ((sy_str **)a->data)[i] = SY_EMPTY;
     }
@@ -938,11 +943,19 @@ static void sy_dims_str(char *buf, size_t cap, int32_t rank, const int64_t *size
 
 /* An array whose extents come from the program can't have a negative one, or so many
  * elements in all that the size of its data in bytes overflows (8 is the biggest element).
- * Past that, it is up to malloc().  An empty array is fine no matter how big its other
- * extents are */
-static void sy_arr_len_check(int32_t rank, const int64_t *sizes)
+ * Past that, it is up to malloc(), and sy_arr_alloc() reports a failed one as R48 too.
+ * An empty array is fine no matter how big its other extents are */
+static void sy_arr_size_error(int32_t rank, const int64_t *sizes)
 {
     char dims[256];
+
+    sy_dims_str(dims, sizeof dims, rank, sizes);
+    sy_rt_error("R48", "invalid array size %s: extents must not be negative, and the array "
+        "must be small enough to allocate", dims);
+}
+
+static void sy_arr_len_check(int32_t rank, const int64_t *sizes)
+{
     int64_t len = 1;
     int32_t k;
     int bad = 0;
@@ -960,9 +973,7 @@ static void sy_arr_len_check(int32_t rank, const int64_t *sizes)
         }
     }
     if (!bad) return;
-    sy_dims_str(dims, sizeof dims, rank, sizes);
-    sy_rt_error("R48", "invalid array size %s: extents must not be negative, and the array "
-        "must be small enough to allocate", dims);
+    sy_arr_size_error(rank, sizes);
 }
 
 /* std::reshape() needs as many elements in the new shape as there are */
