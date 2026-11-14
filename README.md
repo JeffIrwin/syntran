@@ -115,13 +115,14 @@ synup list
 
 ### Path and environment settings
 
-Feel free to add the directory to your PATH environment variable, or type the
-full path.
+Feel free to add the `~/.syntran/bin/` directory to your PATH environment
+variable, or type the full path.
 
 Whenever you see something like `./build/Debug/syntran` or `fpm run` in the rest
 of this documentation, replace that with `/path/to/syntran` or
 `C:\path\to\syntran.exe` appropriately, depending on your operating system and
-where you downloaded the binary.
+where you downloaded the binary.  The `synup` updater places everything is in
+`$SYNUP_HOME`, which is `~/.syntran` by default
 
 I recommend running `ulimit -s unlimited` in `~/.bashrc` or at least in your
 current shell to remove the stack limit.  Otherwise, syntran can crash with
@@ -2781,10 +2782,11 @@ println(e[0].d.c[0].b.a[0]._);
 
 ### Recursive structs
 
-A struct can contain itself, as long as it does so through an array member.  An
-array can be empty, so it ends the recursion where a scalar member could not.
-(A scalar member such as `next: Node` would make the struct infinitely large,
-which is an error.)  This is how to write a tree:
+A struct can contain itself, as long as it does so through an array member or an
+optional member (see [Optional members](#optional-members) below).  Either one
+can be empty, so it ends the recursion where a plain scalar member could not.
+(A member such as `next: Node` would make the struct infinitely large, which is
+an error.)  This is how to write a tree with an array:
 <!-- syntran-begin mode=file group=recursive-structs -->
 ```rust
 struct Tree
@@ -2825,7 +2827,8 @@ total = 12
 <!-- syntran-end -->
 
 Structs can also be mutually recursive, such as a directory that contains files
-and other directories, again as long as the recursion goes through arrays.
+and other directories, again as long as the recursion goes through arrays or
+optionals.
 
 #### Optional members
 
@@ -3150,6 +3153,6 @@ Many syntran samples are provided in this repository and elsewhere:
 1.  [Inline tests](src/tests/test.f90):  these are short one-to-few line syntran snippets, embedded in Fortran as a string and `eval`'d.  They are covered by the tests
 2.  [Script tests](src/tests/test-src):  these are longer syntran scripts, organized into categories by directory.  They are covered by the tests
 3.  [Fortran examples](example):  short Fortran programs which call syntran as a library, see [above](#calling-syntran-from-fortran).  Run them with `fpm run --example <name>`
+5.  [Advent of Code](https://github.com/JeffIrwin/aoc-syntran):  these are syntran scripts which solve problems from the [Advent of Code](https://adventofcode.com/about).  They live in a separate repository, which is a submodule at `external/aoc-syntran`.  CI runs them with `--jit` in the release binaries, but they are not part of the short test suite
 4.  [Samples](samples):  these are longer syntran scripts which can also take a while to run, e.g. the wave equation solvers.  They are *not* covered by the tests because of the time they take to run
-5.  [Advent of Code](https://github.com/JeffIrwin/aoc-syntran):  these are syntran scripts which solve problems from the [Advent of Code](https://adventofcode.com/about).  They are *not* covered by tests and in a separate repository
 
