@@ -627,7 +627,7 @@ function parse_args() result(args)
 			"Parse and type check without running the program")
 		call print_help_opt("-t", "--transpile", "<FILE>", &
 			"Write the program as Fortran source to <FILE> ('-' for stdout)", &
-			"instead of running it")
+			"instead of running it (deprecated)")
 		call print_help_opt("", "--keep-unused-fns", "", &
 			"With --transpile, also write fns that nothing calls")
 		call print_help_opt("-o", "--native", "<FILE>", &

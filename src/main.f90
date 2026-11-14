@@ -3,6 +3,7 @@
 
 program main
 
+	use iso_fortran_env, only: error_unit
 	use syntran__app_m
 	use syntran__synup_m, only: syntran_update
 	use syntran
@@ -75,6 +76,11 @@ program main
 		! generated program if we're not --quiet, like the interpreter
 		transpile%print_result = .not. args%quiet
 		transpile%shake_fns = .not. args%keep_unused_fns
+
+		! Deprecated in 1.8.  This goes to stderr, because the Fortran source
+		! may be going to stdout with `-t -`
+		write(error_unit, '(a)') warn_prefix//"--transpile is deprecated and will be "// &
+			"removed in a future release.  Use --native instead"//color_reset
 
 		if (args%syntran_file_arg) then
 			res = syntran_interpret_file(args%syntran_file, &
