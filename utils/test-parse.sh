@@ -10,7 +10,10 @@ set -eu
 # The port is not finished yet, so most files don't match.  Only the files in
 # utils/parse-pass.txt are required to, and the list grows with each milestone
 # of doc/compiler-roadmap.md.  A file in the list that no longer matches is a
-# failure, and so is one that is in the list but is missing.
+# failure, and so is one that is in the list but is missing.  A crash of either
+# parser, which is any non-zero exit status, is a failure for every file, in the
+# list or not, since the port sends anything that it can't parse yet to the
+# `unsupported` diagnostic and never stops.
 #
 # Usage:
 #   utils/test-parse.sh [--native] [-v] [--update-pass-list] [path/to/syntran]
@@ -23,7 +26,9 @@ set -eu
 #                        fails and is required to pass, instead of just its name
 #   --update-pass-list   Rewrite utils/parse-pass.txt from this run's matches.
 #                        It needs the default inputs, so that the list covers
-#                        all of them
+#                        all of them, and it refuses if a file in the list
+#                        regressed or if anything crashed, so that a bug can't
+#                        be dropped from the list by running this again
 #
 # With no files or dirs, it tests every .syntran file in src/tests/test-src,
 # samples, and src/tests/long.  Any argument that's a .syntran file or a dir is
@@ -106,11 +111,35 @@ done
 npass=0
 nfail=0
 nregress=0
+ncrash=0
 passed=()
 newly=0
 for f in "${files[@]}" ; do
-	"$syntran_bin" --parse "$f" > "$work/expect" 2>&1 || true
-	run_port "$f" > "$work/actual" 2>&1 || true
+	fortran_rc=0
+	port_rc=0
+	"$syntran_bin" --parse "$f" > "$work/expect" 2>&1 || fortran_rc=$?
+	run_port "$f" > "$work/actual" 2>&1 || port_rc=$?
+
+	# A diagnostic is not a crash:  both parsers exit 0 with one.  So a failure
+	# status is a runtime error or a signal, and the dumps can't be compared
+	if [[ $fortran_rc -ne 0 || $port_rc -ne 0 ]]; then
+		ncrash=$((ncrash + 1))
+		nfail=$((nfail + 1))
+		echo "CRASH: $f"
+		if [[ $fortran_rc -ne 0 ]]; then
+			echo "    syntran --parse exited with $fortran_rc"
+			if [[ $verbose -eq 1 ]]; then
+				head -5 "$work/expect" | sed 's/^/        /'
+			fi
+		fi
+		if [[ $port_rc -ne 0 ]]; then
+			echo "    the port exited with $port_rc"
+			if [[ $verbose -eq 1 ]]; then
+				head -5 "$work/actual" | sed 's/^/        /'
+			fi
+		fi
+		continue
+	fi
 
 	# The Fortran appends the diagnostics that only its first pass raises, like
 	# E22, after the others, and the port raises each where it happens.  So the
@@ -152,8 +181,14 @@ if [[ $default_inputs -eq 1 && $update_pass_list -eq 0 ]]; then
 fi
 
 echo "parse port: $npass match, $nfail don't, of ${#files[@]} files"
+if [[ $ncrash -gt 0 ]]; then
+	echo "$ncrash of them crashed"
+fi
 
-if [[ $update_pass_list -eq 1 ]]; then
+if [[ $update_pass_list -eq 1 && ( $nregress -gt 0 || $ncrash -gt 0 ) ]]; then
+	echo "not writing $PASS_LIST:  fix the regressions and crashes above first," \
+		"or remove a file from it by hand if that is what is meant"
+elif [[ $update_pass_list -eq 1 ]]; then
 	{
 		echo "# Files that compiler/parse-dump.syntran must dump the same as"
 		echo "# \`syntran --parse\`.  Written by \`utils/test-parse.sh --update-pass-list\`"
@@ -164,4 +199,4 @@ elif [[ $newly -gt 0 ]]; then
 	echo "$newly files match that aren't in $PASS_LIST yet, see --update-pass-list"
 fi
 
-[[ $nregress -eq 0 && $nmissing -eq 0 ]]
+[[ $nregress -eq 0 && $nmissing -eq 0 && $ncrash -eq 0 ]]

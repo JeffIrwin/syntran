@@ -10,6 +10,9 @@
 // - `pos` is 0-based, like in the lexer port, and so is `parser.pos`, the index
 //   of the current token.  The Fortran `last_e20_pos` that starts at 0 starts
 //   at -1 here
+// - A variable's slot is 0-based too, and -1 is no slot, where the Fortran's is
+//   1-based and 0 is none.  The `std::` constants take slots 0 to 3.  The
+//   dump prints slots 0-based for both parsers, see `parse_dump()`
 // - A diagnostic is a `Diag`, the error code and the 0-based position of its
 //   span, instead of a message.  The lexer's diagnostics have no position,
 //   since nothing uses it yet
@@ -81,13 +84,13 @@ fn new_parser(repl: bool): Parser
 {
 	// The session of a parser, with no input yet, see `set_input()`
 
-	// Slot 1 is `std::PI`, and slots 2 to 4 are `std::IN`, `std::OUT`, and
+	// Slot 0 is `std::PI`, and slots 1 to 3 are `std::IN`, `std::OUT`, and
 	// `std::ERR`, c.f. declare_intr_vars()
 	let vars = new_scopes();
-	let ok = vars.insert("std::PI", new_type(TypeKind.f64), 1, true);
-	ok = vars.insert("std::IN", new_type(TypeKind.file), 2, true);
-	ok = vars.insert("std::OUT", new_type(TypeKind.file), 3, true);
-	ok = vars.insert("std::ERR", new_type(TypeKind.file), 4, true);
+	let ok = vars.insert("std::PI", new_type(TypeKind.f64), 0, true);
+	ok = vars.insert("std::IN", new_type(TypeKind.file), 1, true);
+	ok = vars.insert("std::OUT", new_type(TypeKind.file), 2, true);
+	ok = vars.insert("std::ERR", new_type(TypeKind.file), 3, true);
 
 	return Parser
 	{
@@ -148,6 +151,8 @@ struct Checkpoint
 	nentries: i32,
 	scope: i32,
 	num_vars: i32,
+	last_e20_pos: i32,
+	expecting: bool,
 }
 
 fn checkpoint(parser: &const Parser): Checkpoint
@@ -160,6 +165,8 @@ fn checkpoint(parser: &const Parser): Checkpoint
 		nentries = parser.vars.len,
 		scope = parser.vars.scope,
 		num_vars = parser.num_vars,
+		last_e20_pos = parser.last_e20_pos,
+		expecting = parser.expecting,
 	};
 }
 
@@ -177,10 +184,13 @@ fn rewind(parser: &Parser, cp: &const Checkpoint)
 	parser.vars.truncate(cp.nentries);
 	parser.num_vars = cp.num_vars;
 
-	// An E20 whose position is remembered for de-duping in `match()` has to be
-	// forgotten too, or a parse of the same tokens again would see a "second"
-	// failure at that position and drop its E20
-	parser.last_e20_pos = -1;
+	// The position of the last E20, which de-dupes them in `match()`, goes back
+	// to what it was.  The E20 that a speculative parse made is gone with its
+	// diagnostic, so a parse of the same tokens again has to be able to report
+	// it, and an E20 from before the checkpoint is still the last one.  The
+	// same goes for `expecting`, which a speculative parse can set at eof
+	parser.last_e20_pos = cp.last_e20_pos;
+	parser.expecting = cp.expecting;
 	return;
 }
 
@@ -306,9 +316,11 @@ fn unsupported(parser: &Parser): i32
 
 fn push_var(parser: &Parser): i32
 {
-	// Allocate the next variable slot, which is 1-based
+	// Allocate the next variable slot, which is 0-based, so `num_vars` is also
+	// the number of slots that are used
+	const slot = parser.num_vars;
 	parser.num_vars += 1;
-	return parser.num_vars;
+	return slot;
 }
 
 fn search(parser: &const Parser, key: &const str): i32
@@ -375,9 +387,8 @@ fn scan_decls(parser: &Parser)
 	// declared, which are fns, structs, and enums.  Milestone 2 declares the fn
 	// signatures here, milestones 4 and 5 the structs and enums, and
 	// milestone 6 the names that a `use` brings in.  Until then nothing is
-	// declared, so
-	// the items are only skipped.  The scan pushes no nodes and no diagnostics,
-	// since they are the parse's
+	// declared, so the items are only skipped.  The scan pushes no nodes and no
+	// diagnostics, since they are the parse's
 	while peek_kind(parser, 0) != TokenKind.eof
 		skip_item(&parser);
 	return;
@@ -416,17 +427,19 @@ fn parse_unit(parser: &Parser): i32
 		const pos0 = parser.pos;
 		const current = peek_token(parser, 0);
 
-		if current.kind == TokenKind.keyword and
-			any(current.keyword == [
-			Keyword.fn_, Keyword.struct_, Keyword.enum_,
-		])
+		switch current.kind
 		{
 			// The declarations are milestones 2, 4, and 5
-			members.push(unsupported(&parser));
-		}
-		else
-		{
-			members.push(parse_statement(&parser));
+			case TokenKind.keyword when any(current.keyword == [
+				Keyword.fn_, Keyword.struct_, Keyword.enum_,
+			])
+			{
+				members.push(unsupported(&parser));
+			}
+			default
+			{
+				members.push(parse_statement(&parser));
+			}
 		}
 
 		// Break infinite loops

@@ -1334,11 +1334,14 @@ module function parse_dump(node) result(str_)
 	! set, in this fixed order:
 	!
 	!     id=<text>@<pos>  op=<text>@<pos>  type=<type>  slot=<g|l><id>
-	!     val=<literal>  sub=<sub_kind>  lomit  uomit  ref=<-|r|c per param>
-	!     root=<kind>  enum_name  locs=<n>  params=<slots>  pos=<src_pos>
-	!     prefix=<module>  struct=<name>
+	!     field=<id>  val=<literal>  sub=<sub_kind>  lomit  uomit
+	!     ref=<-|r|c per param>  root=<kind>  enum_name  locs=<n>
+	!     params=<slots>  pos=<src_pos>  prefix=<module>  struct=<name>
 	!
-	! `pos` is 0-based, unlike the parser's own 1-based pos.  Children are walked
+	! `pos`, `slot`, `field`, and `params` are 0-based, unlike the parser's own
+	! 1-based ones, since syntran is 0-based.  A `field` is what the `member` of
+	! a dot_expr has instead of a `slot`, since it indexes the struct's members
+	! and not a variable.  Children are walked
 	! in the order of their declaration in syntax_node_t, so a new child member
 	! has to be added to dump_node() below.  utils/check-node-sync.sh checks that
 	! every member is either dumped there or exempt
@@ -1401,7 +1404,13 @@ recursive subroutine dump_node(sb, node, role, depth, is_sub)
 		continue
 	case default
 		if (node%id_index /= 0) then
-			call sb%push(" slot="//merge("l", "g", node%is_loc)//str(node%id_index))
+			if (role == "member") then
+				! The member of a dot_expr, which is the only node with this role
+				call sb%push(" field="//str(node%id_index - 1))
+			else
+				call sb%push(" slot="//merge("l", "g", node%is_loc)// &
+					str(node%id_index - 1))
+			end if
 		end if
 	end select
 
@@ -1444,7 +1453,7 @@ recursive subroutine dump_node(sb, node, role, depth, is_sub)
 		call sb%push(" params=")
 		do i = 1, size(node%params)
 			if (i > 1) call sb%push(",")
-			call sb%push(str(node%params(i)))
+			call sb%push(str(node%params(i) - 1))
 		end do
 	end if
 

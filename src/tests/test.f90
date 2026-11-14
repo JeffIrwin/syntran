@@ -4569,6 +4569,9 @@ subroutine unit_test_fns(npass, nfail)
 			     'struct A { b: i32 } struct S { x: i32, a: A } ' // &
 			     'fn f(i: i32): S { return S{x = 3, a = A{b = 4}}; } g();', &
 			     quiet) == '7', &
+			! The same from a file, with a method call on the result and a chain
+			! of members, which the eval() above doesn't have
+			interpret_file(path//'test-47.syntran', quiet) == 'true', &
 			! Regression: a void fn with no explicit `return` used to leave
 			! its implicit-void-return sentinel on top of the fn body's own
 			! stranded block result (block_statement compilation always
@@ -8167,7 +8170,7 @@ subroutine unit_test_parse_dump(npass, nfail)
 			! A child's role is the name of the member that holds it
 			parse_dump_str('let x = 1 + 2;', 'a') == &
 				'root translation_unit type=unknown'//lf// &
-				'  members[0] let_expr id=x@4 op==@6 type=i32 slot=g5 pos=0'//lf// &
+				'  members[0] let_expr id=x@4 op==@6 type=i32 slot=g4 pos=0'//lf// &
 				'    right binary_expr op=+@10 type=i32'//lf// &
 				'      left literal_expr type=i32 val=1'//lf// &
 				'      right literal_expr type=i32 val=2'//lf, &
@@ -8176,22 +8179,22 @@ subroutine unit_test_parse_dump(npass, nfail)
 			! are left out
 			parse_dump_str('let v = [1, 2];'//lf//'let y = v[0];', 'a') == &
 				'root translation_unit type=unknown'//lf// &
-				'  members[0] let_expr id=v@4 op==@6 type=[i32; :] slot=g5 pos=0'//lf// &
+				'  members[0] let_expr id=v@4 op==@6 type=[i32; :] slot=g4 pos=0'//lf// &
 				'    right array_expr type=[i32; :]'//lf// &
 				'      elems[0] literal_expr type=i32 val=1'//lf// &
 				'      elems[1] literal_expr type=i32 val=2'//lf// &
-				'  members[1] let_expr id=y@20 op==@22 type=i32 slot=g6 pos=16'//lf// &
-				'    right name_expr id=v@24 type=i32 slot=g5'//lf// &
+				'  members[1] let_expr id=y@20 op==@22 type=i32 slot=g5 pos=16'//lf// &
+				'    right name_expr id=v@24 type=i32 slot=g4'//lf// &
 				'      lsubscripts[0] literal_expr type=i32 val=0 sub=scalar_sub'//lf, &
 
 			! A fn has no slot, since its id counts the intrinsic fns.  It's in the
 			! trailer instead, with its params, which can be refs
 			parse_dump_str('fn f(a: &i32, b: &const [f64; :]): i32 { return a; }', 'a') == &
 				'root translation_unit type=unknown'//lf// &
-				'  members[0] fn_declaration id=f@3 type=unknown ref=rc locs=2 params=1,2 pos=0'//lf// &
+				'  members[0] fn_declaration id=f@3 type=unknown ref=rc locs=2 params=0,1 pos=0'//lf// &
 				'    body block_statement type=unknown pos=39'//lf// &
 				'      members[0] return_statement type=unknown pos=41'//lf// &
-				'        right name_expr id=a@48 type=i32 slot=l1'//lf// &
+				'        right name_expr id=a@48 type=i32 slot=l0'//lf// &
 				'fn f(i32&, [f64; :]&const): i32'//lf, &
 
 			! Structs and enums are only in the trailer
@@ -8202,11 +8205,26 @@ subroutine unit_test_parse_dump(npass, nfail)
 				'struct S { m: i32 }'//lf// &
 				'enum E { a, b }'//lf, &
 
+			! The member of a dot is an index into its struct's members, so it has a
+			! field and not a slot
+			parse_dump_str('struct S { a: i32, b: i32 }'//lf// &
+				'let s = S{a = 1, b = 2};'//lf//'let y = s.b;', 'a') == &
+				'root translation_unit type=unknown'//lf// &
+				'  members[0] struct_declaration type=unknown'//lf// &
+				'  members[1] let_expr id=s@32 op==@34 type=S slot=g4 pos=28'//lf// &
+				'    right struct_instance_expr type=S struct=S'//lf// &
+				'      members[0] literal_expr type=i32 val=1'//lf// &
+				'      members[1] literal_expr type=i32 val=2'//lf// &
+				'  members[2] let_expr id=y@57 op==@59 type=i32 slot=g5 pos=53'//lf// &
+				'    right dot_expr id=s@61 type=i32 slot=g4'//lf// &
+				'      member unknown id=b@63 type=i32 field=1'//lf// &
+				'struct S { a: i32, b: i32 }'//lf, &
+
 			! The kind name of a continue statement has no space in it, like the other
 			! kinds, since the port prints the same names
 			parse_dump_str('for i in [0: 2] { continue; }', 'a') == &
 				'root translation_unit type=unknown'//lf// &
-				'  members[0] for_statement id=i@4 type=unknown slot=g5 pos=0'//lf// &
+				'  members[0] for_statement id=i@4 type=unknown slot=g4 pos=0'//lf// &
 				'    body block_statement type=unknown pos=16'//lf// &
 				'      members[0] continue_statement type=unknown pos=18'//lf// &
 				'    array array_expr type=[i32; :]'//lf// &

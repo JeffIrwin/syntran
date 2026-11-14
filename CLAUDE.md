@@ -294,7 +294,9 @@ and `parse_dump_str()` in `src/syntran.f90` have the format), and
 `compiler/parse-dump.syntran` dumps the port's.  With any diagnostic, only the
 `diag <code>` lines are dumped.  Unlike the lexer, the port is unfinished, so
 only the files in `utils/parse-pass.txt` have to match, and the list grows with
-each milestone:
+each milestone.  A non-zero exit of either parser is a `CRASH` for any file, in
+the list or not, and `--update-pass-list` won't write the list while there is a
+regression or a crash.  Slots, fields, and params in the dump are 0-based:
 ```bash
 bash utils/test-parse.sh -v build/v1/bin/syntran                 # on the VM, ~2 min
 bash utils/test-parse.sh --native build/native/bin/syntran       # compiled
@@ -536,7 +538,8 @@ Module paths in `use` statements are resolved relative to the current source fil
 - `src/tests/core.f90` - Test core module
 - `src/tests/test-src/` - Syntran script unit test files by category
 - `src/tests/long/aoc/` - Longer integration tests
-- `compiler/` - The self-hosted compiler, written in syntran.  Only the lexer so far
+- `compiler/` - The self-hosted compiler, written in syntran.  The lexer and the
+  core of the parser so far, and the linter for its style
 - `samples/` - Example syntran programs (not tested in CI)
 - `doc/README.md` - Table of contents for the other doc pages
 - `doc/intrinsics.md` - Intrinsic function documentation
