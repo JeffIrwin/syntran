@@ -32,13 +32,9 @@ module syntran__core_m
 
 	! TODO:
 	!  - 1.8 release
-	!    * duplicate badly-formatted "wrong types for this binary operator" text
-	!      in readme
-	!    * update readme to be more accurate about all backends instead of using
-	!      "interpreter" over-specifically. that's stale now
-	!    * probably note transpiler backend as deprecated in 1.8? remove in
-	!      1.9/1.10
 	!  - self-hosted compiler
+	!    * self-host tests need to run on windows too. currently just linux/mac
+	!      iirc
 	!    * this seems like it won't scale: "A module imported directly and
 	!      through another module is parsed twice". maybe ok to leave in the
 	!      fortran src, but for a large project (like a self-hosted compiler) we

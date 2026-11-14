@@ -8,7 +8,7 @@ set -eu
 # Usage:
 #   utils/lint.sh [--native] [path/to/syntran] [file-or-dir ...]
 #
-#   --native   Compile compiler/lint.syntran once with `syntran --native`
+#   --native   Compile compiler/lint.syntran once with `syntran --aot`
 #              (which needs LLVM), and run that, instead of the VM
 #
 # With no files or dirs, it lints compiler/.  Any argument that's a .syntran
@@ -65,7 +65,7 @@ done
 
 # One command that runs the linter on all of the files, in one process
 if [[ $native -eq 1 ]]; then
-	"$syntran_bin" -q --native "$work/lint" compiler/lint.syntran
+	"$syntran_bin" -q --aot "$work/lint" compiler/lint.syntran
 	run_lint() { "$work/lint" "$@"; }
 else
 	run_lint() { "$syntran_bin" -q compiler/lint.syntran -- "$@"; }

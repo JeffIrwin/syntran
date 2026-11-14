@@ -1,5 +1,5 @@
 /*
- * syntran_crt.c -- C runtime of the native backend (`syntran --native`)
+ * syntran_crt.c -- C runtime of the native backend (`syntran --aot`)
  *
  * Every program that the native backend compiles is linked with this file.  It
  * is embedded in the syntran executable by src/gen_native_rt.sh, so a compiled
@@ -44,7 +44,7 @@
 
 #ifdef SYNTRAN_LLVM
 /* Only syntran itself defines this macro, when it is built with LLVM.  A program that is
- * compiled by `syntran --native` never does.  The library runs a program that it has
+ * compiled by `syntran --aot` never does.  The library runs a program that it has
  * compiled in its own process, with an in-memory JIT, to test the backend.  Then the
  * things that would exit() leave the program with a longjmp instead, and the result
  * of the program, and its error, are kept for the caller rather than written.  The

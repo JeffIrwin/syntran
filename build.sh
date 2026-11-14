@@ -11,7 +11,7 @@ Builds syntran with cmake, or with fpm if --fpm is given.
   debug, release       Build type (default: debug).  --debug/--release also work
   --fpm                Build with fpm instead of cmake.  The binary is installed
                        to build/fpm/<Debug|Release>/bin/
-  --llvm, --no-llvm    Build the native backend (`syntran --native`), which needs
+  --llvm, --no-llvm    Build the native backend (`syntran --aot`), which needs
                        LLVM 17+.  Default: on if llvm-config is found, on the
                        PATH or in the usual install dirs.  $LLVM_CONFIG names one
   --blas, --no-blas    Link BLAS/LAPACK for `@`, std::solve(), etc., or use the
@@ -143,7 +143,7 @@ if [[ "$machine" == "Mac" ]]; then
 fi
 
 #===============================================================================
-# LLVM, for the native backend (`syntran --native`, see doc/native.md)
+# LLVM, for the native backend (`syntran --aot`, see doc/native.md)
 
 # Print the major version of llvm-config $1, or nothing if it doesn't run
 llvm_major() {

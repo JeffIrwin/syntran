@@ -20,7 +20,7 @@ set -eu
 #                       [file-or-dir ...]
 #
 #   --native             Compile compiler/parse-dump.syntran once with
-#                        `syntran --native` (which needs LLVM), and run that,
+#                        `syntran --aot` (which needs LLVM), and run that,
 #                        instead of the VM
 #   -v                   Print the first lines of the diff for each file that
 #                        fails and is required to pass, instead of just its name
@@ -87,7 +87,7 @@ trap 'rm -rf "$work"' EXIT
 
 # One command that runs the port on a file
 if [[ $native -eq 1 ]]; then
-	"$syntran_bin" -q --native "$work/parse-dump" compiler/parse-dump.syntran
+	"$syntran_bin" -q --aot "$work/parse-dump" compiler/parse-dump.syntran
 	run_port() { "$work/parse-dump" "$1"; }
 else
 	run_port() { "$syntran_bin" -q compiler/parse-dump.syntran -- "$1"; }

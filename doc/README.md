@@ -18,8 +18,8 @@ pages below go into more detail on specific topics.
 - [Fortran API](api.md):  using syntran as a Fortran library
 - [Transpiling to Fortran](transpile.md) (deprecated):  generating a standalone
   Fortran program instead of running the interpreter
-- [Compiling natively with LLVM](native.md):  generating a native executable
-  with LLVM instead of running the interpreter
+- [Compiling natively with LLVM](native.md):  compiling ahead of time to a
+  native executable, or just in time and running it, with LLVM instead of the VM
 
 ## Installing and building
 

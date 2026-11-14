@@ -7,7 +7,7 @@
 //
 //     syntran -q compiler/lint.syntran -- <file>...
 //
-// or use utils/lint.sh, which also takes dirs and can compile with --native
+// or use utils/lint.sh, which also takes dirs and can compile with --aot
 
 use lex::*;
 

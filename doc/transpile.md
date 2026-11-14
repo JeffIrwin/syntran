@@ -2,7 +2,7 @@
 
 > **Deprecated in 1.8.**  `--transpile` will be removed in a future release,
 > likely 1.9 or 1.10, and it prints a warning when it runs.  Use
-> [`--native` or `--jit`](native.md) instead.
+> [`--aot` or `--jit`](native.md) instead.
 
 Syntran can write a program as modern Fortran source, instead of running it with
 the interpreter.  You then compile that with the Fortran compiler of your choice.

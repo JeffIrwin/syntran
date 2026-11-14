@@ -106,9 +106,9 @@ homepage = "https://github.com/JeffIrwin/syntran"
 blas.build.link = ["lapack", "blas"]
 noblas.preprocess.cpp.macros = "SYNTRAN_NO_BLAS"
 
-# The native backend (`syntran --native`, src/native.F90) compiles through
+# The native backend (`syntran --aot`, src/native.F90) compiles through
 # LLVM.  It's opt-in, because it needs LLVM installed (e.g. `brew install llvm`
-# or `apt install llvm-dev`).  Without it, `--native` is an error.  fpm can't
+# or `apt install llvm-dev`).  Without it, `--aot` is an error.  fpm can't
 # find the libraries itself, so name their directory in LIBRARY_PATH:
 #
 #     export LIBRARY_PATH=$(llvm-config --libdir)

@@ -22,9 +22,9 @@ By default, syntran runs a program on an efficient stack-based bytecode VM with
 performance roughly on par with python. Vectorized array operations use native
 Fortran constructs, offering numpy-like performance without requiring any
 third-party dependencies.  See the [benchmarks](src/benchmarks/README.md).
-Syntran can also [compile a program to a native
-executable](#compiling-natively-with-llvm), or JIT-compile it and run it right
-away, for much more speed.
+Syntran can also compile a program with LLVM, either ahead of time (AOT) to a
+[native executable](#compiling-natively-with-llvm), or just in time (JIT) in
+memory to run it right away, for much more speed.
 
 Syntran can run standalone scripts, serve as a desktop calculator in its REPL,
 or be embedded in Fortran applications through its [API](doc/api.md).
@@ -438,12 +438,12 @@ Note: global block statement is not required as of 0.0.13.  Multiple statements 
 
 ### Compiling natively with LLVM
 
-A syntran which is built with LLVM can also compile a program straight to a
+When built with LLVM, syntran can also AOT-compile a program straight to a
 native executable, with no Fortran compiler involved:
 
 <!-- syntran-begin mode=skip reason="shell invocation example" -->
 ```
-syntran --native fib fib.syntran
+syntran --aot fib fib.syntran
 ./fib
 ```
 <!-- syntran-end -->
@@ -451,12 +451,12 @@ syntran --native fib fib.syntran
 See [doc/native.md](doc/native.md) for what it supports, and how to build
 syntran with it.
 
-To compile a program in memory and run it right away, use `--jit`.
+To JIT-compile a program in memory and run it right away, use `--jit`.
 
 ### Transpiling to Fortran (deprecated)
 
 **Deprecated in 1.8:**  `--transpile` will be removed in a future release, likely
-1.9 or 1.10.  Use `--native` or `--jit` instead.
+1.9 or 1.10.  Use `--aot` or `--jit` instead.
 
 Instead of running a program, `syntran --transpile`
 translates it to a standalone modern Fortran program, which you compile
@@ -515,11 +515,11 @@ Run `syntran -h` to see a comprehensive listing of syntran command-line argument
            instead of running it (deprecated)
        --keep-unused-fns
            With --transpile, also write fns that nothing calls
-   -o, --native <FILE>
-           Compile the program with LLVM to an executable <FILE>
+   -o, --aot <FILE>
+           Compile the program ahead of time with LLVM to an executable <FILE>
            (or an object <FILE>.o, or LLVM IR <FILE>.ll)
    -j, --jit
-           Compile the program with LLVM and run it right away
+           Compile the program just in time with LLVM and run it right away
        --update
            Update to the latest release, by running `synup update`
        -- <ARGS>...
@@ -557,11 +557,11 @@ Run `syntran -h` to see a comprehensive listing of syntran command-line argument
            instead of running it (deprecated)
        --keep-unused-fns
            With --transpile, also write fns that nothing calls
-   -o, --native <FILE>
-           Compile the program with LLVM to an executable <FILE>
+   -o, --aot <FILE>
+           Compile the program ahead of time with LLVM to an executable <FILE>
            (or an object <FILE>.o, or LLVM IR <FILE>.ll)
    -j, --jit
-           Compile the program with LLVM and run it right away
+           Compile the program just in time with LLVM and run it right away
        --update
            Update to the latest release, by running `synup update`
        -- <ARGS>...

@@ -6,7 +6,7 @@ columns, gfortran, and numpy are the best of 3 runs; pure python is a single run
 
 There are three syntran columns, one per backend, all running the same
 .syntran programs.  syntran vm is the bytecode interpreter, which is the default.
-syntran native is an executable made once by `syntran --native`, whose compile
+syntran native is an executable made once by `syntran --aot`, whose compile
 time is not counted, like gfortran's.  syntran jit is `syntran --jit`, which
 compiles in memory on every run, so its time includes the compile.
 

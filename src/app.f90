@@ -305,7 +305,7 @@ function parse_args() result(args)
 			args%transpile = .true.
 			call get_next_arg(i, args%transpile_out)
 
-		case ("-o", "--native")
+		case ("-o", "--aot")
 			args%native = .true.
 			call get_next_arg(i, args%native_out)
 
@@ -415,31 +415,31 @@ function parse_args() result(args)
 		error = .true.
 	end if
 
-	! Same for --native, which also needs a program and a syntran with LLVM
+	! Same for --aot, which also needs a program and a syntran with LLVM
 	if (args%native .and. .not. args%help .and. .not. args%version) then
 		if (.not. (args%syntran_file_arg .or. args%command_arg)) then
-			write(*,*) err_prefix//"--native requires a <file.syntran> "// &
+			write(*,*) err_prefix//"--aot requires a <file.syntran> "// &
 				"or -c <cmd> argument"
 			error = .true.
 		end if
 		if (args%transpile .or. args%syntax_only .or. args%interactive) then
-			write(*,*) err_prefix//"--native cannot be used with --transpile, "// &
+			write(*,*) err_prefix//"--aot cannot be used with --transpile, "// &
 				"--syntax-only, or --interactive"
 			error = .true.
 		end if
 		if (.not. native_available) then
-			write(*,*) err_prefix//"--native requires a syntran that is built "// &
+			write(*,*) err_prefix//"--aot requires a syntran that is built "// &
 				"with LLVM, i.e. with SYNTRAN_LLVM"
 			error = .true.
 		end if
 	end if
 
-	! `syntran --native a.syntran a.syntran` would replace the program with its binary
+	! `syntran --aot a.syntran a.syntran` would replace the program with its binary
 	if (args%native .and. args%syntran_file_arg .and. .not. args%help .and. &
 		.not. args%version) then
 		if (allocated(args%native_out) .and. allocated(args%syntran_file)) then
 			if (args%native_out == args%syntran_file) then
-				write(*,*) err_prefix//"--native output file `"//args%native_out// &
+				write(*,*) err_prefix//"--aot output file `"//args%native_out// &
 					"` is also the input file"
 				error = .true.
 			end if
@@ -450,14 +450,14 @@ function parse_args() result(args)
 	if (args%native .and. .not. args%help .and. .not. args%version) then
 		if (allocated(args%native_out)) then
 			if (args%native_out == "-") then
-				write(*,*) err_prefix//"--native needs an output file name, " &
+				write(*,*) err_prefix//"--aot needs an output file name, " &
 					//"it cannot write to stdout"
 				error = .true.
 			end if
 		end if
 	end if
 
-	! --jit compiles with LLVM like --native, but runs the program instead of
+	! --jit compiles with LLVM like --aot, but runs the program instead of
 	! writing it
 	if (args%jit .and. .not. args%help .and. .not. args%version) then
 		if (.not. (args%syntran_file_arg .or. args%command_arg)) then
@@ -467,7 +467,7 @@ function parse_args() result(args)
 		end if
 		if (args%native .or. args%transpile .or. args%syntax_only .or. &
 			args%interactive) then
-			write(*,*) err_prefix//"--jit cannot be used with --native, "// &
+			write(*,*) err_prefix//"--jit cannot be used with --aot, "// &
 				"--transpile, --syntax-only, or --interactive"
 			error = .true.
 		end if
@@ -499,7 +499,7 @@ function parse_args() result(args)
 			args%native .or. args%jit .or. args%syntax_only .or. args%interactive .or. &
 			args%lex .or. args%parse) then
 			write(*,*) err_prefix//"--update cannot be used with a <file.syntran>, "// &
-				"--command, --transpile, --native, --jit, --syntax-only, or --interactive"
+				"--command, --transpile, --aot, --jit, --syntax-only, or --interactive"
 			error = .true.
 		end if
 	end if
@@ -513,7 +513,7 @@ function parse_args() result(args)
 		if (args%command_arg .or. args%transpile .or. args%native .or. &
 			args%jit .or. args%syntax_only .or. args%interactive) then
 			write(*,*) err_prefix//"--lex cannot be used with --command, "// &
-				"--transpile, --native, --jit, --syntax-only, or --interactive"
+				"--transpile, --aot, --jit, --syntax-only, or --interactive"
 			error = .true.
 		end if
 		if (args%parse) then
@@ -531,7 +531,7 @@ function parse_args() result(args)
 		if (args%command_arg .or. args%transpile .or. args%native .or. &
 			args%jit .or. args%syntax_only .or. args%interactive) then
 			write(*,*) err_prefix//"--parse cannot be used with --command, "// &
-				"--transpile, --native, --jit, --syntax-only, or --interactive"
+				"--transpile, --aot, --jit, --syntax-only, or --interactive"
 			error = .true.
 		end if
 	end if
@@ -630,11 +630,11 @@ function parse_args() result(args)
 			"instead of running it (deprecated)")
 		call print_help_opt("", "--keep-unused-fns", "", &
 			"With --transpile, also write fns that nothing calls")
-		call print_help_opt("-o", "--native", "<FILE>", &
-			"Compile the program with LLVM to an executable <FILE>", &
+		call print_help_opt("-o", "--aot", "<FILE>", &
+			"Compile the program ahead of time with LLVM to an executable <FILE>", &
 			"(or an object <FILE>.o, or LLVM IR <FILE>.ll)")
 		call print_help_opt("-j", "--jit", "", &
-			"Compile the program with LLVM and run it right away")
+			"Compile the program just in time with LLVM and run it right away")
 		call print_help_opt("", "--update", "", &
 			"Update to the latest release, by running `synup update`")
 		call print_help_opt("", "--", "<ARGS>...", &

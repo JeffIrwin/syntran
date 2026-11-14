@@ -17,7 +17,7 @@
 #
 # The syntran programs are run through three backends.  "syntran vm" is the
 # bytecode interpreter.  The other two need LLVM in $SYNTRAN: "syntran native" is
-# an executable made once by `syntran --native` (compile time not counted, like
+# an executable made once by `syntran --aot` (compile time not counted, like
 # fortran), and "syntran jit" is `syntran --jit` (compile time counted).  The
 # fortran column is hand-written, not `syntran --transpile` output.
 # Linking the native executables needs a C compiler, `cc` or $CC
@@ -158,11 +158,11 @@ for f in $BENCHES sweep ; do
 done
 
 if [ "$HAVE_LLVM" = 1 ] ; then
-	echo "Compiling syntran benchmarks with: $SYNTRAN --native" >&2
+	echo "Compiling syntran benchmarks with: $SYNTRAN --aot" >&2
 	for f in $BENCHES sweep ; do
 		rm -f "$BIN/${f}_native"
-		"$SYNTRAN" -q --native "$BIN/${f}_native" "$SRC/$f.syntran" \
-			|| echo "warning: --native failed for $f.  Its native column will be ERR" >&2
+		"$SYNTRAN" -q --aot "$BIN/${f}_native" "$SRC/$f.syntran" \
+			|| echo "warning: --aot failed for $f.  Its native column will be ERR" >&2
 	done
 fi
 
@@ -265,7 +265,7 @@ np_ver=n/a
 	echo
 	echo "There are three syntran columns, one per backend, all running the same"
 	echo ".syntran programs.  syntran vm is the bytecode interpreter, which is the default."
-	echo "syntran native is an executable made once by \`syntran --native\`, whose compile"
+	echo "syntran native is an executable made once by \`syntran --aot\`, whose compile"
 	echo "time is not counted, like gfortran's.  syntran jit is \`syntran --jit\`, which"
 	echo "compiles in memory on every run, so its time includes the compile."
 	echo

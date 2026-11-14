@@ -1,14 +1,19 @@
 # Compiling natively with LLVM
 
 Syntran can compile a program to machine code with [LLVM](https://llvm.org),
-instead of running it with the interpreter.
+instead of running it on the bytecode VM, in one of two ways: ahead of time
+(AOT) with `--aot`, which writes an executable, or just in time (JIT) with
+`--jit`, which compiles in memory and runs the program right away.  Both use
+the same compiler, which this page calls the native backend.
+
+To compile ahead of time:
 
 ```
-syntran --native fib fib.syntran
+syntran --aot fib fib.syntran
 ./fib
 ```
 
-`--native` (or `-o`) takes the output file, then the input is a file, or a command string
+`--aot` (or `-o`) takes the output file, then the input is a file, or a command string
 with `-c`.  What is written depends on the extension of the output:
 
 | Output | What it is |
@@ -17,7 +22,7 @@ with `-c`.  What is written depends on the extension of the output:
 | `fib.o` | An object file, which is not linked |
 | `fib.ll` | The textual LLVM IR, for looking at what the compiler made of the program |
 
-To compile and run a program in one step, without writing a file, use `--jit`
+To JIT-compile and run a program in one step, without writing a file, use `--jit`
 (or `-j`):
 
 ```
@@ -30,11 +35,11 @@ would, so the output and exit status are the same.  It needs LLVM, but no C
 compiler.  The runtime that it uses is the one built into syntran, which is
 compiled with the flags of syntran, not `-ffp-contract=off`, and without BLAS.
 So float results, especially of `@` and `std::solve()`, can differ from an
-executable in the last digits.  Use `--native` if that matters.
+executable in the last digits.  Use `--aot` if that matters.
 
 `--jit` honors `--cd`, so a program's relative file paths are resolved against
 the directory of its source file, as in the interpreter.  An executable made by
-`--native` doesn't, like one made by `--transpile`: its relative paths are
+`--aot` doesn't, like one made by `--transpile`: its relative paths are
 resolved against the directory that it is run from.
 
 By default, the compiled program prints the value of the last statement of the
@@ -49,12 +54,12 @@ same as the interpreter's.
 ## Official Linux binary
 
 The Linux binary from the releases page has the native backend built in, with
-LLVM linked statically, so `--jit` needs nothing else installed.  `--native`
+LLVM linked statically, so `--jit` needs nothing else installed.  `--aot`
 also needs a C compiler to link the executable (`cc`, or `$CC`), and a program
 that uses `@` or `std::solve()` needs BLAS and LAPACK for the linker too, e.g.
 `libopenblas-dev`.  `Dockerfile.rocky` builds it.
 
-The macOS binary has it too, also with LLVM linked statically.  `--native` links
+The macOS binary has it too, also with LLVM linked statically.  `--aot` links
 with `cc` from Xcode's command line tools, and `@` links Accelerate.  It is built
 with `./build.sh release --llvm --blas -- -DSYNTRAN_LLVM_STATIC=ON`, where
 `SYNTRAN_LLVM_STATIC` takes LLVM's component archives from `llvm-config
@@ -62,7 +67,7 @@ with `./build.sh release --llvm --blas -- -DSYNTRAN_LLVM_STATIC=ON`, where
 zstd, or z3 dylibs.
 
 The Windows binary has it too, also with LLVM linked statically, so the package
-is still just `syntran.exe` with no DLLs next to it.  `--native` links with `gcc`
+is still just `syntran.exe` with no DLLs next to it.  `--aot` links with `gcc`
 (or `$CC`), which Windows doesn't come with, so it needs a mingw gcc on the
 `PATH`.  `--jit` needs nothing.  It is built as in
 [Linking LLVM statically on Windows](#linking-llvm-statically-on-windows).
@@ -70,7 +75,7 @@ is still just `syntran.exe` with no DLLs next to it.  `--native` links with `gcc
 ## Building syntran with LLVM
 
 This needs LLVM (version 17 or later) installed.  Without it, syntran builds as
-always and `--native` is an error.  `build.sh` turns the native backend on if it
+always and `--aot` is an error.  `build.sh` turns the native backend on if it
 finds `llvm-config` (including Homebrew's keg-only one), and `--llvm` or
 `--no-llvm` overrides that:
 
@@ -128,7 +133,7 @@ Compiling a program links it with `gcc`, or `$CC`.  A program which uses `@` or
 
 ```powershell
 $env:CC = "gcc -static -fopenmp -L$PWD/build/openblas"
-build\native\bin\syntran --native hello.exe -c 'println(\"hello\");'
+build\native\bin\syntran --aot hello.exe -c 'println(\"hello\");'
 ```
 
 #### Linking LLVM statically on Windows
