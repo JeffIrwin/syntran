@@ -942,7 +942,7 @@
 				"
 			},
 			{
-				"if": "matrix.os == 'ubuntu-24.04'",
+				"if": "matrix.os != 'windows-latest'",
 				"name": "Test lexer port natively",
 				"shell": "bash",
 				"run":
@@ -954,7 +954,7 @@
 				"
 			},
 			{
-				"if": "matrix.os == 'ubuntu-24.04'",
+				"if": "matrix.os != 'windows-latest'",
 				"name": "Test parser port natively",
 				"shell": "bash",
 				"run":
@@ -967,7 +967,7 @@
 				"
 			},
 			{
-				"if": "matrix.os == 'ubuntu-24.04'",
+				"if": "matrix.os != 'windows-latest'",
 				"name": "Lint syntran style natively",
 				"shell": "bash",
 				"run":
