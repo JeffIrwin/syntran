@@ -1,0 +1,12 @@
+// A scalar subscript of 2**63 - 1 in a slice, which became the empty range
+// [i, i + 1) when i + 1 wrapped around, and so skipped the bounds check
+
+let matrix = [
+	0,  1,  2,
+	3,  4,  5,
+	6,  7,  8,
+	9, 10, 11 ;
+	3, 4
+];
+let y_slice = matrix[1,:];
+y_slice = matrix[9223372036854775807,:];

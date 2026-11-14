@@ -10961,6 +10961,7 @@ subroutine unit_test_bounds_check(npass, nfail)
 	integer, intent(inout) :: npass, nfail
 
 	character(len = *), parameter :: label = 'bounds check'
+	character(len = *), parameter :: P = 'src/tests/test-src/errors/'
 
 	if (.not. bounds_check) return
 
@@ -11039,6 +11040,18 @@ subroutine unit_test_bounds_check(npass, nfail)
 			RC_SUBSCRIPT_OOB), &
 		diag_has_code(get_diags( &
 			'struct S {x: i32,} fn g(): [S; :] { return [S{x = 1}]; } println(g()[1].x);'), &
+			RC_SUBSCRIPT_OOB), &
+
+		! A scalar subscript of huge() in a slice: usub = lsub + 1 wraps around,
+		! which made it look like an empty range, and skipped the check
+		diag_has_code(get_diags_file(P//'fuzz-slice-scalar-huge.syntran'), &
+			RC_SUBSCRIPT_OOB), &
+		diag_has_code(get_diags( &
+			'let m = [0; 3, 4]; let y = m[:, 9223372036854775807];'), &
+			RC_SUBSCRIPT_OOB), &
+		diag_has_code(get_diags( &
+			'struct S {a: [i32; :, :],} let s = S{a = [0; 3, 4]}; '// &
+			'let y = s.a[9223372036854775807, :];'), &
 			RC_SUBSCRIPT_OOB) &
 		], label, npass, nfail)
 
@@ -12178,7 +12191,37 @@ subroutine unit_test_fuzz_regressions(npass, nfail)
 			diag_has_code(get_diags_file(P//'fuzz-repeat-huge.syntran'), RC_REPEAT_TOO_LONG), &
 			diag_has_code(get_diags('repeat("ab", 0x7fffffffffffffff);'), RC_REPEAT_TOO_LONG), &
 			.not. diag_has_code(get_diags('repeat("", 0x7fffffffffffffff);'), RC_REPEAT_TOO_LONG), &
-			.not. diag_has_code(get_diags('repeat("ab", 3);'), RC_REPEAT_TOO_LONG) &
+			.not. diag_has_code(get_diags('repeat("ab", 3);'), RC_REPEAT_TOO_LONG), &
+
+			! The element count of a float range overflowed an i32 (default
+			! kind ceiling()), or wasn't finite, and then the fill loop ran off
+			! the end of its allocation
+			diag_has_code(get_diags_file(P//'fuzz-float-range-huge.syntran'), RC_BAD_ARRAY_SIZE), &
+			diag_count_code(get_diags_file(P//'fuzz-float-range-huge.syntran'), &
+				RC_BAD_ARRAY_SIZE) == 1, &
+			diag_has_code(get_diags('let a = [0.0: 1e-300: 5.0];'), RC_BAD_ARRAY_SIZE), &
+			diag_has_code(get_diags('let a = [0.0f: 1e-38f: 5.0f];'), RC_BAD_ARRAY_SIZE), &
+			diag_has_code(get_diags('let a = [0.0: 1.0: 0.0/0.0];'), RC_BAD_ARRAY_SIZE), &
+			diag_has_code(get_diags('let a = [0.0: 1.0: 1.0/0.0];'), RC_BAD_ARRAY_SIZE), &
+			diag_has_code(get_diags('let a = [0.0: 1.0/0.0: 5.0];'), RC_BAD_ARRAY_SIZE), &
+			diag_has_code(get_diags('let a = [-1e308: 1.0: 1e308];'), RC_BAD_ARRAY_SIZE), &
+			.not. diag_has_code(get_diags('let a = [0.0: 0.5: 2.0];'), RC_BAD_ARRAY_SIZE), &
+			eval('size([0.0: 0.5: 2.0], 0);') == '4', &
+			eval('size([1.0: -0.5: -1.0], 0);') == '4', &
+			eval('size([5.0: 1.0: 0.0], 0);') == '0', &
+			eval('size([0.0f: 0.5f: 2.0f], 0);') == '4', &
+
+			! A for loop over a float range had the same i32 overflow in its trip
+			! count.  A count over 2**31 used to run the body 0 times, and one that
+			! wasn't finite was garbage.  The huge but valid ones leave with `break`
+			diag_has_code(get_diags('for x in [0.0: 1e-300: 5.0] { }'), RC_BAD_ARRAY_SIZE), &
+			diag_has_code(get_diags('for x in [0.0f: 1e-38f: 5.0f] { }'), RC_BAD_ARRAY_SIZE), &
+			diag_has_code(get_diags('for x in [0.0: 1.0: 0.0/0.0] { }'), RC_BAD_ARRAY_SIZE), &
+			diag_has_code(get_diags('for x in [0.0: 1.0/0.0: 5.0] { }'), RC_BAD_ARRAY_SIZE), &
+			eval('let n = 0; for x in [0.0: 1e-9: 5.0] { n += 1; break; } n;') == '1', &
+			eval('let n = 0; for x in [0.0f: 1e-9f: 5.0f] { n += 1; break; } n;') == '1', &
+			eval('let n = 0; for x in [0.0: 0.5: 2.0] { n += 1; } n;') == '4', &
+			eval('let n = 0; for x in [5.0: 1.0: 0.0] { n += 1; } n;') == '0' &
 		]
 	call unit_test_coda(tests, label, npass, nfail)
 

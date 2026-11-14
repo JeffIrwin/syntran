@@ -2308,17 +2308,20 @@ module subroutine vm_run(prog, state, res)
 						call rt_throw(state, err_rt(RC_FOR_STEP_ZERO_F, 'for loop step is 0.0'))
 						exit
 					end if
-					for_iters(fi)%len8 = ceiling( &
-						(for_iters(fi)%ubound_%sca%f32 - for_iters(fi)%lbound_%sca%f32) &
-						/ for_iters(fi)%step%sca%f32)
+					call float_range_cap(state, &
+						real(for_iters(fi)%lbound_%sca%f32, 8), &
+						real(for_iters(fi)%step%sca%f32, 8), &
+						real(for_iters(fi)%ubound_%sca%f32, 8), for_iters(fi)%len8)
+					if (state%rt_halt) exit
 				case (f64_type)
 					if (for_iters(fi)%step%sca%f64 == 0.0d0) then
 						call rt_throw(state, err_rt(RC_FOR_STEP_ZERO_F, 'for loop step is 0.0'))
 						exit
 					end if
-					for_iters(fi)%len8 = ceiling( &
-						(for_iters(fi)%ubound_%sca%f64 - for_iters(fi)%lbound_%sca%f64) &
-						/ for_iters(fi)%step%sca%f64)
+					call float_range_cap(state, &
+						for_iters(fi)%lbound_%sca%f64, for_iters(fi)%step%sca%f64, &
+						for_iters(fi)%ubound_%sca%f64, for_iters(fi)%len8)
+					if (state%rt_halt) exit
 				case default
 					write(*,*) err_int(IC_STEP_ARRAY_TYPE, 'step array type not implemented')
 					call internal_error()

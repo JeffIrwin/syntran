@@ -576,18 +576,35 @@ function rt_step_i64(lb, step, ub) result(r)
     r = r(1: j - 1)
 end function rt_step_i64
 
+! Number of elements of the float range [lb: step: ub], computed in f64 even for an f32
+! range so that ub - lb can't overflow.  The step isn't 0.  A bound or step that isn't
+! finite, or more elements than an i64, is an error, and a NaN fails both tests.  The count
+! is compared as a real because converting a big or non-finite one to an integer is undefined
+
+function rt_float_range_len(lb, step, ub) result(n)
+    real(real64), intent(in) :: lb, step, ub
+    integer(int64) :: n
+    real(real64) :: count_
+    n = 0
+    if (.not. (abs(lb) <= huge(lb) .and. abs(step) <= huge(step) .and. abs(ub) <= huge(ub))) &
+        call rt_fatal('float range has a bound or step that is not finite')
+    count_ = (ub - lb) / step
+    if (.not. (count_ < real(huge(n), real64))) call rt_fatal('float range has too many elements')
+    if (count_ > 0) n = ceiling(count_, int64)
+end function rt_float_range_len
+
 function rt_step_f32(lb, step, ub) result(r)
     real(real32), intent(in) :: lb, step, ub
     real(real32), allocatable :: r(:)
     real(real32) :: f
-    integer :: j, cap
+    integer(int64) :: j, cap
     if (.not. (step > 0.0_real32 .or. step < 0.0_real32)) call rt_fatal('array step is 0.0')
-    cap = max(0, ceiling((ub - lb) / step))
+    cap = rt_float_range_len(real(lb, real64), real(step, real64), real(ub, real64))
     allocate(r(cap))
     j = 1
     f = lb
     if ((lb < ub) .neqv. (0 < step)) f = ub
-    do while (((f < ub) .eqv. (lb < ub)) .and. (f < ub .or. f > ub))
+    do while (((f < ub) .eqv. (lb < ub)) .and. (f < ub .or. f > ub) .and. j <= cap)
         r(j) = f
         ! Multiplying instead of repeatedly adding keeps rounding errors from
         ! accumulating, e.g. [0.0: 0.1: 0.9]
@@ -601,14 +618,14 @@ function rt_step_f64(lb, step, ub) result(r)
     real(real64), intent(in) :: lb, step, ub
     real(real64), allocatable :: r(:)
     real(real64) :: f
-    integer :: j, cap
+    integer(int64) :: j, cap
     if (.not. (step > 0.0_real64 .or. step < 0.0_real64)) call rt_fatal('array step is 0.0')
-    cap = max(0, ceiling((ub - lb) / step))
+    cap = rt_float_range_len(lb, step, ub)
     allocate(r(cap))
     j = 1
     f = lb
     if ((lb < ub) .neqv. (0 < step)) f = ub
-    do while (((f < ub) .eqv. (lb < ub)) .and. (f < ub .or. f > ub))
+    do while (((f < ub) .eqv. (lb < ub)) .and. (f < ub .or. f > ub) .and. j <= cap)
         r(j) = f
         f = lb + j * step
         j = j + 1

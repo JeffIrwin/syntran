@@ -1147,6 +1147,22 @@ sy_arr *sy_arr_step_i64(int64_t lb, int64_t step, int64_t ub)
     return a;
 }
 
+/* Number of elements of the float range [lb: step: ub], computed in double even for an f32
+ * range so that ub - lb can't overflow.  The step isn't 0.  A bound or step that isn't finite,
+ * or more elements than an i64, is R48, and a NaN fails both tests.  The count is compared
+ * as a double because converting a big or non-finite one to an integer is undefined */
+static int64_t sy_float_range_len(double lb, double step, double ub)
+{
+    double count;
+
+    if (!(isfinite(lb) && isfinite(step) && isfinite(ub)))
+        sy_rt_error("R48", "float range has a bound or step that is not finite");
+    count = (ub - lb) / step;
+    if (!(count < 9223372036854775808.0))
+        sy_rt_error("R48", "float range has too many elements");
+    return count > 0 ? (int64_t)ceil(count) : 0;
+}
+
 /* A float step multiplies instead of repeatedly adding, so that rounding errors
  * don't accumulate, e.g. [0.0: 0.1: 0.9] */
 sy_arr *sy_arr_step_f32(float lb, float step, float ub)
@@ -1156,11 +1172,12 @@ sy_arr *sy_arr_step_f32(float lb, float step, float ub)
     sy_arr *a;
 
     if (!(step > 0.0f || step < 0.0f)) sy_rt_error("R26", "array step is 0.0");
-    cap = (int64_t)ceilf((ub - lb) / step);
-    a = sy_arr_new1(SY_F32, cap > 0 ? cap : 0);
+    cap = sy_float_range_len(lb, step, ub);
+    sy_arr_len_check(1, &cap);
+    a = sy_arr_new1(SY_F32, cap);
     f = lb;
     if ((lb < ub) != (0 < step)) f = ub;
-    while (((f < ub) == (lb < ub)) && (f < ub || f > ub)) {
+    while (((f < ub) == (lb < ub)) && (f < ub || f > ub) && j < cap) {
         ((float *)a->data)[j] = f;
         j++;
         f = lb + (float)j * step;
@@ -1176,11 +1193,12 @@ sy_arr *sy_arr_step_f64(double lb, double step, double ub)
     sy_arr *a;
 
     if (!(step > 0.0 || step < 0.0)) sy_rt_error("R26", "array step is 0.0");
-    cap = (int64_t)ceil((ub - lb) / step);
-    a = sy_arr_new1(SY_F64, cap > 0 ? cap : 0);
+    cap = sy_float_range_len(lb, step, ub);
+    sy_arr_len_check(1, &cap);
+    a = sy_arr_new1(SY_F64, cap);
     f = lb;
     if ((lb < ub) != (0 < step)) f = ub;
-    while (((f < ub) == (lb < ub)) && (f < ub || f > ub)) {
+    while (((f < ub) == (lb < ub)) && (f < ub || f > ub) && j < cap) {
         ((double *)a->data)[j] = f;
         j++;
         f = lb + (double)j * step;

@@ -633,6 +633,50 @@ end function slice_len
 
 !===============================================================================
 
+subroutine float_range_cap(state, lb, step, ub, cap)
+
+	! Number of elements of the float range `[lb: step: ub]`, or an R48 runtime
+	! error if there are too many to count or if lb, step, or ub isn't finite.
+	! The caller must check state%rt_halt immediately after.  The caller has
+	! already rejected a step of 0.  It is used for the capacity of the array
+	! expression (runtime_control.f90's eval_array_expr, step_array kind) and
+	! for the count of OP_FOR_SETUP (vm_exec.f90)
+	!
+	! The count is computed in f64, even for an f32 range, so that `ub - lb`
+	! can't overflow, and it's compared to huge() as a real, since ceiling()
+	! of a big or non-finite count into an integer is undefined.  The
+	! comparisons are written so that a NaN fails them.  The array expression's
+	! fill loop stops at cap too, and then shrinks the array to what it filled,
+	! because whole-array ops like `a + b` assume that size(a) == a%len_
+
+	type(state_t), intent(inout) :: state
+	real(kind = 8), intent(in) :: lb, step, ub
+	integer(kind = 8), intent(out) :: cap
+
+	real(kind = 8) :: count_
+
+	cap = 0
+
+	if (.not. (abs(lb) <= huge(lb) .and. abs(step) <= huge(step) &
+			.and. abs(ub) <= huge(ub))) then
+		call rt_throw(state, err_rt(RC_BAD_ARRAY_SIZE, &
+			'float range has a bound or step that is not finite'))
+		return
+	end if
+
+	count_ = (ub - lb) / step
+	if (.not. (count_ < real(huge(cap), 8))) then
+		call rt_throw(state, err_rt(RC_BAD_ARRAY_SIZE, &
+			'float range has too many elements'))
+		return
+	end if
+
+	if (count_ > 0) cap = ceiling(count_, kind = 8)
+
+end subroutine float_range_cap
+
+!===============================================================================
+
 end module syntran__runtime_m
 
 !===============================================================================

@@ -1164,6 +1164,10 @@ module subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, r
 			end if
 			if (node%lsubscripts(i)%sub_kind == arr_sub) then
 				call check_arr_sub_bound(state, i, rank_, asubs(i), sz)
+			else if (node%lsubscripts(i)%sub_kind == scalar_sub) then
+				! Not an empty range, even though usub = lsub + 1 wraps to a
+				! negative for lsub = huge()
+				call check_bound(state, lsubs(i), i, rank_, sz)
 			else
 				len_ = slice_len(lsubs(i), ssubs(i), usubs(i))
 				call check_range_bound(state, i, rank_, lsubs(i), ssubs(i), len_, sz)
@@ -1983,6 +1987,9 @@ module subroutine field_slice_bounds(member_node, field_val, state, rank_slice, 
 		if (bounds_check) then
 			if (member_node%lsubscripts(i)%sub_kind == arr_sub) then
 				call check_arr_sub_bound(state, i, rank_, asubs(i), sz)
+			else if (member_node%lsubscripts(i)%sub_kind == scalar_sub) then
+				! See get_subscript_range()
+				call check_bound(state, lsub, i, rank_, sz)
 			else
 				len_ = slice_len(lsub, ssub, usub)
 				call check_range_bound(state, i, rank_, lsub, ssub, len_, sz)

@@ -674,16 +674,23 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 				return
 			end if
 
-			array%cap = ceiling((ubound_%sca%f32 - lbound_%sca%f32) / step%sca%f32)
-			allocate(array%f32( array%cap ))
+			call float_range_cap(state, &
+				real(lbound_%sca%f32, 8), real(step%sca%f32, 8), real(ubound_%sca%f32, 8), &
+				array%cap)
+			if (state%rt_halt) return
+			allocate(array%f32( array%cap ), stat = alloc_stat)
+			if (alloc_stat /= 0) then
+				call rt_throw(state, err_rt_bad_array_size([array%cap]))
+				return
+			end if
 
-			j = 1
+			j8 = 1
 			f = lbound_%sca%f32
 			if (lbound_%sca%f32 < ubound_%sca%f32 .neqv. 0 < step%sca%f32) f = ubound_%sca%f32
 
 			do while ((f  < ubound_%sca%f32 .eqv. lbound_%sca%f32 < ubound_%sca%f32) &
-			     .and. f /= ubound_%sca%f32)
-				array%f32(j) = f
+			     .and. f /= ubound_%sca%f32 .and. j8 <= array%cap)
+				array%f32(j8) = f
 
 				! Using only addition here seems more efficient, but
 				! rounding errors accumulate differently.  Compare
@@ -692,12 +699,17 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 				! in 0.8
 
 				!f = f + step%sca%f32
-				f = lbound_%sca%f32 + j * step%sca%f32
+				f = lbound_%sca%f32 + j8 * step%sca%f32
 
-				j = j + 1
+				j8 = j8 + 1
 			end do
-			array%len_ = j - 1
+			array%len_ = j8 - 1
 			!array%len_ = array%cap
+
+			if (array%len_ < array%cap) then
+				array%f32 = array%f32(1: array%len_)
+				array%cap = array%len_
+			end if
 
 		else if (array%type == f64_type) then
 
@@ -709,16 +721,22 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 				return
 			end if
 
-			array%cap = ceiling((ubound_%sca%f64 - lbound_%sca%f64) / step%sca%f64)
-			allocate(array%f64( array%cap ))
+			call float_range_cap(state, &
+				lbound_%sca%f64, step%sca%f64, ubound_%sca%f64, array%cap)
+			if (state%rt_halt) return
+			allocate(array%f64( array%cap ), stat = alloc_stat)
+			if (alloc_stat /= 0) then
+				call rt_throw(state, err_rt_bad_array_size([array%cap]))
+				return
+			end if
 
-			j = 1
+			j8 = 1
 			f64 = lbound_%sca%f64
 			if (lbound_%sca%f64 < ubound_%sca%f64 .neqv. 0 < step%sca%f64) f64 = ubound_%sca%f64
 
 			do while ((f64  < ubound_%sca%f64 .eqv. lbound_%sca%f64 < ubound_%sca%f64) &
-			     .and. f64 /= ubound_%sca%f64)
-				array%f64(j) = f64
+			     .and. f64 /= ubound_%sca%f64 .and. j8 <= array%cap)
+				array%f64(j8) = f64
 
 				! Using only addition here seems more efficient, but
 				! rounding errors accumulate differently.  Compare
@@ -727,12 +745,17 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 				! in 0.8
 
 				!f64 = f64 + step%sca%f64
-				f64 = lbound_%sca%f64 + j * step%sca%f64
+				f64 = lbound_%sca%f64 + j8 * step%sca%f64
 
-				j = j + 1
+				j8 = j8 + 1
 			end do
-			array%len_ = j - 1
+			array%len_ = j8 - 1
 			!array%len_ = array%cap
+
+			if (array%len_ < array%cap) then
+				array%f64 = array%f64(1: array%len_)
+				array%cap = array%len_
+			end if
 
 		else
 			write(*,*) err_int(IC_STEP_ARRAY_TYPE, 'step array type eval not implemented')
