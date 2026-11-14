@@ -147,6 +147,7 @@ module syntran__errors_m
 		EC_UNTYPED_NULL = "E129", &
 		EC_NATIVE_UNSUPPORTED = "E130", &
 		EC_MOVE_NOT_VAR = "E131", &
+		EC_BREAK_OUTSIDE_LOOP = "E132", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -239,6 +240,7 @@ module syntran__errors_m
 		RC_NULL_MEMBER = "R47", &
 		RC_BAD_ARRAY_SIZE = "R48", &
 		RC_CAST_STR_LEN = "R49", &
+		RC_REPEAT_TOO_LONG = "R50", &
 		WC_MISSING_RETURN = "W1"
 
 	! A text span indicates which characters to underline in a faulty line of
@@ -907,6 +909,13 @@ module syntran__errors_m
 			character(len = :), allocatable :: err
 		end function err_move_not_var
 
+		module function err_break_outside_loop(context, span, keyword) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+			character(len = *), intent(in) :: keyword
+		end function err_break_outside_loop
+
 		module function err_native_unsupported(context, span, what) result(err)
 			type(text_context_t) :: context
 			type(text_span_t), intent(in) :: span
@@ -1218,6 +1227,11 @@ module syntran__errors_m
 			integer(kind = 8), intent(in) :: ncopies
 			character(len = :), allocatable :: err
 		end function err_rt_repeat_negative
+
+		module function err_rt_repeat_too_long(ncopies, len_) result(err)
+			integer(kind = 8), intent(in) :: ncopies, len_
+			character(len = :), allocatable :: err
+		end function err_rt_repeat_too_long
 
 		module function err_rt_bad_array_size(sizes) result(err)
 			integer(kind = 8), intent(in) :: sizes(:)

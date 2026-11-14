@@ -72,6 +72,10 @@ module syntran__parse_m
 		! scope.
 		logical :: in_fn_body = .false.
 
+		! How many `for`/`while` bodies enclose the statement being parsed, within the
+		! current fn.  A `break` or `continue` in a fn body with none is E132
+		integer :: loop_depth = 0
+
 		! True while parsing an imported module's translation unit (as
 		! opposed to the main program).  See in_fn_body above.
 		logical :: is_module = .false.

@@ -9473,6 +9473,11 @@ subroutine unit_test_error_codes(npass, nfail)
 			.not. diag_has_code(get_diags('struct S{v:[i32; :],} let s = S{v=[1]}; ' &
 				//'let b = std::move(s.v);'), EC_MOVE_NOT_VAR), &
 
+			! E132: break or continue in a fn, outside of a loop
+			diag_count_code(get_diags_file(P//'E132-break-outside-loop.syntran'), &
+				EC_BREAK_OUTSIDE_LOOP) == 1, &
+			diag_has_code(get_diags('fn f() { continue; }'), EC_BREAK_OUTSIDE_LOOP), &
+
 			! E130: no valid program is known that the native backend can't compile any
 			! more, so there is no example of it (a `for` over a scalar is reported,
 			! but the interpreter crashes on it).  std::caller() used to be one
@@ -10873,6 +10878,12 @@ subroutine unit_test_runtime_errors(npass, nfail)
 			diag_has_code(get_diags('let a = [1.5; 9223372036854775807];'), RC_BAD_ARRAY_SIZE), &
 			diag_has_code(get_diags('let a = [0; 4611686018427387904, 4];'), RC_BAD_ARRAY_SIZE), &
 			diag_has_code(get_diags('let a = [0: 9223372036854775807];'), RC_BAD_ARRAY_SIZE), &
+			! ... and a count that doesn't overflow, but that allocate() can't get memory for
+			! (2^60 elements of 8 bytes is more than any address space), which it
+			! reports with stat=
+			diag_has_code(get_diags("let a = [0'i64; 0x0fffffffffffffff];"), RC_BAD_ARRAY_SIZE), &
+			diag_has_code(get_diags('let a = ["x"; 0x0fffffffffffffff];'), RC_BAD_ARRAY_SIZE), &
+			diag_has_code(get_diags('let a = [0: 0x0fffffffffffffff];'), RC_BAD_ARRAY_SIZE), &
 			.not. diag_has_code(get_diags('let n = 0; let a = [0; n]; println(size(a, 0));'), &
 				RC_BAD_ARRAY_SIZE), &
 			.not. diag_has_code(get_diags('let a = [0; 0, 9223372036854775807];'), &
@@ -10898,7 +10909,15 @@ subroutine unit_test_runtime_errors(npass, nfail)
 			diag_has_code(get_diags('println(i64(["a", "", "c"]));'), RC_CAST_STR_LEN), &
 			.not. diag_has_code(get_diags('println(i32("A"));'), RC_CAST_STR_LEN), &
 			.not. diag_has_code(get_diags('println(i64("A"));'), RC_CAST_STR_LEN), &
-			.not. diag_has_code(get_diags('println(i32(["a", "b"]));'), RC_CAST_STR_LEN) &
+			.not. diag_has_code(get_diags('println(i32(["a", "b"]));'), RC_CAST_STR_LEN), &
+
+			! R50: repeat() with a result that is too long.  A negative count is R39
+			rt_code_both_file(P//'R50-repeat-too-long.syntran', RC_REPEAT_TOO_LONG), &
+			diag_count_code(get_diags_file(P//'R50-repeat-too-long.syntran'), &
+				RC_REPEAT_TOO_LONG) == 1, &
+			diag_has_code(get_diags('println(repeat("ab", 0x7fffffffffffffff));'), &
+				RC_REPEAT_TOO_LONG), &
+			.not. diag_has_code(get_diags('println(repeat("ab", -1));'), RC_REPEAT_TOO_LONG) &
 		]
 
 	! R33: out-of-bounds subscript.  Only reachable in builds compiled with
@@ -11795,6 +11814,8 @@ subroutine unit_test_error_locations(npass, nfail)
 				EC_UNTYPED_NULL, P//'E129-untyped-null.syntran', 9, 1, 18), &
 			diag_loc_ok(get_diags_file(P//'E131-move-not-variable.syntran'), &
 				EC_MOVE_NOT_VAR, P//'E131-move-not-variable.syntran', 9, 20, 6), &
+			diag_loc_ok(get_diags_file(P//'E132-break-outside-loop.syntran'), &
+				EC_BREAK_OUTSIDE_LOOP, P//'E132-break-outside-loop.syntran', 14, 3, 5), &
 
 			! The source is the exact bytes of the file, so a CRLF reaches the
 			! lexer, and it's one line end, not two.  A lone CR is still one.  The
@@ -12119,7 +12140,45 @@ subroutine unit_test_fuzz_regressions(npass, nfail)
 
 			! A zero-length name is an error in libgfortran's get_environment_variable
 			diag_has_code(get_diags('let v = std::getenv("");'), RC_GETENV_UNSET), &
-			eval('std::hasenv("");') == 'false' &
+			eval('std::hasenv("");') == 'false', &
+
+			! `break` and `continue` in a fn body outside of a loop left the fn without a
+			! value, and the caller hit I33
+			diag_has_code(get_diags_file(P//'fuzz-break-in-fn.syntran'), EC_BREAK_OUTSIDE_LOOP), &
+			diag_count_code(get_diags_file(P//'fuzz-break-in-fn.syntran'), &
+				EC_BREAK_OUTSIDE_LOOP) == 2, &
+			diag_has_code(get_diags('fn f() { { break; } }'), EC_BREAK_OUTSIDE_LOOP), &
+			! ... but a loop in the fn body, at any depth, is fine, also with a switch
+			.not. diag_has_code(get_diags('fn f() { for i in [0: 3] { if i == 1 break; } }'), &
+				EC_BREAK_OUTSIDE_LOOP), &
+			.not. diag_has_code(get_diags('fn f() { while true { { continue; } } }'), &
+				EC_BREAK_OUTSIDE_LOOP), &
+			.not. diag_has_code(get_diags( &
+				'fn f(n: i32) { while true { switch n { case 3 { break; } } } }'), &
+				EC_BREAK_OUTSIDE_LOOP), &
+			! ... and the loop doesn't extend past its own body, or into a later fn
+			diag_has_code(get_diags('fn f() { for i in [0: 3] { } continue; }'), &
+				EC_BREAK_OUTSIDE_LOOP), &
+			diag_has_code(get_diags('fn f() { while true { break; } } fn g() { break; }'), &
+				EC_BREAK_OUTSIDE_LOOP), &
+			! ... and at the top level, `break` still leaves a block
+			.not. diag_has_code(get_diags('let n = 1; { n += 1; break; n += 1; }'), &
+				EC_BREAK_OUTSIDE_LOOP), &
+
+			! The length of a sliced str overflowed for a step near the max i64
+			eval('let s = "hello"; s[:0x7fffffffffffffff:];') == 'h', &
+			eval('let s = "hello"; s[:-0x7fffffffffffffff-1:];') == 'o', &
+			eval('let s = "hello"; s[:0x7fffffffffffffff:2];') == 'h', &
+			eval('let s = "hello"; s[4:-0x7fffffffffffffff-1:-2];') == 'o', &
+			eval('let s = "hello"; s[0:2:5];') == 'hlo', &
+			eval('let s = "hello"; s[4:-1:-1];') == 'olleh', &
+			eval('let s = "hello"; s[4:-2:-1];') == 'olh', &
+
+			! repeat() overflowed the length of its result.  An empty str is fine
+			diag_has_code(get_diags_file(P//'fuzz-repeat-huge.syntran'), RC_REPEAT_TOO_LONG), &
+			diag_has_code(get_diags('repeat("ab", 0x7fffffffffffffff);'), RC_REPEAT_TOO_LONG), &
+			.not. diag_has_code(get_diags('repeat("", 0x7fffffffffffffff);'), RC_REPEAT_TOO_LONG), &
+			.not. diag_has_code(get_diags('repeat("ab", 3);'), RC_REPEAT_TOO_LONG) &
 		]
 	call unit_test_coda(tests, label, npass, nfail)
 

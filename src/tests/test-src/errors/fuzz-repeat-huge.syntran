@@ -1,0 +1,4 @@
+// repeat() with a count so big that the length of the result overflowed
+
+let title = "abc";
+let status = repeat(title, 9223372036854775807) == "abcabc";

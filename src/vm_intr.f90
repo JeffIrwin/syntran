@@ -41,7 +41,8 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 	integer :: env_len, env_stat, sys_stat, sys_cstat
 	integer :: red_inner, red_n, red_outer, red_op
 	integer :: solve_n, solve_nrhs, solve_info
-	integer(kind = 8) :: ir, ic, ncopies, bad_len
+	integer :: repeat_stat
+	integer(kind = 8) :: ir, ic, ncopies, bad_len, repeat_n
 
 	logical :: exists_, red_ok, ok_
 
@@ -479,8 +480,28 @@ module subroutine vm_call_intr(intr_id, nargs, args, state, res)
 			call rt_throw(state, err_rt_repeat_negative(ncopies))
 			return
 		end if
+		! The length of the result only has to fit in an i64.  Whether there is
+		! memory for it is up to allocate(), since gfortran's repeat() aborts when it
+		! can't allocate
+		repeat_n = len(args(1)%str%s, 8)
+		if (repeat_n > 0) then
+			if (ncopies > huge(0_8) / repeat_n) then
+				call rt_throw(state, err_rt_repeat_too_long(ncopies, repeat_n))
+				return
+			end if
+		end if
 		if (.not. allocated(res%str)) allocate(res%str)
-		res%str%s = repeat(args(1)%str%s, ncopies)
+		if (allocated(res%str%s)) deallocate(res%str%s)
+		allocate(character(len = repeat_n * ncopies) :: res%str%s, stat = repeat_stat)
+		if (repeat_stat /= 0) then
+			call rt_throw(state, err_rt_repeat_too_long(ncopies, repeat_n))
+			return
+		end if
+		if (repeat_n > 0) then
+			do ir = 1, ncopies
+				res%str%s((ir - 1) * repeat_n + 1: ir * repeat_n) = args(1)%str%s
+			end do
+		end if
 
 	case (INTR_PARSE_I32, INTR_PARSE_I64, INTR_PARSE_F32, INTR_PARSE_F64, INTR_PARSE_BOOL)
 		! Bad text is a runtime error here.  The by-ref `ok` form is in

@@ -235,9 +235,10 @@ module syntran__runtime_m
 			type(value_t), intent(out) :: val
 		end subroutine
 
-		module subroutine allocate_array(val, cap)
+		module subroutine allocate_array(val, cap, stat)
 			type(value_t), intent(inout) :: val
 			integer(kind = 8), intent(in) :: cap
+			integer, intent(out), optional :: stat
 		end subroutine
 
 		module subroutine check_array_len(state, sizes, len_)

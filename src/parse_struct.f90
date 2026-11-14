@@ -947,6 +947,7 @@ recursive module subroutine parse_method_declaration(parser, decl, struct, is_co
 	integer :: fn_src_id
 
 	logical :: overwrite, const_param, in_fn_body0, no_fn_kw0
+	integer :: loop_depth0
 
 	type(fn_t) :: fn
 
@@ -1114,8 +1115,11 @@ recursive module subroutine parse_method_declaration(parser, decl, struct, is_co
 
 	in_fn_body0 = parser%in_fn_body
 	parser%in_fn_body = .true.
+	loop_depth0 = parser%loop_depth
+	parser%loop_depth = 0
 	call parser%parse_statement(body)
 	parser%in_fn_body = in_fn_body0
+	parser%loop_depth = loop_depth0
 
 	if (.not. parser%returned .and. fn%type%type /= void_type) then
 		span = new_span(fn_beg, fn_name_end - fn_beg + 1)

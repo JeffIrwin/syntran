@@ -1,0 +1,5 @@
+// R50: repeat-too-long
+// repeat() was given a count that makes its result too long to allocate
+
+let n = 0x7fffffffffffffff;
+let s = repeat("ab", n);

@@ -867,6 +867,12 @@ argument is E42, and a const variable is E83.)
 
 [Example](../src/tests/test-src/errors/E131-move-not-variable.syntran)
 
+### E132 -- break-outside-loop
+
+A `break` or `continue` in a fn or method body that isn't inside a `for` or `while` loop in that same fn.  At the top level of a program, a `break` can leave a block, but a fn body isn't a block to leave early, and it would return no value to its caller.  Use `return` to leave a fn.
+
+[Example](../src/tests/test-src/errors/E132-break-outside-loop.syntran)
+
 ## Internal errors
 
 ### I1 -- eval-unary-type
@@ -1364,7 +1370,7 @@ A member was read or assigned through an optional struct (`?Node`) that is `null
 
 ### R48 -- bad-array-size
 
-An array was built with a negative extent, like `[0; n]` with `n = -1`, or with more than 2^40 elements, which is too many to allocate.  An extent of zero is fine, and gives an empty array.  A range like `[7: 3]` whose upper bound is below its lower bound is also fine, and is empty.  The sizes can come from the program, so they aren't known until runtime.
+An array was built with a negative extent, like `[0; n]` with `n = -1`, or with too many elements to allocate: the count overflows an `i64`, or there isn't enough memory for the array.  An extent of zero is fine, and gives an empty array.  A range like `[7: 3]` whose upper bound is below its lower bound is also fine, and is empty.  The sizes can come from the program, so they aren't known until runtime.
 
 [Example](../src/tests/test-src/errors/R48-bad-array-size.syntran)
 
@@ -1373,6 +1379,12 @@ An array was built with a negative extent, like `[0; n]` with `n = -1`, or with 
 [`i32()`](intrinsics.md#i32) or [`i64()`](intrinsics.md#i64) was given a string that doesn't have exactly 1 character, or an array with such an element.  Only a single character has an integer value, its ASCII code.  To read a number from a string, use `parse_i32()` or `parse_i64()` instead.
 
 [Example](../src/tests/test-src/errors/R49-cast-str-len.syntran)
+
+### R50 -- repeat-too-long
+
+[`repeat()`](intrinsics.md#repeat) was given a count that makes its result too big to allocate: its length overflows an `i64`, or there isn't enough memory for it.  A negative count is [R39](#r39----repeat-negative) instead.
+
+[Example](../src/tests/test-src/errors/R50-repeat-too-long.syntran)
 
 ## Warnings
 

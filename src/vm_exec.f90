@@ -3689,6 +3689,7 @@ module subroutine vm_run(prog, state, res)
 			block
 			integer :: rk_, k_
 			integer(kind=8) :: dims_(MAX_NAT_UNIF_RANK), len_tot_
+			integer :: alloc_stat_
 			type(value_t) :: fill_
 
 			rk_     = instr%b
@@ -3709,7 +3710,12 @@ module subroutine vm_run(prog, state, res)
 			val%array%len_     = len_tot_
 			allocate(val%array%size(rk_))
 			val%array%size(1:rk_) = dims_(1:rk_)
-			call allocate_array(val, len_tot_)
+			call allocate_array(val, len_tot_, alloc_stat_)
+			if (alloc_stat_ /= 0) then
+				call rt_throw(state, err_rt_bad_array_size(dims_(1:rk_)))
+				val%array%len_ = 0
+				exit
+			end if
 
 			select case (instr%a)
 			case (bool_type); val%array%bool = fill_%sca%bool
@@ -3729,6 +3735,7 @@ module subroutine vm_run(prog, state, res)
 		case (OP_BOUND_ARRAY_NAT)
 			block
 			integer(kind=8) :: lb_, ub_, len_, k8_
+			integer :: alloc_stat_
 
 			ub_ = stack%v(stack%len_  )%to_i64()
 			lb_ = stack%v(stack%len_-1)%to_i64()
@@ -3745,7 +3752,12 @@ module subroutine vm_run(prog, state, res)
 			val%array%len_     = len_
 			allocate(val%array%size(1))
 			val%array%size(1)  = len_
-			call allocate_array(val, len_)
+			call allocate_array(val, len_, alloc_stat_)
+			if (alloc_stat_ /= 0) then
+				call rt_throw(state, err_rt_bad_array_size([len_]))
+				val%array%len_ = 0
+				exit
+			end if
 
 			select case (instr%a)
 			case (i32_type)

@@ -1,0 +1,5 @@
+// a step that is near the max i64 overflowed the length of a sliced str
+
+let rs = "hello world";
+println(rs[:9223372036854775807:]);
+println(rs[:-9223372036854775807-1:]);

@@ -106,6 +106,7 @@ module subroutine parse_break_statement(parser, statement)
 	type(syntax_token_t) :: break_token, semi
 
 	call parser%match(break_keyword, break_token)
+	call check_in_loop(parser, break_token%pos, "break")
 	statement%kind = break_statement
 	call parser%match(semicolon_token, semi)
 
@@ -121,10 +122,34 @@ module subroutine parse_continue_statement(parser, statement)
 	type(syntax_token_t) :: continue_token, semi
 
 	call parser%match(continue_keyword, continue_token)
+	call check_in_loop(parser, continue_token%pos, "continue")
 	statement%kind = continue_statement
 	call parser%match(semicolon_token, semi)
 
 end subroutine parse_continue_statement
+
+!===============================================================================
+
+subroutine check_in_loop(parser, pos, keyword)
+
+	! A `break` or `continue` in a fn body has to be in a loop in that fn body.  At the
+	! top level, a `break` can leave a block, and `continue` is a no-op, but there is
+	! no block to leave from a fn
+
+	class(parser_t) :: parser
+	integer, intent(in) :: pos
+	character(len = *), intent(in) :: keyword
+
+	!********
+
+	type(text_span_t) :: span
+
+	if (.not. parser%in_fn_body .or. parser%loop_depth > 0) return
+
+	span = new_span(pos, len(keyword))
+	call parser%diagnostics%push(err_break_outside_loop(parser%context(), span, keyword))
+
+end subroutine check_in_loop
 
 !===============================================================================
 
@@ -910,7 +935,9 @@ recursive module subroutine parse_for_statement(parser, statement)
 
 	end if
 
+	parser%loop_depth = parser%loop_depth + 1
 	call parser%parse_statement(body)
+	parser%loop_depth = parser%loop_depth - 1
 
 	statement%kind       = for_statement
 	statement%identifier = identifier
@@ -952,7 +979,9 @@ recursive module subroutine parse_while_statement(parser, statement)
 			"while-loop"))
 	end if
 
+	parser%loop_depth = parser%loop_depth + 1
 	call parse_scoped_statement(parser, body)
+	parser%loop_depth = parser%loop_depth - 1
 
 	statement%kind = while_statement
 	call syntax_node_move(condition, statement%condition)

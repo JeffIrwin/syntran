@@ -573,6 +573,7 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 
 	integer :: i, j, k
 	integer(kind = 8) :: i8, j8, n_elems8
+	integer :: alloc_stat
 
 	logical :: is_cat
 
@@ -628,7 +629,11 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 			array%cap = array%len_
 
 			!print *, 'cap = ', array%cap
-			allocate(array%i32( array%cap ))
+			allocate(array%i32( array%cap ), stat = alloc_stat)
+			if (alloc_stat /= 0) then
+				call rt_throw(state, err_rt_bad_array_size([array%len_]))
+				return
+			end if
 
 			! Step may be negative.  Every element is within the bounds, so
 			! the int() can't overflow
@@ -648,7 +653,11 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 			if (state%rt_halt) return
 			array%cap = array%len_
 
-			allocate(array%i64( array%cap ))
+			allocate(array%i64( array%cap ), stat = alloc_stat)
+			if (alloc_stat /= 0) then
+				call rt_throw(state, err_rt_bad_array_size([array%len_]))
+				return
+			end if
 
 			! Step may be negative
 			do j8 = 1, array%len_
@@ -752,7 +761,11 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 
 		if (array%type == f32_type) then
 
-			allocate(array%f32( array%cap ))
+			allocate(array%f32( array%cap ), stat = alloc_stat)
+			if (alloc_stat /= 0) then
+				call rt_throw(state, err_rt_bad_array_size([array%len_]))
+				return
+			end if
 			fstep = (ubound_%sca%f32 - lbound_%sca%f32) &
 				/ real((len_%to_i64() - 1))
 
@@ -762,7 +775,11 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 
 		else if (array%type == f64_type) then
 
-			allocate(array%f64( array%cap ))
+			allocate(array%f64( array%cap ), stat = alloc_stat)
+			if (alloc_stat /= 0) then
+				call rt_throw(state, err_rt_bad_array_size([array%len_]))
+				return
+			end if
 			fstep64 = (ubound_%sca%f64 - lbound_%sca%f64) &
 				/ real((len_%to_i64() - 1), 8)
 
@@ -814,7 +831,12 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 		if (state%rt_halt) return
 		!print *, 'res%array%len_ = ', res%array%len_
 
-		call allocate_array(res, res%array%len_)
+		call allocate_array(res, res%array%len_, alloc_stat)
+		if (alloc_stat /= 0) then
+			call rt_throw(state, err_rt_bad_array_size(res%array%size))
+			res%array%len_ = 0
+			return
+		end if
 		select case (res%array%type)
 		case (i32_type)
 			res%array%i32 = lbound_%sca%i32
@@ -941,7 +963,12 @@ recursive module subroutine eval_array_expr(node, state, res, slots)
 		call check_array_len(state, [res%array%len_], res%array%len_)
 		if (state%rt_halt) return
 
-		call allocate_array(res, res%array%len_)
+		call allocate_array(res, res%array%len_, alloc_stat)
+		if (alloc_stat /= 0) then
+			call rt_throw(state, err_rt_bad_array_size([res%array%len_]))
+			res%array%len_ = 0
+			return
+		end if
 
 		!print *, 'bounds in [', lbound_%to_str(), ': ', ubound_%to_str(), ']'
 		!print *, 'node%val%array%type = ', node%val%array%type

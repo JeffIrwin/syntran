@@ -333,6 +333,7 @@ module procedure get_all_error_codes
 	call codes%push(EC_UNTYPED_NULL)
 	call codes%push(EC_NATIVE_UNSUPPORTED)
 	call codes%push(EC_MOVE_NOT_VAR)
+	call codes%push(EC_BREAK_OUTSIDE_LOOP)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -425,6 +426,7 @@ module procedure get_all_error_codes
 	call codes%push(RC_NULL_MEMBER)
 	call codes%push(RC_BAD_ARRAY_SIZE)
 	call codes%push(RC_CAST_STR_LEN)
+	call codes%push(RC_REPEAT_TOO_LONG)
 	call codes%push(WC_MISSING_RETURN)
 end procedure get_all_error_codes
 
@@ -1414,6 +1416,17 @@ end procedure err_move_not_var
 
 !===============================================================================
 
+module procedure err_break_outside_loop
+
+	err = err_pre(EC_BREAK_OUTSIDE_LOOP) &
+		//"`"//keyword//"` in a fn has to be inside a `for` or `while` loop in that fn, because " &
+		//"a fn body is not a block that it can leave early.  Use `return` to leave a fn" &
+		//underline(context, span)//" not in a loop"//color_reset
+
+end procedure err_break_outside_loop
+
+!===============================================================================
+
 module procedure err_native_unsupported
 
 	err = err_pre(EC_NATIVE_UNSUPPORTED) &
@@ -2088,14 +2101,29 @@ end procedure err_rt_repeat_negative
 
 !===============================================================================
 
+module procedure err_rt_repeat_too_long
+
+	! Runtime (R50) error for repeat() whose result can't be allocated, because its
+	! length overflows an i64 or there isn't enough memory
+
+	err = err_rt(RC_REPEAT_TOO_LONG, &
+		"repeat() of a string of length "//str(len_)//" "//str(ncopies)//" times is too long: "// &
+		"the result is too big to allocate")
+
+end procedure err_rt_repeat_too_long
+
+
+!===============================================================================
+
 module procedure err_rt_bad_array_size
 
 	! Runtime (R48) error for an array that is built with a negative extent, or
-	! with so many elements that it can't be allocated
+	! with so many elements that it can't be allocated (the count overflows, or
+	! there isn't enough memory)
 
 	err = err_rt(RC_BAD_ARRAY_SIZE, &
 		"invalid array size "//dims_str(sizes)//": extents must not be negative, "// &
-		"and the array must have at most 2^40 elements")
+		"and the array must be small enough to allocate")
 
 end procedure err_rt_bad_array_size
 

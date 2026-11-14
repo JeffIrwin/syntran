@@ -473,6 +473,9 @@ sy_str *sy_str_repeat(const sy_str *s, int64_t n)
     int64_t i;
 
     if (n < 0) sy_rt_error("R39", "ncopies argument of repeat() is negative: %lld", (long long)n);
+    if (s->len > 0 && n > ((int64_t)INT64_MAX - 64) / s->len)
+        sy_rt_error("R50", "repeat() of a string of length %lld %lld times is too long: "
+            "the result is too big to allocate", (long long)s->len, (long long)n);
     r = sy_str_alloc(s->len * n);
     for (i = 0; i < n; i++) memcpy(r->data + i * s->len, s->data, (size_t)s->len);
     return r;
@@ -933,9 +936,10 @@ static void sy_dims_str(char *buf, size_t cap, int32_t rank, const int64_t *size
         n += (size_t)snprintf(buf + n, cap - n, k > 0 ? " x %lld" : "%lld", (long long)size[k]);
 }
 
-/* An array whose extents come from the program can't have a negative one, or more than 2^40
- * elements in all, which is the interpreter's limit too.  An empty array is fine no matter
- * how big its other extents are */
+/* An array whose extents come from the program can't have a negative one, or so many
+ * elements in all that the size of its data in bytes overflows (8 is the biggest element).
+ * Past that, it is up to malloc().  An empty array is fine no matter how big its other
+ * extents are */
 static void sy_arr_len_check(int32_t rank, const int64_t *sizes)
 {
     char dims[256];
@@ -951,14 +955,14 @@ static void sy_arr_len_check(int32_t rank, const int64_t *sizes)
             if (sizes[k] == 0) return;
         }
         for (k = 0; k < rank && !bad; k++) {
-            if (len > ((int64_t)1 << 40) / sizes[k]) bad = 1;
+            if (len > (INT64_MAX / 8) / sizes[k]) bad = 1;
             else len *= sizes[k];
         }
     }
     if (!bad) return;
     sy_dims_str(dims, sizeof dims, rank, sizes);
     sy_rt_error("R48", "invalid array size %s: extents must not be negative, and the array "
-        "must have at most 2^40 elements", dims);
+        "must be small enough to allocate", dims);
 }
 
 /* std::reshape() needs as many elements in the new shape as there are */

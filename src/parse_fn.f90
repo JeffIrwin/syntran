@@ -816,6 +816,7 @@ recursive module subroutine parse_fn_declaration(parser, decl, no_fn_kw)
 	integer :: fn_src_id
 
 	logical :: overwrite, const_param, in_fn_body0, no_fn_kw0
+	integer :: loop_depth0
 
 	type(fn_t) :: fn
 
@@ -1017,8 +1018,11 @@ recursive module subroutine parse_fn_declaration(parser, decl, no_fn_kw)
 	! (nested fns aren't allowed, but save/restore defensively anyway)
 	in_fn_body0 = parser%in_fn_body
 	parser%in_fn_body = .true.
+	loop_depth0 = parser%loop_depth
+	parser%loop_depth = 0
 	call parser%parse_statement(body)
 	parser%in_fn_body = in_fn_body0
+	parser%loop_depth = loop_depth0
 
 	! A void fn has nothing to return, so the lack of any return statement is
 	! not an error for it.  Only non-void fns require at least one return

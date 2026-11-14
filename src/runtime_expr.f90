@@ -370,19 +370,16 @@ module function str_char_slice(s, node, state, isub, slots) result(out)
 	! copies the whole string on every iteration, making a length-L slice
 	! O(L^2) -- disastrous for string-heavy hot loops (e.g. repeated slicing
 	! in a tight loop over a long string).
-	if (step > 0) then
-		n_out = max(0_8, (iu - il + step - 1) / step)
-	else
-		n_out = max(0_8, (il - iu - step - 1) / (-step))
-	end if
+	! The count is computed without adding `step` to anything, since a huge step
+	! would overflow
+	n_out = 0
+	if (step > 0 .and. iu > il) n_out = (iu - il - 1) / step + 1
+	if (step < 0 .and. il > iu) n_out = (iu - il + 1) / step + 1
 	allocate(character(len = n_out) :: out)
 
-	i8 = il
-	j8 = 1
-	do while ((step > 0 .and. i8 < iu) .or. (step < 0 .and. i8 > iu))
+	do j8 = 1, n_out
+		i8 = il + (j8 - 1) * step
 		out(j8:j8) = s(i8+1 : i8+1)
-		i8 = i8 + step
-		j8 = j8 + 1
 	end do
 
 end function str_char_slice

@@ -651,7 +651,7 @@ end subroutine get_file_member
 
 !===============================================================================
 
-subroutine alloc_array_prim(arr, cap, ok)
+subroutine alloc_array_prim(arr, cap, ok, stat)
 
 	! Shared per-type allocate() dispatch for allocate_array()/new_array()
 	! below.  Only handles the primitive element types that both callers
@@ -660,57 +660,84 @@ subroutine alloc_array_prim(arr, cap, ok)
 	!
 	! ok is returned .false. for an unhandled type so each caller can keep
 	! emitting its own existing internal-error code/message
+	!
+	! stat is nonzero if the allocation failed, e.g. for an overflowing or too big
+	! cap.  A caller that has no way to report that, like new_array(), doesn't pass
+	! it, and the failure is fatal
 
 	type(array_t), intent(inout) :: arr
 	integer(kind = 8), intent(in) :: cap
 	logical, intent(out) :: ok
+	integer, intent(out), optional :: stat
+
+	integer :: stat_
 
 	ok = .true.
+	stat_ = 0
 	select case (arr%type)
 	case (i32_type)
-		allocate(arr%i32( cap ))
+		allocate(arr%i32( cap ), stat = stat_)
 
 	case (i64_type)
-		allocate(arr%i64( cap ))
+		allocate(arr%i64( cap ), stat = stat_)
 
 	case (f32_type)
-		allocate(arr%f32( cap ))
+		allocate(arr%f32( cap ), stat = stat_)
 
 	case (f64_type)
-		allocate(arr%f64( cap ))
+		allocate(arr%f64( cap ), stat = stat_)
 
 	case (bool_type)
-		allocate(arr%bool( cap ))
+		allocate(arr%bool( cap ), stat = stat_)
 
 	case (str_type)
-		allocate(arr%str( cap ))
+		allocate(arr%str( cap ), stat = stat_)
 
 	case default
 		ok = .false.
 	end select
 
+	if (present(stat)) then
+		stat = stat_
+	else if (stat_ /= 0) then
+		write(*,*) 'Fatal error: out of memory allocating an array'
+		call internal_error()
+	end if
+
 end subroutine alloc_array_prim
 
 !===============================================================================
 
-module subroutine allocate_array(val, cap)
+module subroutine allocate_array(val, cap, stat)
+
+	! If stat is passed, it is nonzero when there wasn't enough memory.  Without
+	! it, that is fatal.  The sizes that come from the program are checked by
+	! check_array_len() first, and pass stat to report R48
 
 	type(value_t), intent(inout) :: val
 	integer(kind = 8), intent(in) :: cap
+	integer, intent(out), optional :: stat
 
 	!! always done in caller
 	!if (.not. allocated(val%array)) allocate(val%array)
 
 	logical :: ok
+	integer :: stat_
 
 	val%array%cap = cap
 
 	if (any(val%array%type == [struct_type, enum_type])) then
-		allocate(val%struct( cap ))
+		allocate(val%struct( cap ), stat = stat_)
+		if (present(stat)) then
+			stat = stat_
+		else if (stat_ /= 0) then
+			write(*,*) 'Fatal error: out of memory allocating an array'
+			call internal_error()
+		end if
 		return
 	end if
 
-	call alloc_array_prim(val%array, cap, ok)
+	call alloc_array_prim(val%array, cap, ok, stat)
 	if (.not. ok) then
 		write(*,*) err_int(IC_ALLOC_ARRAY_TYPE, 'cannot allocate array of type `' &
 			//type_name_primitive(val%array%type)//'`')
@@ -724,19 +751,19 @@ end subroutine allocate_array
 module subroutine check_array_len(state, sizes, len_)
 
 	! Total number of elements of an array with the extents `sizes`, or an R48
-	! runtime error (and len_ = 0) if an extent is negative or the array is too
-	! large to allocate.  Call this before allocate_array() with a length that
+	! runtime error (and len_ = 0) if an extent is negative or the element count
+	! overflows an i64.  Call this before allocate_array() with a length that
 	! comes from the program, e.g. `[0; n]`.  The caller must check
 	! state%rt_halt immediately after
 	!
-	! The limit is far below huge(0_8), so that the element count times the size
-	! of an element, even a struct, can't overflow when the memory is allocated
+	! Whether there is memory for that many elements is not decided here, because
+	! it depends on the system.  allocate() reports that with stat=, which
+	! includes the count times the size of an element overflowing, and the caller
+	! reports it as R48 too
 
 	type(state_t), intent(inout) :: state
 	integer(kind = 8), intent(in) :: sizes(:)
 	integer(kind = 8), intent(out) :: len_
-
-	integer(kind = 8), parameter :: max_len = 2_8**40
 
 	integer :: i
 
@@ -752,7 +779,7 @@ module subroutine check_array_len(state, sizes, len_)
 
 	len_ = 1
 	do i = 1, size(sizes)
-		if (len_ > max_len / sizes(i)) then
+		if (len_ > huge(0_8) / sizes(i)) then
 			len_ = 0
 			call rt_throw(state, err_rt_bad_array_size(sizes))
 			return
