@@ -8940,6 +8940,13 @@ subroutine unit_test_error_codes(npass, nfail)
 			diag_count_code(get_diags('1 + ;'), EC_UNEXPECTED_TOKEN) == 1, &
 			diag_count_code(get_diags('1 +'), EC_UNEXPECTED_TOKEN) == 1, &
 			diag_has_text(get_diags('1 +'), 'end of input'), &
+			! "expected X, found Y", with what is missing first.  End of input
+			! is not a token, so it isn't called an unexpected one
+			diag_has_text(get_diags('let x = 0'), 'expected `;`, found end of input'), &
+			.not. diag_has_text(get_diags('let x = 0'), 'unexpected token end'), &
+			diag_has_text(get_diags('let x = 0'), 'expected `;` here'), &
+			diag_has_text(get_diags('let x = (1 + 2;'), 'expected `)`, found `;`'), &
+			diag_has_text(get_diags('let x = (1 + 2;'), 'unexpected token'), &
 			diag_has_code(get_diags( &
 				'fn f() { let x = 1; } let a = f();'), EC_VOID_ASSIGN), &
 			! Void fns have nothing to return, so they must not also trigger
@@ -11842,7 +11849,27 @@ subroutine unit_test_error_locations(npass, nfail)
 
 			! The last line has no line feed
 			diag_loc_ok(get_diags('let a = 1;'//line_feed//'let b = ;'), &
-				EC_UNEXPECTED_TOKEN, '<stdin>', 2, 9, 1) &
+				EC_UNEXPECTED_TOKEN, '<stdin>', 2, 9, 1), &
+
+			! A missing `;` is reported right after the last token of the
+			! unfinished line, not on the token that starts a later line.  At
+			! the end of the input it is already there
+			diag_loc_ok(get_diags('let x = 0'), &
+				EC_UNEXPECTED_TOKEN, '<stdin>', 1, 10, 1), &
+			diag_loc_ok(get_diags('let x = 0'//line_feed//line_feed), &
+				EC_UNEXPECTED_TOKEN, '<stdin>', 1, 10, 1), &
+			diag_loc_ok(get_diags('let x = 0'//line_feed//'let y = 1;'), &
+				EC_UNEXPECTED_TOKEN, '<stdin>', 1, 10, 1), &
+			diag_loc_ok(get_diags('let x = 0'//carriage_return//line_feed//'let y = 1;'), &
+				EC_UNEXPECTED_TOKEN, '<stdin>', 1, 10, 1), &
+			diag_loc_ok(get_diags('let x = "hi"'//line_feed//'let y = 1;'), &
+				EC_UNEXPECTED_TOKEN, '<stdin>', 1, 13, 1), &
+			diag_loc_ok(get_diags('fn f() {'//line_feed//tab//'let x = 0'//line_feed//'}'), &
+				EC_UNEXPECTED_TOKEN, '<stdin>', 2, 11, 1), &
+
+			! No move when the offending token is on the same line
+			diag_loc_ok(get_diags('let x = 0 1;'), &
+				EC_UNEXPECTED_TOKEN, '<stdin>', 1, 11, 1) &
 		]
 
 	call unit_test_coda(tests, label, npass, nfail)

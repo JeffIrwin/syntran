@@ -583,11 +583,11 @@ module syntran__errors_m
 			character(len = *), intent(in) :: c
 		end function err_unexpected_char
 
-		module function err_unexpected_token(context, span, got, expect) result(err)
+		module function err_unexpected_token(context, span, got, expect, label) result(err)
 			type(text_context_t) :: context
 			type(text_span_t), intent(in) :: span
 			character(len = :), allocatable :: err
-			character(len = *), intent(in) :: got, expect
+			character(len = *), intent(in) :: got, expect, label
 		end function err_unexpected_token
 
 		module function err_void_assign(context, span, var) result(err)

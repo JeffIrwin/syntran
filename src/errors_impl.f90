@@ -784,10 +784,11 @@ module procedure err_unexpected_token
 
 	! `got` and `expect` are already fully formatted by the caller (got_desc()/
 	! expect_desc() in parse_misc.f90), e.g. "`4`"/"an identifier"/
-	! "end of input", so they aren't quoted again here
+	! "end of input", so they aren't quoted again here.  `label` is the text
+	! next to the caret, which the caller picks because it also picks the span
 	err = err_pre(EC_UNEXPECTED_TOKEN) &
-		//'unexpected token '//got//', expected '//expect &
-		//underline(context, span)//" unexpected token"//color_reset
+		//'expected '//expect//', found '//got &
+		//underline(context, span)//" "//label//color_reset
 
 end procedure err_unexpected_token
 
