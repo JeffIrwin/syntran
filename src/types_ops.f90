@@ -352,6 +352,9 @@ module integer function get_keyword_kind(text) result(kind)
 		case ("when")
 			kind = when_keyword
 
+		case ("null")
+			kind = null_keyword
+
 		case default
 			kind = identifier_token
 
@@ -391,7 +394,7 @@ module logical function is_identifier_or_keyword(kind)
 		let_keyword, if_keyword, else_keyword, for_keyword, in_keyword, &
 		while_keyword, fn_keyword, struct_keyword, enum_keyword, include_keyword, &
 		return_keyword, break_keyword, continue_keyword, use_keyword, &
-		switch_keyword, case_keyword, default_keyword, when_keyword &
+		switch_keyword, case_keyword, default_keyword, when_keyword, null_keyword &
 	])
 
 end function is_identifier_or_keyword
@@ -407,9 +410,9 @@ module logical function is_assignment_op(op)
 
 	is_assignment_op = any(op == [equals_token, plus_equals_token, &
 		minus_equals_token, star_equals_token, slash_equals_token, &
-		sstar_equals_token, percent_equals_token, &
+		double_star_equals_token, percent_equals_token, &
 		amp_equals_token, pipe_equals_token, caret_equals_token, &
-		lless_equals_token, ggreater_equals_token])
+		double_less_equals_token, double_greater_equals_token])
 
 end function is_assignment_op
 
@@ -469,9 +472,9 @@ module logical function is_binary_op_allowed(left, op, right, left_arr, right_ar
 
 			end if
 
-		case (minus_token, star_token, sstar_token, slash_token, &
+		case (minus_token, star_token, double_star_token, slash_token, &
 			minus_equals_token, star_equals_token, slash_equals_token, &
-			sstar_equals_token, percent_token, percent_equals_token)
+			double_star_equals_token, percent_token, percent_equals_token)
 			! these operators work on numbers but not strings
 
 			if (left == array_type .and. right == array_type) then
@@ -512,8 +515,8 @@ module logical function is_binary_op_allowed(left, op, right, left_arr, right_ar
 			end if
 
 		case ( &
-				lless_token, ggreater_token, &
-				lless_equals_token, ggreater_equals_token)
+				double_less_token, double_greater_token, &
+				double_less_equals_token, double_greater_equals_token)
 
 			! Bitwise shift operators work on any combination of ints
 
@@ -564,7 +567,22 @@ module logical function is_binary_op_allowed(left, op, right, left_arr, right_ar
 
 			! `array = scalar` is allowed but `scalar = array` is not
 
-			if (left == array_type) then
+			if (left == struct_type .and. right == null_type) then
+				! Only an optional can hold null, which is checked when the types
+				! of the whole values are matched
+				allowed = .true.
+
+			else if (left == array_type .and. right == array_type) then
+				! The elements have to agree like scalars do.  Otherwise
+				! `ints = [true]` got through to the evaluator, which has no such
+				! conversion (I34)
+				allowed = &
+					left_arr == unknown_type .or. right_arr == unknown_type .or. &
+					(is_float_type(left_arr) .and. is_float_type(right_arr)) .or. &
+					(is_int_type  (left_arr) .and. is_int_type  (right_arr)) .or. &
+					(left_arr == right_arr)
+
+			else if (left == array_type) then
 				allowed = &
 					(is_float_type(left_arr) .and. is_float_type(right)) .or. &
 					(is_int_type  (left_arr) .and. is_int_type  (right)) .or. &
@@ -578,10 +596,18 @@ module logical function is_binary_op_allowed(left, op, right, left_arr, right_ar
 
 			end if
 
-		case (eequals_token, bang_equals_token)
+		case (double_equals_token, bang_equals_token)
 
 			if (left == file_type .or. right == file_type) then
 				allowed = .false.
+				return
+			end if
+
+			! `x == null` and `x != null` are the only equality on a struct
+			if (left == null_type .or. right == null_type) then
+				allowed = &
+					(left  == null_type .or. left  == struct_type) .and. &
+					(right == null_type .or. right == struct_type)
 				return
 			end if
 
@@ -660,7 +686,24 @@ module logical function is_binary_op_allowed_val(left, op, right) &
 	allowed = is_binary_op_allowed(left%type, op, right%type, larrtype, rarrtype)
 	if (.not. allowed) return
 
-	if (left%type == struct_type) then
+	! A compound assignment can't grow a scalar into an array, same as the plain
+	! `=` (which is_binary_op_allowed() already rejects).  `i += [1]` would
+	! otherwise get through to the evaluator, which has no such operation
+	if (is_assignment_op(op) .and. op /= equals_token .and. &
+		left%type /= array_type .and. right%type == array_type) then
+		allowed = .false.
+		return
+	end if
+
+	! Only an optional (`?Struct`) can be assigned null.  `x == null` is fine for
+	! any struct, though
+	if (op == equals_token .and. right%type == null_type .and. &
+		left%type == struct_type .and. .not. left%is_opt) then
+		allowed = .false.
+		return
+	end if
+
+	if (left%type == struct_type .and. right%type == struct_type) then
 		! Prefer the alias-independent struct_cookie (set at struct
 		! declaration time) so the same struct reached via two different
 		! module aliases/import paths is still recognized as the same type.
@@ -810,7 +853,7 @@ module integer function get_binary_op_prec(kind) result(prec)
 		! unary ops, like Fortran.  It is also right-associative, which
 		! parse_expr() handles.  See the matching note on get_unary_op_prec
 		! above
-		case (sstar_token)
+		case (double_star_token)
 			prec = 12
 
 		case (star_token, slash_token, percent_token, matmul_token)
@@ -819,7 +862,7 @@ module integer function get_binary_op_prec(kind) result(prec)
 		case (plus_token, minus_token)
 			prec = 9
 
-		case (lless_token, ggreater_token) ! `<<`, `>>`
+		case (double_less_token, double_greater_token) ! `<<`, `>>`
 			prec = 8
 
 		case (amp_token) ! `&`
@@ -835,7 +878,7 @@ module integer function get_binary_op_prec(kind) result(prec)
 				greater_token, greater_equals_token)
 			prec = 4
 
-		case (eequals_token, bang_equals_token)
+		case (double_equals_token, bang_equals_token)
 			prec = 3
 
 		case (and_keyword)  ! `and` (logical, not bitwise)
@@ -905,7 +948,7 @@ recursive module integer function get_binary_op_kind( &
 
 	select case (op)
 	case ( &
-			eequals_token, bang_equals_token, less_token, less_equals_token, &
+			double_equals_token, bang_equals_token, less_token, less_equals_token, &
 			greater_token, greater_equals_token)
 		!print *, 'bool_type'
 
@@ -918,7 +961,7 @@ recursive module integer function get_binary_op_kind( &
 			kind_ = bool_type
 		end if
 
-	case (lless_token, ggreater_token)
+	case (double_less_token, double_greater_token)
 		! Bitwise shifts return the left operand's type for scalars
 		if (left == array_type .or. right == array_type) then
 
@@ -1116,6 +1159,11 @@ recursive module integer function types_match(a, b) result(io)
 
 	io = TYPE_MATCH
 
+	! Only an optional (`?Struct`) can be null.  A `?Struct` value is accepted
+	! where a plain struct is expected, and a null then fails at the first member
+	! access (R47), like an unallocated component in Fortran
+	if (a%is_opt .and. b%type == null_type) return
+
 	! Note that is_binary_op_allowed() specifically allows operations on unknown
 	! types.  Maybe we should allow unknowns here too.  Test cases such as
 	! instantiating a struct with a fn that hasn't been defined above
@@ -1270,6 +1318,199 @@ module integer function matmul_out_rank(lrank, rrank) result(out_rank)
 	end if
 
 end function matmul_out_rank
+
+!===============================================================================
+
+module function parse_dump(node) result(str_)
+
+	! Dump the typed tree, one node per line, for `syntran --parse`.  It is used
+	! to test the syntran port of the parser in compiler/parse.syntran, which
+	! prints the same format:
+	!
+	!     <2*depth spaces><role> <kind_name> [field=value ...]
+	!
+	! `role` is the name of the parent's member that holds the node, like `left`
+	! or `args[2]`, and the root's is `root`.  A field is only printed when it is
+	! set, in this fixed order:
+	!
+	!     id=<text>@<pos>  op=<text>@<pos>  type=<type>  slot=<g|l><id>
+	!     field=<id>  val=<literal>  sub=<sub_kind>  lomit  uomit
+	!     ref=<-|r|c per param>  root=<kind>  enum_name  locs=<n>
+	!     params=<slots>  pos=<src_pos>  prefix=<module>  struct=<name>
+	!
+	! `pos`, `slot`, `field`, and `params` are 0-based, unlike the parser's own
+	! 1-based ones, since syntran is 0-based.  A `field` is what the `member` of
+	! a dot_expr has instead of a `slot`, since it indexes the struct's members
+	! and not a variable.  Children are walked
+	! in the order of their declaration in syntax_node_t, so a new child member
+	! has to be added to dump_node() below.  utils/check-node-sync.sh checks that
+	! every member is either dumped there or exempt
+
+	type(syntax_node_t), intent(in) :: node
+	character(len = :), allocatable :: str_
+
+	!********
+
+	type(char_vector_t) :: sb
+
+	sb = new_char_vector()
+	call dump_node(sb, node, "root", 0, .false.)
+	str_ = sb%trim()
+
+end function parse_dump
+
+!===============================================================================
+
+recursive subroutine dump_node(sb, node, role, depth, is_sub)
+
+	! One node of parse_dump().  `is_sub` is set for the elements of a subscript
+	! list, which are the only nodes that have a sub_kind
+
+	type(char_vector_t), intent(inout) :: sb
+	type(syntax_node_t), intent(in) :: node
+	character(len = *), intent(in) :: role
+	integer, intent(in) :: depth
+	logical, intent(in) :: is_sub
+
+	!********
+
+	character :: c
+	character(len = :), allocatable :: refs
+
+	integer :: i
+
+	call sb%push(repeat("  ", depth)//role//" "//kind_name(node%kind))
+
+	! The pos of a token is 0 if it was never set, e.g. on the identifier of a
+	! fn_call_ptr_expr, and then there is no `@pos`
+	if (allocated(node%identifier%text)) then
+		call sb%push(" id="//escape_dump(node%identifier%text))
+		if (node%identifier%pos > 0) call sb%push("@"//str(node%identifier%pos - 1))
+	end if
+	if (allocated(node%op%text)) then
+		call sb%push(" op="//escape_dump(node%op%text))
+		if (node%op%pos > 0) call sb%push("@"//str(node%op%pos - 1))
+	end if
+
+	call sb%push(" type="//value_type_name(node%val))
+
+	! The id of a fn, struct, or enum is its index in a table that the trailer of
+	! the dump lists in id order, and a call is identified by its name.  The ids
+	! of fns also count the intrinsic fns, which a port is free to number
+	! differently, so none of them are dumped
+	select case (node%kind)
+	case (fn_declaration, fn_call_expr, fn_ref_expr, method_call_expr, &
+			struct_declaration, enum_declaration)
+		continue
+	case default
+		if (node%id_index /= 0) then
+			if (role == "member") then
+				! The member of a dot_expr, which is the only node with this role
+				call sb%push(" field="//str(node%id_index - 1))
+			else
+				call sb%push(" slot="//merge("l", "g", node%is_loc)// &
+					str(node%id_index - 1))
+			end if
+		end if
+	end select
+
+	! The text of a float literal is already in id, and it has more digits than
+	! its value does
+	if (node%kind == literal_expr .and. node%val%type /= f32_type .and. &
+		node%val%type /= f64_type) then
+		call sb%push(" val="//escape_dump(node%val%to_str()))
+	end if
+
+	if (is_sub) call sb%push(" sub="//kind_name(node%sub_kind))
+	if (node%lsub_omit) call sb%push(" lomit")
+	if (node%usub_omit) call sb%push(" uomit")
+
+	if (allocated(node%is_ref)) then
+		refs = ""
+		do i = 1, size(node%is_ref)
+			! Fortran doesn't short-circuit, so the allocation is checked first.  A
+			! call has is_ref but not is_const_ref
+			c = "-"
+			if (node%is_ref(i)) c = "r"
+			if (allocated(node%is_const_ref)) then
+				if (node%is_const_ref(i)) c = "c"
+			end if
+			refs = refs//c
+		end do
+		call sb%push(" ref="//refs)
+	end if
+
+	if (node%root_kind /= 0) call sb%push(" root="//kind_name(node%root_kind))
+	if (node%is_enum_name) call sb%push(" enum_name")
+
+	! num_locs has no default value, so it's only set on these
+	select case (node%kind)
+	case (fn_declaration, fn_call_expr, method_call_expr)
+		call sb%push(" locs="//str(node%num_locs))
+	end select
+
+	if (allocated(node%params)) then
+		call sb%push(" params=")
+		do i = 1, size(node%params)
+			if (i > 1) call sb%push(",")
+			call sb%push(str(node%params(i) - 1))
+		end do
+	end if
+
+	if (node%src_pos > 0) call sb%push(" pos="//str(node%src_pos - 1))
+	if (allocated(node%module_prefix)) call sb%push(" prefix="//node%module_prefix)
+	if (allocated(node%struct_name)) call sb%push(" struct="//node%struct_name)
+	call sb%push(line_feed)
+
+	if (allocated(node%left       )) call dump_node(sb, node%left       , "left"       , depth + 1, .false.)
+	if (allocated(node%right      )) call dump_node(sb, node%right      , "right"      , depth + 1, .false.)
+	call dump_list(sb, node%members, "members", depth + 1, .false.)
+	if (allocated(node%condition  )) call dump_node(sb, node%condition  , "condition"  , depth + 1, .false.)
+	if (allocated(node%if_clause  )) call dump_node(sb, node%if_clause  , "if_clause"  , depth + 1, .false.)
+	if (allocated(node%else_clause)) call dump_node(sb, node%else_clause, "else_clause", depth + 1, .false.)
+	if (allocated(node%body       )) call dump_node(sb, node%body       , "body"       , depth + 1, .false.)
+	if (allocated(node%array      )) call dump_node(sb, node%array      , "array"      , depth + 1, .false.)
+	if (allocated(node%member     )) call dump_node(sb, node%member     , "member"     , depth + 1, .false.)
+	if (allocated(node%lbound_    )) call dump_node(sb, node%lbound_    , "lbound"     , depth + 1, .false.)
+	if (allocated(node%step       )) call dump_node(sb, node%step       , "step"       , depth + 1, .false.)
+	if (allocated(node%ubound_    )) call dump_node(sb, node%ubound_    , "ubound"     , depth + 1, .false.)
+	if (allocated(node%len_       )) call dump_node(sb, node%len_       , "len"        , depth + 1, .false.)
+	call dump_list(sb, node%elems, "elems", depth + 1, .false.)
+	if (allocated(node%rank       )) call dump_node(sb, node%rank       , "rank"       , depth + 1, .false.)
+	call dump_list(sb, node%lsubscripts, "lsubscripts", depth + 1, .true.)
+	call dump_list(sb, node%size_, "size", depth + 1, .false.)
+	call dump_list(sb, node%args, "args", depth + 1, .false.)
+	call dump_list(sb, node%usubscripts, "usubscripts", depth + 1, .true.)
+	call dump_list(sb, node%ssubscripts, "ssubscripts", depth + 1, .true.)
+
+end subroutine dump_node
+
+!===============================================================================
+
+recursive subroutine dump_list(sb, list, role, depth, is_sub)
+
+	! A list member of dump_node().  The role of an element is `<role>[i]`, with
+	! a 0-based i
+
+	type(char_vector_t), intent(inout) :: sb
+	type(syntax_node_t), allocatable, intent(in) :: list(:)
+	character(len = *), intent(in) :: role
+	integer, intent(in) :: depth
+	logical, intent(in) :: is_sub
+
+	!********
+
+	integer :: i
+
+	if (.not. allocated(list)) return
+	do i = 1, size(list)
+		! The parser allocates all three subscript lists at the same size, but a
+		! subscript only fills one of them.  The others are left empty
+		if (is_sub .and. list(i)%kind == 0) cycle
+		call dump_node(sb, list(i), role//"["//str(i - 1)//"]", depth, is_sub)
+	end do
+
+end subroutine dump_list
 
 !===============================================================================
 

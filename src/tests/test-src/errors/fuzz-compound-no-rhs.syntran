@@ -1,0 +1,5 @@
+// Fuzz regression: a compound assignment with no right-hand side used to
+// crash the E111 check, because lsubscripts was never allocated
+
+let sum_ = 0;
+sum_ +=

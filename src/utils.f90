@@ -26,11 +26,13 @@ module syntran__utils_m
 			FG_BOLD_            = esc//'[;1m', &
 			FG_BRIGHT_RED_      = esc//'[91m', &
 			FG_BOLD_BRIGHT_RED_ = esc//'[91;1m', &
+			FG_BOLD_BRIGHT_GREEN_ = esc//'[92;1m', &
 			FG_BRIGHT_GREEN_    = esc//'[92m', &
 			FG_GREEN_           = esc//'[32m', &
 			FG_BRIGHT_BLUE_     = esc//'[94m', &
 			FG_BRIGHT_MAGENTA_  = esc//'[95m', &
 			FG_BRIGHT_CYAN_     = esc//'[96m', &
+			FG_BOLD_BRIGHT_CYAN_ = esc//'[96;1m', &
 			FG_BRIGHT_WHITE_    = esc//'[97m', &
 			FG_BOLD_YELLOW_     = esc//'[1;33m', &
 			COLOR_RESET_        = esc//'[0m'
@@ -40,11 +42,13 @@ module syntran__utils_m
 			fg_bold, &
 			fg_bright_red, &
 			fg_bold_bright_red, &
+			fg_bold_bright_green, &
 			fg_bright_green, &
 			fg_green, &
 			fg_bright_blue, &
 			fg_bright_magenta, &
 			fg_bright_cyan, &
+			fg_bold_bright_cyan, &
 			fg_bright_white, &
 			fg_bold_yellow, &
 			color_reset
@@ -220,6 +224,11 @@ module syntran__utils_m
 			character(len = :), allocatable :: str_
 		end function trim_char_vector
 
+		module function escape_dump(str_) result(esc)
+			character(len = *), intent(in) :: str_
+			character(len = :), allocatable :: esc
+		end function escape_dump
+
 		module subroutine push_all_string(vector, add)
 			class(string_vector_t) :: vector
 			type(string_vector_t), intent(in) :: add
@@ -353,6 +362,15 @@ module syntran__utils_m
 			character(len = *), intent(in) :: str_, old, new
 			character(len = :), allocatable :: str_out
 		end function replace_all
+
+		module function is_windows() result(r)
+			logical :: r
+		end function is_windows
+
+		module function sh_quote(s) result(r)
+			character(len = *), intent(in) :: s
+			character(len = :), allocatable :: r
+		end function sh_quote
 
 		module function tabs2spaces(str_) result(str_out)
 			character(len = *), intent(in)  :: str_

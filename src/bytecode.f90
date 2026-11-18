@@ -229,7 +229,36 @@ module syntran__bytecode_m
 		OP_GT_STR           = 1244, &
 		OP_GE_STR           = 1245, &
 		OP_EQ_ARRAY         = 1247, &
-		OP_CALL_INTR_REF    = 1248
+		OP_CALL_INTR_REF    = 1248, &
+		OP_IS_NULL          = 1249, &
+		OP_IS_NULL_MEMBER   = 1250, &
+		OP_TAKE_MEMBER      = 1251, &
+		OP_LOAD_REF_MEMBER  = 1252, &
+		OP_MOVE_LOCAL       = 1253, &
+		OP_MOVE_GLOBAL      = 1254, &
+		OP_MOVE_MEMBER      = 1255
+
+	! Moves instead of copies for recursive structs (linked lists).  A struct
+	! variable load deep-copies the whole value, so `cur != null` and
+	! `cur = cur.next` would be O(n) each, and walking a list O(n**2)
+	!
+	! OP_IS_NULL: `x == null` or `x != null` for a variable x, without loading it.
+	! a = slot, b = 1 for `!=`, c = 1 if x is a local.  Pushes a bool
+	!
+	! OP_IS_NULL_MEMBER: the same for a plain dot chain `x.a.b` with no
+	! subscripts.  a = prog%nodes index of the dot_expr, b = 1 for `!=`.  A null
+	! in the middle of the chain is R47, like a load of the member would be
+	!
+	! OP_TAKE_MEMBER: `x = x.a.b` for struct/null members and a plain dot chain.
+	! a = prog%nodes index of the RHS dot_expr, whose id_index/is_loc is x.  The
+	! member is moved out of x, then x is overwritten by it.  Pushes an empty
+	! value if the next op is OP_POP, else a copy of the new x
+	!
+	! OP_LOAD_REF_MEMBER: a by-ref call arg that is a plain dot chain `x.a.b`, e.g.
+	! the receiver `next` of `next.push(v)`.  a = prog%nodes index of the dot_expr.
+	! Like OP_LOAD_REF_LOCAL/GLOBAL, the member is moved out of x onto the stack
+	! instead of copied, and OP_RET moves it back (see call_recv_moved()).  A null
+	! in the middle of the chain is R47
 
 	! OP_CALL_INTR_REF: intrinsic call with by-ref args (fn_t%ref_params), e.g.
 	! std::lu_factor(&A).  a = intr_id, b = prog%nodes index of the call node
@@ -505,6 +534,19 @@ module syntran__bytecode_m
 		INTR_F32_SCA = 159, INTR_F32_ARR = 160, &
 		INTR_F64_SCA = 161, INTR_F64_ARR = 162
 
+	! std::move(x) of an array or str.  The VM compiles it to OP_MOVE_*, not to
+	! OP_CALL_INTR
+	integer, parameter :: INTR_MOVE = 163
+
+	! std::system(cmd)
+	integer, parameter :: INTR_SYSTEM = 164
+
+	! std::read_file(path)
+	integer, parameter :: INTR_READ_FILE = 165
+
+	! std::variant_of(e)
+	integer, parameter :: INTR_VARIANT_OF = 166
+
 	!********
 
 	! A single bytecode instruction.  Kept as a plain POD record (no allocatable
@@ -636,6 +678,12 @@ module syntran__bytecode_m
 		! a function-level return_statement (emit OP_RET) from a top-level one
 		! (emit OP_HALT).
 		logical :: in_fn_body = .false.
+
+		! Index of the member of the next struct_instance_expr that is loaded
+		! with OP_LOAD_REF_* (moved out of its variable) instead of copied, for
+		! `x = S{..., m = x}`.  Set by the assignment that contains the literal
+		! and cleared by the literal
+		integer :: struct_move_slot = 0
 
 		! REPL support: fns declared on an earlier REPL line have no
 		! fn_declaration node in the tree being compiled now (each REPL line
@@ -1076,8 +1124,12 @@ pure integer function intr_id_from_name(name) result(id)
 	case ("transpose");      id = INTR_TRANSPOSE
 	case ("shape");          id = INTR_SHAPE
 	case ("getenv");         id = INTR_GETENV
+	case ("move");           id = INTR_MOVE
 	case ("hasenv");         id = INTR_HASENV
+	case ("system");         id = INTR_SYSTEM
 	case ("exists");         id = INTR_EXISTS
+	case ("read_file");      id = INTR_READ_FILE
+	case ("variant_of");     id = INTR_VARIANT_OF
 	case ("try_open");       id = INTR_TRY_OPEN
 	case ("print_trace");    id = INTR_PRINT_TRACE
 	case ("stack_trace");    id = INTR_STACK_TRACE
@@ -1151,7 +1203,7 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 			case (f32_type); op = OP_MOD_F32
 			case (f64_type); op = OP_MOD_F64
 			end select
-		case (sstar_token)
+		case (double_star_token)
 			select case (ltype)
 			case (i32_type); op = OP_POW_I32
 			case (i64_type); op = OP_POW_I64
@@ -1190,7 +1242,7 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 			case (f64_type); op = OP_GE_F64
 			case (str_type); op = OP_GE_STR
 			end select
-		case (eequals_token)
+		case (double_equals_token)
 			select case (ltype)
 			case (i32_type); op = OP_EQ_I32
 			case (i64_type); op = OP_EQ_I64
@@ -1247,7 +1299,7 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 		case (greater_equals_token)
 			if (ltype == i32_type) then; op = OP_GE_I32_I64
 			else;                         op = OP_GE_I64_I32; end if
-		case (eequals_token)
+		case (double_equals_token)
 			if (ltype == i32_type) then; op = OP_EQ_I32_I64
 			else;                         op = OP_EQ_I64_I32; end if
 		case (bang_equals_token)
@@ -1288,7 +1340,7 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 		case (greater_equals_token)
 			if (ltype == f32_type) then; op = OP_GE_F32_I32
 			else;                         op = OP_GE_I32_F32; end if
-		case (eequals_token)
+		case (double_equals_token)
 			if (ltype == f32_type) then; op = OP_EQ_F32_I32
 			else;                         op = OP_EQ_I32_F32; end if
 		case (bang_equals_token)
@@ -1329,7 +1381,7 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 		case (greater_equals_token)
 			if (ltype == f32_type) then; op = OP_GE_F32_I64
 			else;                         op = OP_GE_I64_F32; end if
-		case (eequals_token)
+		case (double_equals_token)
 			if (ltype == f32_type) then; op = OP_EQ_F32_I64
 			else;                         op = OP_EQ_I64_F32; end if
 		case (bang_equals_token)
@@ -1370,7 +1422,7 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 		case (greater_equals_token)
 			if (ltype == f64_type) then; op = OP_GE_F64_I32
 			else;                         op = OP_GE_I32_F64; end if
-		case (eequals_token)
+		case (double_equals_token)
 			if (ltype == f64_type) then; op = OP_EQ_F64_I32
 			else;                         op = OP_EQ_I32_F64; end if
 		case (bang_equals_token)
@@ -1411,7 +1463,7 @@ pure integer function binop_typed_opcode(op_kind, ltype, rtype) result(op)
 		case (greater_equals_token)
 			if (ltype == f64_type) then; op = OP_GE_F64_I64
 			else;                         op = OP_GE_I64_F64; end if
-		case (eequals_token)
+		case (double_equals_token)
 			if (ltype == f64_type) then; op = OP_EQ_F64_I64
 			else;                         op = OP_EQ_I64_F64; end if
 		case (bang_equals_token)
@@ -1471,13 +1523,13 @@ pure integer function arr_binop_typed_opcode(op_kind, elem_type) result(op)
 		select case (op_kind)
 		case (plus_token, minus_token, star_token, slash_token, percent_token, &
 		      less_token, less_equals_token, greater_token, greater_equals_token, &
-		      eequals_token, bang_equals_token)
+		      double_equals_token, bang_equals_token)
 			op = OP_ARR_BINOP
 		end select
 	case (bool_type)
 		! Logical/equality operators for bool arrays
 		select case (op_kind)
-		case (eequals_token, bang_equals_token, and_keyword, or_keyword)
+		case (double_equals_token, bang_equals_token, and_keyword, or_keyword)
 			op = OP_ARR_BINOP
 		end select
 	end select
@@ -1907,6 +1959,252 @@ end function call_recv_slot_start
 
 !===============================================================================
 
+pure function plain_member_chain(node) result(ok)
+
+	! Whether node is a dot chain `x.a.b` rooted at a variable with no subscripts
+	! anywhere, so that no slots are needed to evaluate it and member_is_null(),
+	! take_member(), and move_member_out() (runtime_array.f90) can walk it
+
+	type(syntax_node_t), intent(in) :: node
+	logical :: ok
+
+	ok = .false.
+	if (node%kind /= dot_expr) return
+	if (node%root_kind /= 0) return
+	if (.not. allocated(node%member)) return
+	ok = chain_total_nslots(node) == 0
+
+end function plain_member_chain
+
+!===============================================================================
+
+function member_store_moves(node) result(ok)
+
+	! Whether the assignment `x.a.b = expr`, to a plain dot chain with no
+	! subscripts, can move the value into place with OP_STORE_MEMBER c = 1 instead
+	! of copying it twice or more.  The RHS has to be a struct/null, or an array or
+	! str of exactly the member's type, so that there is no cast or broadcast
+	! to do.  `data = new_data` in a vec's push method is an array
+
+	type(syntax_node_t), intent(in) :: node
+	logical :: ok
+
+	ok = .false.
+	if (node%op%kind /= equals_token) return
+	if (chain_total_nslots(node) /= 0) return
+
+	select case (node%right%val%type)
+	case (struct_type, null_type)
+		ok = .true.
+	case (array_type, str_type)
+		ok = types_match(node%val, node%right%val) == TYPE_MATCH
+	end select
+
+end function member_store_moves
+
+!===============================================================================
+
+function take_member_assign(node) result(ok)
+
+	! Whether the assignment `x = x.a.b` can move the member out of x with
+	! OP_TAKE_MEMBER instead of copying it.  Only plain chains of struct/null
+	! members, rooted at the same variable as the LHS
+
+	type(syntax_node_t), intent(in) :: node
+	logical :: ok
+
+	ok = .false.
+	if (.not. any(node%right%val%type == [struct_type, null_type])) return
+	if (.not. plain_member_chain(node%right)) return
+	if (node%right%id_index /= node%id_index) return
+	ok = node%right%is_loc .eqv. node%is_loc
+
+end function take_member_assign
+
+!===============================================================================
+
+recursive function cant_fail(node, id, is_loc) result(ok)
+
+	! Whether node is a cheap expression that can't read variable (id, is_loc)
+	! and can't raise a runtime error, so a struct literal that moves that
+	! variable can't be interrupted half way, e.g. in the REPL
+
+	type(syntax_node_t), intent(in) :: node
+	integer, intent(in) :: id
+	logical, intent(in) :: is_loc
+	logical :: ok
+
+	ok = .false.
+	select case (node%kind)
+	case (literal_expr)
+		ok = .true.
+	case (name_expr)
+		if (allocated(node%lsubscripts)) return
+		ok = .not. (node%id_index == id .and. (node%is_loc .eqv. is_loc))
+	case (unary_expr)
+		ok = node%op%kind == minus_token
+		if (ok) ok = cant_fail(node%right, id, is_loc)
+	case (binary_expr)
+		if (.not. any(node%op%kind == [plus_token, minus_token, star_token])) return
+		ok = cant_fail(node%left, id, is_loc)
+		if (ok) ok = cant_fail(node%right, id, is_loc)
+	end select
+
+end function cant_fail
+
+!===============================================================================
+
+function struct_move_member(node, id, is_loc) result(imove)
+
+	! For `x = S{..., m = x, ...}` where node is the struct literal, return the
+	! index of the member m that is exactly x so it can be moved out of x
+	! instead of deep-copied.  Zero if there is no such member, or any other
+	! member could read x or fail (cant_fail())
+
+	type(syntax_node_t), intent(in) :: node
+	integer, intent(in) :: id
+	logical, intent(in) :: is_loc
+	integer :: imove
+
+	integer :: i
+
+	imove = 0
+	if (node%kind /= struct_instance_expr) return
+
+	do i = 1, size(node%members)
+		associate(m => node%members(i))
+			if (m%kind == name_expr .and. m%val%type == struct_type) then
+				if (.not. allocated(m%lsubscripts) .and. &
+				    m%id_index == id .and. (m%is_loc .eqv. is_loc)) then
+					if (imove /= 0) then
+						imove = 0
+						return
+					end if
+					imove = i
+					cycle
+				end if
+			end if
+			if (.not. cant_fail(m, id, is_loc)) then
+				imove = 0
+				return
+			end if
+		end associate
+	end do
+
+end function struct_move_member
+
+!===============================================================================
+
+function same_plain_chain(a, b) result(ok)
+
+	! Whether a and b, each a dot_expr or an assignment to one, are plain dot
+	! chains (no subscripts, no call root) that name the same member of the same
+	! variable
+
+	type(syntax_node_t), intent(in), target :: a, b
+	logical :: ok
+
+	type(syntax_node_t), pointer :: pa, pb
+
+	ok = .false.
+	if (a%root_kind /= 0 .or. b%root_kind /= 0) return
+	if (.not. allocated(a%member) .or. .not. allocated(b%member)) return
+	if (chain_total_nslots(a) /= 0 .or. chain_total_nslots(b) /= 0) return
+	if (a%id_index /= b%id_index) return
+	if (a%is_loc .neqv. b%is_loc) return
+
+	pa => a%member
+	pb => b%member
+	do
+		if (pa%id_index /= pb%id_index) return
+		if ((pa%kind == dot_expr) .neqv. (pb%kind == dot_expr)) return
+		if (pa%kind /= dot_expr) exit
+		pa => pa%member
+		pb => pb%member
+	end do
+	ok = .true.
+
+end function same_plain_chain
+
+!===============================================================================
+
+function struct_move_chain(node, lhs) result(imove)
+
+	! For `x.a.b = S{..., m = x.a.b, ...}` where node is the struct literal and
+	! lhs is the assignment, return the index of the member m that is exactly the
+	! chain being assigned, so it can be moved out of x.a.b instead of deep-copied.
+	! This is `head = Node{val = v, next = head}` inside a method.  Zero if there
+	! is no such member, or any other member could read x or fail (cant_fail())
+
+	type(syntax_node_t), intent(in) :: node, lhs
+	integer :: imove
+
+	integer :: i
+
+	imove = 0
+	if (node%kind /= struct_instance_expr) return
+	if (.not. allocated(lhs%member)) return
+
+	do i = 1, size(node%members)
+		associate(m => node%members(i))
+			if (m%kind == dot_expr .and. any(m%val%type == [struct_type, null_type])) then
+				if (same_plain_chain(m, lhs)) then
+					if (imove /= 0) then
+						imove = 0
+						return
+					end if
+					imove = i
+					cycle
+				end if
+			end if
+			if (.not. cant_fail(m, lhs%id_index, lhs%is_loc)) then
+				imove = 0
+				return
+			end if
+		end associate
+	end do
+
+end function struct_move_chain
+
+!===============================================================================
+
+pure function call_recv_moved(cn, i) result(ok)
+
+	! Whether by-ref param i's arg (cn%args(i)) is moved out of its variable at the
+	! call with OP_LOAD_REF_MEMBER and moved back at OP_RET, instead of copied in
+	! with OP_LOAD_MEMBER and written back with set_val.  That needs a plain dot
+	! chain `x.a.b`.  Every other by-ref arg must also be a bare name or a plain
+	! chain, because a subscript or a fn call in one of them could otherwise read
+	! the member after it has been moved out.  (By-value args are all evaluated
+	! first.)  compile_ctrl.f90's by-ref arg loading and OP_RET must agree, so both
+	! call this
+
+	type(syntax_node_t), intent(in) :: cn
+	integer, intent(in) :: i
+	logical :: ok
+
+	integer :: j
+
+	ok = .false.
+	if (.not. cn%is_ref(i)) return
+	if (.not. plain_member_chain(cn%args(i))) return
+
+	do j = 1, size(cn%is_ref)
+		if (j == i .or. .not. cn%is_ref(j)) cycle
+		associate(a => cn%args(j))
+			if (a%kind == name_expr) then
+				if (allocated(a%lsubscripts)) return
+			else if (.not. plain_member_chain(a)) then
+				return
+			end if
+		end associate
+	end do
+	ok = .true.
+
+end function call_recv_moved
+
+!===============================================================================
+
 pure function array_expr_nslots(node) result(n)
 
 	! Total operand-stack slots an array_expr node's sub-expressions consume
@@ -2022,13 +2320,13 @@ pure integer function compound_to_arith_token(op_kind) result(tok)
 	integer, intent(in) :: op_kind
 
 	select case (op_kind)
-	case (plus_equals_token);    tok = plus_token
-	case (minus_equals_token);   tok = minus_token
-	case (star_equals_token);    tok = star_token
-	case (slash_equals_token);   tok = slash_token
-	case (percent_equals_token); tok = percent_token
-	case (sstar_equals_token);   tok = sstar_token
-	case default;                tok = 0
+	case (plus_equals_token);        tok = plus_token
+	case (minus_equals_token);       tok = minus_token
+	case (star_equals_token);        tok = star_token
+	case (slash_equals_token);       tok = slash_token
+	case (percent_equals_token);     tok = percent_token
+	case (double_star_equals_token); tok = double_star_token
+	case default;                    tok = 0
 	end select
 
 end function compound_to_arith_token

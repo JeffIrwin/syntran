@@ -1,0 +1,17 @@
+// break and continue in a fn, outside of any loop, used to leave the fn with no
+// value, and then die with an internal error in the caller
+
+fn f(a: i32): i32
+{
+	break;
+	return a;
+}
+
+fn g(a: i32): i32
+{
+	continue;
+	return a;
+}
+
+let x = f(1);
+let y = g(2);

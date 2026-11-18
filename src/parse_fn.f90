@@ -609,6 +609,24 @@ recursive module subroutine parse_fn_call(parser, module_prefix, identifier, fn_
 		end if
 	end if
 
+	! std::variant_of() takes any_type so that it can take any enum, so check that
+	! the arg is a scalar enum here
+	if (fn%is_intr .and. identifier_%text == "variant_of" .and. args%len_ == 1) then
+		if (args%v(1)%val%type /= enum_type .and. &
+			args%v(1)%val%type /= unknown_type) then
+			call parser%diagnostics%push(err_bad_arg_type( &
+				parser%context(), alias_spans(1), identifier_%text, 0, "value", &
+				"enum", type_name(args%v(1)%val)))
+		end if
+	end if
+
+	! std::move() has the type of its arg, and moves it out of the variable
+	if (fn%is_intr .and. identifier_%text == "move" .and. args%len_ == 1) then
+		call check_move_arg(parser, args%v(1), alias_spans(1))
+		if (any(args%v(1)%val%type == [array_type, str_type])) &
+			fn_call%val = args%v(1)%val
+	end if
+
 	if (fn%is_intr .and. any(identifier_%text == ["format", "printf", "writef"])) then
 		! The format string is the first arg, except for writef(), where the file
 		! handle comes first
@@ -736,7 +754,8 @@ recursive module subroutine parse_qualified_expr(parser, expr)
 			call parser%parse_subscripts(expr)
 		end if
 		if (parser%current_kind() == dot_token .and. &
-				expr%val%type == struct_type) then
+				(expr%val%type == struct_type .or. &
+				expr%val%type == unknown_type)) then
 			call parser%parse_dot(expr)
 		end if
 
@@ -748,7 +767,7 @@ recursive module subroutine parse_qualified_expr(parser, expr)
 			! Struct not found
 			span = new_span(fn_identifier%pos, len(fn_identifier%text))
 			call parser%diagnostics%push( &
-				err_undeclare_var(parser%context(), span, fn_name, &
+				err_undeclare_var(parser%contexts%v(fn_identifier%unit_), span, fn_name, &
 				parser%vars%closest(fn_name)))
 		end if
 
@@ -759,7 +778,7 @@ recursive module subroutine parse_qualified_expr(parser, expr)
 		if (iostat /= exit_success) then
 			span = new_span(fn_identifier%pos, len(fn_identifier%text))
 			call parser%diagnostics%push( &
-				err_undeclare_var(parser%context(), span, fn_name, &
+				err_undeclare_var(parser%contexts%v(fn_identifier%unit_), span, fn_name, &
 				parser%vars%closest(fn_name)))
 			return
 		end if
@@ -776,7 +795,7 @@ end subroutine parse_qualified_expr
 
 !===============================================================================
 
-module subroutine parse_fn_declaration(parser, decl, no_fn_kw)
+recursive module subroutine parse_fn_declaration(parser, decl, no_fn_kw)
 
 	class(parser_t) :: parser
 	type(syntax_node_t), intent(out) :: decl
@@ -797,6 +816,7 @@ module subroutine parse_fn_declaration(parser, decl, no_fn_kw)
 	integer :: fn_src_id
 
 	logical :: overwrite, const_param, in_fn_body0, no_fn_kw0
+	integer :: loop_depth0
 
 	type(fn_t) :: fn
 
@@ -848,9 +868,16 @@ module subroutine parse_fn_declaration(parser, decl, no_fn_kw)
 
 	!print *, 'matching lparen'
 
-	! This is a bit of a hack, but parser can crash otherwise if parens are
-	! missing.  Should parens be optional for fns without params?
-	if (parser%current_kind() /= lparen_token) return
+	! Parens are required, even for fns without params.  Report the missing one
+	! (match() pushes E20) and bail out, undoing the scope state from above.
+	! Returning without a diagnostic leaves a kind-0 node for the compiler
+	if (parser%current_kind() /= lparen_token) then
+		call parser%match(lparen_token, lparen)
+		call parser%vars%pop_scope()
+		call parser%locs%pop_scope()
+		parser%is_loc = .false.
+		return
+	end if
 
 	call parser%match(lparen_token, lparen)
 
@@ -991,8 +1018,11 @@ module subroutine parse_fn_declaration(parser, decl, no_fn_kw)
 	! (nested fns aren't allowed, but save/restore defensively anyway)
 	in_fn_body0 = parser%in_fn_body
 	parser%in_fn_body = .true.
+	loop_depth0 = parser%loop_depth
+	parser%loop_depth = 0
 	call parser%parse_statement(body)
 	parser%in_fn_body = in_fn_body0
+	parser%loop_depth = loop_depth0
 
 	! A void fn has nothing to return, so the lack of any return statement is
 	! not an error for it.  Only non-void fns require at least one return
@@ -1089,10 +1119,12 @@ recursive module subroutine parse_type(parser, type_text, type)
 	integer :: rank, itype, i
 	integer :: pos0, pos1, pos2
 
+	logical :: is_opt
+
 	character(len = :), allocatable :: cookie, suggest, param_type_text, ret_type_text
 
 	type(syntax_token_t) :: colon, ident, comma, lbracket, rbracket, semi, dummy, &
-		double_colon, fn_kw, lparen, rparen, amp
+		double_colon, fn_kw, lparen, rparen, amp, question
 
 	type(text_span_t) :: span
 
@@ -1100,6 +1132,8 @@ recursive module subroutine parse_type(parser, type_text, type)
 	type(value_vector_t) :: param_types
 
 	pos1 = parser%current_pos()
+
+	is_opt = .false.
 
 	if (parser%current_kind() == amp_token) then
 
@@ -1116,6 +1150,16 @@ recursive module subroutine parse_type(parser, type_text, type)
 
 		! Fall through and parse the type normally so this doesn't cascade
 		! into further bogus diagnostics
+		pos1 = parser%current_pos()
+
+	end if
+
+	if (parser%current_kind() == question_token) then
+
+		! Optional type, `?Struct`, which can also be null.  Checked below
+		! after the type is known
+		call parser%match(question_token, question)
+		is_opt = .true.
 		pos1 = parser%current_pos()
 
 	end if
@@ -1148,6 +1192,12 @@ recursive module subroutine parse_type(parser, type_text, type)
 
 		end do
 		call parser%match(rparen_token, rparen)
+
+		if (is_opt) then
+			span = new_span(pos1 - 1, parser%current_pos() - pos1 + 1)
+			call parser%diagnostics%push(err_bad_optional( &
+				parser%context(), span, trim(parser%text(pos1, parser%current_pos() - 1))))
+		end if
 
 		type%type = fn_type
 		allocate(type%fn_params( param_types%len_ ))
@@ -1242,6 +1292,18 @@ recursive module subroutine parse_type(parser, type_text, type)
 	else if (itype == enum_type) then
 		type%enum_name = type_text
 		type%enum_cookie = cookie
+	end if
+
+	if (is_opt) then
+		! Only a scalar struct can be optional.  An unknown type already has its
+		! own diagnostic
+		if (itype == struct_type .and. rank < 0) then
+			type%is_opt = .true.
+		else if (itype /= unknown_type .or. rank >= 0) then
+			span = new_span(pos1 - 1, pos2 - pos1 + 1)
+			call parser%diagnostics%push(err_bad_optional( &
+				parser%context(), span, trim(parser%text(pos1, pos2 - 1))))
+		end if
 	end if
 
 end subroutine parse_type
@@ -1471,6 +1533,87 @@ logical function has_ref_root(arg, arg_is_ref)
 end function has_ref_root
 
 end subroutine check_ref_aliases
+
+!===============================================================================
+
+recursive pure function move_chain_plain(node) result(ok)
+
+	! Whether a member chain has no subscripts anywhere, like chain_total_nslots()
+	! (bytecode.f90) == 0
+
+	type(syntax_node_t), intent(in) :: node
+	logical :: ok
+
+	ok = .not. allocated(node%lsubscripts)
+	if (.not. ok) return
+
+	if (allocated(node%member)) then
+		if (node%member%kind == dot_expr) then
+			ok = move_chain_plain(node%member)
+		else
+			ok = .not. allocated(node%member%lsubscripts)
+		end if
+	end if
+
+end function move_chain_plain
+
+!===============================================================================
+
+subroutine check_move_arg(parser, arg, span)
+
+	! std::move(x) takes the value out of a variable and leaves it empty, so x
+	! has to be a plain variable or member chain, not a const one, holding an
+	! array or str (any_type lets every other type through the param check)
+
+	class(parser_t), intent(inout) :: parser
+	type(syntax_node_t), intent(in) :: arg
+	type(text_span_t), intent(in) :: span
+
+	!********
+
+	logical :: is_const_var
+
+	if (arg%val%type == unknown_type) return
+
+	if (arg%val%type /= array_type .and. arg%val%type /= str_type) then
+		call parser%diagnostics%push(err_bad_arg_type(parser%context(), span, &
+			"move", 0, "x", "array or str", type_name(arg%val)))
+		return
+	end if
+
+	if (arg%kind == name_expr) then
+		if (allocated(arg%lsubscripts) .or. arg%is_enum_name) then
+			call parser%diagnostics%push(err_move_not_var(parser%context(), span))
+			return
+		end if
+	else if (arg%kind == dot_expr) then
+		if (arg%root_kind /= 0 .or. .not. allocated(arg%member) &
+				.or. .not. move_chain_plain(arg)) then
+			call parser%diagnostics%push(err_move_not_var(parser%context(), span))
+			return
+		end if
+	else
+		call parser%diagnostics%push(err_move_not_var(parser%context(), span))
+		return
+	end if
+
+	! A member of a const struct, or of self in a const method, can't be moved
+	! out of either
+	if (arg%kind == dot_expr .and. parser%in_method .and. arg%is_loc .and. &
+			arg%id_index == parser%self_loc_id) then
+		! An implicit-self field, whose identifier is the field name
+		is_const_var = parser%in_const_method
+	else if (arg%is_loc) then
+		is_const_var = parser%locs%is_const(arg%identifier%text)
+	else
+		is_const_var = parser%vars%is_const(arg%identifier%text)
+	end if
+	if (is_const_var) then
+		call parser%diagnostics%push(err_const_assign( &
+			parser%context(), span, arg%identifier%text))
+	end if
+
+end subroutine check_move_arg
 
 !===============================================================================
 

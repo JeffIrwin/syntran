@@ -144,6 +144,46 @@ check_sync "syntax_node_t" src/types.f90 syntax_node_t src/types_copy.f90 \
 	syntax_node_move:full \
 	syntax_node_move_into:full
 
+# check_dump <decl_file> <type_name> <impl_file> <proc> <exempt member> [...]
+#   Every member of the type has to appear in the walker of `syntran --parse`,
+#   dump_node(), or be listed as one that isn't part of the dumped tree.  A new
+#   child member that isn't walked would be silently missing from the dump, and
+#   so from the differential test of the parser port
+check_dump()
+{
+	local decl_file="$1" type_name="$2" impl_file="$3" proc="$4"
+	shift 4
+
+	local fields body missing name_field is_bare_scalar
+	fields="$(extract_fields "$decl_file" "$type_name")"
+	body="$(extract_body "$impl_file" "$proc")"
+	if [[ -z "$fields" || -z "$body" ]]; then
+		echo "check-node-sync: could not find $type_name or $proc() -- parser bug?" >&2
+		exit 2
+	fi
+
+	missing=""
+	while read -r name_field is_bare_scalar; do
+		[[ -z "$name_field" ]] && continue
+		# The exempt members, as ` name `, to match a whole word
+		if [[ " $* " == *" $name_field "* ]]; then
+			continue
+		fi
+		if ! grep -qE "%${name_field}([^A-Za-z0-9_]|\$)" <<< "$body"; then
+			missing="$missing $name_field"
+		fi
+	done <<< "$fields"
+
+	if [[ -n "$missing" ]]; then
+		echo "check-node-sync: ${proc}() in $impl_file is missing:$missing" >&2
+		echo "  Dump it, or exempt it in this script if it isn't part of the tree" >&2
+		fail=1
+	fi
+}
+
+check_dump src/types.f90 syntax_node_t src/types_ops.f90 dump_node \
+	diagnostics expecting first_expecting first_expected is_empty src_id
+
 if [[ "$fail" -ne 0 ]]; then
 	exit 1
 fi

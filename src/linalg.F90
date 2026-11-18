@@ -92,11 +92,57 @@ module syntran__linalg_m
 	end interface
 
 	private :: sgemm, dgemm, sgesv, dgesv, sgetrf, dgetrf, sgetrs, dgetrs
+
+	interface
+		! src/c/blas_info.c.  Fills buf with a NUL-terminated name
+		subroutine syntran_blas_vendor(buf, n) bind(c, name = "syntran_blas_vendor")
+			use, intrinsic :: iso_c_binding, only: c_char, c_int
+			character(kind = c_char), intent(out) :: buf(*)
+			integer(c_int), value :: n
+		end subroutine syntran_blas_vendor
+	end interface
+
+	private :: syntran_blas_vendor
 #endif
 
 !===============================================================================
 
 contains
+
+!===============================================================================
+
+function blas_vendor() result(str)
+
+	! Which BLAS is linked, for `--version`.  The C helper can't tell a reference
+	! BLAS from MKL, etc., so it says "reference or unrecognized"
+
+#ifndef SYNTRAN_NO_BLAS
+	use, intrinsic :: iso_c_binding, only: c_char, c_int, c_null_char
+#endif
+
+	character(len = :), allocatable :: str
+
+#ifdef SYNTRAN_NO_BLAS
+	str = "not linked"
+#else
+	integer, parameter :: n = 256
+
+	character(kind = c_char) :: buf(n)
+
+	integer :: i
+
+	buf = c_null_char
+	call syntran_blas_vendor(buf, int(n, c_int))
+
+	i = 1
+	do while (i < n .and. buf(i) /= c_null_char)
+		i = i + 1
+	end do
+
+	str = transfer(buf(1: i - 1), repeat(" ", i - 1))
+#endif
+
+end function blas_vendor
 
 !===============================================================================
 

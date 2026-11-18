@@ -1,0 +1,103 @@
+
+// A variable that is read as an operand or an argument is read before a later
+// operand or the callee reassigns it, so the value that is used is the one that
+// the variable had.  The strings are made at run time, since a literal is never
+// freed and could not tell a copy from a borrow
+
+let s = "hel" + str(1);
+let g = [1, 2, 3];
+let ok = true;
+
+fn fs(): str
+{
+	s = "bye" + str(2);
+	return "!";
+}
+
+fn fa(): i32
+{
+	g = [7, 8, 9];
+	return 0;
+}
+
+fn ps(x: str): str
+{
+	s = "zzz" + str(3);
+	return x;
+}
+
+fn pa(x: [i32; :]): i32
+{
+	g[0] = 99;
+	return x[0];
+}
+
+fn pr(x: [i32; :], y: &[i32; :]): i32
+{
+	y[0] = 42;
+	return x[0];
+}
+
+fn two(a: str, b: str): str
+{
+	return a + b;
+}
+
+fn two_a(a: [i32; :], b: i32): i32
+{
+	return a[0] + b;
+}
+
+// str on the left, a call that assigns it on the right
+ok = ok and s + fs() == "hel1!" and s == "bye2";
+
+// by-value str arg, and the callee assigns the global
+s = "hel" + str(1);
+ok = ok and ps(s) == "hel1" and s == "zzz3";
+
+// an earlier arg is borrowed while a later arg reassigns it
+s = "hel" + str(1);
+ok = ok and two(s, fs()) == "hel1!";
+
+// array on the left, a call that assigns it on the right
+g = [1, 2, 3];
+let sum1 = g + fa() * 1;
+ok = ok and sum1[0] == 1 and sum1[1] == 2 and sum1[2] == 3;
+
+// the same, as a slice, which is fused into one loop if there is no call
+g = [1, 2, 3];
+let sum2 = g[0: 2] + g[1: 3] + fa();
+ok = ok and sum2[0] == 3 and sum2[1] == 5;
+
+// by-value array arg, and the callee changes the global
+g = [1, 2, 3];
+ok = ok and pa(g) == 1 and g[0] == 99;
+
+// by-value and by-reference arguments of the same variable
+let h = [5, 6];
+ok = ok and pr(h, &h) == 5 and h[0] == 42;
+
+// an earlier arg is borrowed while a later arg reassigns it
+g = [1, 2, 3];
+ok = ok and two_a(g, fa()) == 1;
+
+// an array literal and the arguments of an intrinsic
+g = [1, 2, 3];
+let lit = [g[0], fa()];
+ok = ok and lit[0] == 1 and lit[1] == 0;
+
+// every argument of println() is evaluated before any is written
+s = "hel" + str(1);
+println(s, fs());
+
+fn ga(): [i32; :]
+{
+	g = [7, 8, 9];
+	return [1, 1, 1];
+}
+
+// two array operands of an intrinsic
+g = [1, 2, 3];
+ok = ok and dot(g, ga()) == 6;
+
+return ok;

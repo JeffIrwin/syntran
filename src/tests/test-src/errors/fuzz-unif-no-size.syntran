@@ -1,0 +1,7 @@
+let n = 3;
+let a = [0];
+
+// A uniform array needs a size, or it was a rank-0 array that the VM allocated
+// twice
+for i in [0 * n]
+	let rsums = [0;  ];

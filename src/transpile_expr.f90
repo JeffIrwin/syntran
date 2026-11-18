@@ -593,28 +593,9 @@ module function enum_slot_of(em, val) result(k)
 	type(value_t), intent(in) :: val
 	integer :: k
 
-	integer :: i
-
 	k = 0
 	if (.not. associated(em%enums)) return
-	if (.not. allocated(em%enums%table)) return
-
-	do i = 1, size(em%enums%table)
-		if (.not. allocated(em%enums%table(i)%key)) cycle
-		if (.not. allocated(em%enums%table(i)%val)) cycle
-
-		if (allocated(val%enum_cookie) .and. allocated(em%enums%table(i)%val%cookie)) then
-			if (em%enums%table(i)%val%cookie == val%enum_cookie) then
-				k = i
-				return
-			end if
-		else if (allocated(val%enum_name)) then
-			if (em%enums%table(i)%key == val%enum_name) then
-				k = i
-				return
-			end if
-		end if
-	end do
+	k = enums_slot_of(em%enums, val)
 
 end function enum_slot_of
 
@@ -664,7 +645,7 @@ module function enum_cmp(em, k, op, l, r) result(s)
 	character(len = :), allocatable :: ops, a, b
 
 	select case (op)
-	case (eequals_token)
+	case (double_equals_token)
 		ops = '=='
 	case (bang_equals_token)
 		ops = '/='
@@ -680,7 +661,7 @@ module function enum_cmp(em, k, op, l, r) result(s)
 
 	a = l
 	b = r
-	if (.not. (op == eequals_token .or. op == bang_equals_token) .or. &
+	if (.not. (op == double_equals_token .or. op == bang_equals_token) .or. &
 			enum_has_alias(em%enums%table(k)%val)) then
 		a = enum_fn(em, k, 'val')//'('//l//')'
 		b = enum_fn(em, k, 'val')//'('//r//')'
@@ -755,55 +736,11 @@ module function struct_slot_of(em, val) result(k)
 	type(value_t), intent(in) :: val
 	integer :: k
 
-	integer :: i
-
 	k = 0
 	if (.not. associated(em%structs)) return
-	if (.not. allocated(em%structs%table)) return
-
-	do i = 1, size(em%structs%table)
-		if (.not. allocated(em%structs%table(i)%key)) cycle
-		if (.not. allocated(em%structs%table(i)%val)) cycle
-
-		if (allocated(val%struct_cookie) .and. allocated(em%structs%table(i)%val%cookie)) then
-			if (em%structs%table(i)%val%cookie == val%struct_cookie) then
-				k = i
-				return
-			end if
-		else if (allocated(val%struct_name)) then
-			if (same_struct_name(em%structs%table(i)%key, val%struct_name)) then
-				k = i
-				return
-			end if
-		end if
-	end do
+	k = structs_slot_of(em%structs, val)
 
 end function struct_slot_of
-
-!===============================================================================
-
-function same_struct_name(a, b) result(same)
-
-	! Is `a` the name of the struct that `b` is, which differ by a module
-	! prefix like `mod::Point` if one is imported with a qualified name?
-
-	character(len = *), intent(in) :: a, b
-	logical :: same
-
-	integer :: n
-
-	same = a == b
-	if (same) return
-
-	if (len(a) > len(b)) then
-		n = len(a) - len(b)
-		if (n >= 2) same = a(n+1:) == b .and. a(n-1:n) == '::'
-	else if (len(b) > len(a)) then
-		n = len(b) - len(a)
-		if (n >= 2) same = b(n+1:) == a .and. b(n-1:n) == '::'
-	end if
-
-end function same_struct_name
 
 !===============================================================================
 
@@ -1069,24 +1006,10 @@ module subroutine struct_member(em, k, id, val, name, ok)
 	character(len = :), allocatable, intent(out) :: name
 	logical, intent(out) :: ok
 
-	integer :: i, mid, io
-
 	ok = .false.
 	name = ''
-	if (k < 1) return
-
-	associate (st => em%structs%table(k)%val)
-		if (.not. allocated(st%member_names%v)) return
-		do i = 1, size(st%member_names%v)
-			call st%vars%search(st%member_names%v(i)%s, mid, io, val)
-			if (io /= 0) cycle
-			if (mid == id) then
-				name = st%member_names%v(i)%s
-				ok = .true.
-				return
-			end if
-		end do
-	end associate
+	if (.not. associated(em%structs)) return
+	call structs_member(em%structs, k, id, val, name, ok)
 
 end subroutine struct_member
 
@@ -1330,6 +1253,10 @@ function emit_literal(em, node) result(s)
 		case (str_type)
 			s = str_literal(val%str%s)
 
+		case (null_type)
+			call em_unsupported(em, 'the `null` literal of an optional struct')
+			s = '0'
+
 		case default
 			call em_unsupported(em, 'a literal of type `'//kind_name(val%type)//'`')
 			s = '0'
@@ -1394,7 +1321,7 @@ function emit_str_binary(em, node, l, r, lvl) result(s)
 		select case (node%op%kind)
 		case (plus_token)
 			s = 'rt_cat('//la//', '//ra//')'
-		case (eequals_token)
+		case (double_equals_token)
 			s = 'rt_eq('//la//', '//ra//')'
 		case (bang_equals_token)
 			s = '(.not. rt_eq('//la//', '//ra//'))'
@@ -1416,7 +1343,7 @@ function emit_str_binary(em, node, l, r, lvl) result(s)
 		case (plus_token)
 			s = '('//l//' // '//r//')'
 			lvl = 6
-		case (eequals_token)
+		case (double_equals_token)
 			s = 'rt_str_eq('//unparen(l)//', '//unparen(r)//')'
 		case (bang_equals_token)
 			s = '(.not. rt_str_eq('//l//', '//r//'))'
@@ -1659,7 +1586,7 @@ recursive function emit_binary_lvl(em, node, lvl) result(s)
 
 	select case (node%op%kind)
 
-	case (plus_token, minus_token, star_token, slash_token, sstar_token, &
+	case (plus_token, minus_token, star_token, slash_token, double_star_token, &
 			percent_token)
 
 		if (.not. is_numeric_type(restype)) then
@@ -1669,7 +1596,7 @@ recursive function emit_binary_lvl(em, node, lvl) result(s)
 			return
 		end if
 
-		if (node%op%kind == sstar_token) then
+		if (node%op%kind == double_star_token) then
 			s = emit_pow(l, r, lp, rp, lt, rt, restype, lvl)
 			return
 		end if
@@ -1698,12 +1625,12 @@ recursive function emit_binary_lvl(em, node, lvl) result(s)
 			s = 'mod('//unparen(l)//', '//unparen(r)//')'
 		end select
 
-	case (eequals_token, bang_equals_token, less_token, less_equals_token, &
+	case (double_equals_token, bang_equals_token, less_token, less_equals_token, &
 			greater_token, greater_equals_token)
 
 		if (lt == bool_type .and. rt == bool_type) then
 			select case (node%op%kind)
-			case (eequals_token)
+			case (double_equals_token)
 				s = '('//operand(l, lp, 1, .true.)//' .eqv. '// &
 					operand(r, rp, 1, .false.)//')'
 				lvl = 1
@@ -1719,7 +1646,7 @@ recursive function emit_binary_lvl(em, node, lvl) result(s)
 		end if
 
 		if (lt == fn_type .and. rt == fn_type) then
-			if (node%op%kind /= eequals_token .and. node%op%kind /= bang_equals_token) then
+			if (node%op%kind /= double_equals_token .and. node%op%kind /= bang_equals_token) then
 				call em_unsupported(em, 'ordering comparison of fn pointers')
 				s = '.false.'
 				return
@@ -1774,7 +1701,7 @@ recursive function emit_binary_lvl(em, node, lvl) result(s)
 		r = operand(r, rp, 5, .false.)
 
 		select case (node%op%kind)
-		case (eequals_token)
+		case (double_equals_token)
 			s = '('//l//' == '//r//')'
 		case (bang_equals_token)
 			s = '('//l//' /= '//r//')'
@@ -1819,17 +1746,17 @@ recursive function emit_binary_lvl(em, node, lvl) result(s)
 			s = 'ieor('//l//', '//r//')'
 		end select
 
-	case (lless_token, ggreater_token)
+	case (double_less_token, double_greater_token)
 		if (.not. (lt == i32_type .or. lt == i64_type)) then
 			call em_unsupported(em, 'a bitwise shift of type `'//kind_name(lt)//'`')
 			s = '0'
 			return
 		end if
 
-		! The shift is done in the width of the left operand, then widened if
-		! the right operand is an i64.  Both are logical shifts, so a `>>` doesn't
-		! extend the sign bit
-		if (node%op%kind == lless_token) then
+		! The result is in the width of the left operand, even if the right
+		! operand is an i64 (so the convert() below is a no-op).  Both are logical
+		! shifts, so a `>>` doesn't extend the sign bit
+		if (node%op%kind == double_less_token) then
 			s = convert('shiftl('//unparen(l)//', '//unparen(r)//')', lt, restype)
 		else
 			s = convert('shiftr('//unparen(l)//', '//unparen(r)//')', lt, restype)
@@ -2680,8 +2607,26 @@ recursive function emit_array_expr(em, node) result(s)
 		s = 'rt_linspace_'//sfx//'('//lb//', '//ub//', '//n_str//')'
 
 	case (unif_array)
-		! [v; n, m] is v repeated n * m times, in the shape [n, m]
-		v = emit_expr(em, node%lbound_)
+		! [Name; 0] has no fill value to emit, just a struct type for the
+		! empty array.  The parser makes a throwaway fill value for it
+		if (t == struct_type .and. node%lbound_%kind == literal_expr) then
+			k = struct_slot_of(em, node%lbound_%val)
+			if (k == 0 .or. size(node%size_) > 1) then
+				call em_unsupported(em, 'an array of structs of rank above 1')
+				s = '[0]'
+				return
+			end if
+			s = '['//struct_tname(em, k)//' :: ]'
+			return
+		end if
+
+		! [v; n, m] is v repeated n * m times, in the shape [n, m].  An enum is
+		! its i32 ordinal, and so is the throwaway fill value of [Name; 0]
+		if (t == enum_type .and. node%lbound_%kind == literal_expr) then
+			v = '0_int32'
+		else
+			v = emit_expr(em, node%lbound_)
+		end if
 		if (t /= str_type .and. t /= struct_type) v = convert(v, elem_type(node%lbound_%val), t)
 
 		n_str = ''
@@ -3029,7 +2974,9 @@ recursive function emit_intr_call(em, node) result(s)
 	character(len = :), allocatable :: name, base, suffix, a1, a2, args, kind_str, &
 		arg_i, spec_i, fmt_call
 
-	integer :: i, n, iu, t, ferr
+	integer :: i, n, iu, t, ferr, ek
+
+	logical :: ok
 
 	type(rt_str_t), allocatable :: fpieces(:), fspecs(:)
 
@@ -3155,7 +3102,12 @@ recursive function emit_intr_call(em, node) result(s)
 		s = 'achar('//convert(a1, elem_type(node%args(1)%val), i32_type)//')'
 
 	case ('parse_i32', 'parse_i64', 'parse_f32', 'parse_f64', 'parse_bool')
-		s = 'rt_'//base//'('//a1//')'
+		! With an `ok` arg, a2 is the variable that rt_parse_*() sets
+		if (n >= 2) then
+			s = 'rt_'//base//'('//a1//', '//a2//')'
+		else
+			s = 'rt_'//base//'('//a1//')'
+		end if
 
 	case ('size')
 		if (n == 2) then
@@ -3258,7 +3210,37 @@ recursive function emit_intr_call(em, node) result(s)
 	case ('exists')
 		s = 'rt_exists('//a1//')'
 
-	case ('getenv', 'hasenv')
+	case ('read_file')
+		s = 'rt_read_file('//a1//')'
+
+	case ('variant_of')
+		! The name of the variant, from the helper of the enum's type
+		ek = enum_slot_of(em, node%args(1)%val)
+		if (ek == 0) call em_unsupported(em, 'an enum of unknown type')
+		s = enum_fn(em, max(ek, 1), 'name')//'('//a1//')'
+
+	case ('move')
+		! The temp takes the array or str out of the variable with move_alloc(),
+		! which doesn't copy, and the variable gets an empty one, like in the
+		! interpreter.  a1 is the variable or member, and both lines are hoisted
+		! before the statement
+		em%tmp_count = em%tmp_count + 1
+		s = 'mv_t'//str(em%tmp_count)
+		call em%decls%push(decl_line(em, node%val, s, ok))
+		if (.not. ok) call em_unsupported(em, 'a move of type `'//kind_name(node%val%type)//'`', &
+			node%identifier%pos)
+		call em_line(em, 'call move_alloc('//a1//', '//s//')')
+		if (is_arr(node%val)) then
+			args = '0'
+			do i = 2, node%val%array%rank
+				args = args//', 0'
+			end do
+			call em_line(em, 'allocate('//a1//'('//args//'))')
+		else
+			call em_line(em, a1//" = ''")
+		end if
+
+	case ('getenv', 'hasenv', 'system')
 		s = 'rt_'//base//'('//a1//')'
 
 	case ('args')

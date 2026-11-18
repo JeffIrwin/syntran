@@ -1,0 +1,157 @@
+
+// Moves of structs in `x = S{..., m = x}`, `x.a = S{..., m = x.a}` and
+// `x = x.a.b`.  A move must never be visible: the old owner is overwritten, and
+// anything copied from it beforehand is independent
+
+struct Node
+{
+	val: i32,
+	next: ?Node,
+
+	// The chain form: the member being assigned is moved into the new node
+	fn prepend(v: i32)
+	{
+		next = Node{val = v, next = next};
+	}
+
+	const fn len(): i32
+	{
+		if next == null
+		{
+			return 1;
+		}
+		return 1 + next.len();
+	}
+
+	const fn total(): i32
+	{
+		if next == null
+		{
+			return val;
+		}
+		return val + next.total();
+	}
+}
+
+struct Holder
+{
+	head: ?Node,
+	tag: i32,
+}
+
+struct Outer
+{
+	h: Holder,
+	n: i32,
+}
+
+fn push_front(list: &Node, v: i32)
+{
+	list = Node{val = v, next = list};
+}
+
+fn build(n: i32): Node
+{
+	let l = Node{val = 0, next = null};
+	for i in [1: n]
+	{
+		l.prepend(i);
+	}
+	return l;
+}
+
+fn drop_two(l: Node): Node
+{
+	// Local slots: x = x.a.b with two links
+	let c = l;
+	c = c.next.next;
+	return c;
+}
+
+let ok = true;
+
+// A chain assignment in a method
+let a = Node{val = 1, next = null};
+let before = a;
+a.prepend(2);
+a.prepend(3);
+ok = ok and a.len() == 3 and a.val == 1 and a.next.val == 3 and a.next.next.val == 2;
+ok = ok and before.len() == 1;
+
+// A `&` param is moved in place
+let b = Node{val = 1, next = null};
+let bcopy = b;
+push_front(&b, 2);
+push_front(&b, 3);
+ok = ok and b.len() == 3 and b.val == 3 and b.next.val == 2 and b.next.next.val == 1;
+ok = ok and bcopy.len() == 1 and bcopy.val == 1;
+
+// A chain rooted at a member of a member
+let o = Outer{h = Holder{head = Node{val = 5, next = null}, tag = 9}, n = 4};
+let ocopy = o;
+o.h.head = Node{val = 6, next = o.h.head};
+o.h.head = Node{val = 7, next = o.h.head};
+ok = ok and o.h.head.len() == 3 and o.h.head.total() == 18 and o.h.tag == 9 and o.n == 4;
+ok = ok and ocopy.h.head.len() == 1 and ocopy.h.head.val == 5;
+
+// `x = x.a.b` more than one level deep leaves the rest of x intact where it
+// should be, and frees what it doesn't keep
+let w = Outer{h = Holder{head = Node{val = 1, next = Node{val = 2, next = null}}, tag = 3}, n = 8};
+let wcopy = w;
+let hn = w.h.head;
+hn = hn.next;
+ok = ok and hn.val == 2 and hn.next == null;
+ok = ok and w.h.head.len() == 2 and wcopy.h.head.len() == 2;
+
+let chain = build(7);
+ok = ok and chain.len() == 7;
+let c2 = drop_two(chain);
+ok = ok and c2.len() == 5 and chain.len() == 7;
+
+// The assignment as a value
+let v = Node{val = 1, next = null};
+let r = (v = Node{val = 2, next = v});
+ok = ok and r.val == 2 and r.next.val == 1 and v.val == 2 and v.len() == 2;
+r.val = 100;
+ok = ok and v.val == 2;
+
+// Not moved when another member reads x, or x is used twice, but still right
+let u = Node{val = 1, next = null};
+u = Node{val = u.val + 10, next = u};
+ok = ok and u.val == 11 and u.next.val == 1 and u.len() == 2;
+u.next = Node{val = u.next.val + 1, next = u.next};
+ok = ok and u.next.val == 2 and u.next.next.val == 1 and u.len() == 3;
+
+// Walking a long list is linear.  Quadratic copies of the tail would take
+// seconds here
+let big = Node{val = 0, next = null};
+for i in [1: 20000]
+{
+	big = Node{val = i, next = big};
+}
+let n = 0;
+let s = 0;
+while big != null
+{
+	s += big.val;
+	n += 1;
+	big = big.next;
+}
+ok = ok and n == 20000 and s == 19999 * 20000 / 2 and big == null;
+
+// ... and so is a chain assignment in a method
+let pb = Node{val = 0, next = null};
+for i in [1: 20000]
+{
+	pb.prepend(i);
+}
+let pn = 0;
+while pb != null
+{
+	pn += 1;
+	pb = pb.next;
+}
+ok = ok and pn == 20000;
+
+return ok;
+

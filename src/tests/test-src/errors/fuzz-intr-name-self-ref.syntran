@@ -1,0 +1,3 @@
+// A global named after an intrinsic, on its own right-hand side.  Pass 1 found
+// the variable that is being declared, instead of the fn
+let count = (std::format("count: {}", count));

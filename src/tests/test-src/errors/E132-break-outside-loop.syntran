@@ -1,0 +1,18 @@
+// E132: break-outside-loop
+// A fn body is not a block that `break` can leave early, so `break` and `continue`
+// need a loop inside the same fn.  (At the top level, a `break` can leave a block)
+
+fn first_neg(v: [i32; :]): i32
+{
+	let r = -1;
+	for x in v
+	{
+		if x < 0
+			r = x;
+	}
+	if r == 0
+		break;
+	return r;
+}
+
+return first_neg([1, -2, 3]);

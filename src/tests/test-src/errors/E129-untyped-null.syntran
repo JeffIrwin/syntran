@@ -1,0 +1,9 @@
+// E129: untyped-null
+// A variable's type is inferred from its initializer, and `null` has no struct
+// type, so the variable could never hold a struct
+
+struct Node { val: i32, next: ?Node, }
+
+let tail = Node{val = 1, next = null};
+
+let nothing = null;

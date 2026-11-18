@@ -372,7 +372,7 @@ An implicit unit-step range's bounds (`[lo: hi]`) are of a uniform but non-integ
 
 ### E59 -- het-array
 
-An array literal is heterogeneous: an element's type doesn't match the first element's type.
+An array literal is heterogeneous: an element's type doesn't match the first element's type.  The message names both types.
 
 [Example](../src/tests/test-src/errors/E59-het-array.syntran)
 
@@ -806,6 +806,72 @@ Arrays of `file` handles (e.g. `[f, g]` or `[std::OUT; 2]`) are not supported: a
 storage has no case for `file`-typed values.
 
 [Example](../src/tests/test-src/errors/E124-file-array.syntran)
+
+### E125 -- typed-array-size
+
+An array literal with a type name instead of a fill value, like `[Node; 0]` or
+`[str; 0, 0]`, can only be empty.  A type name has no value to fill elements with, so every
+size must be the literal `0`.  This is how to make the empty base case of a recursive
+struct like `struct Tree { kids: [Tree; :] }`.
+
+[Example](../src/tests/test-src/errors/E125-typed-array-size.syntran)
+
+### E126 -- infinite-struct
+
+A struct holds itself in a scalar member, either directly (`next: Node`) or through other
+scalar struct members (`A { b: B }`, `B { a: A }`), so it would have infinite size.  Make
+one of the members optional like `?Node`, or an array like `[Node; :]`, which can be
+empty, to recurse.
+
+[Example](../src/tests/test-src/errors/E126-infinite-struct.syntran)
+
+### E127 -- bad-optional
+
+Only a struct can be optional, like `?Node`.  Primitive types, arrays, and fn pointers
+can't, so `?i32`, `?[Node; :]`, and `?fn(i32): i32` are errors.
+
+[Example](../src/tests/test-src/errors/E127-bad-optional.syntran)
+
+### E128 -- null-array
+
+`null` can't be an element of an array literal like `[null, null]`, because arrays of
+optionals aren't supported.
+
+[Example](../src/tests/test-src/errors/E128-null-array.syntran)
+
+### E129 -- untyped-null
+
+A variable is declared directly from `null`, like `let x = null;`.  A variable's type is
+inferred from its initializer and `null` has no struct type, so `x` could never be
+assigned a struct afterwards.  Only a `?Struct` member, fn parameter, or fn return value
+can be null.
+
+[Example](../src/tests/test-src/errors/E129-untyped-null.syntran)
+
+### E130 -- native-unsupported
+
+A construct which the native backend (`syntran --aot`) can't compile yet.
+The program is still valid.  Run it with the interpreter instead, i.e. without
+`--aot` or `--jit`.  This is only ever reported when
+compiling natively.  There is at most one diagnostic for each statement.
+
+See [native.md](native.md) for what is supported.  At the moment no valid program is
+known that it can't compile, so there is no example.
+
+### E131 -- move-not-variable
+
+The argument of `std::move()` is not a plain variable or struct member, like `x` or
+`v.data`.  It moves the value out of its variable and leaves an empty array or str behind,
+so it can't take a subscript, a slice, a literal, or a fn call.  (A scalar or struct
+argument is E42, and a const variable is E83.)
+
+[Example](../src/tests/test-src/errors/E131-move-not-variable.syntran)
+
+### E132 -- break-outside-loop
+
+A `break` or `continue` in a fn or method body that isn't inside a `for` or `while` loop in that same fn.  At the top level of a program, a `break` can leave a block, but a fn body isn't a block to leave early, and it would return no value to its caller.  Use `return` to leave a fn.
+
+[Example](../src/tests/test-src/errors/E132-break-outside-loop.syntran)
 
 ## Internal errors
 
@@ -1294,6 +1360,31 @@ arrays of strings.
 `"false"` are accepted, optionally with surrounding spaces.
 
 [Example](../src/tests/test-src/errors/R46-parse-bool.syntran)
+
+### R47 -- null-member
+
+A member was read or assigned through an optional struct (`?Node`) that is `null`, like
+`tail.next.val` when `tail.next` is `null`.  Compare with `x == null` first.
+
+[Example](../src/tests/test-src/errors/R47-null-member.syntran)
+
+### R48 -- bad-array-size
+
+An array was built with a negative extent, like `[0; n]` with `n = -1`, or with too many elements to allocate: the count overflows an `i64`, or there isn't enough memory for the array.  An extent of zero is fine, and gives an empty array.  A range like `[7: 3]` whose upper bound is below its lower bound is also fine, and is empty.  A float range like `[0.0: 1e-300: 5.0]`, as an array or as the iterable of a `for` loop, is R48 too when it has too many elements to count, or when its bounds or step aren't finite (infinity or NaN).  The sizes can come from the program, so they aren't known until runtime.
+
+[Example](../src/tests/test-src/errors/R48-bad-array-size.syntran)
+
+### R49 -- cast-str-len
+
+[`i32()`](intrinsics.md#i32) or [`i64()`](intrinsics.md#i64) was given a string that doesn't have exactly 1 character, or an array with such an element.  Only a single character has an integer value, its ASCII code.  To read a number from a string, use `parse_i32()` or `parse_i64()` instead.
+
+[Example](../src/tests/test-src/errors/R49-cast-str-len.syntran)
+
+### R50 -- repeat-too-long
+
+[`repeat()`](intrinsics.md#repeat) was given a count that makes its result too big to allocate: its length overflows an `i64`, or there isn't enough memory for it.  A negative count is [R39](#r39----repeat-negative) instead.
+
+[Example](../src/tests/test-src/errors/R50-repeat-too-long.syntran)
 
 ## Warnings
 

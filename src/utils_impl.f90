@@ -232,6 +232,45 @@ module procedure trim_char_vector
 
 end procedure trim_char_vector
 
+!===============================================================================
+
+module procedure escape_dump
+
+	! Escape a token's text or value for lex_dump() and parse_dump(), so that a
+	! token is always exactly one line, with no tabs in it.  Bytes >= 128 are
+	! left alone
+
+	!********
+
+	integer :: i
+
+	type(char_vector_t) :: sb
+
+	sb = new_char_vector()
+	do i = 1, len(str_)
+		select case (str_(i:i))
+		case ("\")
+			call sb%push("\")
+			call sb%push("\")
+		case (line_feed)
+			call sb%push("\")
+			call sb%push("n")
+		case (carriage_return)
+			call sb%push("\")
+			call sb%push("r")
+		case (tab)
+			call sb%push("\")
+			call sb%push("t")
+		case (null_char)
+			call sb%push("\")
+			call sb%push("0")
+		case default
+			call sb%push(str_(i:i))
+		end select
+	end do
+	esc = sb%trim()
+
+end procedure escape_dump
 
 !===============================================================================
 
@@ -375,16 +414,17 @@ end procedure is_dir
 
 module procedure read_file
 
-	! Read all lines of a file into str_
-
-
-
+	! Read the exact bytes of a file into str_.  A line end is left as it is, so a
+	! CRLF keeps its CR, and a last line without a line feed doesn't get one.  This
+	! is the same as std::read_file(), so the lexer sees the bytes of the file, and
+	! so will a lexer that is written in syntran
 
 	!********
 
 	character :: c
 
 	integer :: io, iu
+	integer(kind = 8) :: n
 
 	type(char_vector_t) :: sb  ! string builder
 
@@ -400,32 +440,33 @@ module procedure read_file
 		return
 	end if
 
-	open(file = file, newunit = iu, status = 'old', iostat = io)
+	open(file = file, newunit = iu, status = 'old', action = 'read', &
+		access = 'stream', form = 'unformatted', iostat = io)
 	if (io /= exit_success) then
 		if (present(iostat)) iostat = io
 		return
 	end if
 
-	! Read 1 character at a time until end
-	sb = new_char_vector()
-	do
-		read(iu, '(a)', advance = 'no', iostat = io) c
-		if (io == iostat_end) then
-			io = exit_success
-			exit
-		end if
-
-		!if (io == iostat_eor) exit
-		if (io == iostat_eor) c = line_feed
-
-		call sb%push(c)
-
-	end do
+	inquire(unit = iu, size = n)
+	if (n > 0) then
+		deallocate(str_)
+		allocate(character(len = n) :: str_)
+		read(iu, iostat = io) str_
+		if (io /= exit_success) str_ = ''
+	else
+		! An empty file, or one with no size like a named pipe, which can only be
+		! read once, to the end
+		sb = new_char_vector()
+		do
+			read(iu, iostat = io) c
+			if (io /= exit_success) exit
+			call sb%push(c)
+		end do
+		if (io == iostat_end) io = exit_success
+		str_ = sb%trim()
+		if (io /= exit_success) str_ = ''
+	end if
 	close(iu)
-	str_ = sb%trim()
-
-	!print *, 'str = '
-	!print *, str
 
 	if (present(iostat)) iostat = io
 
@@ -817,7 +858,10 @@ module procedure rm_leading_zeros
 	integer :: i
 
 	i = 1
-	do while (i < len(str_) .and. str_(i:i) == "0")
+	! Fortran doesn't short-circuit `.and.`, so str_(i:i) can't share a
+	! condition with the length check, or it reads past an empty str_
+	do while (i < len(str_))
+		if (str_(i:i) /= "0") exit
 		i = i + 1
 	end do
 	str_out = str_(i:)
@@ -861,6 +905,37 @@ module procedure replace_all
 	str_out = sb%trim()
 
 end procedure replace_all
+
+!===============================================================================
+
+module procedure is_windows
+
+	! gfortran doesn't define _WIN32 for the preprocessor, so ask the environment
+	! instead.  Windows sets OS for every process, including under Git Bash
+
+	character(len = 16) :: os
+
+	call get_environment_variable('OS', os)
+	r = trim(os) == 'Windows_NT'
+
+end procedure is_windows
+
+!===============================================================================
+
+module procedure sh_quote
+
+	! `execute_command_line()` runs the command in cmd.exe on Windows, which
+	! doesn't treat single quotes as quotes.  A path can't have a double quote
+	! there, and callers reject one.  In a POSIX shell a single quote ends the
+	! quoted string, so it's closed, escaped, and opened again: 'it'\''s'
+
+	if (is_windows()) then
+		r = '"'//s//'"'
+	else
+		r = "'"//replace_all(s, "'", "'\''")//"'"
+	end if
+
+end procedure sh_quote
 
 
 !===============================================================================

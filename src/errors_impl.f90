@@ -326,6 +326,14 @@ module procedure get_all_error_codes
 	call codes%push(EC_STD_UNKNOWN_NAME)
 	call codes%push(EC_MOD_IMPORT_NAME)
 	call codes%push(EC_FILE_ARRAY)
+	call codes%push(EC_TYPED_ARRAY_SIZE)
+	call codes%push(EC_INFINITE_STRUCT)
+	call codes%push(EC_BAD_OPTIONAL)
+	call codes%push(EC_NULL_ARRAY)
+	call codes%push(EC_UNTYPED_NULL)
+	call codes%push(EC_NATIVE_UNSUPPORTED)
+	call codes%push(EC_MOVE_NOT_VAR)
+	call codes%push(EC_BREAK_OUTSIDE_LOOP)
 	call codes%push(IC_EVAL_UNARY_TYPE)
 	call codes%push(IC_EVAL_BINARY_TYPES)
 	call codes%push(IC_EVAL_LEN_ARRAY)
@@ -415,6 +423,10 @@ module procedure get_all_error_codes
 	call codes%push(RC_READ_FAIL)
 	call codes%push(RC_BINARY_WRITE_TYPE)
 	call codes%push(RC_PARSE_BOOL)
+	call codes%push(RC_NULL_MEMBER)
+	call codes%push(RC_BAD_ARRAY_SIZE)
+	call codes%push(RC_CAST_STR_LEN)
+	call codes%push(RC_REPEAT_TOO_LONG)
 	call codes%push(WC_MISSING_RETURN)
 end procedure get_all_error_codes
 
@@ -772,10 +784,11 @@ module procedure err_unexpected_token
 
 	! `got` and `expect` are already fully formatted by the caller (got_desc()/
 	! expect_desc() in parse_misc.f90), e.g. "`4`"/"an identifier"/
-	! "end of input", so they aren't quoted again here
+	! "end of input", so they aren't quoted again here.  `label` is the text
+	! next to the caret, which the caller picks because it also picks the span
 	err = err_pre(EC_UNEXPECTED_TOKEN) &
-		//'unexpected token '//got//', expected '//expect &
-		//underline(context, span)//" unexpected token"//color_reset
+		//'expected '//expect//', found '//got &
+		//underline(context, span)//" "//label//color_reset
 
 end procedure err_unexpected_token
 
@@ -1345,6 +1358,100 @@ end procedure err_file_array
 
 !===============================================================================
 
+module procedure err_typed_array_size
+
+	err = err_pre(EC_TYPED_ARRAY_SIZE) &
+		//'size `'//size_text//'` of a type-name array literal is not zero.  ' &
+		//'A type name has no value to fill an array with, so only ' &
+		//'empty arrays like `[Node; 0]` are allowed' &
+		//underline(context, span)//" size must be literal 0"//color_reset
+
+end procedure err_typed_array_size
+
+!===============================================================================
+
+module procedure err_infinite_struct
+
+	err = err_pre(EC_INFINITE_STRUCT) &
+		//'struct `'//struct_name//'` contains itself through member `'//member//'`, ' &
+		//'so it would have infinite size.  Make `'//member//'` optional like ' &
+		//'`?Type`, or an array like `[Type; :]`, which can be empty' &
+		//underline(context, span)//" recursive member"//color_reset
+
+end procedure err_infinite_struct
+
+!===============================================================================
+
+module procedure err_null_array
+
+	err = err_pre(EC_NULL_ARRAY) &
+		//'array element is `null`.  ' &
+		//'Arrays of optionals are not supported' &
+		//underline(context, span)//" null in array literal"//color_reset
+
+end procedure err_null_array
+
+!===============================================================================
+
+module procedure err_untyped_null
+
+	err = err_pre(EC_UNTYPED_NULL) &
+		//'`null` has no struct type, so variable `'//var//'` could never hold ' &
+		//'anything else.  Only a `?Struct` member, parameter, or fn return ' &
+		//'value can be null' &
+		//underline(context, span)//" untyped null"//color_reset
+
+end procedure err_untyped_null
+
+!===============================================================================
+
+module procedure err_move_not_var
+
+	err = err_pre(EC_MOVE_NOT_VAR) &
+		//'`std::move()` takes a plain variable or struct member, like `x` or ' &
+		//'`v.data`, not a subscript or other expression, because it moves the ' &
+		//'value out of the variable and leaves it empty' &
+		//underline(context, span)//" not a variable"//color_reset
+
+end procedure err_move_not_var
+
+!===============================================================================
+
+module procedure err_break_outside_loop
+
+	err = err_pre(EC_BREAK_OUTSIDE_LOOP) &
+		//"`"//keyword//"` in a fn has to be inside a `for` or `while` loop in that fn, because " &
+		//"a fn body is not a block that it can leave early.  Use `return` to leave a fn" &
+		//underline(context, span)//" not in a loop"//color_reset
+
+end procedure err_break_outside_loop
+
+!===============================================================================
+
+module procedure err_native_unsupported
+
+	err = err_pre(EC_NATIVE_UNSUPPORTED) &
+		//what//' is not supported by the native backend yet' &
+		//underline(context, span)//" unsupported" &
+		//color_reset//line_feed//fg_bright_green//"help"//color_reset &
+		//": run the program with the interpreter instead, i.e. without `--aot` or `--jit`"
+
+end procedure err_native_unsupported
+
+!===============================================================================
+
+module procedure err_bad_optional
+
+	err = err_pre(EC_BAD_OPTIONAL) &
+		//'`?'//type_text//'` is not a valid optional type.  ' &
+		//'Only a struct can be optional, like `?Node`, not an array, fn pointer, ' &
+		//'or primitive type' &
+		//underline(context, span)//" bad optional type"//color_reset
+
+end procedure err_bad_optional
+
+!===============================================================================
+
 module procedure err_missing_return
 
 	err = err_pre(EC_MISSING_RETURN) &
@@ -1779,7 +1886,7 @@ module procedure err_het_array
 
 	err = err_pre(EC_HET_ARRAY) &
 		//'array is heterogeneous.  Element `'//elem  &
-		//"` does not match the first element's type" &
+		//'` has type `'//actual//'` but the first element has type `'//expect//'`' &
 		//underline(context, span) &
 		//" heterogeneous array element"//color_reset
 
@@ -1991,6 +2098,50 @@ module procedure err_rt_repeat_negative
 		"ncopies argument of repeat() is negative: "//str(ncopies))
 
 end procedure err_rt_repeat_negative
+
+
+!===============================================================================
+
+module procedure err_rt_repeat_too_long
+
+	! Runtime (R50) error for repeat() whose result can't be allocated, because its
+	! length overflows an i64 or there isn't enough memory
+
+	err = err_rt(RC_REPEAT_TOO_LONG, &
+		"repeat() of a string of length "//str(len_)//" "//str(ncopies)//" times is too long: "// &
+		"the result is too big to allocate")
+
+end procedure err_rt_repeat_too_long
+
+
+!===============================================================================
+
+module procedure err_rt_bad_array_size
+
+	! Runtime (R48) error for an array that is built with a negative extent, or
+	! with so many elements that it can't be allocated (the count overflows, or
+	! there isn't enough memory)
+
+	err = err_rt(RC_BAD_ARRAY_SIZE, &
+		"invalid array size "//dims_str(sizes)//": extents must not be negative, "// &
+		"and the array must be small enough to allocate")
+
+end procedure err_rt_bad_array_size
+
+
+!===============================================================================
+
+module procedure err_rt_cast_str_len
+
+	! Runtime (R49) error for i32() or i64() of a string that isn't exactly 1
+	! character long, which is the only kind that has an integer value (its
+	! ASCII code)
+
+	err = err_rt(RC_CAST_STR_LEN, &
+		"cannot cast a string of length "//str(len_)//" with `"//fn//"()`: only "// &
+		"single-character strings can be cast.  Use `parse_"//fn//"()` to parse a number")
+
+end procedure err_rt_cast_str_len
 
 
 !===============================================================================
@@ -2433,9 +2584,9 @@ module procedure underline
 	! j :shrug:
 	j = max(min(len(context%text), span%start + length - 1), 1)
 	!print *, 'char = "', context%text(j:j), '"'
-	do while (is_whitespace(context%text(j:j)))
+	do while (length > 0 .and. is_whitespace(context%text(j:j)))
 		length = length - 1
-		j = min(len(context%text), span%start + length - 1)
+		j = max(min(len(context%text), span%start + length - 1), 1)
 	end do
 	length = max(length, 1)
 

@@ -59,6 +59,19 @@ module subroutine search(parser, key, id_index, iostat, val, is_loc, is_const)
 
 	if (.not. is_loc) then
 		call parser%vars%search(key, id_index, iostat, val, is_const = is_const)
+
+		! In pass 1 the vars table still holds everything pass 0 inserted, but
+		! num_vars was reset, so an id past it is a global that isn't declared
+		! yet, e.g. the `count` in `let count = count;`.  Treat it as not found,
+		! c.f. the pass-0-only diagnostics in parse_unit().  Pass 0's value
+		! goes too, e.g. the fn ref in `let sq = sq;`, or callers that build a
+		! node from it would allocate over its fn_params
+		if (iostat == exit_success .and. parser%ipass > 0 .and. &
+			id_index > parser%num_vars) then
+			iostat = exit_failure
+			call value_destroy(val)
+			val%type = unknown_type
+		end if
 	end if
 
 end subroutine search
@@ -255,11 +268,12 @@ module subroutine match(parser, kind, token, what)
 
 	!********
 
-	integer :: len_text
+	integer :: len_text, iprev, prev_end, gap_end
 
-	character(len = :), allocatable :: expect
+	character(len = :), allocatable :: expect, label
 
 	type(syntax_token_t) :: current
+	type(text_context_t) :: context
 	type(text_span_t) :: span
 
 	! If current_text() and current_pos() helper fns are added, this local var
@@ -284,11 +298,42 @@ module subroutine match(parser, kind, token, what)
 	len_text = max(len(current%text), 1)
 
 	span = new_span(parser%current_pos(), len_text)
+	label = "unexpected token"
 
 	if (present(what)) then
 		expect = what
 	else
 		expect = expect_desc(kind)
+	end if
+
+	! A missing `;` (or anything missing at the end of the input) is best
+	! reported right after the last token of the unfinished line, not on the
+	! token that starts the next line, which may be several lines away.  A
+	! token on the same line as the previous one is already the right place
+	!
+	! At the end of the input the caret is already just after the last token,
+	! so it only needs the label
+	if (current%kind == eof_token) label = "expected "//expect//" here"
+
+	iprev = parser%peek_index(0) - 1
+	if ((kind == semicolon_token .or. current%kind == eof_token) &
+		.and. iprev >= 1) then
+
+		if (parser%tokens(iprev)%unit_ == current%unit_) then
+			context  = parser%context()
+			prev_end = parser%tokens(iprev)%pos + len(parser%tokens(iprev)%text)
+			gap_end  = min(current%pos - 1, len(context%text))
+
+			if (prev_end <= gap_end) then
+				if (scan(context%text(prev_end: gap_end), &
+					line_feed//carriage_return) > 0) then
+
+					span  = new_span(prev_end, 1)
+					label = "expected "//expect//" here"
+
+				end if
+			end if
+		end if
 	end if
 
 	! A match() failure at the same position as the last one (e.g. parse_expr_
@@ -300,7 +345,7 @@ module subroutine match(parser, kind, token, what)
 
 		call parser%diagnostics%push( &
 			err_unexpected_token(parser%context(), span, &
-			got_desc(current%kind, current%text), expect))
+			got_desc(current%kind, current%text), expect, label))
 	end if
 
 	! An unmatched char in the middle of the input is an error and should log
@@ -338,7 +383,7 @@ recursive module subroutine preprocess(parser, tokens_in, src_file, contexts)
 
 	type(text_span_t) :: span
 
-	type(syntax_token_t) :: token, token_peek, lparen, rparen, semicolon
+	type(syntax_token_t) :: token, token_peek, lparen, rparen, semicolon, filetok
 	type(syntax_token_vector_t) :: tokens_out
 
 	! The includer's own context was pushed by new_parser() before it called
@@ -376,6 +421,14 @@ recursive module subroutine preprocess(parser, tokens_in, src_file, contexts)
 			! are consumed by the preprocessor, so the later actual parser does
 			! not see them.
 			call parser%match_pre(lparen_token, tokens_in, i, contexts%v(unit_0), lparen)
+
+			! The file name must be a string literal.  Anything else (including
+			! the eof of a bare `#include`) has no `%val%str` to read.  This
+			! pushes the E20 and leaves the rest of the tokens for the parser
+			if (tokens_in(i + 1)%kind /= str_token) then
+				call parser%match_pre(str_token, tokens_in, i, contexts%v(unit_0), filetok)
+				cycle
+			end if
 
 			! Prepend with path to src_file, unless already absolute
 
@@ -507,7 +560,8 @@ module subroutine match_pre(parser, kind, tokens, token_index, context, token)
 
 		call parser%diagnostics%push( &
 			err_unexpected_token(context, span, &
-			got_desc(current%kind, current%text), expect_desc(kind)))
+			got_desc(current%kind, current%text), expect_desc(kind), &
+			"unexpected token"))
 	end if
 
 	! An unmatched char in the middle of the input is an error and should log

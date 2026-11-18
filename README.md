@@ -8,7 +8,7 @@
 
 ## [Syntax translator](https://www.practo.com/medicine-info/syntran-100-mg-capsule-18930)
 
-_An interpreter written in Fortran_
+_An interpreter and compiler written in Fortran_
 
 > Jerry: Fungicide. I mean what could she have?
 >
@@ -16,12 +16,15 @@ _An interpreter written in Fortran_
 >
 > Kramer: Fungus.
 
-Syntran is an interpreted, array-oriented language -- basically MATLAB but with curly braces, type checking, and zero-indexed arrays.
+Syntran is an array-oriented language -- basically MATLAB but with curly braces, type checking, and zero-indexed arrays.
 
-The interpreter is an efficient stack-based bytecode VM with performance roughly on par
-with python. Vectorized array operations use native Fortran constructs, offering
-numpy-like performance without requiring any third-party dependencies.  See the
-[benchmarks](src/benchmarks/README.md).
+By default, syntran runs a program on an efficient stack-based bytecode VM with
+performance roughly on par with python. Vectorized array operations use native
+Fortran constructs, offering numpy-like performance without requiring any
+third-party dependencies.  See the [benchmarks](src/benchmarks/README.md).
+Syntran can also compile a program with LLVM, either ahead of time (AOT) to a
+[native executable](#compiling-natively-with-llvm), or just in time (JIT) in
+memory to run it right away, for much more speed.
 
 Syntran can run standalone scripts, serve as a desktop calculator in its REPL,
 or be embedded in Fortran applications through its [API](doc/api.md).
@@ -39,7 +42,7 @@ described below.
 
 ## Install binary
 
-To run syntran, you can either install a binary or build it from the Fortran source code.  To build it from source, [see the next section](#build-the-interpreter-from-source).
+To run syntran, you can either install a binary or build it from the Fortran source code.  To build it from source, [see the next section](#build-syntran-from-source).
 
 Download the binary from the latest github release for your operating system:
 
@@ -49,7 +52,6 @@ Download the binary from the latest github release for your operating system:
 curl -LO "https://github.com/JeffIrwin/syntran/releases/latest/download/syntran-linux.zip"
 unzip syntran-linux.zip
 chmod +x ./syntran
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.
 ./syntran -h
 ```
 <!-- syntran-end -->
@@ -94,22 +96,45 @@ More or less any terminal on Windows should work, but [Windows Terminal](https:/
 
 <!-- mac works too but i don't want to encourage apple usery -->
 
+### Toolchain manager
+
+The release zips also have `synup`, which installs several versions of syntran side by side, and switches between them.  It downloads with the `curl` that is already on your system, and checks every download against the release's `SHA256SUMS`.
+
+<!-- syntran-begin mode=skip reason="shell installation command, not syntran code" -->
+```
+./synup init                # installs the latest release in ~/.syntran
+synup install 1.6.0         # an older release
+synup install dev           # the latest build of the dev branch
+synup default 1.6.0         # which one `syntran` runs.  Or `stable`, or `dev`
+synup update                # newest release, and `dev` if installed
+synup list
+```
+<!-- syntran-end -->
+
+`syntran --update` is the same as `synup update`.  [More details](doc/synup.md).
+
 ### Path and environment settings
 
-Feel free to add the directory to your PATH environment variable, or type the
-full path.
+Feel free to add the `~/.syntran/bin/` directory to your PATH environment
+variable, or type the full path.
 
 Whenever you see something like `./build/Debug/syntran` or `fpm run` in the rest
 of this documentation, replace that with `/path/to/syntran` or
 `C:\path\to\syntran.exe` appropriately, depending on your operating system and
-where you downloaded the binary.
+where you downloaded the binary.  The `synup` updater places everything is in
+`$SYNUP_HOME`, which is `~/.syntran` by default
 
 I recommend running `ulimit -s unlimited` in `~/.bashrc` or at least in your
 current shell to remove the stack limit.  Otherwise, syntran can crash with
 large recursion depths of recursive function calls (see issue
-https://github.com/JeffIrwin/syntran/issues/28).
+https://github.com/JeffIrwin/syntran/issues/28).  Copying a very long linked
+list, e.g. `let cur = list;`, can also overflow the stack, because it recurses
+once per node.
 
-## Build the interpreter from source
+On macOS, the hard limit is about 64 MB, so `ulimit -s unlimited` fails with
+`value exceeds hard limit`.  Use `ulimit -s 65520` instead.
+
+## Build syntran from source
 
 Using cmake:
 
@@ -121,7 +146,7 @@ Using cmake:
 
 If you installed syntran as a binary, you can skip this section.
 
-A [Fortran compiler](https://fortran-lang.org/en/compilers/) and either [CMake](https://cmake.org/download/) or [FPM](https://fpm.fortran-lang.org/index.html) are required.  Supported compilers are gfortran 10 through 15, or Intel 2025.2.  Also check `matrix.gfortran` in the [github actions workflow ](.github/workflows/main.yml) to see which compilers are regularly tested in CI/CD.  For performance, gfortran is recommended over Intel.  A BLAS/LAPACK library is also needed by default, see [below](#blas-and-lapack).
+A [Fortran compiler](https://fortran-lang.org/en/compilers/) and either [CMake](https://cmake.org/download/) or [FPM](https://fpm.fortran-lang.org/index.html) are required.  Supported compilers are gfortran 11 through 15, or Intel 2025.2.  Also check `matrix.gfortran` in the [github actions workflow ](.github/workflows/main.yml) to see which compilers are regularly tested in CI/CD.  For performance, gfortran is recommended over Intel.  A BLAS/LAPACK library is also needed by default, see [below](#blas-and-lapack).
 
 Two independent build systems are provided for syntran.  You can either use cmake, which is run by `build.sh` as shown above, or you can use the Fortran Package Manager `fpm`:
 
@@ -134,6 +159,23 @@ fpm build
 Other `fpm` commands are available, such as `fpm test`, `fpm run`, `fpm
 install`, etc.  Most of the example commands in this documentation will assume
 that cmake was used, but there is usually an fpm alternative.
+
+`build.sh` can drive either build system with the same options, so you don't
+have to remember the `fpm --features` combinations:
+
+<!-- syntran-begin mode=skip reason="builds the interpreter itself; out of scope for output testing" -->
+```
+./build.sh                       # cmake, debug
+./build.sh release --fpm --test  # fpm, release, then run the short tests
+./build.sh --no-llvm --no-blas   # opt out of the optional libraries
+```
+<!-- syntran-end -->
+
+The native backend ([LLVM](doc/native.md)) and BLAS/LAPACK are both
+auto-detected, and the options `--llvm`/`--no-llvm` and `--blas`/`--no-blas`
+force them on or off.  `--blas-dir DIR` looks for BLAS/LAPACK in a nonstandard
+directory.  The fpm binaries are installed to `build/fpm/<Debug|Release>/bin/`.
+Run `./build.sh --help` for the full list.
 
 As an alternative to installing dependencies yourself, you can run syntran in a
 docker container using the included [Dockerfile](Dockerfile).  See the
@@ -171,8 +213,8 @@ slower for large matrices.  Nothing needs to be installed:
 
 <!-- syntran-begin mode=skip reason="builds the interpreter itself; out of scope for output testing" -->
 ```
-# cmake, via build.sh
-SYNTRAN_NO_BLAS=1 ./build.sh
+# cmake, via build.sh.  SYNTRAN_NO_BLAS=1 ./build.sh does the same
+./build.sh --no-blas
 
 # fpm, which needs version 0.13.0 or later
 fpm build --features release,noblas
@@ -188,7 +230,7 @@ If you depend on syntran from your own fpm project, see
 
 ## Run
 
-Start the interpreter.  Adjust the path if you built with fpm or installed a binary:
+Start the REPL.  Adjust the path if you built with fpm or installed a binary:
 
 <!-- syntran-begin mode=skip reason="starts an interactive REPL with no input; nothing to assert" -->
 ```
@@ -196,7 +238,7 @@ Start the interpreter.  Adjust the path if you built with fpm or installed a bin
 ```
 <!-- syntran-end -->
 
-Then enter arithmetic expressions like `1 + 2 * 3;` in the interpreter.  Semicolons are required at the end of statements!
+Then enter arithmetic expressions like `1 + 2 * 3;` in the REPL.  Semicolons are required at the end of statements!
 
 <!-- cpp is the closest match I can find for markdown syntax highlighting -->
 <!-- syntran-begin mode=skip reason="illustrates the syntran$ prompt convention itself, not a `// result` style block" -->
@@ -208,7 +250,7 @@ syntran$ (1 + 2) * 3;
 ```
 <!-- syntran-end -->
 
-Expressions are evaluated immediately and the result is printed to the console.  In the rest of this documentation, we will hide the `syntran$` prompt and show the result as a `// comment`, so you can copy and paste code blocks straight into the interpreter.
+Expressions are evaluated immediately and the result is printed to the console.  In the rest of this documentation, we will hide the `syntran$` prompt and show the result as a `// comment`, so you can copy and paste code blocks straight into the REPL.
 
 Use two asterisks for exponent powers, like Fortran and Scilab:
 
@@ -290,7 +332,7 @@ false
 true
 true
 Error[E48]: binary operator `and` is not defined for types i32 and bool
-  --> <stdin>:1:5
+  --&gt; <stdin>:1:5
    |
  1 | foo and p;
    |     ^^^ wrong types for this binary operator
@@ -383,7 +425,7 @@ vim.cmd.autocmd("BufRead,BufNewFile *.syntran set filetype=rust")
 
 ### Saving scripts in a file
 
-As programs get longer and more complicated, it becomes difficult to enter them into the interactive interpreter.  To interpret a whole file, provide it as a command line argument:
+As programs get longer and more complicated, it becomes difficult to enter them into the REPL.  To run a whole file, provide it as a command line argument:
 
 <!-- syntran-begin mode=skip reason="shell invocation example" -->
 ```
@@ -395,9 +437,29 @@ As programs get longer and more complicated, it becomes difficult to enter them 
 Note: global block statement is not required as of 0.0.13.  Multiple statements (and functions) are parsed at the global scope.
 -->
 
-### Transpiling to Fortran
+### Compiling natively with LLVM
 
-Instead of running a program with the interpreter, `syntran --transpile`
+When built with LLVM, syntran can also AOT-compile a program straight to a
+native executable, with no Fortran compiler involved:
+
+<!-- syntran-begin mode=skip reason="shell invocation example" -->
+```
+syntran --aot fib fib.syntran
+./fib
+```
+<!-- syntran-end -->
+
+See [doc/native.md](doc/native.md) for what it supports, and how to build
+syntran with it.
+
+To JIT-compile a program in memory and run it right away, use `--jit`.
+
+### Transpiling to Fortran (deprecated)
+
+**Deprecated in 1.8:**  `--transpile` will be removed in a future release, likely
+1.9 or 1.10.  Use `--aot` or `--jit` instead.
+
+Instead of running a program, `syntran --transpile`
 translates it to a standalone modern Fortran program, which you compile
 yourself with the Fortran compiler of your choice:
 
@@ -410,10 +472,10 @@ gfortran -O3 fib.f90 -o fib
 <!-- syntran-end -->
 
 Most of the language is supported, including structs, enums, modules, `switch`,
-file I/O, and function pointers.  The interpreter's call stack
+file I/O, and function pointers.  The call stack
 (`std::caller()` and friends) is not.  See [doc/transpile.md](doc/transpile.md)
 for what is supported, and for how the generated program differs from
-interpreting.
+running the program normally.
 
 ### Other command-line arguments
 
@@ -424,51 +486,87 @@ Run `syntran -h` to see a comprehensive listing of syntran command-line argument
  syntran 1.7.0
  https://github.com/JeffIrwin/syntran
 
- Usage:
-     syntran <file.syntran> [options] [-- <script args>...]
-     syntran
-     syntran -c <cmd> | --command <cmd>
-     syntran -h | --help
-     syntran --version
+ Usage: syntran [OPTIONS] [FILE] [-- <ARGS>...]
+        syntran [OPTIONS] -c <CMD>
+        syntran help
 
  Options:
-     -h --help           Show this help
-     --version           Show version and build details
-     -c --command <cmd>  Run program passed in as string
-     --color (off|on)    Set ANSI text color [default: auto]
-     --fmax-errors <n>   Limit max error messages to <n> [default: 4]
-     -i --interactive    Interpret a file then start an interactive shell
-     -q --quiet          Don't print the banner, only errors and println calls
-     --permissive-return Downgrade missing-return errors to warnings
-     --cd                Resolve the script's relative file paths against its own directory
-     -s --syntax-only    Parse and type check without running the program
-     -t --transpile <f>  Write the program as Fortran source to <f> ('-' for stdout) instead of running it
-     --keep-unused-fns   With --transpile, also write the fns that nothing calls
-     -- <args>...        Pass remaining arguments to script via std::args()
+   -h, --help
+           Show this help
+       --version
+           Show version and build details
+   -c, --command <CMD>
+           Run program passed in as string
+       --color <WHEN>
+           Set ANSI text color [possible values: auto, on, off] [default: auto]
+       --fmax-errors <N>
+           Limit max error messages to <N> [default: 4]
+   -i, --interactive
+           Interpret a file then start an interactive shell
+   -q, --quiet
+           Don't print the banner, only errors and println calls
+       --permissive-return
+           Downgrade missing-return errors to warnings
+       --cd
+           Resolve the script's relative file paths against its own directory
+   -s, --syntax-only
+           Parse and type check without running the program
+   -t, --transpile <FILE>
+           Write the program as Fortran source to <FILE> ('-' for stdout)
+           instead of running it (deprecated)
+       --keep-unused-fns
+           With --transpile, also write fns that nothing calls
+   -o, --aot <FILE>
+           Compile the program ahead of time with LLVM to an executable <FILE>
+           (or an object <FILE>.o, or LLVM IR <FILE>.ll)
+   -j, --jit
+           Compile the program just in time with LLVM and run it right away
+       --update
+           Update to the latest release, by running `synup update`
+       -- <ARGS>...
+           Pass remaining arguments to script via std::args()
 ```
 <!-- syntran-expect
  syntran X.Y.Z
  https://github.com/JeffIrwin/syntran
- Usage:
-     syntran <file.syntran> [options] [-- <script args>...]
-     syntran
-     syntran -c <cmd> | --command <cmd>
-     syntran -h | --help
-     syntran --version
+ Usage: syntran [OPTIONS] [FILE] [-- <ARGS>...]
+        syntran [OPTIONS] -c <CMD>
+        syntran help
  Options:
-     -h --help           Show this help
-     --version           Show version and build details
-     -c --command <cmd>  Run program passed in as string
-     --color (off|on)    Set ANSI text color [default: auto]
-     --fmax-errors <n>   Limit max error messages to <n> [default: 4]
-     -i --interactive    Interpret a file then start an interactive shell
-     -q --quiet          Don't print the banner, only errors and println calls
-     --permissive-return Downgrade missing-return errors to warnings
-     --cd                Resolve the script's relative file paths against its own directory
-     -s --syntax-only    Parse and type check without running the program
-     -t --transpile <f>  Write the program as Fortran source to <f> ('-' for stdout) instead of running it
-     --keep-unused-fns   With --transpile, also write the fns that nothing calls
-     -- <args>...        Pass remaining arguments to script via std::args()
+   -h, --help
+           Show this help
+       --version
+           Show version and build details
+   -c, --command <CMD>
+           Run program passed in as string
+       --color <WHEN>
+           Set ANSI text color [possible values: auto, on, off] [default: auto]
+       --fmax-errors <N>
+           Limit max error messages to <N> [default: 4]
+   -i, --interactive
+           Interpret a file then start an interactive shell
+   -q, --quiet
+           Don't print the banner, only errors and println calls
+       --permissive-return
+           Downgrade missing-return errors to warnings
+       --cd
+           Resolve the script's relative file paths against its own directory
+   -s, --syntax-only
+           Parse and type check without running the program
+   -t, --transpile <FILE>
+           Write the program as Fortran source to <FILE> ('-' for stdout)
+           instead of running it (deprecated)
+       --keep-unused-fns
+           With --transpile, also write fns that nothing calls
+   -o, --aot <FILE>
+           Compile the program ahead of time with LLVM to an executable <FILE>
+           (or an object <FILE>.o, or LLVM IR <FILE>.ll)
+   -j, --jit
+           Compile the program just in time with LLVM and run it right away
+       --update
+           Update to the latest release, by running `synup update`
+       -- <ARGS>...
+           Pass remaining arguments to script via std::args()
 -->
 <!-- syntran-end -->
 
@@ -477,12 +575,16 @@ Although the semantic version is always shown, `--version` shows more details:
 ```
  syntran 1.7.0
  https://github.com/JeffIrwin/syntran
- git commit = a62ce5b
- build date = Nov  6 2026
- fortran compiler = gfortran [14, 2, 0]
+
+   commit        a62ce5b
+   built         Nov  6 2026
+   compiler      gfortran 14.2.0
+   bounds check  off
+   blas          OpenBLAS 0.3.20 NO_AFFINITY Haswell MAX_THREADS=64
+   llvm          linked
 ```
 <!-- syntran-end -->
-This can be helpful for binary installations.  If you built from source, most of the details are pointlessly redundant, and the `git commit` will not be shown.
+This can be helpful for binary installations.  It also shows whether BLAS and LLVM are linked, and if BLAS is, which one.  The `blas` row says `not linked` for a build with `SYNTRAN_NO_BLAS`, and `reference or unrecognized` if it's not OpenBLAS or Accelerate, since the reference BLAS can't be told from, say, MKL.  If you built from source, most of the details are pointlessly redundant, and the `commit` will not be shown.
 
 ## Calling syntran from Fortran
 
@@ -573,8 +675,8 @@ for i in [0: 5]
 -->
 <!-- syntran-end -->
 I will often refer to the *starting bound* and *ending bound* as the lower
-and upper bounds respectively.  This is how the variables are named in the
-interpreter.  However, it is a poor choice of words for negative or downward
+and upper bounds respectively.  This is how the variables are named in
+syntran's source code.  However, it is a poor choice of words for negative or downward
 steps:
 <!-- syntran-begin mode=repl group=for-downward -->
 ```rust
@@ -2195,7 +2297,7 @@ println(std::format("{} {:.1} {}", n, x, v));
 -->
 <!-- syntran-end -->
 
-Only ASCII strings are supported because syntran is interpreted in Fortran.  Unicode strings cannot be indexed properly:
+Only ASCII strings are supported because syntran indexes strings byte by byte.  Unicode strings cannot be indexed properly:
 
 <!-- syntran-begin mode=skip reason="unicode indexing is explicitly documented as YMMV / mojibake" -->
 ```rust
@@ -2678,6 +2780,154 @@ println(e[0].d.c[0].b.a[0]._);
 ```
 <!-- syntran-end -->
 
+### Recursive structs
+
+A struct can contain itself, as long as it does so through an array member or an
+optional member (see [Optional members](#optional-members) below).  Either one
+can be empty, so it ends the recursion where a plain scalar member could not.
+(A member such as `next: Node` would make the struct infinitely large, which is
+an error.)  This is how to write a tree with an array:
+<!-- syntran-begin mode=file group=recursive-structs -->
+```rust
+struct Tree
+{
+    val: i32,
+    kids: [Tree; :],
+}
+
+fn total(t: Tree): i32
+{
+    let sum = t.val;
+    for i in [0: size(t.kids, 0)]
+    {
+        sum += total(t.kids[i]);
+    }
+    return sum;
+}
+```
+<!-- syntran-end -->
+
+A leaf has no children.  There is no value to fill an array of `Tree` with
+yet, so an empty array is written with the type name instead of a fill value, as
+in `[Tree; 0]`.  The size after the semicolon can only be the literal `0` in
+this form.  Other types work too, for example `[str; 0]` or `[f64; 0, 0]`:
+<!-- syntran-begin mode=file group=recursive-structs -->
+```rust
+let leaf = Tree{val = 3, kids = [Tree; 0]};
+let branch = Tree{val = 2, kids = [leaf, leaf]};
+let root = Tree{val = 1, kids = [branch, leaf]};
+
+println("total = ", total(root));
+println(root.kids[0].kids[1].val);
+```
+<!-- syntran-expect
+total = 12
+3
+-->
+<!-- syntran-end -->
+
+Structs can also be mutually recursive, such as a directory that contains files
+and other directories, again as long as the recursion goes through arrays or
+optionals.
+
+#### Optional members
+
+An array is a clumsy way to hold "zero or one" thing, as in a linked list.  For
+that, put a `?` before the name of a struct to make it _optional_.  An optional
+can hold either a struct or `null`, and you test for `null` with `==` or `!=`:
+<!-- syntran-begin mode=file group=optional-structs -->
+```rust
+struct Node
+{
+    val: i32,
+    next: ?Node,
+}
+
+fn list_sum(n: ?Node): i32
+{
+    if n == null
+    {
+        return 0;
+    }
+    return n.val + list_sum(n.next);
+}
+
+let tail = Node{val = 3, next = null};
+let list = Node{val = 1, next = Node{val = 2, next = tail}};
+
+println(list);
+println("sum = ", list_sum(list));
+println(tail.next == null);
+```
+<!-- syntran-expect
+Node{val = 1, next = Node{val = 2, next = Node{val = 3, next = null}}}
+sum = 6
+true
+-->
+<!-- syntran-end -->
+
+Only a struct can be optional: `?i32`, `?[Node; :]`, and arrays of optionals are
+errors.  The literal `null` can't be assigned to a plain `Node`, but an optional can
+be used anywhere a `Node` is expected, so a plain `Node` variable can still end up
+holding `null`, e.g. after `cur = cur.next`.
+
+Syntran does not check ahead of time that an optional isn't `null` before you use
+its members, like Rust or Kotlin do.  Reading `tail.next.val` above is a runtime
+error, similar to using an unallocated component in Fortran.  Check with `== null`
+first.
+
+Methods can change an optional member too.  A linked list can be wrapped in a
+`List` struct whose `push()` adds a node to the front in constant time, so the
+list reads in reverse order of the pushes:
+<!-- syntran-begin mode=file group=optional-methods -->
+```rust
+struct Node
+{
+    val: i32,
+    next: ?Node,
+}
+
+struct List
+{
+    head: ?Node,
+    len: i32,
+
+    fn push(v: i32)
+    {
+        head = Node{val = v, next = head};
+        len += 1;
+    }
+}
+
+let list = List{head = null, len = 0};
+list.push(1);
+list.push(2);
+list.push(3);
+println(list);
+println("len = ", list.len);
+```
+<!-- syntran-expect
+List{head = Node{val = 3, next = Node{val = 2, next = Node{val = 1, next = null}}}, len = 3}
+len = 3
+-->
+<!-- syntran-end -->
+
+Like all other values, structs are copied, so `let cur = list;` copies the whole
+list.  Syntran avoids the copy when it can tell that the old value is
+about to be overwritten anyway, so walking a list with `cur = cur.next`, testing
+for `cur != null`, or building one with `list = Node{val = i, next = list}` does
+not copy the rest of the list at every step.  The same goes for a member:
+`head = Node{val = v, next = head}` above moves the old list into the new node, so
+`push()` takes the same time no matter how long the list is.  Copies are still
+made by `let cur = list;`, when a list is passed to a fn by value, and when a fn
+returns one.  For a big tree, an array of nodes that refer to each other by index
+scales better.
+
+A list with a node per element is freed without recursion, so a million nodes are
+fine.  But copying one, printing it, assigning over it, or dropping a fn's local
+list still recurses once per node, which overflows an 8 MB stack at a few tens of
+thousands of nodes.
+
 ## Enums
 
 Enums declare a named type with a fixed set of integer-valued variants:
@@ -2781,6 +3031,14 @@ println(Suit.Diamonds);
 ```
 <!-- syntran-end -->
 
+To get just the variant's name, without the enum's, use `std::variant_of()`:
+<!-- syntran-begin mode=file group=enums -->
+```rust
+println(std::variant_of(Suit.Diamonds));
+// Diamonds
+```
+<!-- syntran-end -->
+
 Enums can be used anywhere a type is expected: as function parameters and
 return types, and as struct members:
 <!-- syntran-begin mode=file group=enums -->
@@ -2853,6 +3111,7 @@ let all = [Suit.Hearts, Suit.Diamonds, Suit.Clubs, Suit.Spades];
 30
 Suit.Clubs
 Suit.Diamonds
+Diamonds
 Suit.Spades
 [Suit.Diamonds, Suit.Clubs, Suit.Spades]
 4
@@ -2880,7 +3139,7 @@ let Suit = 5;
 ```
 <!-- syntran-expect
 Error[E98]: variable `Suit` conflicts with the enum of the same name
-  --> main_enum-name-clash.syntran:2:5
+  --&gt; main_enum-name-clash.syntran:2:5
    |
  2 | let Suit = 5;
    |     ^^^^ name already used by an enum
@@ -2894,6 +3153,6 @@ Many syntran samples are provided in this repository and elsewhere:
 1.  [Inline tests](src/tests/test.f90):  these are short one-to-few line syntran snippets, embedded in Fortran as a string and `eval`'d.  They are covered by the tests
 2.  [Script tests](src/tests/test-src):  these are longer syntran scripts, organized into categories by directory.  They are covered by the tests
 3.  [Fortran examples](example):  short Fortran programs which call syntran as a library, see [above](#calling-syntran-from-fortran).  Run them with `fpm run --example <name>`
+5.  [Advent of Code](https://github.com/JeffIrwin/aoc-syntran):  these are syntran scripts which solve problems from the [Advent of Code](https://adventofcode.com/about).  They live in a separate repository, which is a submodule at `external/aoc-syntran`.  CI runs them with `--jit` in the release binaries, but they are not part of the short test suite
 4.  [Samples](samples):  these are longer syntran scripts which can also take a while to run, e.g. the wave equation solvers.  They are *not* covered by the tests because of the time they take to run
-5.  [Advent of Code](https://github.com/JeffIrwin/aoc-syntran):  these are syntran scripts which solve problems from the [Advent of Code](https://adventofcode.com/about).  They are *not* covered by tests and in a separate repository
 

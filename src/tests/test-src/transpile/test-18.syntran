@@ -1,0 +1,66 @@
+// The trig fns of degrees.  These programs are run by both the interpreter and
+// the compiling backends (utils/test-transpile.sh), which must print the same
+// thing.  The angles that are printed are the ones with a simple result, which
+// every implementation gets exactly, and the others are only checked to be close.
+// The return value is the number of failed checks
+
+let status = 0;
+
+fn check(ok: bool): i32
+{
+	if (ok) return 0;
+	return 1;
+}
+
+fn near(x: f64, y: f64): bool
+{
+	return abs(x - y) < 1.0e-12;
+}
+
+//==============================================================================
+// Exact angles, of both float types
+
+let one = 1.0;
+println(sind(30.0 * one), " ", cosd(60.0 * one), " ", tand(45.0 * one));
+println(sind(90.0 * one), " ", cosd(0.0 * one), " ", cosd(90.0 * one), " ", sind(0.0 * one));
+println(sind(150.0 * one), " ", sind(210.0 * one), " ", sind(330.0 * one), " ", sind(-30.0 * one));
+println(cosd(120.0 * one), " ", cosd(180.0 * one), " ", cosd(270.0 * one), " ", cosd(-60.0 * one));
+println(tand(135.0 * one), " ", tand(-45.0 * one), " ", tand(225.0 * one), " ", tand(0.0 * one));
+println(sind(30.0f), " ", cosd(60.0f), " ", tand(45.0f), " ", sind(450.0f), " ", cosd(720.0f));
+
+status += check(sind(30.0 * one) == 0.5);
+status += check(cosd(60.0 * one) == 0.5);
+status += check(tand(45.0 * one) == 1.0);
+status += check(sind(30.0f) == 0.5f);
+status += check(sind(-30.0 * one) == -0.5);
+status += check(sind(390.0 * one) == 0.5);
+status += check(cosd(90.0 * one) == 0.0);
+status += check(tand(180.0 * one) == 0.0);
+
+//==============================================================================
+// Other angles are close, and so are arrays of them
+
+status += check(near(sind(10.0 * one), 0.17364817766693033));
+status += check(near(cosd(10.0 * one), 0.984807753012208));
+status += check(near(tand(10.0 * one), 0.17632698070846498));
+status += check(near(sind(37.5 * one), 0.6087614290087207));
+status += check(near(cosd(-200.0 * one), -0.9396926207859084));
+
+let a = [0.0, 30.0, 60.0, 90.0, 120.0];
+let s = sind(a);
+println(near(s[1], 0.5), " ", near(s[4], sind(120.0 * one)));
+status += check(near(s[1], 0.5) and near(s[4], sind(120.0 * one)));
+status += check(size(cosd(a)) == 5);
+status += check(near(sum(tand([10.0, 20.0, 30.0])), 0.17632698070846498 + 0.36397023426620234 + 0.5773502691896258));
+
+//==============================================================================
+// The inverse fns give degrees
+
+println(asind(0.0 * one), " ", acosd(1.0 * one), " ", atand(1.0 * one), " ", asind(1.0 * one));
+status += check(near(asind(0.5 * one), 30.0));
+status += check(near(acosd(0.5 * one), 60.0));
+status += check(near(atand(1.0 * one), 45.0));
+status += check(near(sum(atand([0.0, 1.0])), 45.0));
+
+println(status);
+return status;

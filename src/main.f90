@@ -3,7 +3,9 @@
 
 program main
 
+	use iso_fortran_env, only: error_unit
 	use syntran__app_m
+	use syntran__synup_m, only: syntran_update
 	use syntran
 
 	implicit none
@@ -16,6 +18,8 @@ program main
 
 	type(transpile_t) :: transpile
 
+	type(native_t) :: native
+
 	!********
 
 	! What happens if there's an error while parsing args?  Here I initialize to
@@ -27,6 +31,12 @@ program main
 
 	if (args%version .or. args%help) then
 		call exit(EXIT_SUCCESS)
+	end if
+
+	if (args%update) then
+		! The toolchain manager does the work, so that this syntran can be
+		! replaced while it's running
+		call exit(syntran_update())
 	end if
 
 	maxerr            = args%maxerr
@@ -48,12 +58,29 @@ program main
 				syntax_only = .true., io = io)
 		end if
 
+	else if (args%lex) then
+		! Hidden: dump the lexer's tokens, one per line, instead of running the
+		! program.  See lex_dump().  parse_args() has already guaranteed a file
+		res = syntran_lex_file(args%syntran_file, io)
+		if (io == EXIT_SUCCESS) write(*,'(a)', advance = 'no') res
+
+	else if (args%parse) then
+		! Hidden: dump the typed syntax tree instead of running the program.  See
+		! parse_dump().  parse_args() has already guaranteed a file
+		res = syntran_parse_file(args%syntran_file, io)
+		if (io == EXIT_SUCCESS) write(*,'(a)', advance = 'no') res
+
 	else if (args%transpile) then
 		! Write the program as Fortran source for the user to compile, instead of
 		! running it.  The value of the last statement is only printed by the
 		! generated program if we're not --quiet, like the interpreter
 		transpile%print_result = .not. args%quiet
 		transpile%shake_fns = .not. args%keep_unused_fns
+
+		! Deprecated in 1.8.  This goes to stderr, because the Fortran source
+		! may be going to stdout with `-t -`
+		write(error_unit, '(a)') warn_prefix//"--transpile is deprecated and will be "// &
+			"removed in a future release.  Use --aot or --jit instead"//color_reset
 
 		if (args%syntran_file_arg) then
 			res = syntran_interpret_file(args%syntran_file, &
@@ -67,6 +94,28 @@ program main
 		if (io == EXIT_SUCCESS) then
 			call syntran_write_transpiled(transpile, args%transpile_out, io)
 		end if
+
+	else if (args%native .or. args%jit) then
+		! Compile the program to machine code with LLVM, instead of running it.
+		! With --jit, run it right away in this process instead of writing a file.
+		! The value of the last statement is only printed by the compiled
+		! program if we're not --quiet, like the interpreter
+		native%print_result = .not. args%quiet
+		native%jit = args%jit
+		if (args%native) native%out = args%native_out
+
+		if (args%syntran_file_arg) then
+			res = syntran_interpret_file(args%syntran_file, &
+				chdir_ = args%chdir, script_args = args%script_args, &
+				native = native, io = io)
+		else
+			res = syntran_eval(args%command, script_args = args%script_args, &
+				native = native, io = io)
+		end if
+
+		! A jit'd program that ran to the end leaves its exit status here.  One that
+		! hit a runtime error or called std::exit() already exited the process
+		if (args%jit .and. io == EXIT_SUCCESS) io = native%exit_code
 
 	else if (args%interactive) then
 		! "Interactive" keeps running in the REPL with the same vars and fns

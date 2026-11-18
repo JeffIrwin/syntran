@@ -456,7 +456,7 @@ recursive module subroutine emit_assign(em, node)
 		op_str = ' * '
 	case (slash_equals_token)
 		op_str = ' / '
-	case (sstar_equals_token)
+	case (double_star_equals_token)
 		op_str = ' ** '
 	case (percent_equals_token)
 		fn_str = 'mod'
@@ -466,16 +466,16 @@ recursive module subroutine emit_assign(em, node)
 		fn_str = 'ior'
 	case (caret_equals_token)
 		fn_str = 'ieor'
-	case (lless_equals_token)
+	case (double_less_equals_token)
 		fn_str = 'shiftl'
-	case (ggreater_equals_token)
+	case (double_greater_equals_token)
 		fn_str = 'shiftr'
 	case default
 		call em_unsupported(em, 'the `'//node%op%text//'` operator')
 		return
 	end select
 
-	if (node%op%kind == lless_equals_token .or. node%op%kind == ggreater_equals_token) then
+	if (node%op%kind == double_less_equals_token .or. node%op%kind == double_greater_equals_token) then
 		! Shifted in the width of the target.  The count can have any integer
 		! type
 		call em_line(em, lhs//' = '//fn_str//'('//lhs//', '//rhs//')')
@@ -730,7 +730,7 @@ end function is_pure_case
 
 recursive function case_cmp(em, subj, sval, v, op) result(s)
 
-	! Fortran expression for `<subject> == v` if `op` is eequals_token, or for
+	! Fortran expression for `<subject> == v` if `op` is double_equals_token, or for
 	! `<subject> < v` if it is less_token.  `subj` is the hidden variable that the
 	! subject was stored in and `sval` is its value, for the type
 
@@ -828,7 +828,7 @@ recursive function case_test(em, subj, sval, v) result(s)
 		s = '(.not. '//case_cmp(em, subj, sval, v%lbound_, less_token)//' .and. '// &
 			case_cmp(em, subj, sval, v%ubound_, less_token)//')'
 	else
-		s = case_cmp(em, subj, sval, v, eequals_token)
+		s = case_cmp(em, subj, sval, v, double_equals_token)
 	end if
 
 end function case_test
@@ -936,7 +936,7 @@ recursive subroutine emit_switch(em, node, is_result)
 							em%indent = em%indent - 1
 							call em_line(em, 'end if')
 						else
-							test = case_cmp(em, subj, node%condition%val, v, eequals_token)
+							test = case_cmp(em, subj, node%condition%val, v, double_equals_token)
 							call em_line(em, matched//' = '//unparen(test))
 						end if
 					end associate
@@ -2433,6 +2433,50 @@ end function struct_slot_by_id
 
 !===============================================================================
 
+recursive function struct_reaches(em, target, k, seen) result(found)
+
+	! Does the struct at slot `k` have a member, directly or through the
+	! members of other structs, that is (an array of) the struct at slot
+	! `target`?  `seen` marks the structs that were already searched
+
+	type(emitter_t), intent(inout) :: em
+	integer, intent(in) :: target, k
+	logical, intent(inout) :: seen(:)
+	logical :: found
+
+	!********
+
+	character(len = :), allocatable :: mname
+
+	integer :: m, j
+
+	logical :: ok
+
+	type(value_t) :: mval
+
+	found = .false.
+	if (seen(k)) return
+	seen(k) = .true.
+
+	do m = 1, em%structs%table(k)%val%num_vars
+		call struct_member(em, k, m, mval, mname, ok)
+		if (.not. ok) cycle
+		if (elem_type(mval) /= struct_type) cycle
+
+		j = struct_slot_of(em, mval)
+		if (j == 0) cycle
+
+		found = j == target
+		if (.not. found) found = struct_reaches(em, target, j, seen)
+		if (found) exit
+	end do
+
+	call value_destroy(mval)
+
+end function struct_reaches
+
+!===============================================================================
+
 subroutine check_struct_members(em, node)
 
 	! Report a struct member whose type can't be a component of a derived type
@@ -2448,15 +2492,31 @@ subroutine check_struct_members(em, node)
 	integer :: i, k
 
 	logical :: ok
+	logical, allocatable :: seen(:)
 
 	type(value_t) :: mval
 
 	k = struct_slot_by_id(em, node%id_index)
 	if (k == 0) return
 
+	! A recursive struct is a derived type with a component of its own type,
+	! which has to be allocatable and have its own copy semantics.  Not yet
+	allocate(seen(size(em%structs%table)))
+	seen = .false.
+	if (struct_reaches(em, k, k, seen)) then
+		call em_unsupported(em, 'a recursive struct')
+		return
+	end if
+
 	do i = 1, em%structs%table(k)%val%num_vars
 		call struct_member(em, k, i, mval, mname, ok)
 		if (.not. ok) cycle
+
+		if (mval%is_opt) then
+			call em_unsupported(em, 'an optional struct member (`?'//mval%struct_name//'`)')
+			call value_destroy(mval)
+			return
+		end if
 
 		line = decl_line(em, mval, 'm', ok)
 		if (.not. ok) then
@@ -2566,16 +2626,36 @@ recursive function struct_level(em, k) result(lv)
 
 	integer :: m
 
+	! Which structs are being measured further up the call stack, shared by
+	! the recursion on purpose.  A recursive struct is reported as unsupported
+	! (c.f. check_struct_members()), but the types still get measured after
+	! that, and would never stop going down otherwise
+	logical, allocatable, save :: busy(:)
+
 	logical :: ok
 
 	type(value_t) :: mval
 
 	lv = 0
+
+	if (.not. allocated(busy)) then
+		allocate(busy(size(em%structs%table)))
+		busy = .false.
+	else if (size(busy) /= size(em%structs%table)) then
+		deallocate(busy)
+		allocate(busy(size(em%structs%table)))
+		busy = .false.
+	end if
+	if (busy(k)) return
+	busy(k) = .true.
+
 	do m = 1, em%structs%table(k)%val%num_vars
 		call struct_member(em, k, m, mval, mname, ok)
 		if (.not. ok) cycle
 		lv = max(lv, val_level(em, mval))
 	end do
+
+	busy(k) = .false.
 
 	call value_destroy(mval)
 
@@ -2949,6 +3029,8 @@ subroutine emit_enum_procs(em)
 	!
 	!   enumN_strs(i)  the name of variant i, like `Suit.Clubs`, as an rt_str_t
 	!   enumN_str(i)   the same as a string, for a single variant
+	!   enumN_name(i)  the name of a single variant alone, like `Clubs`, which is
+	!                  `std::variant_of()`
 	!   enumN_val(i)   the backing value of variant i, `i32(Suit.Clubs)`
 	!   enumN_of(v)    the first variant with backing value v, `Suit(v)`
 	!
@@ -3011,6 +3093,20 @@ subroutine emit_enum_procs(em)
 			call em%procs%push("            r = '"//nm//".<invalid>'")
 			call em%procs%push('        end select')
 			call em%procs%push('    end function '//id//'_str')
+			call em%procs%push('')
+
+			call em%procs%push('    function '//id//'_name(v) result(r)')
+			call em%procs%push('        integer(int32), intent(in) :: v')
+			call em%procs%push('        character(len = :), allocatable :: r')
+			call em%procs%push('        select case (v)')
+			do i = 1, e%num_vars
+				call em%procs%push('        case ('//str(i - 1)//')')
+				call em%procs%push("            r = '"//e%variant_names%v(i)%s//"'")
+			end do
+			call em%procs%push('        case default')
+			call em%procs%push("            r = '<invalid>'")
+			call em%procs%push('        end select')
+			call em%procs%push('    end function '//id//'_name')
 			call em%procs%push('')
 
 			call em%procs%push('    elemental function '//id//'_val(v) result(r)')

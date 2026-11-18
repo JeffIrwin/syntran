@@ -48,6 +48,11 @@ recursive module subroutine set_val(node, var, state, val, index_, slots, pos)
 		call internal_error()
 	end if
 
+	if (var%type == null_type) then
+		call rt_throw(state, err_rt(RC_NULL_MEMBER, "cannot assign a member of null"))
+		return
+	end if
+
 	if (allocated(node%lsubscripts) .and. allocated(node%member)) then
 
 		if (present(index_)) then
@@ -238,6 +243,13 @@ recursive module subroutine get_val(node, var, state, res, index_, slots, pos)
 		return
 	end if
 
+	! A member of an optional (`?Struct`) that holds null.  There is no
+	! struct(:) to index, like an unallocated component in Fortran
+	if (var%type == null_type) then
+		call rt_throw(state, err_rt(RC_NULL_MEMBER, "cannot access a member of null"))
+		return
+	end if
+
 	if (allocated(node%lsubscripts) .and. allocated(node%member)) then
 
 		if (present(index_)) then
@@ -396,6 +408,203 @@ end subroutine get_val
 
 !===============================================================================
 
+function member_leaf(node, var, state, assign) result(v)
+
+	! Pointer to the member at the end of a plain dot chain `x.a.b` (no
+	! subscripts) rooted at var, or null() after throwing R47 if a link in the
+	! middle of the chain is null.  The chain must have been checked by
+	! plain_member_chain() at compile time.  assign only selects the message
+
+	type(syntax_node_t), intent(in), target :: node
+	type(value_t), intent(inout), target :: var
+	type(state_t), intent(inout) :: state
+	logical, intent(in) :: assign
+	type(value_t), pointer :: v
+
+	!********
+
+	type(syntax_node_t), pointer :: n
+
+	v => var
+	n => node%member
+	! Mirrors get_val(): each link indexes v%struct(), which is R47 for null
+	do
+		if (v%type == null_type) then
+			if (assign) then
+				call rt_throw(state, err_rt(RC_NULL_MEMBER, "cannot assign a member of null"))
+			else
+				call rt_throw(state, err_rt(RC_NULL_MEMBER, "cannot access a member of null"))
+			end if
+			v => null()
+			return
+		end if
+		v => v%struct(n%id_index)
+		if (n%kind /= dot_expr) exit
+		n => n%member
+	end do
+
+end function member_leaf
+
+!===============================================================================
+
+module subroutine member_is_null(node, var, state, is_null)
+
+	! Whether the member at the end of a plain dot chain `x.a.b` (no
+	! subscripts) holds null, without copying it like get_val() would
+
+	type(syntax_node_t), intent(in), target :: node
+	type(value_t), intent(inout), target :: var
+	type(state_t), intent(inout) :: state
+	logical, intent(out) :: is_null
+
+	!********
+
+	type(value_t), pointer :: v
+
+	is_null = .false.
+	v => member_leaf(node, var, state, .false.)
+	if (.not. associated(v)) return
+	is_null = v%type == null_type
+
+end subroutine member_is_null
+
+!===============================================================================
+
+module subroutine take_member(node, var, state)
+
+	! `x = x.a.b`: move the member x.a.b out of x and overwrite x with it, so
+	! that the rest of x is freed instead of copying the member.  x ends up
+	! the same as it would after an assignment from a get_val() copy.  The chain
+	! must be plain, as in member_is_null()
+
+	type(syntax_node_t), intent(in), target :: node
+	type(value_t), intent(inout), target :: var
+	type(state_t), intent(inout) :: state
+
+	!********
+
+	type(value_t), pointer :: v
+	type(value_t) :: tmp
+
+	v => member_leaf(node, var, state, .false.)
+	if (.not. associated(v)) return
+
+	call value_move(v, tmp)
+	call value_move(tmp, var)
+
+end subroutine take_member
+
+!===============================================================================
+
+module subroutine move_member_out(node, var, state, val)
+
+	! Move the member x.a.b of a plain dot chain out of x into val, for a by-ref
+	! call arg (OP_LOAD_REF_MEMBER).  The member in x is left empty until
+	! move_member_in() puts it back.  val is unknown_type after R47
+
+	type(syntax_node_t), intent(in), target :: node
+	type(value_t), intent(inout), target :: var
+	type(state_t), intent(inout) :: state
+	type(value_t), intent(out) :: val
+
+	!********
+
+	type(value_t), pointer :: v
+
+	v => member_leaf(node, var, state, .false.)
+	if (.not. associated(v)) return
+
+	call value_move(v, val)
+
+end subroutine move_member_out
+
+!===============================================================================
+
+module subroutine move_member_in(node, var, state, val)
+
+	! Move val back into the member x.a.b of a plain dot chain, after a by-ref
+	! call (OP_RET).  If the callee made a link in the chain null through a
+	! global, this is R47 and val is left alone for the caller to free
+
+	type(syntax_node_t), intent(in), target :: node
+	type(value_t), intent(inout), target :: var
+	type(state_t), intent(inout) :: state
+	type(value_t), intent(inout) :: val
+
+	!********
+
+	type(value_t), pointer :: v
+
+	v => member_leaf(node, var, state, .true.)
+	if (.not. associated(v)) return
+
+	call value_move(val, v)
+
+end subroutine move_member_in
+
+!===============================================================================
+
+module subroutine move_take(v, val)
+
+	! std::move(x): move the array or str v into val without copying it.  Unlike
+	! the by-ref moves above, nobody puts it back, so v is left an empty array
+	! (same element type and rank, all extents 0) or an empty str.  That keeps
+	! v a valid value that can be read or reassigned
+
+	type(value_t), intent(inout) :: v
+	type(value_t), intent(out) :: val
+
+	call value_move(v, val)
+
+	select case (val%type)
+	case (str_type)
+		allocate(v%str)
+		v%str%s = ''
+
+	case (array_type)
+		allocate(v%array)
+		v%array%type = val%array%type
+		v%array%kind = expl_array
+		v%array%rank = val%array%rank
+		v%array%len_ = 0
+		allocate(v%array%size(val%array%rank))
+		v%array%size = 0
+		call allocate_array(v, 0_8)
+
+		! Struct and enum arrays also keep their element type in the value
+		if (allocated(val%struct_name))   v%struct_name   = val%struct_name
+		if (allocated(val%struct_cookie)) v%struct_cookie = val%struct_cookie
+		if (allocated(val%enum_name))     v%enum_name     = val%enum_name
+		if (allocated(val%enum_cookie))   v%enum_cookie   = val%enum_cookie
+	end select
+
+end subroutine move_take
+
+!===============================================================================
+
+module subroutine move_member_take(node, var, state, val)
+
+	! std::move(x.a.b) of a plain dot chain, see move_take()
+
+	type(syntax_node_t), intent(in), target :: node
+	type(value_t), intent(inout), target :: var
+	type(state_t), intent(inout) :: state
+	type(value_t), intent(out) :: val
+
+	!********
+
+	type(value_t), pointer :: v
+
+	v => member_leaf(node, var, state, .false.)
+	if (.not. associated(v)) return
+
+	call move_take(v, val)
+
+end subroutine move_member_take
+
+!===============================================================================
+
+
 subroutine get_file_member(member_node, var, state, res)
 
 	! Read one of a file handle's fixed read-only members (c.f. FILE_MEM_*
@@ -442,7 +651,7 @@ end subroutine get_file_member
 
 !===============================================================================
 
-subroutine alloc_array_prim(arr, cap, ok)
+subroutine alloc_array_prim(arr, cap, ok, stat)
 
 	! Shared per-type allocate() dispatch for allocate_array()/new_array()
 	! below.  Only handles the primitive element types that both callers
@@ -451,57 +660,84 @@ subroutine alloc_array_prim(arr, cap, ok)
 	!
 	! ok is returned .false. for an unhandled type so each caller can keep
 	! emitting its own existing internal-error code/message
+	!
+	! stat is nonzero if the allocation failed, e.g. for an overflowing or too big
+	! cap.  A caller that has no way to report that, like new_array(), doesn't pass
+	! it, and the failure is fatal
 
 	type(array_t), intent(inout) :: arr
 	integer(kind = 8), intent(in) :: cap
 	logical, intent(out) :: ok
+	integer, intent(out), optional :: stat
+
+	integer :: stat_
 
 	ok = .true.
+	stat_ = 0
 	select case (arr%type)
 	case (i32_type)
-		allocate(arr%i32( cap ))
+		allocate(arr%i32( cap ), stat = stat_)
 
 	case (i64_type)
-		allocate(arr%i64( cap ))
+		allocate(arr%i64( cap ), stat = stat_)
 
 	case (f32_type)
-		allocate(arr%f32( cap ))
+		allocate(arr%f32( cap ), stat = stat_)
 
 	case (f64_type)
-		allocate(arr%f64( cap ))
+		allocate(arr%f64( cap ), stat = stat_)
 
 	case (bool_type)
-		allocate(arr%bool( cap ))
+		allocate(arr%bool( cap ), stat = stat_)
 
 	case (str_type)
-		allocate(arr%str( cap ))
+		allocate(arr%str( cap ), stat = stat_)
 
 	case default
 		ok = .false.
 	end select
 
+	if (present(stat)) then
+		stat = stat_
+	else if (stat_ /= 0) then
+		write(*,*) 'Fatal error: out of memory allocating an array'
+		call internal_error()
+	end if
+
 end subroutine alloc_array_prim
 
 !===============================================================================
 
-module subroutine allocate_array(val, cap)
+module subroutine allocate_array(val, cap, stat)
+
+	! If stat is passed, it is nonzero when there wasn't enough memory.  Without
+	! it, that is fatal.  The sizes that come from the program are checked by
+	! check_array_len() first, and pass stat to report R48
 
 	type(value_t), intent(inout) :: val
 	integer(kind = 8), intent(in) :: cap
+	integer, intent(out), optional :: stat
 
 	!! always done in caller
 	!if (.not. allocated(val%array)) allocate(val%array)
 
 	logical :: ok
+	integer :: stat_
 
 	val%array%cap = cap
 
 	if (any(val%array%type == [struct_type, enum_type])) then
-		allocate(val%struct( cap ))
+		allocate(val%struct( cap ), stat = stat_)
+		if (present(stat)) then
+			stat = stat_
+		else if (stat_ /= 0) then
+			write(*,*) 'Fatal error: out of memory allocating an array'
+			call internal_error()
+		end if
 		return
 	end if
 
-	call alloc_array_prim(val%array, cap, ok)
+	call alloc_array_prim(val%array, cap, ok, stat)
 	if (.not. ok) then
 		write(*,*) err_int(IC_ALLOC_ARRAY_TYPE, 'cannot allocate array of type `' &
 			//type_name_primitive(val%array%type)//'`')
@@ -509,6 +745,49 @@ module subroutine allocate_array(val, cap)
 	end if
 
 end subroutine allocate_array
+
+!===============================================================================
+
+module subroutine check_array_len(state, sizes, len_)
+
+	! Total number of elements of an array with the extents `sizes`, or an R48
+	! runtime error (and len_ = 0) if an extent is negative or the element count
+	! overflows an i64.  Call this before allocate_array() with a length that
+	! comes from the program, e.g. `[0; n]`.  The caller must check
+	! state%rt_halt immediately after
+	!
+	! Whether there is memory for that many elements is not decided here, because
+	! it depends on the system.  allocate() reports that with stat=, which
+	! includes the count times the size of an element overflowing, and the caller
+	! reports it as R48 too
+
+	type(state_t), intent(inout) :: state
+	integer(kind = 8), intent(in) :: sizes(:)
+	integer(kind = 8), intent(out) :: len_
+
+	integer :: i
+
+	len_ = 0
+
+	if (any(sizes < 0)) then
+		call rt_throw(state, err_rt_bad_array_size(sizes))
+		return
+	end if
+
+	! An empty array is fine no matter how big its other extents are
+	if (any(sizes == 0)) return
+
+	len_ = 1
+	do i = 1, size(sizes)
+		if (len_ > huge(0_8) / sizes(i)) then
+			len_ = 0
+			call rt_throw(state, err_rt_bad_array_size(sizes))
+			return
+		end if
+		len_ = len_ * sizes(i)
+	end do
+
+end subroutine check_array_len
 
 !===============================================================================
 
@@ -658,7 +937,7 @@ module subroutine apply_assign_op(lhs, rhs, op)
 	case (slash_equals_token)
 		call div(tmp, rhs_, lhs, op%text)
 
-	case (sstar_equals_token)
+	case (double_star_equals_token)
 		call pow(tmp, rhs_, lhs, op%text)
 
 	case (percent_equals_token)
@@ -673,10 +952,10 @@ module subroutine apply_assign_op(lhs, rhs, op)
 	case (caret_equals_token)
 		call bit_xor(tmp, rhs_, lhs, op%text)
 
-	case (lless_equals_token)
+	case (double_less_equals_token)
 		call left_shift(tmp, rhs_, lhs, op%text)
 
-	case (ggreater_equals_token)
+	case (double_greater_equals_token)
 		call right_shift(tmp, rhs_, lhs, op%text)
 
 	case default
@@ -885,6 +1164,10 @@ module subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, r
 			end if
 			if (node%lsubscripts(i)%sub_kind == arr_sub) then
 				call check_arr_sub_bound(state, i, rank_, asubs(i), sz)
+			else if (node%lsubscripts(i)%sub_kind == scalar_sub) then
+				! Not an empty range, even though usub = lsub + 1 wraps to a
+				! negative for lsub = huge()
+				call check_bound(state, lsubs(i), i, rank_, sz)
 			else
 				len_ = slice_len(lsubs(i), ssubs(i), usubs(i))
 				call check_range_bound(state, i, rank_, lsubs(i), ssubs(i), len_, sz)
@@ -898,6 +1181,26 @@ module subroutine get_subscript_range(node, state, asubs, lsubs, ssubs, usubs, r
 	!print *, 'rank_slice = ', rank_slice
 
 end subroutine get_subscript_range
+
+!===============================================================================
+
+pure function at_last_step(sub, ssub, usub) result(last)
+
+	! Whether sub is the last index visited by a range with step ssub and
+	! exclusive end usub, i.e. the next step would reach or pass usub.  This
+	! is `sub >= usub - 1` for ssub == 1, but a stepped or reversed range
+	! doesn't end at usub - 1
+
+	integer(kind = 8), intent(in) :: sub, ssub, usub
+	logical :: last
+
+	if (ssub > 0) then
+		last = sub + ssub >= usub
+	else
+		last = sub + ssub <= usub
+	end if
+
+end function at_last_step
 
 !===============================================================================
 
@@ -920,7 +1223,7 @@ module subroutine get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
 		n = size(asubs(j)%v)
 		carry = j < size(subs) .and. subs(j) == asubs(j)%v(n)
 	else
-		carry = j < size(subs) .and. subs(j) >= usubs(j) - 1
+		carry = j < size(subs) .and. at_last_step(subs(j), ssubs(j), usubs(j))
 	end if
 
 	do while (carry)
@@ -934,7 +1237,7 @@ module subroutine get_next_subscript(asubs, lsubs, ssubs, usubs, subs)
 			n = size(asubs(j)%v)
 			carry = j < size(subs) .and. subs(j) == asubs(j)%v(n)
 		else
-			carry = j < size(subs) .and. subs(j) >= usubs(j) - 1
+			carry = j < size(subs) .and. at_last_step(subs(j), ssubs(j), usubs(j))
 		end if
 	end do
 
@@ -1684,6 +1987,9 @@ module subroutine field_slice_bounds(member_node, field_val, state, rank_slice, 
 		if (bounds_check) then
 			if (member_node%lsubscripts(i)%sub_kind == arr_sub) then
 				call check_arr_sub_bound(state, i, rank_, asubs(i), sz)
+			else if (member_node%lsubscripts(i)%sub_kind == scalar_sub) then
+				! See get_subscript_range()
+				call check_bound(state, lsub, i, rank_, sz)
 			else
 				len_ = slice_len(lsub, ssub, usub)
 				call check_range_bound(state, i, rank_, lsub, ssub, len_, sz)
@@ -2182,6 +2488,11 @@ module subroutine apply_subscripts_to_val(node, val, state, res, slots)
 		i8    = 0
 		do i = 1, val%array%rank
 			subscript = slots(i)
+			if (bounds_check) then
+				call check_bound(state, subscript%to_i64(), i, val%array%rank, &
+					val%array%size(i))
+				if (state%rt_halt) return
+			end if
 			i8   = i8 + prod * subscript%to_i64()
 			prod = prod * val%array%size(i)
 		end do

@@ -27,49 +27,86 @@ module syntran__core_m
 
 	integer, parameter ::   &
 		syntran_major =  1, &
-		syntran_minor =  7, &
+		syntran_minor =  8, &
 		syntran_patch =  0
 
 	! TODO:
-	!  - transpiler improvements:
-	!    * cover more OS's and intel in addition to gnu in testing. currently
-	!      only gnu on ubuntu
-	!    * readln implementation is technically O(n**2), although the 256 char
-	!      buffer in practice usually has a nice constant factor
-	!    * rank-4 limitation is clunky. is there really no general size(*) or
-	!      polymorphic workaround? if not, maybe go up a few more ranks (at
-	!      least 6 or 7)
-	!    * replace stack_trace with a native backtrace() call instead of
-	!      parse erroring?
-	!    * option to split generated code into multiple files -- one for runtime
-	!      lib, another for user program, maybe even split user files per input
-	!      syntran module
-	!      + maybe also generate a cmake list (or makefile) to accompany?
-	!      + runtime lib probably shouldn't be shipped pre-compiled, since it
-	!        would only work with one user's compiler
-	!      + would want to flip --keep-unused-fns default if split. tree shaking
-	!        only makes sense for single file outputs. with splitting,
-	!        tree-shaking would introduce churn which would backfire for
-	!        incremental builds
-	!    * very low priority, but de-mangling and parenthesis stripping in
-	!      generated code seem to miss a few edge cases
-	!    * save comments? would need to save "trivia" tokens in parser. maybe
-	!      not worth the overhead or the complications of re-formating without
-	!      introducing edge cases like unterminated pre-processor breaking
-	!      comments
-	!    * eventually (long away) shoot for a full syntran compiler using LLVM
-	!      + maybe a good fable task
-	!      + claude estimates compiler would be 3x more code than transpiler
-	!      + initial transpiler pr is about 15 kloc code
-	!      + considering claude did the transpiler in one day, a full compiler
-	!        could still be very achievable
+	!  - self-hosted compiler
+	!    * self-host tests need to run on windows too. currently just linux/mac
+	!      iirc
+	!    * this seems like it won't scale: "A module imported directly and
+	!      through another module is parsed twice". maybe ok to leave in the
+	!      fortran src, but for a large project (like a self-hosted compiler) we
+	!      should really only parse each module once
+	!    * readme still says "interpreter written in fortran". can already
+	!      update the "interpreter" part now
+	!    * the vars/locs distinction is probably an anti pattern. maybe "global"
+	!      vars could get an implicit outer block scope to make them just
+	!      another kind of "local" var. don't need to change fortran impl, just
+	!      don't propogate the anti pattern into new syntran compiler
+	!    * run utils/test-lex.sh on all os's
+	!    * follow plan in doc/compiler-roadmap.md
+	!    * compiler/ dir organization? apps (lex-dump, later parse-dump) are
+	!      mixed in with library modules
+	!    * sum types and other follow-ups as needed
+	!    * later, might want ffi, a way to interface and call c api libs. for
+	!      now we can generate llvm ir just by writing text with now llvm lib
+	!      dependency. this would not allow a native repl and would require
+	!      shelling out to clang for exe linking
+	!  - llvm compiled backend
+	!    * test (manually) all aoc solutions in its repo
+	!      + done
+	!      + jit takes ~95 s total
+	!      + aot takes 200+ (slower than transpiler but faster than vm)
+	!    * all aoc jit run fast enough that we might as well add as a submodule
+	!      and always run in ci (not bytecode though)
+	!      + done
+	!      + decrypt-all.sh takes ~40 s. is there a faster way to batch decrypt?
+	!    * fuse elementwise intrinsics (sqrt, exp, ... for the elem benchmark),
+	!      write into the destination slice/variable in place (small), multi-d
+	!      slices, reductions of fused expressions
+	!      + related TBAA work is finished for primitive array operations which
+	!        were slowing the stencil benchmark
+	!    * build devx -- i don't like having openblas and llvm libs under
+	!      "build" dir because they get nuked on cleaning. maybe make a
+	!      gitignored "lib" dir?
+	!      + maybe obviated by build.sh improvements like auto lib detection
+	!    * optimization options? at least give consideration to what the default
+	!      should be
+	!      + default is -O2
+	!      + this is clang and rustc's release builds use
+	!      + could expose later
+	!    * remove transpiler backend? not sure its worth it if we have a
+	!      compiler (especially one which has even better parity with the vm).
+	!      maybe much later, the bytecode vm could also be removed
+	!    * parked:
+	!      + can/should the repl use llvm jit? no, at least probably not until
+	!        we're ready to remove the bytecode vm entirely
+	!  - fuzz testing
+	!    * when/where does the ci fuzz run? either only on master or cron is
+	!      broken
+	!    * periodically check the ci fuzz runs
+	!  - style guide
+	!    * lint script is non-exhaustive. some things are tricky to check or
+	!      require judgment
+	!  - transpiler improvements -- never mind:
+	!    * deprecated in 1.8
+	!    * plan to remove in 1.9 or 1.10
 	!  - split or streamline ci/cd:
-	!    * "build on ubuntu-24" stage is now the slowest. i believe this just
-	!      changed after ast removal. previously, windows and intel-compiler
-	!      builds were about as equally slow, while ubuntu is the bottleneck now
-	!    * ubuntu is 9.5 minutes, while windows and intel classic are 7.5 min
-	!    * split into multiple (parallel) stages, or possible remove any stages
+	!    * split into multiple (parallel) stages, or possibly remove any stages
 	!      that are redundant
+	!  - ghcr
+	!    * github container registry
+	!    * mac and windows stages are slower than linux stages, so streamlining
+	!      them (note above) is still priority
+	!    * it's like a free dockerhub! how am i just finding out about this?
+	!    * optimize syntran images to pull from base images with tools
+	!      pre-installed
+	!    * start with rocky, later do alpine as needed. maybe also ubuntu
+	!      instead of running non-docker ci stage in github ubuntu raw
+	!    * downside, need to update base images periodically for coverage of
+	!      modern toolchains
+	!    * ref https://github.com/szaghi/fortran-toolchains/tree/main
 	!  - declare variable types without initializing them, and/or
 	!    conditional initialization.  Rust discourages mutability, instead
 	!    preferring patterns like this:
@@ -96,13 +133,35 @@ module syntran__core_m
 	!      statement
 	!    * small compatibility break when evaluation of part a bool expression
 	!      calls a fn with side effects
+	!  - pointers? we have fn pointers but lack data/value pointers
+	!    * i thought about making a 'List' struct example containing references
+	!      to head and tail nodes while working on recursive data structs, but i
+	!      believe such references are not possible without adding pointers to
+	!      the language. can also be done with a "memory arena" (?) where objs
+	!      list references as int indices into a large array of all the objs,
+	!      but this is not oop
+	!    * can this be done safely and without massively complicating the
+	!      language? are there real applications that can't be refactored to not
+	!      require pointers?
 	!  - something like python's "if name == main" feature. it could be nice to
 	!    run a module like a program, e.g. to unit test itself, but ignore when
 	!    imported
-	!  - recursive data structs
-	!    * recursive fns are available, but not structs
-	!    * would we need allocation, pointer, or null features for this?
-	!      otherwise one recursive struct just immediately uses infinite memory
+	!  - recursive data structs follow-ups:
+	!    * null safety is only checked at run time (R47), like an unallocated
+	!      Fortran component.  A compile-time check would need flow typing,
+	!      e.g. narrowing `?Node` to `Node` inside `if x != null { ... }`
+	!    * copies of a list are still O(n): `let cur = l`, passing a list to a
+	!      fn, and a fn returning one.  A method receiver chain with a
+	!      subscript also still copies (OP_LOAD_MEMBER).  Related to the `move`
+	!      todo below
+	!    * value_copy() recurses once per node, so copying a list of more than
+	!      ~14000 nodes overflows an 8 MB stack (e.g. `let cur = l` on a 16000
+	!      node list segfaults).  value_destroy() recurses the same way.  Could
+	!      be made iterative for chains with a single struct member, like a Rust
+	!      `Drop` impl
+	!    * the transpiler rejects recursive structs, `?T`, and `null` (E115).
+	!      Fortran supports this natively with allocatable components, but
+	!      the generated copy/print/fill helpers would need to be recursive
 	!  - method improvements:
 	!    * stretch, arguably not very useful: slice method calls? e.g.
 	!      `struct[0:3].method()`. for void methods, just iterate and call it.
@@ -114,11 +173,19 @@ module syntran__core_m
 	!    * ANSI color codes, or some other way to color text
 	!    * E, I (after complex numbers)
 	!    * done: PI, std::IN/OUT/ERR
-	!  - built-in `move` fn to move_alloc an array (or struct)? it's useful to
-	!    avoid a copy in many cases, e.g. dynamic vector example
-	!    src/tests/test-src/struct/test-03.syntran
+	!  - std::move follow-ups.  std::move of an array or str is done (see
+	!    doc/intrinsics.md and samples/vec_i32.syntran), and so is moving an
+	!    array or str temporary into a variable or member
+	!    * move a whole struct, e.g. a vec or a linked list
+	!    * the transpiler moves into a temp, so `y = std::move(x)` still copies
+	!      once.  it would need statement-level matching
+	!    * other copies that a move could avoid: `return x` of a local array
+	!      (OP_LOAD_LOCAL copies it), and passing a variable to an intrinsic
+	!    * the other vec/queue/stack copies of this example still say "cannot
+	!      move yet": src/tests/long/aoc/*, samples/queue_*.syntran
 	!  - generics? longshot, lots of design decisions
 	!  - log a known issue that syntran is not threadsafe
+	!    * this applies to bytecode vm. try testing llvm jit/aot
 	!    * did some work on feature/parallel branch to try running long tests in
 	!      parallel but it's a deep rabbit hole of issues. fix most (?)
 	!      str-to-num and num-to-str conversion, even tried gfortran 13 in
@@ -151,6 +218,7 @@ module syntran__core_m
 	!
 	!  - migrate ci from ubuntu 24 to 26. rocky should stay on version 9 for the
 	!    time-being for glibc compatibility:  https://github.com/JeffIrwin/syntran/issues/19
+	!    * see ghcr/docker note above
 	!    * updated to ubuntu 24.04 on 2026-06-06. 26 is not available yet
 	!    * related, update wsl ubuntu version. consider updating gfortran
 	!      versions in some places
@@ -166,24 +234,34 @@ module syntran__core_m
 	!    * can arrays contain a fn? (E89) -- the array-element storage path
 	!      genuinely has no fn_type case
 	!    * closures and anonymous (lambda) fns?
-	!  - i like claude's "double_colon_token" name. i should change things like
-	!    "sstar_token", "pplus_token", etc. to "double_star_token" ...
 	!  - minloc, maxloc, findloc std:: fns
 	!    * useful for aoc
+	!  - possible breaking changes if 2.0 ever happens:
+	!    * put all current std::* symbols in global namespace (and then anything
+	!      new after 2.0 is still std namespaced)
+	!    * pre-reserve any keywords we might add in 2.1+. unlike std:: fn's,
+	!      keywords can't be namespaced, e.g. 'when' addition was technically a
+	!      small breaking change
+	!    * short-circuit logic
+	!    * escape '\n' and related sequences in all strs, not just fmt strs.
+	!      maybe also '\"'
 	!  - add ci/cd tests for gfortran 15. maybe phase out 10 or 11 for managable
 	!    compute usage
 	!    * gfortran 15 is now the default for Windows github actions
 	!    * available in recent docker images, but gfortran 15 is not available
 	!      in github ubuntu runners as of 2026-06-06
-	!  - built-in syntran update:
-	!    * add checksum verification
-	!    * currently ./utils/syup.sh can do it
-	!    * make this built-in to syntran binary, maybe invoke like
-	!      `syntran --update`.  think carefully. don't want to break this by
-	!      changing the name of the script or arg
-	!    * this would only work on linux, since windows can't overwrite a
-	!      running exe
-	!    * apparently it's possible on windows too.  til:  https://stackoverflow.com/a/459860/4347028
+	!  - synup (toolchain manager, see doc/synup.md) and `syntran --update`
+	!    * mvp done
+	!    * synup.exe on windows is awkward. it worked on cmd but in git bash it
+	!      said unzip not found. os platform detection bug?
+	!    * think about post-release versioning. maybe update v# on dev
+	!      immediately after release because rolling dev release is now visible,
+	!      maybe even mark it as "beta" somehow
+	!    * is linking libcurl worth it? currently shelling out to curl.exe
+	!    * does it make sense to provide a one-liner bash install, curl,
+	!      self-extracting sh/tgz? currently readme provides 3-liners but
+	!      putting it in ~/.syntran/bin/ (or somewhere else) is left up to the
+	!      user
 	!  - enable plugging in to nvim linting.  `--syntax-only`/`-s` now exists,
 	!    but diagnostics still need a 1-line-per-error format with filename,
 	!    line, and column indices to work with gfortran-style nvim linting
@@ -208,17 +286,10 @@ module syntran__core_m
 	!  - using `in` (a keyword) as a fn arg name crashes the parser
 	!    * when? check blame for this comment. can't repro in 1.0.1
 	!  - print improvements:
-	!    * newline shortcut in fmt str? char(10) can be interpolated into "{}"
-	!      fmt at end but it's a bit awkward
-	!      + \n would be a breaking change but i might do it anyway. currently
-	!        "\n" is just literal "\n" two char string. anything like a
-	!        hard-coded windows path would break
+	!    * is there a way to repeat a format, something like
+	!      `printf("3{{} }", 1, 2, 3);` ?
 	!    * still might need file_stat? what happens after write errors e.g. with
 	!      a full disk
-	!    * std::print(), std::write(), std::format(), std::printf(), and
-	!      std::writef() (std::-only so they don't clash with user fns) with
-	!      Rust-style `{:spec}` placeholders
-	!      (hex/bin/oct, width, fill, precision, sci notation) are done
 	!    * std::format() only takes a literal format string for now, so it is checked
 	!      at parse time.  Non-literal formats, positional `{0}` and named
 	!      `{name}` placeholders, and padding with a fill char that is not ascii
@@ -228,12 +299,12 @@ module syntran__core_m
 	!  - file reading/writing
 	!    * add seek() and helper to get file size, at least for binary mode
 	!  - installer packaging:
-	!    * bin exists.  nest it in a `bin` folder
+	!    * bin exists.  nest it in a `bin` folder. mostly obviated by synup
+	!      manager
 	!    * add build os to `--version` output, to distinguish between rocky vs
 	!      ubuntu builds
 	!    * add version summary as a text file (major.minor.patch, git hash,
 	!      build date)
-	!    * list sha256 checksums of binaries somewhere
 	!    * doc. autogenerate pdf and/or html from markdown via pandoc or similar
 	!      + see utils/build-doc.sh
 	!    * readme?
@@ -246,10 +317,13 @@ module syntran__core_m
 	!    * samples could be updated, e.g. sorting in place would be a lot more
 	!      efficient without copying large array vals in and out.  don't update
 	!      tests though.  if anything, add tests, but don't remove coverage
-	!  - type() or typeof() fn to get type name as str?  could be useful for
+	!  - type_of() fn to get type name as str?  could be useful for
 	!    debugging, but I don't want to encourage its use for actual program
 	!    logic. also nameof() to return a variable (or fn or struct) name. c#
 	!    has this
+	!    * also name_of()
+	!    * already did "variant_of()" for enums, as opposed to str(enum) which
+	!      returns "Suit.Heart" rather than just variant_of's "Heart"
 	!  - complex number type(s)
 	!    * basically required for FFT, which could be a fun example/test. see:
 	!        https://github.com/JeffIrwin/numerical-analysis/blob/7067e5fe7d331f817c5c9f9cf922b44af7a18aa9/src/interp.F90#L337
@@ -331,7 +405,6 @@ module syntran__core_m
 	!      it's in the ternary dict first.
 	!    * any use cases for #let? i probably don't want to get into general
 	!      expression parsing like `#let x = 1 + 2;` during preprocessing
-	!  - fuzz testing
 	!  - compound assignment: logical &=, |=, etc.
 	!    * maybe make &&= to avoid confusion with bitwise compound assignment &=
 	!    * +=, -=, *=, /=, %=, **= done
@@ -348,8 +421,7 @@ module syntran__core_m
 	!      + floor, ceil, fraction, nint
 	!        * nint is not useless. i32 casting truncates (?), it does not round
 	!          like nint!
-	!      + system: multiple out args? iostat and stdout
-	!      + rank. might seem unnecessary but reshape() can create arrays of
+	!      + rank. might seem unnecessary but reshape() can (?) create arrays of
 	!        unknown rank at parse time
 	!      + pack/spread/unpack
 	!      + ternary operator or merge() ?
@@ -459,9 +531,9 @@ module syntran__core_m
 	!
 	!****************************************
 
-	! A note on naming: Immo calls '==' equals_equals_token, but I think that
-	! invites tab-completion mistakes so I went with eequals_token.  Same for
-	! sstar_token (and upcoming pplus_token, mminus_token, etc.)
+	! A note on naming: doubled operators are spelled out as double_*_token, e.g.
+	! double_equals_token for '==' and double_star_token for '**'.  Immo's
+	! equals_equals_token would invite tab-completion mistakes with equals_token.
 
 !===============================================================================
 
@@ -540,6 +612,10 @@ function syntax_parse(str_, state, src_file, allow_continue, repl) result(tree)
 
 	! Do nothing for blank lines (or comments)
 	if (parser%current_kind() == eof_token) then
+		! Still a valid (zero-statement) unit, since callers other than the REPL
+		! don't check is_empty and would otherwise compile a kind-0 node
+		tree%kind = translation_unit
+		allocate(tree%members(0))
 		tree%is_empty = .true.
 		tree%diagnostics = parser%diagnostics
 		return

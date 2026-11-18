@@ -114,7 +114,7 @@ recursive module subroutine parse_let_expr(parser, is_const, expr)
 					call parser%next(dummy)
 				end do
 			else if (is_assignment_op(parser%current_kind()) .or. &
-			         parser%current_kind() == eequals_token) then
+			         parser%current_kind() == double_equals_token) then
 				! Typo'd operator, e.g. `let x == 4;` or `let x += 4;`
 				call parser%next(dummy)
 			end if
@@ -146,6 +146,13 @@ recursive module subroutine parse_let_expr(parser, is_const, expr)
 			call parser%diagnostics%push( &
 				err_void_assign(parser%context(), &
 				span, identifier%text))
+		end if
+
+		! `let x = null;` can never hold a struct later, as x's type is null_type
+		if (right%val%type == null_type) then
+			span = new_span(let%pos, parser%current_pos() - let%pos)
+			call parser%diagnostics%push( &
+				err_untyped_null(parser%context(), span, identifier%text))
 		end if
 
 		call new_declaration_expr(identifier, op, right, expr)
@@ -278,7 +285,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			if (search_io /= exit_success) then
 				span = new_span(identifier%pos, len(identifier%text))
 				call parser%diagnostics%push( &
-					err_undeclare_var(parser%context(), span, identifier%text, &
+					err_undeclare_var(parser%contexts%v(identifier%unit_), span, identifier%text, &
 					parser%vars%closest(identifier%text)))
 			end if
 
@@ -300,6 +307,11 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			! re-parse the same tokens and re-push them, causing duplicates
 			parser%pos = pos0
 			parser%diagnostics%len_ = ndiag0
+
+			! The discarded diagnostics included an E20 whose position is
+			! remembered for de-duping in match().  Forget it, or the re-parse
+			! is a "second" failure at that position and its E20 is dropped
+			parser%last_e20_pos = 0
 		else
 			! It's a qualified assignment
 
@@ -324,7 +336,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			if (search_io /= exit_success .and. .not. allocated(expr%member)) then
 				span = new_span(identifier%pos, len(identifier%text))
 				call parser%diagnostics%push( &
-					err_undeclare_var(parser%context(), span, identifier%text, &
+					err_undeclare_var(parser%contexts%v(identifier%unit_), span, identifier%text, &
 					parser%vars%closest(identifier%text)))
 			end if
 
@@ -368,9 +380,13 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			! survives is_binary_op_allowed_val for str operands) can't be
 			! given it a sound meaning here.  Whole-string ops (`s += "x"`,
 			! `v[0] += "x"`, `v[0:2] += "x"`) stay legal
-			if (op%kind == plus_equals_token) then
-				if ((lhs_root_type == str_type .and. allocated(expr%lsubscripts)) .or. &
-				    (lhs_root_arr_type == str_type .and. allocated(expr%lsubscripts) .and. &
+			!
+			! Fortran doesn't short-circuit `.and.`, so size() can only be reached
+			! once lsubscripts is known to be allocated (c.f. the unqualified
+			! branch below)
+			if (op%kind == plus_equals_token .and. allocated(expr%lsubscripts)) then
+				if (lhs_root_type == str_type .or. &
+				    (lhs_root_arr_type == str_type .and. &
 				     size(expr%lsubscripts) == lhs_root_rank + 1)) then
 					span = new_span(op%pos, len(op%text))
 					call parser%diagnostics%push( &
@@ -485,7 +501,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			if (search_io /= exit_success .and. .not. allocated(expr%member)) then
 				span = new_span(identifier%pos, len(identifier%text))
 				call parser%diagnostics%push( &
-					err_undeclare_var(parser%context(), &
+					err_undeclare_var(parser%contexts%v(identifier%unit_), &
 					span, identifier%text, &
 					parser%vars%closest(identifier%text)))
 			end if
@@ -515,6 +531,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			! re-parses the same tokens and would otherwise re-push them,
 			! causing duplicates
 			parser%diagnostics%len_ = ndiag0
+			parser%last_e20_pos = 0  ! see the rewind above
 			call parser%parse_expr(expr=expr)
 			return
 		end if
@@ -556,7 +573,7 @@ recursive module subroutine parse_expr_statement(parser, expr)
 			if (search_io /= exit_success) then
 				span = new_span(identifier%pos, len(identifier%text))
 				call parser%diagnostics%push( &
-					err_undeclare_var(parser%context(), &
+					err_undeclare_var(parser%contexts%v(identifier%unit_), &
 					span, identifier%text, &
 					parser%vars%closest(identifier%text)))
 				!print *, "undeclared var 2"
@@ -604,9 +621,13 @@ recursive module subroutine parse_expr_statement(parser, expr)
 		! is_binary_op_allowed_val for str operands) can't be given a sound
 		! meaning here.  Whole-string ops (`s += "x"`, `v[0] += "x"`,
 		! `v[0:2] += "x"`) stay legal
-		if (op%kind == plus_equals_token) then
-			if ((lhs_root_type == str_type .and. allocated(expr%lsubscripts)) .or. &
-			    (lhs_root_arr_type == str_type .and. allocated(expr%lsubscripts) .and. &
+		!
+		! Fortran doesn't short-circuit `.and.`, so size() can only be reached
+		! once lsubscripts is known to be allocated (e.g. `sum_ += ` with a
+		! missing rhs has none)
+		if (op%kind == plus_equals_token .and. allocated(expr%lsubscripts)) then
+			if (lhs_root_type == str_type .or. &
+			    (lhs_root_arr_type == str_type .and. &
 			     size(expr%lsubscripts) == lhs_root_rank + 1)) then
 				span = new_span(op%pos, len(op%text))
 				call parser%diagnostics%push( &
@@ -680,7 +701,7 @@ recursive module subroutine parse_expr(parser, parent_prec, expr)
 		if (prec == 0 .or. prec <= parent_precl) exit
 
 		call parser%next(op)
-		if (op%kind == sstar_token) then
+		if (op%kind == double_star_token) then
 			! `**` is right-associative, like Fortran:  `a ** b ** c` is
 			! `a ** (b ** c)`.  Parsing the right operand with a parent
 			! precedence one lower lets another `**` nest into it.  That is
@@ -786,6 +807,13 @@ recursive module subroutine parse_primary_expr(parser, expr)
 
 			!print *, 'expr%val%sca%bool = ', expr%val%sca%bool
 
+		case (null_keyword)
+
+			! The value of an optional (`?Struct`) that holds nothing
+			call parser%next(keyword)
+			expr%kind = literal_expr
+			expr%val%type = null_type
+
 		case (identifier_token)
 
 			!print *, "parser%peek_kind(1) = ", kind_name(parser%peek_kind(1))
@@ -852,8 +880,12 @@ recursive module subroutine parse_primary_expr(parser, expr)
 				if (parser%current_kind() == lbracket_token) then
 					call parser%parse_subscripts(expr)
 				end if
+				! A fn that is called before it is declared has an unknown type in
+				! pass 0.  parse_dot() swallows the member chain of an unknown
+				! receiver, instead of leaving a stray `.name` for an E28
 				if (parser%current_kind() == dot_token .and. &
-						expr%val%type == struct_type) then
+						(expr%val%type == struct_type .or. &
+						expr%val%type == unknown_type)) then
 					call parser%parse_dot(expr)
 				end if
 			else if (parser%peek_kind(1) == lbrace_token) then
@@ -972,6 +1004,8 @@ recursive module subroutine parse_name_expr(parser, expr)
 
 	type(fn_t), pointer :: fn
 
+	type(syntax_node_t) :: recv
+
 	! Variable name expression
 
 	call parser%match(identifier_token, identifier)
@@ -1011,8 +1045,13 @@ recursive module subroutine parse_name_expr(parser, expr)
 					call parser%parse_subscripts(expr%member)
 					call value_copy(expr%val, expr%member%val)
 					if (parser%current_kind() == dot_token) then
+						recv = expr   ! dot_expr("0self", field), before parse_dot() rewrites expr%member
 						call parser%parse_dot(expr%member)
-						call value_copy(expr%val, expr%member%val)
+						if (is_call_node(expr%member)) then
+							call splice_implicit_self_call(parser, recv, expr)
+						else
+							call value_copy(expr%val, expr%member%val)
+						end if
 					end if
 					return
 				end if
@@ -1130,7 +1169,7 @@ recursive module subroutine parse_name_expr(parser, expr)
 
 			span = new_span(identifier%pos, len(identifier%text))
 			call parser%diagnostics%push( &
-				err_undeclare_var(parser%context(), &
+				err_undeclare_var(parser%contexts%v(identifier%unit_), &
 				span, identifier%text, suggest))
 		end if
 	end if
@@ -1172,7 +1211,7 @@ recursive module subroutine skip_juxtaposed_arg(parser, skipped)
 
 	select case (parser%current_kind())
 	case (identifier_token, i32_token, i64_token, f32_token, f64_token, &
-			str_token, true_keyword, false_keyword, lbracket_token)
+			str_token, true_keyword, false_keyword, null_keyword, lbracket_token)
 		is_operand = .true.
 	case default
 		is_operand = .false.
@@ -1435,9 +1474,9 @@ recursive module subroutine parse_dot(parser, expr)
 
 	integer :: io, struct_id, member_id, pos0, pos1, method_fn_id, method_io, method_slot
 
-	logical :: is_ok, is_const_var, is_const_receiver
+	logical :: is_ok, is_const_var, is_const_receiver, has_meth, is_root_name
 
-	character(len = :), allocatable :: exp_type, act_type
+	character(len = :), allocatable :: exp_type, act_type, meth_struct
 
 	type(fn_t), pointer :: method_fn
 
@@ -1451,13 +1490,18 @@ recursive module subroutine parse_dot(parser, expr)
 
 	type(integer_vector_t) :: pos_args
 
-	type(syntax_token_t) :: dot, identifier, lparen_, rparen_
+	type(syntax_token_t) :: dot, identifier, lparen_, rparen_, meth
 
 	type(text_span_t) :: span
 
 	type(value_t) :: member
 
 	if (parser%current_kind() /= dot_token) return
+
+	! Whether expr is the root variable of the chain, as opposed to a member
+	! fragment from a recursive call, whose identifier is a member name and not
+	! a variable.  Must be captured before expr%kind is overwritten below
+	is_root_name = expr%kind == name_expr
 
 	!print *, "parsing dot"
 	!print *, "expr type = ", type_name(expr%val)
@@ -1494,10 +1538,26 @@ recursive module subroutine parse_dot(parser, expr)
 		if (parser%current_kind() == lparen_token) then
 			call parse_swallow_arg_list(parser)
 		end if
+
+		! An unknown receiver type is silent above and has no diagnostic of
+		! its own to explain it, e.g. a member of a struct that is not
+		! registered yet during parse pass 0 (`t.kids[0].kids[0].val` for a
+		! recursive struct).  Swallow the rest of the chain too, or the stray
+		! `[0].val` would cascade into a bogus E28 that survives the pass 0
+		! merge in parse_unit()
+		if (expr%val%type == unknown_type) call parse_swallow_member_tail(parser)
 		return
 	end if
 
 	!print *, "struct_name = """, expr%val%struct_name, """"
+
+	! A struct-typed value can have no name after a malformed struct
+	! declaration (it already has a diagnostic).  Recover like an unknown type
+	! above, instead of reading an unallocated name
+	if (.not. allocated(expr%val%struct_name)) then
+		call parse_swallow_member_tail(parser)
+		return
+	end if
 
 	! Is there a better way than looking up every struct by name again?
 	struct_id = parser%structs%find(expr%val%struct_name)
@@ -1624,11 +1684,13 @@ recursive module subroutine parse_dot(parser, expr)
 	! I think this is the right place to parse subscripts. Or should it be after
 	! the recursive parse_dot()?
 	expr%member%val = member
+	! parse_subscripts() reads this for its E36/E13 diagnostics
+	expr%member%identifier = identifier
 	pos0 = parser%current_pos()
 	call parser%parse_subscripts(expr%member)
 	pos1 = parser%current_pos()
 	if (allocated(expr%member%lsubscripts)) then
-		expr%val = expr%member%val
+		call value_copy(expr%val, expr%member%val)
 	end if
 
 	if (parser%current_kind() == lparen_token) then
@@ -1683,7 +1745,7 @@ recursive module subroutine parse_dot(parser, expr)
 	! I think this needs a recursive call to `parse_dot()` right here to handle
 	! things like `a.b.c`
 	if (parser%peek_kind(0) == dot_token) then
-		expr%member%val = expr%val
+		call value_copy(expr%member%val, expr%val)
 		expr%member%identifier = identifier  ! set for diags in recursed parse_dot()
 
 		! Save the current expr (e.g. y.b) before the recursive call can turn
@@ -1692,69 +1754,43 @@ recursive module subroutine parse_dot(parser, expr)
 		receiver_cand = expr
 
 		call parser%parse_dot(expr%member)
-		expr%val = expr%member%val
+		call value_copy(expr%val, expr%member%val)
 
-		! If the recursive call resolved a method call, restructure so the
-		! full chain (receiver_cand) is the method's receiver rather than just
-		! the innermost sub-node.
-		if (expr%member%kind == method_call_expr) then
-			! receiver_cand is the outer dot_expr (e.g. y.b).  Its member
-			! should be the inner partial chain produced by the recursive fix
-			! (rather than the b-subnode copy from the save above).
-			receiver_cand%member = expr%member%args(1)
-			method_cand          = expr%member        ! deep-copy the method node
-			method_cand%args(1)  = receiver_cand      ! replace receiver with full chain
-			expr                 = method_cand         ! promote to top-level method call
+		! If the recursive call resolved a method call or a fn-typed member
+		! call, possibly with more members or calls chained after it (e.g.
+		! `a.b.mk().y` or `a.b.mk().mk().y`), restructure so the full chain
+		! (receiver_cand) is rooted at the innermost call's receiver rather
+		! than just the partial fragment that the recursive call saw
+		if (is_call_node(expr%member)) then
+			call_cand = expr%member   ! deep-copy the outer node
+			call splice_chain_root(receiver_cand, call_cand, has_meth, meth, meth_struct)
+			expr = call_cand          ! promote to top-level node
 
-			! Const-receiver check for chained case (e.g. `const s = O{…}; s.field.method()`).
-			! receiver_cand%id_index / is_loc / identifier → root variable (s).
-			! receiver_cand%val%struct_name → the struct type that owns the method.
-			block
-				integer :: fn_id_check, fn_io_check, fn_slot_check
-				type(fn_t), pointer :: fn_check
-				fn_slot_check = parser%fns%find( &
-					"0" // unqualified_name(receiver_cand%val%struct_name) // &
-					"::" // expr%identifier%text)
-				if (fn_slot_check == 0) then
-					fn_io_check = exit_failure
-				else
-					fn_io_check = exit_success
-					fn_check => parser%fns%get(fn_slot_check)
-					fn_id_check = parser%fns%id_at(fn_slot_check)
-				end if
-				! fn_check is a pointer into the shared fn dict, disassociated
-				! when fn_io_check /= exit_success.  Fortran's .and. does not
-				! guarantee short-circuit evaluation, so the io check must be
-				! a separate outer if rather than combined with
-				! fn_check%is_const_method in one expression, or a failed
-				! lookup could dereference a null pointer
-				if (fn_io_check == exit_success) then
-				if (.not. fn_check%is_const_method) then
-					if (receiver_cand%is_loc) then
-						is_const_receiver = parser%locs%is_const(receiver_cand%identifier%text)
-					else
-						is_const_receiver = parser%vars%is_const(receiver_cand%identifier%text)
-					end if
-					if (is_const_receiver) then
-						span = new_span(expr%identifier%pos, len(expr%identifier%text))
-						call parser%diagnostics%push(err_const_assign( &
-							parser%context(), span, receiver_cand%identifier%text))
+			! Const-receiver check for the innermost method call (e.g. `const s =
+			! O{...}; s.field.method()`).  receiver_cand%identifier / is_loc
+			! are the root variable (s).  Only the frame whose expr is the root
+			! variable checks: a deeper frame only holds a member fragment, and
+			! looking its member name up as a variable would give a false E83
+			! when a const has the same name, e.g. `a.b.c.inc()` with `const b`
+			if (has_meth .and. is_root_name) then
+				method_slot = parser%fns%find( &
+					"0" // unqualified_name(meth_struct) // "::" // meth%text)
+				if (method_slot /= 0) then
+					method_fn => parser%fns%get(method_slot)
+					if (.not. method_fn%is_const_method) then
+						if (receiver_cand%is_loc) then
+							is_const_receiver = parser%locs%is_const(receiver_cand%identifier%text)
+						else
+							is_const_receiver = parser%vars%is_const(receiver_cand%identifier%text)
+						end if
+						if (is_const_receiver) then
+							span = new_span(meth%pos, len(meth%text))
+							call parser%diagnostics%push(err_const_assign( &
+								parser%context(), span, receiver_cand%identifier%text))
+						end if
 					end if
 				end if
-				end if
-			end block
-		else if (expr%member%kind == fn_call_ptr_expr) then
-			! Mirror the method_call_expr restructuring above: a fn-typed
-			! member call resolved deeper in the chain (e.g. `f` in
-			! `o.i.f(x)`) was built at the inner recursion frame, whose
-			! %left only holds the partial fragment from that frame down
-			! (missing the root variable "o", since the recursive
-			! parse_dot() call above was passed expr%member, not expr) --
-			! splice in the full chain the same way, via receiver_cand
-			receiver_cand%member = expr%member%left
-			call_cand            = expr%member   ! deep-copy the call node
-			call_cand%left       = receiver_cand ! full chain becomes the callee
-			expr                 = call_cand      ! promote to top-level call
+			end if
 		end if
 	end if
 
@@ -1762,7 +1798,141 @@ end subroutine parse_dot
 
 !===============================================================================
 
-subroutine parse_call_arg_list(parser, call_args, call_is_ref, pos_args, &
+subroutine splice_implicit_self_call(parser, recv, expr)
+
+	! A method or fn-typed member is called on a member of the implicit self
+	! inside a method, e.g. `next.push(v)`.  parse_name_expr() builds
+	! expr = dot_expr("0self", field) and calls parse_dot() on expr%member, which
+	! turns expr%member into the call node (or into a dot_expr that is rooted at
+	! one, for `b.mk().y`).  The innermost receiver (or callee) only holds the
+	! fragment from the field down, so make the call node the top-level expr
+	! and give it the full chain rooted at "0self", like the splice in parse_dot()
+	! does for `a.b.m()`
+	!
+	! recv is expr as it was before the parse_dot() call
+
+	class(parser_t), target :: parser
+	type(syntax_node_t), intent(inout) :: recv, expr
+
+	!********
+
+	integer :: fn_slot
+
+	logical :: has_meth
+
+	character(len = :), allocatable :: meth_struct
+
+	type(fn_t), pointer :: fn_check
+
+	type(syntax_node_t) :: call_node
+
+	type(syntax_token_t) :: meth
+
+	type(text_span_t) :: span
+
+	call_node = expr%member
+	call splice_chain_root(recv, call_node, has_meth, meth, meth_struct)
+
+	! A const method can't mutate self, so it can't call a mutating method
+	! on one of self's members either
+	if (has_meth .and. parser%in_const_method) then
+		fn_slot = parser%fns%find( &
+			"0" // unqualified_name(meth_struct) // "::" // meth%text)
+		if (fn_slot /= 0) then
+			fn_check => parser%fns%get(fn_slot)
+			if (.not. fn_check%is_const_method) then
+				span = new_span(meth%pos, len(meth%text))
+				call parser%diagnostics%push(err_const_assign( &
+					parser%context(), span, "self"))
+			end if
+		end if
+	end if
+
+	expr = call_node
+
+end subroutine splice_implicit_self_call
+
+!===============================================================================
+
+pure function is_call_node(node) result(ok)
+
+	! Whether node is a method call or a fn-typed member call, or a dot_expr
+	! rooted at one (root_kind), as parse_dot() builds them from a member
+	! fragment
+
+	type(syntax_node_t), intent(in) :: node
+	logical :: ok
+
+	ok = any([node%kind, node%root_kind] == method_call_expr) .or. &
+	     any([node%kind, node%root_kind] == fn_call_ptr_expr)
+
+end function is_call_node
+
+!===============================================================================
+
+recursive subroutine splice_chain_root(recv, node, has_meth, meth, meth_struct)
+
+	! node was built by a recursive parse_dot() call on a member fragment, so
+	! the receiver (or callee) of its innermost call only holds the fragment
+	! from that member down, e.g. `b` for `a.b.mk().y`.  Walk down the chain of
+	! calls to that fragment and replace it with recv, the full chain of members
+	! so far (e.g. `a.b`), whose own member is set to the fragment
+	!
+	! If the innermost call is a method, has_meth is set and meth and
+	! meth_struct are its name and its receiver's struct, for const checks
+
+	type(syntax_node_t), intent(inout) :: recv, node
+	logical, intent(out) :: has_meth
+	type(syntax_token_t), intent(inout) :: meth
+	character(len = :), allocatable, intent(inout) :: meth_struct
+
+	!********
+
+	logical :: is_meth, is_innermost
+
+	has_meth = .false.
+
+	if (.not. is_call_node(node)) then
+		recv%member = node
+		node = recv
+		return
+	end if
+
+	! Error recovery can leave a call node without its receiver (`args`) or
+	! callee (`left`), e.g. after a malformed struct declaration, so treat it as
+	! a plain member fragment rather than walking into unallocated components
+	is_meth = any([node%kind, node%root_kind] == method_call_expr)
+	if (is_meth) then
+		if (.not. allocated(node%args)) then
+			recv%member = node
+			node = recv
+			return
+		end if
+	else
+		if (.not. allocated(node%left)) then
+			recv%member = node
+			node = recv
+			return
+		end if
+	end if
+
+	if (is_meth) then
+		is_innermost = .not. is_call_node(node%args(1))
+		if (is_innermost) meth_struct = node%args(1)%val%struct_name
+		call splice_chain_root(recv, node%args(1), has_meth, meth, meth_struct)
+		if (is_innermost) then
+			has_meth = .true.
+			meth     = node%identifier
+		end if
+	else
+		call splice_chain_root(recv, node%left, has_meth, meth, meth_struct)
+	end if
+
+end subroutine splice_chain_root
+
+!===============================================================================
+
+recursive subroutine parse_call_arg_list(parser, call_args, call_is_ref, pos_args, &
 		lparen_, rparen_)
 
 	! Parse a parenthesized, comma-separated argument list into `call_args`
@@ -1825,7 +1995,55 @@ end subroutine parse_call_arg_list
 
 !===============================================================================
 
-subroutine parse_swallow_arg_list(parser)
+recursive subroutine parse_swallow_member_tail(parser)
+
+	! Error recovery: consume the rest of a member chain whose receiver type is
+	! unknown -- any `[...]` subscripts and `.name` / `.name(...)` accesses that
+	! follow -- without building an AST for them
+
+	class(parser_t) :: parser
+
+	!********
+
+	integer :: depth
+
+	type(syntax_token_t) :: dummy
+
+	do
+		select case (parser%current_kind())
+
+		case (lbracket_token)
+			depth = 0
+			do
+				select case (parser%current_kind())
+				case (lbracket_token)
+					depth = depth + 1
+				case (rbracket_token)
+					depth = depth - 1
+				case (eof_token)
+					return
+				end select
+				call parser%next(dummy)
+				if (depth <= 0) exit
+			end do
+
+		case (dot_token)
+			if (parser%peek_kind(1) /= identifier_token) return
+			call parser%next(dummy)
+			call parser%next(dummy)
+			if (parser%current_kind() == lparen_token) call parse_swallow_arg_list(parser)
+
+		case default
+			return
+
+		end select
+	end do
+
+end subroutine parse_swallow_member_tail
+
+!===============================================================================
+
+recursive subroutine parse_swallow_arg_list(parser)
 
 	! Error recovery: consume a parenthesized, comma-separated argument list
 	! without building an AST for it, so the parser stays in sync with a
@@ -1861,7 +2079,7 @@ end subroutine parse_swallow_arg_list
 
 !===============================================================================
 
-subroutine parse_file_member(parser, expr, identifier)
+recursive subroutine parse_file_member(parser, expr, identifier)
 
 	! Read-only dot member access on a file handle: f.is_open, f.eof, f.name.
 	! Unlike struct members these are baked from a fixed table rather than
@@ -1919,15 +2137,15 @@ subroutine parse_file_member(parser, expr, identifier)
 	! it (a bool member gets the standard E39 "scalar cannot have subscripts")
 	call parser%parse_subscripts(expr%member)
 	if (allocated(expr%member%lsubscripts)) then
-		expr%val = expr%member%val
+		call value_copy(expr%val, expr%member%val)
 	end if
 
 	! f.name.foo -- keep the parser in sync; the recursive parse_dot() call
 	! will report E62 (dot on a non-struct str/bool value)
 	if (parser%peek_kind(0) == dot_token) then
-		expr%member%val = expr%val
+		call value_copy(expr%member%val, expr%val)
 		call parser%parse_dot(expr%member)
-		expr%val = expr%member%val
+		call value_copy(expr%val, expr%member%val)
 	end if
 
 end subroutine parse_file_member

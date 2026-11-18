@@ -769,6 +769,41 @@ Not to be confused with [`min`](#min), which compares its scalar arguments.
 
 Related functions: [`maxval`](#maxval), [`min`](#min)
 
+## `move`
+```rust
+fn move(x: [any; any_rank]): [any; any_rank]
+fn move(x: str): str
+```
+
+Move the array or `str` out of the variable `x` and return it, without copying
+it.  `x` is left empty, i.e. a zero-size array of the same element type and rank,
+or `""`, and it can still be read or assigned again.  Must be called with the
+`std::` prefix.
+
+`x` must be a plain variable or a struct member, like `x`, `v.data`, or a field
+such as `data` inside a method.  It can't be a subscript, a slice, or any other
+expression ([E131](errors.md#e131----move-not-variable)), a const variable
+([E83](errors.md#e83----const-assign)), or anything but an array or `str`
+([E42](errors.md#e42----bad-arg-type)).
+
+Assigning the result to a variable or a struct member, like `data = std::move(new_data);`,
+moves it into place instead of copying it.  A growable array only needs one copy
+of its elements when it grows, instead of two:
+
+```rust
+let new_data = [0; new_cap];
+for i in [0: len]
+	new_data[i] = data[i];
+data = std::move(new_data);
+```
+
+See [`samples/vec_i32.syntran`](../samples/vec_i32.syntran) for a complete example.
+
+The Fortran backend (`--transpile`) moves it with `move_alloc()` into a temporary,
+and an assignment from that temporary still copies once.  It does the move before
+the rest of the statement runs, so `println(x, std::move(x))` prints `x` empty there,
+unlike in the interpreter.  Use `std::move()` in a statement of its own.
+
 ## `norm2`
 ```rust
 fn norm2(array: [any_float; any_rank]): any_float
@@ -826,6 +861,7 @@ error); they only reflect the handle's current state.
 ## `parse_bool`
 ```rust
 fn parse_bool(s: str): bool
+fn parse_bool(s: str, ok: &bool): bool
 ```
 
 Convert from a string to a `bool`.  Only `"true"` and `"false"` are accepted,
@@ -833,19 +869,23 @@ optionally with surrounding spaces, so `parse_bool("true")` is `true`.  Other
 spellings like `"True"`, `"t"`, or `"1"` are not accepted.
 
 Any invalid text will cause a runtime error,
-[R46](errors.md#r46----parse-bool).
+[R46](errors.md#r46----parse-bool).  With the optional `ok` argument there is no
+error, and the result is `false` for invalid text.  See [`parse_i32`](#parse_i32).
 
 Related functions: [`parse_i32`](#parse_i32), [`str`](#str)
 
 ## `parse_f32`
 ```rust
 fn parse_f32(s: str): f32
+fn parse_f32(s: str, ok: &bool): f32
 ```
 
 Convert from a string to a float `f32`.  For example, `parse_f32("65.4")`
 returns roughly `65.4f`.
 
-Any invalid numbers will cause a runtime error.
+Any invalid numbers will cause a runtime error.  With the optional `ok` argument
+there is no error, and the result is `0.0f` for invalid text.  See
+[`parse_i32`](#parse_i32).
 
 Note that other numeric types (`i32`) can be converted to float with
 [`f32`](#f32), e.g. `f32(3)`, or simply by multiplying by `1.0f`.
@@ -855,12 +895,15 @@ Related functions: [`parse_i32`](#parse_i32), [`str`](#str)
 ## `parse_f64`
 ```rust
 fn parse_f64(s: str): f64
+fn parse_f64(s: str, ok: &bool): f64
 ```
 
 Convert from a string to a double `f64`.  For example, `parse_f64("65.4")`
 returns roughly `65.4`.
 
-Any invalid numbers will cause a runtime error.
+Any invalid numbers will cause a runtime error.  With the optional `ok` argument
+there is no error, and the result is `0.0` for invalid text.  See
+[`parse_i32`](#parse_i32).
 
 Note that other numeric types (`i32`) can be converted to double with
 [`f64`](#f64), e.g. `f64(3)`, or simply by multiplying by `1.0`.
@@ -870,6 +913,7 @@ Related functions: [`parse_f32`](#parse_f32), [`str`](#str)
 ## `parse_i32`
 ```rust
 fn parse_i32(s: str): i32
+fn parse_i32(s: str, ok: &bool): i32
 ```
 
 Convert from a string to an integer `i32`.  For example, `parse_i32("65")`
@@ -880,6 +924,20 @@ Any invalid numbers will cause a runtime error.  Other languages variously refer
 to similar functions as `atoi()`, `stoi()`, `read()`, `parse()`, `strtol()`,
 `str2int()`, etc.
 
+If you give the optional `ok` argument, which must be a `bool` variable passed
+by reference, then there is no error.  Instead, `ok` is set to whether the text
+could be parsed, and the result is `0` if it could not.  `ok` is always assigned,
+and any previous value is overwritten.  It accepts exactly the text that the
+one-argument form does, so a number that overflows an `i32` is not ok.  The same
+goes for the other `parse_` fns.
+
+```rust
+let ok = false;
+const n = parse_i32(text, &ok);
+if not ok
+	println("not a number: ", text);
+```
+
 Note that other numeric types (`f32`) can be implicitly cast to `i32`.
 
 Related functions: [`parse_i64`](#parse_i64), [`str`](#str)
@@ -887,12 +945,15 @@ Related functions: [`parse_i64`](#parse_i64), [`str`](#str)
 ## `parse_i64`
 ```rust
 fn parse_i64(s: str): i64
+fn parse_i64(s: str, ok: &bool): i64
 ```
 
 Convert from a string to an integer `i64`.  For example, `parse_i64("65")`
 returns `65`.
 
-Any invalid numbers will cause a runtime error.
+Any invalid numbers will cause a runtime error.  With the optional `ok` argument
+there is no error, and the result is `0` for invalid text.  See
+[`parse_i32`](#parse_i32).
 
 Related functions: [`parse_i32`](#parse_i32), [`str`](#str)
 
@@ -975,6 +1036,30 @@ Related functions: [`sum`](#sum)
 
 ## `read_f32`
 ## `read_f64`
+## `read_file`
+```rust
+fn read_file(path: str): str
+```
+
+Return the whole contents of the file at `path` as a `str`.  The result is the
+exact bytes of the file, so unlike [`readln`](#readln), the line feeds are kept,
+and so is a missing line feed at the end of the last line.  A `\r\n` line ending
+is not changed either.  It is also much faster than building a file up from
+lines, which copies the text over and over.
+
+Relative paths are resolved the same way [`open`](#open) resolves them.  A file
+that doesn't exist or can't be read, or a directory, is a runtime error,
+[R8](errors.md#r8----open-file), as for `open()`.  Use [`exists`](#exists) first
+if you need to recover from that.  Must be called with the `std::` prefix, e.g.
+`std::read_file("data.txt")`.
+
+```rust
+const text = std::read_file("data.txt");
+println(len(text), " bytes");
+```
+
+Related functions: [`exists`](#exists), [`open`](#open), [`readln`](#readln)
+
 ## `read_i32`
 ## `read_i64`
 ```rust
@@ -1020,7 +1105,7 @@ fn readln(file_handle: file): str
 
 Read a single line from `file_handle`, or from stdin if called with no argument
 
-Related functions: [`close`](#close), [`eof`](#eof), [`open`](#open), [`read_i32`](#read_i32)
+Related functions: [`close`](#close), [`eof`](#eof), [`open`](#open), [`read_file`](#read_file), [`read_i32`](#read_i32)
 
 ## `repeat`
 ```rust
@@ -1235,6 +1320,31 @@ let sd = sum(a, 0, a > 2); // [0, 7, 11]
 
 Related functions: [`product`](#product), [`count`](#count)
 
+## `system`
+```rust
+fn system(cmd: str): i32
+```
+
+Run the command line `cmd` through the shell (`sh -c` on Unix, `cmd /c` on
+Windows) and return its exit status.  A command that the shell can't find or run
+is an ordinary exit status, `127` or `126`, but the Fortran runtime of the Intel
+compilers doesn't return `127` like gfortran and the native backend do, so don't
+rely on telling it apart there.  The result is `-1` if the shell itself can't be
+started.  Standard output and error are flushed first, so that output stays in
+order.  Pipes, redirection, and `&&` work as they do in the shell, and quoting
+is up to the caller.  Close a file that you wrote before a command reads it.
+Must be called with the `std::` prefix, e.g. `std::system("ls -l")`.
+
+```rust
+let status = std::system("echo hello > out.txt");
+if status != 0
+{
+	println("failed with status ", status);
+}
+```
+
+Related functions: [`getenv`](#getenv), [`exit`](#exit)
+
 ## `tan`
 ```rust
 fn tan(x: any_float): any_float
@@ -1305,6 +1415,29 @@ See also [File handle members](#file-handle-members) for `f.is_open`,
 `f.eof`, and `f.name`.
 
 Related functions: [`open`](#open), [`exists`](#exists), [`close`](#close)
+
+## `variant_of`
+```rust
+fn variant_of(e: enum): str
+```
+
+Return the name of the variant of an enum value, without the name of the enum
+that [`str`](#str) and [`println`](#println) put before it.  An alias, which is
+a variant with the same backing value as an earlier one, is named by the variant
+that was written, since an enum value is its variant and not just its integer.
+The argument must be a single enum value, not an array of them, nor a bare enum
+name.  Must be called with the `std::` prefix, e.g. `std::variant_of(s)`.
+
+```rust
+enum Suit { Hearts, Clubs }
+
+println(Suit.Clubs);
+// Suit.Clubs
+println(std::variant_of(Suit.Clubs));
+// Clubs
+```
+
+Related functions: [`str`](#str), [`println`](#println), [`i32`](#i32)
 
 ## `write`
 ```rust

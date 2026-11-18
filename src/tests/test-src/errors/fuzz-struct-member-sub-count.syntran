@@ -1,0 +1,10 @@
+// Fuzz regression: wrong subscript count on a struct member used to crash
+// while building the E36 message, because the member had no name yet
+
+struct Container
+{
+	vals: [i32; :],
+}
+
+let c = Container{vals = [1, 2, 3]};
+let x = c.vals[0, 0];

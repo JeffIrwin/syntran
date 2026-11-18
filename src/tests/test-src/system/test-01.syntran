@@ -1,0 +1,42 @@
+
+// std::system(): exit statuses, and a command with a side effect that is read
+// back.  Only uses `exit`, `echo`, and `>`, which sh and cmd both have
+
+fn check(b: bool): i32
+{
+	if b
+		return 0;
+	return 1;
+}
+
+fn main(): i32
+{
+	let status = 0;
+
+	status += check(std::system("exit 0") == 0);
+	status += check(std::system("exit 3") == 3);
+	status += check(std::system("exit 255") == 255);
+
+	// 126 is what a shell gives for a command that it can't run.  It is an ordinary
+	// status, not -1, which is only for a shell that won't start.  127, for a command
+	// that isn't found, is left out since Intel's runtimes don't return it like
+	// gfortran does
+	status += check(std::system("exit 126") == 126);
+
+	// The shell's own operators work
+	status += check(std::system("exit 1 && exit 2") == 1);
+
+	// A command that wrote a file, which is read back
+	let filename = "build/system-01.txt";
+	let cmd = "echo hello> " + filename;
+	status += check(std::system(cmd) == 0);
+
+	let fi = open(filename, "r");
+	let line = readln(fi);
+	close(fi);
+	status += check(line == "hello");
+
+	return status;
+}
+
+return main();

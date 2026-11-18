@@ -1,0 +1,9 @@
+// Like fnuser.syntran, but qualified
+
+use fnmod;
+
+fn user_total(): i32
+{
+	let p = fnmod::make_pt(1, 2);
+	return fnmod::add_base(fnmod::sum_pt(p));
+}

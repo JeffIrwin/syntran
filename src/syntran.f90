@@ -12,13 +12,123 @@ module syntran
 	use syntran__vm_m
 	use syntran__line_edit_m
 	use syntran__repl_m
+	use syntran__native_m
 	use syntran__transpile_m
 
 	implicit none
 
+	! For the test suite: evaluate programs by compiling them with LLVM and running
+	! them in this process, rather than on the VM.  See syntran_set_native_evals()
+	logical, private :: native_evals = .false.
+
+	! The result of the last program that ran that way, as text, for syntran_eval()
+	character(len = :), allocatable, private :: native_text
+
 !===============================================================================
 
 contains
+
+!===============================================================================
+
+subroutine syntran_set_native_evals(on)
+
+	! Make syntran_eval(), syntran_eval_i32(), syntran_interpret_file(), etc.
+	! compile their programs with the native backend and run them in memory,
+	! instead of using the VM.  This is only for testing the native backend: it
+	! runs the unit tests of the VM on it.  It needs a syntran that was built with
+	! LLVM, and a program which the backend can't compile is a diagnostic.  The
+	! REPL, syntran_interpret(), is not affected
+
+	logical, intent(in) :: on
+
+	native_evals = on
+
+end subroutine syntran_set_native_evals
+
+!===============================================================================
+
+logical function syntran_native_evals()
+
+	syntran_native_evals = native_evals
+
+end function syntran_native_evals
+
+!===============================================================================
+
+subroutine eval_native(tree, state, val)
+
+	! Like eval_dispatch(), but with the native backend, in memory.  A runtime
+	! error is left in state%rt_halt and state%rt_diags, as it is there.  The
+	! result as text is in native_text, and when it is a scalar, which a typed
+	! syntran_eval_*() needs, it is in `val`
+
+	type(syntax_node_t), intent(in) :: tree
+	type(state_t), intent(inout) :: state
+	type(value_t), intent(out) :: val
+
+	!*******
+
+	integer :: ios
+
+	type(native_t) :: n
+	type(string_vector_t) :: diags
+
+	n%capture = .true.
+	n%print_result = .true.
+	n%trim_result = .false.
+
+	native_text = ''
+	call native_tree(tree, state, n, diags)
+
+	if (diags%len_ > 0) then
+		! The backend could not compile it, which is not the program's fault.  Report
+		! it as a runtime error so that a test of the program fails without crashing
+		state%rt_halt = .true.
+		call state%rt_diags%push_all(diags)
+		if (.not. state%quiet) call log_rt_diags(state%rt_diags)
+		return
+	end if
+
+	if (n%status == 1) then
+		state%rt_halt = .true.
+		call state%rt_diags%push(n%message)
+		if (.not. state%quiet) call log_rt_diags(state%rt_diags)
+		return
+	end if
+
+	if (n%status == 2) then
+		! std::exit().  Nothing to hand back, but it isn't an error of the program
+		native_text = ''
+		return
+	end if
+
+	native_text = n%result
+
+	select case (n%result_type)
+	case (i32_type)
+		val%type = i32_type
+		read(native_text, *, iostat = ios) val%sca%i32
+		if (ios /= 0) val%type = unknown_type
+	case (i64_type)
+		val%type = i64_type
+		read(native_text, *, iostat = ios) val%sca%i64
+		if (ios /= 0) val%type = unknown_type
+	case (f32_type)
+		val%type = f32_type
+		val%sca%f32 = n%result_f32
+	case (f64_type)
+		val%type = f64_type
+		val%sca%f64 = n%result_f64
+	case (bool_type)
+		val%type = bool_type
+		val%sca%bool = native_text == 'true'
+	case (str_type)
+		val%type = str_type
+		allocate(val%str)
+		val%str%s = native_text
+	end select
+
+end subroutine eval_native
 
 !===============================================================================
 
@@ -358,7 +468,7 @@ end function syntran_interpret
 !===============================================================================
 
 subroutine syntran_eval_value(str_, val, quiet, want_type, src_file, chdir_, &
-		script_args, diags, syntax_only, transpile, io)
+		script_args, diags, syntax_only, transpile, native, io)
 
 	! Shared front end for syntran_eval() and the typed syntran_eval_i32() /
 	! _i64() / _f32() / _f64() / _bool() / _str() wrappers below.  Parses and
@@ -401,6 +511,12 @@ subroutine syntran_eval_value(str_, val, quiet, want_type, src_file, chdir_, &
 	! were parser errors.  Backs the `--transpile` CLI option
 	type(transpile_t), optional, intent(inout) :: transpile
 
+	! Compile to a native executable (or object, or LLVM IR) with LLVM instead of
+	! evaluating.  Nothing runs, and `val` is unset.  The output goes to the
+	! file that native%out names.  Constructs which are not supported by the
+	! native backend yet are diagnostics.  Backs the `--aot` CLI option
+	type(native_t), optional, intent(inout) :: native
+
 	! exit_success/exit_failure status for callers.  Failure means the
 	! expression did not run to completion (parser diagnostics, or a runtime
 	! halt for quiet callers -- non-quiet callers exit the process from
@@ -415,7 +531,7 @@ subroutine syntran_eval_value(str_, val, quiet, want_type, src_file, chdir_, &
 	logical :: repl, syntax_onlyl
 
 	type(state_t) :: state
-	type(string_vector_t) :: transpile_diags
+	type(string_vector_t) :: transpile_diags, native_diags
 	type(syntax_node_t) :: tree
 
 	! Determine source directory first
@@ -481,7 +597,26 @@ subroutine syntran_eval_value(str_, val, quiet, want_type, src_file, chdir_, &
 		return
 	end if
 
-	call eval_dispatch(tree, state, val)
+	if (present(native)) then
+		! Same as above, but the output is a file of machine code
+		call native_tree(tree, state, native, native_diags)
+
+		if (native_diags%len_ > 0) then
+			call tree%diagnostics%push_all(native_diags)
+			if (.not. state%quiet) call tree%log_diagnostics()
+			if (present(diags)) diags = tree%diagnostics
+			if (present(io)) io = exit_failure
+		end if
+
+		call state_destroy(state)
+		return
+	end if
+
+	if (native_evals) then
+		call eval_native(tree, state, val)
+	else
+		call eval_dispatch(tree, state, val)
+	end if
 
 	! A runtime error halted evaluation.  eval_dispatch() already printed and
 	! exited for non-quiet callers, so reaching here means state%quiet is
@@ -696,7 +831,7 @@ end subroutine init_state
 !===============================================================================
 
 function syntran_eval(str_, quiet, src_file, chdir_, script_args, diags, &
-		syntax_only, transpile, io) result(res)
+		syntax_only, transpile, native, io) result(res)
 
 	! Note that this chdir_ optional arg is a str_, while the chdir_ optional arg
 	! for syntran_interpret_file() is boolean
@@ -723,6 +858,9 @@ function syntran_eval(str_, quiet, src_file, chdir_, script_args, diags, &
 	! Transpile to Fortran instead of evaluating.  See syntran_eval_value()
 	type(transpile_t), optional, intent(inout) :: transpile
 
+	! Compile natively instead of evaluating.  See syntran_eval_value()
+	type(native_t), optional, intent(inout) :: native
+
 	! exit_success/exit_failure status for non-interactive callers (the CLI in
 	! file or `-c` mode).  Failure means the program did not run to
 	! completion: parser diagnostics, or a runtime halt for quiet callers
@@ -737,7 +875,7 @@ function syntran_eval(str_, quiet, src_file, chdir_, script_args, diags, &
 
 	call syntran_eval_value(str_, val, quiet, src_file = src_file, chdir_ = chdir_, &
 		script_args = script_args, diags = diags, &
-		syntax_only = syntax_only, transpile = transpile, io = iol)
+		syntax_only = syntax_only, transpile = transpile, native = native, io = iol)
 
 	if (present(io)) io = iol
 
@@ -746,11 +884,17 @@ function syntran_eval(str_, quiet, src_file, chdir_, script_args, diags, &
 
 	! Nothing was evaluated when transpiling either
 	if (present(transpile)) return
+	if (present(native)) return
 
 	if (present(syntax_only)) then
 		! Parse and type check succeeded, but nothing was evaluated (see
 		! syntran_eval_value()); val is unset
 		if (syntax_only) return
+	end if
+
+	if (native_evals) then
+		res = native_text
+		return
 	end if
 
 	res = val%to_str()
@@ -800,7 +944,7 @@ end subroutine syntran_write_transpiled
 !===============================================================================
 
 function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args, diags, &
-		syntax_only, transpile, io) result(res)
+		syntax_only, transpile, native, io) result(res)
 
 	character(len = *), intent(in)  :: filename
 	character(len = :), allocatable :: res
@@ -825,6 +969,10 @@ function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args
 	! Transpile to Fortran instead of evaluating.  See syntran_eval_value().
 	! The CLI trims the result of a file, so this sets transpile%trim_result
 	type(transpile_t), optional, intent(inout) :: transpile
+
+	! Compile natively instead of evaluating.  See syntran_eval_value().  The
+	! CLI trims the result of a file, so this sets native%trim_result
+	type(native_t), optional, intent(inout) :: native
 
 	! exit_success/exit_failure status.  See syntran_eval()
 	integer, optional, intent(out) :: io
@@ -857,6 +1005,10 @@ function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args
 		quiet_infol = .true.
 		transpile%trim_result = .true.
 	end if
+	if (present(native)) then
+		quiet_infol = .true.
+		native%trim_result = .true.
+	end if
 
 	if (present(io)) io = exit_success
 
@@ -881,14 +1033,230 @@ function syntran_interpret_file(filename, quiet, quiet_info, chdir_, script_args
 	if (chdirl) then
 		res = trim(adjustl(syntran_eval(source_text, state%quiet, filename, &
 			chdir_ = get_dir(filename), script_args = script_args, diags = diags, &
-			syntax_only = syntax_only, transpile = transpile, io = io)))
+			syntax_only = syntax_only, transpile = transpile, native = native, io = io)))
 	else
 		res = trim(adjustl(syntran_eval(source_text, state%quiet, filename, &
 			script_args = script_args, diags = diags, &
-			syntax_only = syntax_only, transpile = transpile, io = io)))
+			syntax_only = syntax_only, transpile = transpile, native = native, io = io)))
 	end if
 
 end function syntran_interpret_file
+
+!===============================================================================
+
+function syntran_lex_file(filename, io) result(res)
+
+	! Lex a file and return a dump of every token, for `syntran --lex`.  See
+	! lex_dump() for the format
+
+	character(len = *), intent(in)  :: filename
+	character(len = :), allocatable :: res
+
+	! exit_success/exit_failure status
+	integer, intent(out) :: io
+
+	!********
+
+	character(len = :), allocatable :: source_text
+
+	integer :: iostat
+
+	io = exit_success
+
+	source_text = read_file(filename, iostat)
+	if (iostat /= exit_success) then
+		write(*,*) err_404(filename)
+		io = exit_failure
+		res = ''
+		return
+	end if
+
+	res = lex_dump(source_text, filename)
+
+end function syntran_lex_file
+
+!===============================================================================
+
+function parse_dump_str(text, src_file) result(str_)
+
+	! Parse `text` and dump the typed tree, for `syntran --parse`.  This is used
+	! to test the syntran port of the parser in compiler/parse.syntran, which
+	! prints the same format.  See parse_dump() in src/types_ops.f90 for the
+	! tree, which is followed by the tables that the parser filled, in id order:
+	!
+	!     fn <name>(<type>[&|&const], ...): <return type>
+	!     struct <name> { <member>: <type>, ... }
+	!     enum <name> { <variant>, ... }
+	!
+	! If there are any diagnostics, only their codes are dumped, as `diag <code>`
+	! lines and with no tree, so that the shape of a tree after error recovery
+	! isn't compared.  Nothing is compiled or run, so a module that is pulled in
+	! by `use` doesn't run either
+
+	character(len = *), intent(in) :: text, src_file
+	character(len = :), allocatable :: str_
+
+	!********
+
+	integer :: i
+
+	type(char_vector_t) :: sb
+	type(state_t) :: state
+	type(syntax_node_t) :: tree
+
+	call init_state(state)
+	state%quiet = .true.
+
+	tree = syntax_parse(text, state, src_file, repl = .false.)
+
+	sb = new_char_vector()
+	if (tree%diagnostics%len_ > 0) then
+		do i = 1, tree%diagnostics%len_
+			call sb%push("diag "//diag_code(tree%diagnostics%v(i)%s)//line_feed)
+		end do
+	else
+		call sb%push(parse_dump(tree))
+		call dump_tables(sb, state)
+	end if
+	str_ = sb%trim()
+
+	call state_destroy(state)
+
+end function parse_dump_str
+
+!===============================================================================
+
+subroutine dump_tables(sb, state)
+
+	! The trailer of parse_dump_str(): the user fns, structs, and enums
+
+	type(char_vector_t), intent(inout) :: sb
+	type(state_t), intent(in) :: state
+
+	!********
+
+	integer :: i, j, k
+
+	! The flat array has the intrinsic fns first, and then the user fns in id
+	! order
+	if (allocated(state%fns%fns)) then
+		do i = state%fns%num_intr_fns + 1, size(state%fns%fns)
+			associate (fn => state%fns%fns(i))
+				call sb%push("fn "//fn%node%identifier%text//"(")
+				do j = 1, size(fn%params)
+					if (j > 1) call sb%push(", ")
+					call sb%push(value_type_name(fn%params(j)))
+					if (allocated(fn%node%is_ref)) then
+						if (fn%node%is_ref(j)) call sb%push("&")
+					end if
+					if (allocated(fn%node%is_const_ref)) then
+						if (fn%node%is_const_ref(j)) call sb%push("const")
+					end if
+				end do
+				call sb%push("): "//value_type_name(fn%type)//line_feed)
+			end associate
+		end do
+	end if
+
+	do i = 1, state%structs%num_structs
+		do j = 1, state%structs%capacity
+			if (.not. allocated(state%structs%table(j)%key)) cycle
+			if (state%structs%table(j)%id_index /= i) cycle
+
+			associate (struct => state%structs%table(j)%val)
+				call sb%push("struct "//state%structs%table(j)%key//" {")
+				do k = 1, struct%num_vars
+					if (k == 1) then
+						call sb%push(" ")
+					else
+						call sb%push(", ")
+					end if
+					call sb%push(struct%member_names%v(k)%s//": ")
+					call sb%push(value_type_name(member_type(struct, k)))
+				end do
+				call sb%push(" }"//line_feed)
+			end associate
+		end do
+	end do
+
+	do i = 1, state%enums%num_enums
+		do j = 1, state%enums%capacity
+			if (.not. allocated(state%enums%table(j)%key)) cycle
+			if (state%enums%table(j)%id_index /= i) cycle
+
+			associate (enum => state%enums%table(j)%val)
+				call sb%push("enum "//state%enums%table(j)%key//" {")
+				do k = 1, enum%num_vars
+					if (k == 1) then
+						call sb%push(" ")
+					else
+						call sb%push(", ")
+					end if
+					call sb%push(enum%variant_names%v(k)%s)
+				end do
+				call sb%push(" }"//line_feed)
+			end associate
+		end do
+	end do
+
+end subroutine dump_tables
+
+!===============================================================================
+
+function member_type(struct, id) result(val)
+
+	! The value, which is the type, of the member of `struct` that has this id
+
+	type(struct_t), intent(in) :: struct
+	integer, intent(in) :: id
+
+	type(value_t) :: val
+
+	!********
+
+	integer :: i
+
+	do i = 1, struct%vars%dicts(1)%capacity
+		if (.not. allocated(struct%vars%dicts(1)%table(i)%key)) cycle
+		if (struct%vars%dicts(1)%table(i)%id_index /= id) cycle
+		val = struct%vars%dicts(1)%table(i)%val
+		return
+	end do
+
+end function member_type
+
+!===============================================================================
+
+function syntran_parse_file(filename, io) result(res)
+
+	! Parse a file and return a dump of its typed tree, for `syntran --parse`.
+	! See parse_dump_str() for the format
+
+	character(len = *), intent(in)  :: filename
+	character(len = :), allocatable :: res
+
+	! exit_success/exit_failure status
+	integer, intent(out) :: io
+
+	!********
+
+	character(len = :), allocatable :: source_text
+
+	integer :: iostat
+
+	io = exit_success
+
+	source_text = read_file(filename, iostat)
+	if (iostat /= exit_success) then
+		write(*,*) err_404(filename)
+		io = exit_failure
+		res = ''
+		return
+	end if
+
+	res = parse_dump_str(source_text, filename)
+
+end function syntran_parse_file
 
 !===============================================================================
 

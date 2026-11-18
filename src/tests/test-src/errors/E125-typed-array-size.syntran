@@ -1,0 +1,7 @@
+// E125: typed-array-size
+// A type name has no value to fill an array with, so only empty arrays are
+// allowed
+
+struct Node { val: i32, }
+
+let nodes = [Node; 3];

@@ -10,16 +10,22 @@ pages below go into more detail on specific topics.
 - [Error code index](errors.md):  every diagnostic, with its code and an example
 - [Include files](include-files.md):  `#include` preprocessing, which is
   superseded by [modules](../README.md#modules)
+- [Style guide](style.md):  naming, formatting, and module conventions for
+  syntran source, and the linter that checks them
 
 ## Using syntran from other languages
 
 - [Fortran API](api.md):  using syntran as a Fortran library
-- [Transpiling to Fortran](transpile.md):  generating a standalone Fortran
-  program instead of running the interpreter
+- [Transpiling to Fortran](transpile.md) (deprecated):  generating a standalone
+  Fortran program instead of running the interpreter
+- [Compiling natively with LLVM](native.md):  compiling ahead of time to a
+  native executable, or just in time and running it, with LLVM instead of the VM
 
 ## Installing and building
 
 - [Docker](docker.md):  running syntran in a container
+- [synup](synup.md):  the toolchain manager, to install several versions side by
+  side
 - [Shared libraries](shared-libs.md):  notes on the binary packages
 - [Automatic source generation](src-gen.md):  which Fortran sources are
   generated, and how

@@ -121,6 +121,78 @@ end subroutine compile_member_chain_slots
 
 !===============================================================================
 
+function null_test_operand(node) result(which)
+
+	! For `x == null`, `x != null`, `null == x` and `null != x` where x is a
+	! variable or a plain member chain of a struct, return which operand is x
+	! (1 = left, 2 = right).  Otherwise 0
+
+	type(syntax_node_t), intent(in) :: node
+	integer :: which
+
+	which = 0
+	if (.not. any(node%op%kind == [double_equals_token, bang_equals_token])) return
+
+	if (is_null_literal(node%right)) then
+		if (is_null_test_var(node%left)) which = 1
+	else if (is_null_literal(node%left)) then
+		if (is_null_test_var(node%right)) which = 2
+	end if
+
+end function null_test_operand
+
+!===============================================================================
+
+function is_null_literal(node) result(ok)
+	type(syntax_node_t), intent(in) :: node
+	logical :: ok
+	ok = node%kind == literal_expr
+	if (ok) ok = node%val%type == null_type
+end function is_null_literal
+
+!===============================================================================
+
+function is_null_test_var(node) result(ok)
+	type(syntax_node_t), intent(in) :: node
+	logical :: ok
+
+	ok = .false.
+	if (.not. any(node%val%type == [struct_type, null_type])) return
+	if (node%kind == name_expr) then
+		ok = .not. allocated(node%lsubscripts)
+	else
+		ok = plain_member_chain(node)
+	end if
+
+end function is_null_test_var
+
+!===============================================================================
+
+subroutine compile_null_test(prog, node, negate)
+
+	! Emit OP_IS_NULL/OP_IS_NULL_MEMBER for the operand x of `x == null`
+	! (negate = 0) or `x != null` (negate = 1).  See null_test_operand()
+
+	type(program_t), intent(inout) :: prog
+	type(syntax_node_t), intent(in) :: node
+	integer, intent(in) :: negate
+
+	!*******
+
+	integer :: loc
+
+	if (node%kind == name_expr) then
+		loc = 0
+		if (node%is_loc) loc = 1
+		call emit(prog, OP_IS_NULL, a = node%id_index, b = negate, c = int(loc, 8))
+	else
+		call emit(prog, OP_IS_NULL_MEMBER, a = add_node(prog, node), b = negate)
+	end if
+
+end subroutine compile_null_test
+
+!===============================================================================
+
 recursive subroutine compile_array_expr_slots(prog, cs, node)
 
 	! Compile an array_expr node's sub-expressions to bytecode, in the fixed
@@ -554,7 +626,7 @@ recursive subroutine compile_switch_statement(prog, cs, node)
 					call emit_switch_load_subj(prog, node, subj_type)
 					call compile_node(prog, cs, node%members(i)%elems(j))
 					val_type = node%members(i)%elems(j)%val%type
-					call emit_case_cmp(prog, eequals_token, subj_type, val_type)
+					call emit_case_cmp(prog, double_equals_token, subj_type, val_type)
 				end if
 				match_ips(j) = prog%len_ + 1
 				call emit(prog, OP_JUMP_IF_TRUE, a = 0)
@@ -676,7 +748,7 @@ recursive subroutine compile_node_impl(prog, cs, node)
 
 	!*******
 
-	integer :: idx, i, j, const_idx, typed_op
+	integer :: idx, i, j, const_idx, typed_op, move_slot, c_
 	integer :: jf_ip, j_ip, l_top, l_else, l_end, l_pad
 	integer :: nblock_saved
 	logical :: first, entering_ctx
@@ -790,35 +862,47 @@ recursive subroutine compile_node_impl(prog, cs, node)
 
 	! ---- arithmetic / comparison / logic / bitwise ----------------------------
 	case (binary_expr)
-		call compile_node(prog, cs, node%left )
-		call compile_node(prog, cs, node%right)
-		! Same-type scalar or mixed i32/i64: emit typed opcode.
-		! Same-type numeric arrays: emit OP_ARR_BINOP (a=op_kind, b=elem_type).
-		! Otherwise emit generic OP_BINOP with pre-computed result type in instr%b
-		! so the VM can skip get_binary_op_kind at runtime.
-		typed_op = binop_typed_opcode(node%op%kind, &
-			node%left%val%type, node%right%val%type)
-		if (typed_op /= 0) then
-			call emit(prog, typed_op)
+		i = null_test_operand(node)
+		if (i /= 0) then
+			! Test for null without loading (deep copying) the variable
+			j = 0
+			if (node%op%kind == bang_equals_token) j = 1
+			if (i == 1) then
+				call compile_null_test(prog, node%left, j)
+			else
+				call compile_null_test(prog, node%right, j)
+			end if
 		else
-			! Check for same-type numeric array ⊕ array.  Use nested ifs so the
-			! %array%type access is guarded by the allocated() checks — gfortran
-			! at -O0 does not short-circuit .and. chains in else-if conditions.
-			if (node%left%val%type == array_type .and. &
-			    node%right%val%type == array_type) then
-				if (allocated(node%left%val%array) .and. &
-				    allocated(node%right%val%array)) then
-					if (node%left%val%array%type == node%right%val%array%type) then
-						typed_op = arr_binop_typed_opcode(node%op%kind, &
-							node%left%val%array%type)
-						if (typed_op /= 0) &
-							call emit(prog, typed_op, &
-								a = node%op%kind, b = node%left%val%array%type)
+			call compile_node(prog, cs, node%left )
+			call compile_node(prog, cs, node%right)
+			! Same-type scalar or mixed i32/i64: emit typed opcode.
+			! Same-type numeric arrays: emit OP_ARR_BINOP (a=op_kind, b=elem_type).
+			! Otherwise emit generic OP_BINOP with pre-computed result type in instr%b
+			! so the VM can skip get_binary_op_kind at runtime.
+			typed_op = binop_typed_opcode(node%op%kind, &
+				node%left%val%type, node%right%val%type)
+			if (typed_op /= 0) then
+				call emit(prog, typed_op)
+			else
+				! Check for same-type numeric array ⊕ array.  Use nested ifs so the
+				! %array%type access is guarded by the allocated() checks — gfortran
+				! at -O0 does not short-circuit .and. chains in else-if conditions.
+				if (node%left%val%type == array_type .and. &
+				    node%right%val%type == array_type) then
+					if (allocated(node%left%val%array) .and. &
+					    allocated(node%right%val%array)) then
+						if (node%left%val%array%type == node%right%val%array%type) then
+							typed_op = arr_binop_typed_opcode(node%op%kind, &
+								node%left%val%array%type)
+							if (typed_op /= 0) &
+								call emit(prog, typed_op, &
+									a = node%op%kind, b = node%left%val%array%type)
+						end if
 					end if
 				end if
+				if (typed_op == 0) &
+					call emit(prog, OP_BINOP, a = node%op%kind, b = node%val%type)
 			end if
-			if (typed_op == 0) &
-				call emit(prog, OP_BINOP, a = node%op%kind, b = node%val%type)
 		end if
 
 	case (unary_expr)
@@ -851,24 +935,38 @@ recursive subroutine compile_node_impl(prog, cs, node)
 			! OP_STORE_IDX's [subscripts...][rhs] layout -- the VM's
 			! vm_pop_copy grabs the RHS, leaving the slot window below it.
 			call compile_member_chain_slots(prog, cs, node)
+			if (node%op%kind == equals_token) &
+				cs%struct_move_slot = struct_move_chain(node%right, node)
 			call compile_node(prog, cs, node%right)
+			cs%struct_move_slot = 0
 			idx = add_node(prog, node)
-			call emit(prog, OP_STORE_MEMBER, a = idx, b = node%op%kind)
+			! c = 1: plain `=` of a struct, array, or str onto a plain chain, which
+			! the VM can move into place instead of copying (see OP_STORE_MEMBER)
+			c_ = 0
+			if (member_store_moves(node)) c_ = 1
+			call emit(prog, OP_STORE_MEMBER, a = idx, b = node%op%kind, c = int(c_, 8))
 
 		else if (.not. allocated(node%lsubscripts) .and. &
 		         node%op%kind == equals_token) then
 			! Simple plain assignment: a = expr
-			call compile_node(prog, cs, node%right)
-			! Scalar type (LHS and RHS agree — parser guarantees): typed store.
-			typed_op = 0
-			if (node%val%type == node%right%val%type) &
-				typed_op = typed_store_op(node%val%type, node%is_loc)
-			if (typed_op /= 0) then
-				call emit(prog, typed_op, a = node%id_index)
-			else if (node%is_loc) then
-				call emit(prog, OP_STORE_LOCAL,  a = node%id_index)
+			if (take_member_assign(node)) then
+				! a = a.b.c, moving the member instead of copying it
+				call emit(prog, OP_TAKE_MEMBER, a = add_node(prog, node%right))
 			else
-				call emit(prog, OP_STORE_GLOBAL, a = node%id_index)
+				cs%struct_move_slot = struct_move_member(node%right, node%id_index, node%is_loc)
+				call compile_node(prog, cs, node%right)
+				cs%struct_move_slot = 0
+				! Scalar type (LHS and RHS agree — parser guarantees): typed store.
+				typed_op = 0
+				if (node%val%type == node%right%val%type) &
+					typed_op = typed_store_op(node%val%type, node%is_loc)
+				if (typed_op /= 0) then
+					call emit(prog, typed_op, a = node%id_index)
+				else if (node%is_loc) then
+					call emit(prog, OP_STORE_LOCAL,  a = node%id_index)
+				else
+					call emit(prog, OP_STORE_GLOBAL, a = node%id_index)
+				end if
 			end if
 
 		else if (.not. allocated(node%lsubscripts) .and. &
@@ -1445,8 +1543,21 @@ recursive subroutine compile_node_impl(prog, cs, node)
 	! value_t carrying just those instead of storing the whole node; nmembers
 	! travels in instr%b since the member expressions are already bytecode.
 	case (struct_instance_expr)
+		move_slot = cs%struct_move_slot
+		cs%struct_move_slot = 0
 		do i = 1, size(node%members)
-			call compile_node(prog, cs, node%members(i))
+			if (i == move_slot) then
+				! Moved out of the variable or member being assigned
+				if (node%members(i)%kind == dot_expr) then
+					call emit(prog, OP_LOAD_REF_MEMBER, a = add_node(prog, node%members(i)))
+				else if (node%members(i)%is_loc) then
+					call emit(prog, OP_LOAD_REF_LOCAL,  a = node%members(i)%id_index)
+				else
+					call emit(prog, OP_LOAD_REF_GLOBAL, a = node%members(i)%id_index)
+				end if
+			else
+				call compile_node(prog, cs, node%members(i))
+			end if
 		end do
 		block
 			type(value_t) :: struct_proto
@@ -1550,7 +1661,11 @@ recursive subroutine compile_node_impl(prog, cs, node)
 				! Pass 2: move by-ref args from their variable slots onto stack.
 				do i = 1, size(node%is_ref)
 					if (node%is_ref(i)) then
-						if (allocated(node%args(i)%lsubscripts) .or. &
+						if (call_recv_moved(node, i)) then
+							! Plain dot chain: move the member out instead of
+							! copying it; OP_RET moves it back
+							call emit(prog, OP_LOAD_REF_MEMBER, a = add_node(prog, node%args(i)))
+						else if (allocated(node%args(i)%lsubscripts) .or. &
 						    node%args(i)%kind == dot_expr .or. &
 						    node%args(i)%kind == fn_call_expr .or. &
 						    node%args(i)%kind == method_call_expr .or. &
@@ -1666,6 +1781,18 @@ recursive subroutine compile_node_impl(prog, cs, node)
 					slot_c = int(node%args(1)%id_index, 8) * 2 + &
 					         merge(1_8, 0_8, node%args(1)%is_loc)
 					call emit(prog, OP_CALL_INTR, a = intr_id_, b = 1, c = slot_c)
+				end if
+
+			case (INTR_MOVE)
+				! std::move(x): the parser checked that x is a plain variable or
+				! member chain, so there is nothing to push first.  The VM moves
+				! the value out of x and leaves x empty
+				if (node%args(1)%kind == dot_expr) then
+					call emit(prog, OP_MOVE_MEMBER, a = add_node(prog, node%args(1)))
+				else if (node%args(1)%is_loc) then
+					call emit(prog, OP_MOVE_LOCAL,  a = node%args(1)%id_index)
+				else
+					call emit(prog, OP_MOVE_GLOBAL, a = node%args(1)%id_index)
 				end if
 
 			case (INTR_FORMAT)

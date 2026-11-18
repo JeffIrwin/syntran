@@ -6,6 +6,7 @@ module syntran__app_m
 	use syntran
 	use syntran__core_m
 	use syntran__errors_m
+	use syntran__linalg_m, only: blas_vendor
 	use syntran__utils_m
 	use syntran__line_edit_m, only: enable_vt_processing, is_stdout_tty
 
@@ -18,7 +19,7 @@ module syntran__app_m
 
 	type args_t
 
-		character(len = :), allocatable :: syntran_file, command, color, transpile_out
+		character(len = :), allocatable :: syntran_file, command, color, transpile_out, native_out
 
 		integer :: maxerr
 
@@ -26,12 +27,17 @@ module syntran__app_m
 			chdir              = .false., &
 			command_arg        = .false., &
 			interactive        = .false., &
+			jit                = .false., &
 			keep_unused_fns    = .false., &
+			lex                = .false., &
+			native             = .false., &
+			parse              = .false., &
 			permissive_return  = .false., &
 			quiet              = .false., &
 			syntax_only        = .false., &
 			syntran_file_arg   = .false., &
 			transpile          = .false., &
+			update             = .false., &
 			version            = .false., &
 			help               = .false.
 
@@ -118,11 +124,13 @@ subroutine set_ansi_colors(is_color_in)
 		fg_bold            = FG_BOLD_
 		fg_bright_red      = FG_BRIGHT_RED_
 		fg_bold_bright_red = FG_BOLD_BRIGHT_RED_
+		fg_bold_bright_green = FG_BOLD_BRIGHT_GREEN_
 		fg_bright_green    = FG_BRIGHT_GREEN_
 		fg_green           = FG_GREEN_
 		fg_bright_blue     = FG_BRIGHT_BLUE_
 		fg_bright_magenta  = FG_BRIGHT_MAGENTA_
 		fg_bright_cyan     = FG_BRIGHT_CYAN_
+		fg_bold_bright_cyan = FG_BOLD_BRIGHT_CYAN_
 		fg_bright_white    = FG_BRIGHT_WHITE_
 		fg_bold_yellow     = FG_BOLD_YELLOW_
 		color_reset        = COLOR_RESET_
@@ -130,11 +138,13 @@ subroutine set_ansi_colors(is_color_in)
 		fg_bold            = ""
 		fg_bright_red      = ""
 		fg_bold_bright_red = ""
+		fg_bold_bright_green = ""
 		fg_bright_green    = ""
 		fg_green           = ""
 		fg_bright_blue     = ""
 		fg_bright_magenta  = ""
 		fg_bright_cyan     = ""
+		fg_bold_bright_cyan = ""
 		fg_bright_white    = ""
 		fg_bold_yellow     = ""
 		color_reset        = ""
@@ -148,6 +158,65 @@ subroutine set_ansi_colors(is_color_in)
 	warn_prefix    = fg_bold_yellow//'Warning'//fg_bold//': '
 
 end subroutine set_ansi_colors
+
+!===============================================================================
+
+function compiler_str() result(s)
+
+	! The Fortran compiler that built syntran, like "gfortran 15.2.0"
+
+	character(len = :), allocatable :: s
+
+	integer :: i
+
+	s = fort_compiler
+	do i = 1, size(fort_vers)
+		s = s//merge(" ", ".", i == 1)//str(fort_vers(i))
+	end do
+
+end function compiler_str
+
+!===============================================================================
+
+subroutine print_version_row(label, val)
+
+	! One detail of `--version`.  The values line up in a column
+
+	character(len = *), intent(in) :: label, val
+
+	integer, parameter :: width = 14
+
+	write(*,*) "  "//fg_bright_magenta//label//color_reset// &
+		repeat(" ", max(width - len(label), 1))//trim(val)
+
+end subroutine print_version_row
+
+!===============================================================================
+
+subroutine print_help_opt(short, long, arg, desc, desc2)
+
+	! One option of `--help`, in the style of `cargo -h`.  The flags are on one
+	! line and the description is indented below.  `short` is blank for an option
+	! without a short flag, which keeps the long flags aligned
+
+	character(len = *), intent(in) :: short, long, arg, desc
+	character(len = *), intent(in), optional :: desc2
+
+	character(len = :), allocatable :: line
+
+	if (len(short) > 0) then
+		line = "  "//fg_bold_bright_cyan//short//color_reset//", "
+	else
+		line = repeat(" ", 6)
+	end if
+	line = line//fg_bold_bright_cyan//long//color_reset
+	if (len(arg) > 0) line = line//" "//fg_bright_cyan//arg//color_reset
+
+	write(*,*) line
+	write(*,*) repeat(" ", 10)//desc
+	if (present(desc2)) write(*,*) repeat(" ", 10)//desc2
+
+end subroutine print_help_opt
 
 !===============================================================================
 
@@ -236,11 +305,32 @@ function parse_args() result(args)
 			args%transpile = .true.
 			call get_next_arg(i, args%transpile_out)
 
+		case ("-o", "--aot")
+			args%native = .true.
+			call get_next_arg(i, args%native_out)
+
+		case ("-j", "--jit")
+			args%jit = .true.
+
 		case ("--keep-unused-fns")
 			args%keep_unused_fns = .true.
 
+		case ("--lex")
+			! Hidden, so it's not in the help.  Dumps the lexer's tokens, to test
+			! the syntran port of the lexer in compiler/lex.syntran
+			args%lex = .true.
+
+		case ("--parse")
+			! Hidden, so it's not in the help.  Dumps the typed syntax tree, to
+			! test the syntran port of the parser in compiler/parse.syntran
+			args%parse = .true.
+
 		case ("--version")
 			args%version = .true.
+
+		case ("--update")
+			! Runs `synup update`, instead of a program
+			args%update = .true.
 
 		case ("--")
 			! Capture all remaining arguments as script arguments
@@ -251,6 +341,13 @@ function parse_args() result(args)
 			exit
 
 		case default
+
+			! `syntran help`, like `-h`.  Only as the first positional arg, so
+			! a file named `help` has to be run as `./help`
+			if (ipos == 0 .and. argv == "help") then
+				args%help = .true.
+				cycle
+			end if
 
 			! Positional arg
 			ipos = ipos + 1
@@ -305,6 +402,140 @@ function parse_args() result(args)
 		error = .true.
 	end if
 
+	! --interactive would be ignored by these, which don't run the program in the REPL
+	if (args%transpile .and. args%interactive .and. .not. args%help .and. &
+		.not. args%version) then
+		write(*,*) err_prefix//"--transpile cannot be used with --interactive"
+		error = .true.
+	end if
+
+	if (args%syntax_only .and. args%interactive .and. .not. args%help .and. &
+		.not. args%version) then
+		write(*,*) err_prefix//"--syntax-only cannot be used with --interactive"
+		error = .true.
+	end if
+
+	! Same for --aot, which also needs a program and a syntran with LLVM
+	if (args%native .and. .not. args%help .and. .not. args%version) then
+		if (.not. (args%syntran_file_arg .or. args%command_arg)) then
+			write(*,*) err_prefix//"--aot requires a <file.syntran> "// &
+				"or -c <cmd> argument"
+			error = .true.
+		end if
+		if (args%transpile .or. args%syntax_only .or. args%interactive) then
+			write(*,*) err_prefix//"--aot cannot be used with --transpile, "// &
+				"--syntax-only, or --interactive"
+			error = .true.
+		end if
+		if (.not. native_available) then
+			write(*,*) err_prefix//"--aot requires a syntran that is built "// &
+				"with LLVM, i.e. with SYNTRAN_LLVM"
+			error = .true.
+		end if
+	end if
+
+	! `syntran --aot a.syntran a.syntran` would replace the program with its binary
+	if (args%native .and. args%syntran_file_arg .and. .not. args%help .and. &
+		.not. args%version) then
+		if (allocated(args%native_out) .and. allocated(args%syntran_file)) then
+			if (args%native_out == args%syntran_file) then
+				write(*,*) err_prefix//"--aot output file `"//args%native_out// &
+					"` is also the input file"
+				error = .true.
+			end if
+		end if
+	end if
+
+	! Unlike --transpile, "-" is not stdout, and would be a file named "-"
+	if (args%native .and. .not. args%help .and. .not. args%version) then
+		if (allocated(args%native_out)) then
+			if (args%native_out == "-") then
+				write(*,*) err_prefix//"--aot needs an output file name, " &
+					//"it cannot write to stdout"
+				error = .true.
+			end if
+		end if
+	end if
+
+	! --jit compiles with LLVM like --aot, but runs the program instead of
+	! writing it
+	if (args%jit .and. .not. args%help .and. .not. args%version) then
+		if (.not. (args%syntran_file_arg .or. args%command_arg)) then
+			write(*,*) err_prefix//"--jit requires a <file.syntran> "// &
+				"or -c <cmd> argument"
+			error = .true.
+		end if
+		if (args%native .or. args%transpile .or. args%syntax_only .or. &
+			args%interactive) then
+			write(*,*) err_prefix//"--jit cannot be used with --aot, "// &
+				"--transpile, --syntax-only, or --interactive"
+			error = .true.
+		end if
+		if (.not. native_available) then
+			write(*,*) err_prefix//"--jit requires a syntran that is built "// &
+				"with LLVM, i.e. with SYNTRAN_LLVM"
+			error = .true.
+		end if
+	end if
+
+	! The program is either the file or the command, and the one that is not used
+	! would be silently dropped
+	if (args%command_arg .and. args%syntran_file_arg .and. .not. args%help .and. &
+		.not. args%version) then
+		write(*,*) err_prefix//"--command cannot be used with a <file.syntran>"
+		error = .true.
+	end if
+
+	if (args%command_arg .and. args%interactive .and. .not. args%help .and. &
+		.not. args%version) then
+		write(*,*) err_prefix//"--command cannot be used with --interactive"
+		error = .true.
+	end if
+
+	! --update is an alternative to running a program, so anything that is about a
+	! program would be silently dropped
+	if (args%update .and. .not. args%help .and. .not. args%version) then
+		if (args%syntran_file_arg .or. args%command_arg .or. args%transpile .or. &
+			args%native .or. args%jit .or. args%syntax_only .or. args%interactive .or. &
+			args%lex .or. args%parse) then
+			write(*,*) err_prefix//"--update cannot be used with a <file.syntran>, "// &
+				"--command, --transpile, --aot, --jit, --syntax-only, or --interactive"
+			error = .true.
+		end if
+	end if
+
+	! The hidden --lex needs a file, and it's an alternative to running the program
+	if (args%lex .and. .not. args%help .and. .not. args%version) then
+		if (.not. args%syntran_file_arg) then
+			write(*,*) err_prefix//"--lex requires a <file.syntran> argument"
+			error = .true.
+		end if
+		if (args%command_arg .or. args%transpile .or. args%native .or. &
+			args%jit .or. args%syntax_only .or. args%interactive) then
+			write(*,*) err_prefix//"--lex cannot be used with --command, "// &
+				"--transpile, --aot, --jit, --syntax-only, or --interactive"
+			error = .true.
+		end if
+		if (args%parse) then
+			write(*,*) err_prefix//"--lex cannot be used with --parse"
+			error = .true.
+		end if
+	end if
+
+	! The hidden --parse is the same as --lex
+	if (args%parse .and. .not. args%help .and. .not. args%version) then
+		if (.not. args%syntran_file_arg) then
+			write(*,*) err_prefix//"--parse requires a <file.syntran> argument"
+			error = .true.
+		end if
+		if (args%command_arg .or. args%transpile .or. args%native .or. &
+			args%jit .or. args%syntax_only .or. args%interactive) then
+			write(*,*) err_prefix//"--parse cannot be used with --command, "// &
+				"--transpile, --aot, --jit, --syntax-only, or --interactive"
+			error = .true.
+		end if
+	end if
+
 	! It's an option of the transpiler, so it does nothing otherwise
 	if (args%keep_unused_fns .and. .not. args%transpile .and. .not. args%help .and. &
 		.not. args%version) then
@@ -325,24 +556,32 @@ function parse_args() result(args)
 			( &
 				args%command_arg      .or. &
 				args%syntax_only      .or. &
+				args%lex              .or. &
+				args%parse            .or. &
 				args%transpile        .or. &
+				args%native           .or. &
+				args%jit              .or. &
+				args%update           .or. &
 				args%version          .or. &
 				args%syntran_file_arg .or. &
 				args%help                  &
 			)
 
 		if (.not. args%command_arg .and. .not. args%syntax_only .and. &
-			.not. args%transpile) then
+			.not. args%lex .and. .not. args%parse .and. .not. args%update .and. &
+			.not. args%transpile .and. .not. args%native .and. .not. args%jit) then
 			write(*,*)
 			write(*,*) fg_bright_magenta//lang_name//' '//version//color_reset
 			write(*,*) fg_bright_magenta//url//color_reset
 			if (args%version) then
-				write(*,*) fg_bright_magenta//"git commit = "//git_commit//color_reset
-				write(*,*) fg_bright_magenta//"build date = "//build_date//color_reset
-				write(*,*) fg_bright_magenta//"fortran compiler = "//fort_compiler//" "// &
-					str(fort_vers)//color_reset
-				write(*,*) fg_bright_magenta//"bounds check = "// &
-					merge("on ", "off", bounds_check)//color_reset
+				write(*,*)
+				call print_version_row("commit"      , git_commit)
+				call print_version_row("built"       , build_date)
+				call print_version_row("compiler"    , compiler_str())
+				call print_version_row("bounds check", merge("on ", "off", bounds_check))
+				call print_version_row("blas"        , blas_vendor())
+				call print_version_row("llvm"        , merge("linked    ", "not linked", &
+					native_available))
 			end if
 			write(*,*)
 		end if
@@ -357,28 +596,49 @@ function parse_args() result(args)
 
 	if (error .or. args%help) then
 
-		write(*,*) fg_bold//"Usage:"//color_reset
-		write(*,*) "    syntran <file.syntran> [options] [-- <script args>...]"
-		write(*,*) "    syntran"
-		write(*,*) "    syntran -c <cmd> | --command <cmd>"
-		write(*,*) "    syntran -h | --help"
-		write(*,*) "    syntran --version"
+		write(*,*) fg_bold_bright_green//"Usage:"//color_reset//" "// &
+			fg_bold_bright_cyan//"syntran"//color_reset//" "// &
+			fg_bright_cyan//"[OPTIONS] [FILE] [-- <ARGS>...]"//color_reset
+		write(*,*) "       "// &
+			fg_bold_bright_cyan//"syntran"//color_reset//" "// &
+			fg_bright_cyan//"[OPTIONS]"//color_reset//" "// &
+			fg_bold_bright_cyan//"-c"//color_reset//" "// &
+			fg_bright_cyan//"<CMD>"//color_reset
+		write(*,*) "       "// &
+			fg_bold_bright_cyan//"syntran help"//color_reset
 		write(*,*)
-		write(*,*) fg_bold//"Options:"//color_reset
-		write(*,*) "    -h --help           Show this help"
-		write(*,*) "    --version           Show version and build details"
-		write(*,*) "    -c --command <cmd>  Run program passed in as string"
-		write(*,*) "    --color (off|on)    Set ANSI text color [default: auto]"
-		write(*,*) "    --fmax-errors <n>   Limit max " &
-			//"error messages to <n> [default: "//str(maxerr_def)//"]"
-		write(*,*) "    -i --interactive    Interpret a file then start an interactive shell"
-		write(*,*) "    -q --quiet          Don't print the banner, only errors and println calls"
-		write(*,*) "    --permissive-return Downgrade missing-return errors to warnings"
-		write(*,*) "    --cd                Resolve the script's relative file paths against its own directory"
-		write(*,*) "    -s --syntax-only    Parse and type check without running the program"
-		write(*,*) "    -t --transpile <f>  Write the program as Fortran source to <f> ('-' for stdout) instead of running it"
-		write(*,*) "    --keep-unused-fns   With --transpile, also write the fns that nothing calls"
-		write(*,*) "    -- <args>...        Pass remaining arguments to script via std::args()"
+		write(*,*) fg_bold_bright_green//"Options:"//color_reset
+		call print_help_opt("-h", "--help", "", "Show this help")
+		call print_help_opt("", "--version", "", "Show version and build details")
+		call print_help_opt("-c", "--command", "<CMD>", "Run program passed in as string")
+		call print_help_opt("", "--color", "<WHEN>", &
+			"Set ANSI text color [possible values: auto, on, off] [default: auto]")
+		call print_help_opt("", "--fmax-errors", "<N>", &
+			"Limit max error messages to <N> [default: "//str(maxerr_def)//"]")
+		call print_help_opt("-i", "--interactive", "", &
+			"Interpret a file then start an interactive shell")
+		call print_help_opt("-q", "--quiet", "", &
+			"Don't print the banner, only errors and println calls")
+		call print_help_opt("", "--permissive-return", "", &
+			"Downgrade missing-return errors to warnings")
+		call print_help_opt("", "--cd", "", &
+			"Resolve the script's relative file paths against its own directory")
+		call print_help_opt("-s", "--syntax-only", "", &
+			"Parse and type check without running the program")
+		call print_help_opt("-t", "--transpile", "<FILE>", &
+			"Write the program as Fortran source to <FILE> ('-' for stdout)", &
+			"instead of running it (deprecated)")
+		call print_help_opt("", "--keep-unused-fns", "", &
+			"With --transpile, also write fns that nothing calls")
+		call print_help_opt("-o", "--aot", "<FILE>", &
+			"Compile the program ahead of time with LLVM to an executable <FILE>", &
+			"(or an object <FILE>.o, or LLVM IR <FILE>.ll)")
+		call print_help_opt("-j", "--jit", "", &
+			"Compile the program just in time with LLVM and run it right away")
+		call print_help_opt("", "--update", "", &
+			"Update to the latest release, by running `synup update`")
+		call print_help_opt("", "--", "<ARGS>...", &
+			"Pass remaining arguments to script via std::args()")
 		write(*,*)
 
 		if (.not. args%help) call exit(EXIT_FAILURE)

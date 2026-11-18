@@ -411,43 +411,98 @@ end function rt_reshape_str_4
 !===============================================================================
 
 ! Convert a string to a number, like the interpreter's parse_*() fns do.  A
-! string which isn't a number is a fatal error
+! string which isn't a number is a fatal error, unless there is an `ok` arg,
+! which is set to whether it parsed instead, and the result is 0 if it didn't
 
-function rt_parse_i32(s) result(r)
+subroutine rt_parse_check(good, ok, name, s)
+    logical, intent(in) :: good
+    logical, intent(out), optional :: ok
+    character(len = *), intent(in) :: name, s
+    if (present(ok)) then
+        ok = good
+    else if (.not. good) then
+        call rt_fatal(' cannot parse_' // name // '() for argument `' // s // '`')
+    end if
+end subroutine rt_parse_check
+
+! Does `s` start with an integer: blanks, an optional sign, digits, and then the
+! end or a separator?  A list-directed read of an integer accepts `1.5` with ifx
+! and ifort, but not with gfortran, so check it here like the interpreter does
+function rt_starts_with_int(s) result(r)
     character(len = *), intent(in) :: s
+    logical :: r
+    integer :: i, nd
+    i = 1
+    do while (i <= len(s))
+        if (s(i:i) /= ' ' .and. s(i:i) /= char(9)) exit
+        i = i + 1
+    end do
+    if (i <= len(s)) then
+        if (s(i:i) == '+' .or. s(i:i) == '-') i = i + 1
+    end if
+    nd = 0
+    do while (i <= len(s))
+        if (s(i:i) < '0' .or. s(i:i) > '9') exit
+        nd = nd + 1
+        i = i + 1
+    end do
+    r = nd > 0
+    if (.not. r .or. i > len(s)) return
+    select case (s(i:i))
+    case (' ', ',', '/', char(9), char(10), char(13))
+    case default
+        r = .false.
+    end select
+end function rt_starts_with_int
+
+function rt_parse_i32(s, ok) result(r)
+    character(len = *), intent(in) :: s
+    logical, intent(out), optional :: ok
     integer(int32) :: r
     integer :: io
-    read(s, *, iostat = io) r
-    if (io /= 0) call rt_fatal(' cannot parse_i32() for argument `'//s//'`')
+    io = 1
+    if (rt_starts_with_int(s)) read(s, *, iostat = io) r
+    if (io /= 0) r = 0
+    call rt_parse_check(io == 0, ok, 'i32', s)
 end function rt_parse_i32
 
-function rt_parse_i64(s) result(r)
+function rt_parse_i64(s, ok) result(r)
     character(len = *), intent(in) :: s
+    logical, intent(out), optional :: ok
     integer(int64) :: r
     integer :: io
-    read(s, *, iostat = io) r
-    if (io /= 0) call rt_fatal(' cannot parse_i64() for argument `'//s//'`')
+    io = 1
+    if (rt_starts_with_int(s)) read(s, *, iostat = io) r
+    if (io /= 0) r = 0
+    call rt_parse_check(io == 0, ok, 'i64', s)
 end function rt_parse_i64
 
-function rt_parse_f32(s) result(r)
+function rt_parse_f32(s, ok) result(r)
     character(len = *), intent(in) :: s
+    logical, intent(out), optional :: ok
     real(real32) :: r
     integer :: io
     read(s, *, iostat = io) r
-    if (io /= 0) call rt_fatal(' cannot parse_f32() for argument `'//s//'`')
+    if (io /= 0) r = 0
+    call rt_parse_check(io == 0, ok, 'f32', s)
 end function rt_parse_f32
 
-function rt_parse_f64(s) result(r)
+function rt_parse_f64(s, ok) result(r)
     character(len = *), intent(in) :: s
+    logical, intent(out), optional :: ok
     real(real64) :: r
     integer :: io
     read(s, *, iostat = io) r
-    if (io /= 0) call rt_fatal(' cannot parse_f64() for argument `'//s//'`')
+    if (io /= 0) r = 0
+    call rt_parse_check(io == 0, ok, 'f64', s)
 end function rt_parse_f64
 
-function rt_parse_bool(s) result(r)
+function rt_parse_bool(s, ok) result(r)
     character(len = *), intent(in) :: s
+    logical, intent(out), optional :: ok
     logical :: r
+    logical :: good
+    good = .true.
     select case (trim(adjustl(s)))
     case ('true')
         r = .true.
@@ -455,8 +510,9 @@ function rt_parse_bool(s) result(r)
         r = .false.
     case default
         r = .false.
-        call rt_fatal(' cannot parse_bool() for argument `'//s//'`')
+        good = .false.
     end select
+    call rt_parse_check(good, ok, 'bool', s)
 end function rt_parse_bool
 
 !===============================================================================
@@ -520,18 +576,35 @@ function rt_step_i64(lb, step, ub) result(r)
     r = r(1: j - 1)
 end function rt_step_i64
 
+! Number of elements of the float range [lb: step: ub], computed in f64 even for an f32
+! range so that ub - lb can't overflow.  The step isn't 0.  A bound or step that isn't
+! finite, or more elements than an i64, is an error, and a NaN fails both tests.  The count
+! is compared as a real because converting a big or non-finite one to an integer is undefined
+
+function rt_float_range_len(lb, step, ub) result(n)
+    real(real64), intent(in) :: lb, step, ub
+    integer(int64) :: n
+    real(real64) :: count_
+    n = 0
+    if (.not. (abs(lb) <= huge(lb) .and. abs(step) <= huge(step) .and. abs(ub) <= huge(ub))) &
+        call rt_fatal('float range has a bound or step that is not finite')
+    count_ = (ub - lb) / step
+    if (.not. (count_ < real(huge(n), real64))) call rt_fatal('float range has too many elements')
+    if (count_ > 0) n = ceiling(count_, int64)
+end function rt_float_range_len
+
 function rt_step_f32(lb, step, ub) result(r)
     real(real32), intent(in) :: lb, step, ub
     real(real32), allocatable :: r(:)
     real(real32) :: f
-    integer :: j, cap
+    integer(int64) :: j, cap
     if (.not. (step > 0.0_real32 .or. step < 0.0_real32)) call rt_fatal('array step is 0.0')
-    cap = max(0, ceiling((ub - lb) / step))
+    cap = rt_float_range_len(real(lb, real64), real(step, real64), real(ub, real64))
     allocate(r(cap))
     j = 1
     f = lb
     if ((lb < ub) .neqv. (0 < step)) f = ub
-    do while (((f < ub) .eqv. (lb < ub)) .and. (f < ub .or. f > ub))
+    do while (((f < ub) .eqv. (lb < ub)) .and. (f < ub .or. f > ub) .and. j <= cap)
         r(j) = f
         ! Multiplying instead of repeatedly adding keeps rounding errors from
         ! accumulating, e.g. [0.0: 0.1: 0.9]
@@ -545,14 +618,14 @@ function rt_step_f64(lb, step, ub) result(r)
     real(real64), intent(in) :: lb, step, ub
     real(real64), allocatable :: r(:)
     real(real64) :: f
-    integer :: j, cap
+    integer(int64) :: j, cap
     if (.not. (step > 0.0_real64 .or. step < 0.0_real64)) call rt_fatal('array step is 0.0')
-    cap = max(0, ceiling((ub - lb) / step))
+    cap = rt_float_range_len(lb, step, ub)
     allocate(r(cap))
     j = 1
     f = lb
     if ((lb < ub) .neqv. (0 < step)) f = ub
-    do while (((f < ub) .eqv. (lb < ub)) .and. (f < ub .or. f > ub))
+    do while (((f < ub) .eqv. (lb < ub)) .and. (f < ub .or. f > ub) .and. j <= cap)
         r(j) = f
         f = lb + j * step
         j = j + 1
@@ -1302,11 +1375,51 @@ function rt_exists(path) result(r)
     inquire(file = path, exist = r)
 end function rt_exists
 
+! The exact bytes of a file, for std::read_file()
+function rt_read_file(path) result(s)
+    character(len = *), intent(in) :: path
+    character(len = :), allocatable :: s
+    character(len = :), allocatable :: tmp
+    character :: c
+    integer :: iu, io
+    integer(int64) :: n, k
+    open(newunit = iu, file = path, status = 'old', action = 'read', &
+        access = 'stream', form = 'unformatted', iostat = io)
+    if (io /= 0) call rt_fatal('cannot open file "' // path // '"')
+    inquire(unit = iu, size = n)
+    if (n > 0) then
+        allocate(character(len = n) :: s)
+        read(iu, iostat = io) s
+        if (io /= 0) call rt_fatal('cannot open file "' // path // '"')
+    else
+        ! An empty file, or one with no size like a named pipe, which can only be
+        ! read once, to the end
+        allocate(character(len = 64) :: s)
+        k = 0
+        do
+            read(iu, iostat = io) c
+            if (io /= 0) exit
+            if (k == len(s)) then
+                allocate(character(len = 2 * k) :: tmp)
+                tmp(1: k) = s
+                call move_alloc(tmp, s)
+            end if
+            k = k + 1
+            s(k: k) = c
+        end do
+        if (io /= iostat_end) call rt_fatal('cannot open file "' // path // '"')
+        s = s(1: k)
+    end if
+    close(iu)
+end function rt_read_file
+
 function rt_getenv(name) result(s)
     character(len = *), intent(in) :: name
     character(len = :), allocatable :: s
     integer :: n, st
-    call get_environment_variable(name, length = n, status = st)
+    st = 1
+    n = 0
+    if (len(name) > 0) call get_environment_variable(name, length = n, status = st)
     if (st /= 0) call rt_fatal('environment variable "' // name // '" is not set')
     allocate(character(len = n) :: s)
     if (n > 0) call get_environment_variable(name, value = s)
@@ -1316,9 +1429,23 @@ function rt_hasenv(name) result(r)
     character(len = *), intent(in) :: name
     logical :: r
     integer :: st
-    call get_environment_variable(name, status = st)
+    st = 1
+    if (len(name) > 0) call get_environment_variable(name, status = st)
     r = st == 0
 end function rt_hasenv
+
+function rt_system(cmd) result(r)
+    character(len = *), intent(in) :: cmd
+    integer(int32) :: r
+    integer :: st, cst
+    flush(output_unit)
+    flush(error_unit)
+    st = -1
+    ! cmdstat is set for an exit status of 126 or 127 too, but exitstat is still
+    ! assigned then, and is only left as the -1 above if nothing was started
+    call execute_command_line(cmd, exitstat = st, cmdstat = cst)
+    r = int(st, int32)
+end function rt_system
 
 function rt_args() result(r)
     ! The command line arguments of the program
@@ -1680,7 +1807,8 @@ function rt_fmt_val(kind_, ival, bits, rval, sval, sp) result(out)
             zero_ok = .false.
             digits = 'NaN'
         else
-            if (sign(1.0_real64, rval) < 0) then
+            ! The sign bit, because sign() doesn't see the sign of -0.0 in ifx
+            if (transfer(rval, rbits) < 0) then
                 prefix = '-'
             else if (plus) then
                 prefix = '+'

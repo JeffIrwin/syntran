@@ -1,0 +1,456 @@
+// Syntran parser, written in syntran.  This is a port of the front end in
+// src/parse*.f90, and the second piece of the self-hosted compiler after
+// compiler/lex.syntran.  See doc/compiler-roadmap.md
+//
+// It's tested against the Fortran parser by dumping both of their typed trees
+// (see compiler/parse-dump.syntran, `syntran --parse`, and
+// utils/test-parse.sh).  Its procedure names match the Fortran ones, so they
+// can be read side by side.  Differences:
+//
+// - `pos` is 0-based, like in the lexer port, and so is `parser.pos`, the index
+//   of the current token.  The Fortran `last_e20_pos` that starts at 0 starts
+//   at -1 here
+// - A variable's slot is 0-based too, and -1 is no slot, where the Fortran's is
+//   1-based and 0 is none.  The `std::` constants take slots 0 to 3.  The
+//   dump prints slots 0-based for both parsers, see `parse_dump()`
+// - A diagnostic is a `Diag`, the error code and the 0-based position of its
+//   span, instead of a message.  The lexer's diagnostics have no position,
+//   since nothing uses it yet
+// - Children are indices into an arena, see compiler/ast.syntran
+// - There is one parse, after `scan_decls()` has declared what can be used
+//   before it is declared, instead of two passes that share their tables.  So
+//   there is no `ipass`, nothing to hide from pass 1 in `search()`, no
+//   `overwrite` when a name is declared, and no pass-0-only diagnostics to
+//   merge.  A diagnostic is raised once, where it happens, which can be in a
+//   different order than the Fortran's, see utils/test-parse.sh
+// - Parsing fns return the index of the node that they made, and `-1` isn't
+//   ever returned
+// - The `parse_*` fns that take a `parser` are not methods, since they are
+//   mutually recursive, and they are in `#include`d files that aren't modules,
+//   like the Fortran submodules:  compiler/parse_expr.syntran and
+//   compiler/parse_stmt.syntran
+//
+// This is milestone 1, the core: literals, unary and binary exprs, let and
+// const, assignment, blocks, if/while/for over ranges, break/continue, and
+// return.  Anything that a later milestone ports, like a fn, a struct, a call,
+// or a subscript, gets the pseudo-diagnostic `unsupported`, which the Fortran
+// parser never makes, so a file that has one can't match.  The semantic checks
+// that only add a diagnostic, like the operand types of an operator, are left
+// for stage 2.  The differential test only gates the files in
+// utils/parse-pass.txt
+
+use scopes::*;
+
+//==============================================================================
+
+struct Parser
+{
+	// A parser outlives its input, so that an interactive interpreter can parse
+	// one input after another with the declarations of the earlier ones, like
+	// the Fortran REPL does by round-tripping `state%vars` and the rest.  The
+	// first group is what `set_input()` replaces, and the second is the
+	// session, which only grows, so `rewind()` can take back what an input
+	// added
+
+	// The tokens, without any whitespace or comments, like the Fortran
+	// `new_parser()`, and up to and including eof
+	tokens: TokenVec,
+	pos: i32,
+	diags: DiagVec,
+
+	// The position of the token of the last E20, which de-dupes them
+	last_e20_pos: i32,
+
+	// Set if a token was missing at eof, i.e. the input is incomplete
+	expecting: bool,
+
+	// The arena of every input, since a later one reaches nodes of an earlier
+	// one, e.g. the body of a fn that it calls
+	nodes: NodeVec,
+
+	vars: Scopes,
+	num_vars: i32,
+
+	// Is the input from the interactive interpreter?  Only there is an
+	// expression statement allowed, since its value is printed
+	repl: bool,
+}
+
+// The number of `std::` constants that are declared before any variable of
+// the program, c.f. NUM_INTR_VARS in src/intr_vars.f90
+const NUM_INTR_VARS = 4;
+
+fn new_parser(repl: bool): Parser
+{
+	// The session of a parser, with no input yet, see `set_input()`
+
+	// Slot 0 is `std::PI`, and slots 1 to 3 are `std::IN`, `std::OUT`, and
+	// `std::ERR`, c.f. declare_intr_vars()
+	let vars = new_scopes();
+	let ok = vars.insert("std::PI", new_type(TypeKind.f64), 0, true);
+	ok = vars.insert("std::IN", new_type(TypeKind.file), 1, true);
+	ok = vars.insert("std::OUT", new_type(TypeKind.file), 2, true);
+	ok = vars.insert("std::ERR", new_type(TypeKind.file), 3, true);
+
+	return Parser
+	{
+		tokens = new_token_vec(),
+		pos = 0,
+		diags = new_diag_vec(),
+		last_e20_pos = -1,
+		expecting = false,
+		nodes = new_node_vec(),
+		vars = vars,
+		num_vars = NUM_INTR_VARS,
+		repl = repl,
+	};
+}
+
+fn set_input(parser: &Parser, text: &const str)
+{
+	// Lex the next input to parse, and forget everything about the last one
+	// that is not a declaration
+	let lexer = new_lexer(text);
+	const all = lex_all(&lexer);
+
+	let tokens = new_token_vec();
+	for i in [0: all.len]
+	{
+		const kind = all.data[i].kind;
+		if not any(kind == [
+			TokenKind.whitespace, TokenKind.comment, TokenKind.bad,
+		])
+			tokens.push(all.data[i]);
+	}
+	parser.tokens = tokens;
+	parser.pos = 0;
+
+	// Every lexer diagnostic is a parser diagnostic
+	let diags = new_diag_vec();
+	for i in [0: lexer.diags.len]
+		diags.push(new_diag(lexer.diags.data[i], -1));
+	parser.diags = diags;
+
+	parser.last_e20_pos = -1;
+	parser.expecting = false;
+	return;
+}
+
+//==============================================================================
+
+struct Checkpoint
+{
+	// What `rewind()` goes back to:  where the parse was, and how much of the
+	// session existed.  It's for a speculative parse that may have to be
+	// undone, and for an input that turns out to be incomplete, which is parsed
+	// again from its start when the rest of it is typed
+
+	pos: i32,
+	ndiags: i32,
+	nnodes: i32,
+	nentries: i32,
+	scope: i32,
+	num_vars: i32,
+	last_e20_pos: i32,
+	expecting: bool,
+}
+
+fn checkpoint(parser: &const Parser): Checkpoint
+{
+	return Checkpoint
+	{
+		pos = parser.pos,
+		ndiags = parser.diags.len,
+		nnodes = parser.nodes.len,
+		nentries = parser.vars.len,
+		scope = parser.vars.scope,
+		num_vars = parser.num_vars,
+		last_e20_pos = parser.last_e20_pos,
+		expecting = parser.expecting,
+	};
+}
+
+fn rewind(parser: &Parser, cp: &const Checkpoint)
+{
+	// Take back everything that was done since the checkpoint.  Diagnostics, so
+	// that they aren't duplicated by a parse of the same tokens again, and
+	// nodes, so that they don't pile up.  The scopes that were pushed go first,
+	// since each one drops its entries down to where it started
+	parser.pos = cp.pos;
+	parser.diags.len = cp.ndiags;
+	parser.nodes.len = cp.nnodes;
+	while parser.vars.scope > cp.scope
+		parser.vars.pop_scope();
+	parser.vars.truncate(cp.nentries);
+	parser.num_vars = cp.num_vars;
+
+	// The position of the last E20, which de-dupes them in `match()`, goes back
+	// to what it was.  The E20 that a speculative parse made is gone with its
+	// diagnostic, so a parse of the same tokens again has to be able to report
+	// it, and an E20 from before the checkpoint is still the last one.  The
+	// same goes for `expecting`, which a speculative parse can set at eof
+	parser.last_e20_pos = cp.last_e20_pos;
+	parser.expecting = cp.expecting;
+	return;
+}
+
+//==============================================================================
+
+// The token accessors.  An offset past the end is the eof token
+
+fn peek_index(parser: &const Parser, offset: i32): i32
+{
+	return min(parser.pos + offset, parser.tokens.len - 1);
+}
+
+fn peek_kind(parser: &const Parser, offset: i32): TokenKind
+{
+	return parser.tokens.data[peek_index(parser, offset)].kind;
+}
+
+fn peek_pos(parser: &const Parser, offset: i32): i32
+{
+	return parser.tokens.data[peek_index(parser, offset)].pos;
+}
+
+fn peek_token(parser: &const Parser, offset: i32): Token
+{
+	return parser.tokens.data[peek_index(parser, offset)];
+}
+
+fn is_keyword(parser: &const Parser, offset: i32, keyword: Keyword): bool
+{
+	// Is the token a keyword, and this one?  The Fortran `let_keyword` is a
+	// token kind of its own
+	const i = peek_index(parser, offset);
+	return parser.tokens.data[i].kind == TokenKind.keyword and
+		parser.tokens.data[i].keyword == keyword;
+}
+
+fn next_token(parser: &Parser): Token
+{
+	const token = peek_token(parser, 0);
+	parser.pos += 1;
+	return token;
+}
+
+fn skip(parser: &Parser)
+{
+	// Go past the current token and drop it
+	parser.pos += 1;
+	return;
+}
+
+fn type_of(parser: &const Parser, node: i32): Type
+{
+	// The type of a node that was made already
+	return parser.nodes.data[node].type_;
+}
+
+fn push_diag(parser: &Parser, code: &const str, pos: i32)
+{
+	parser.diags.push(new_diag(code, pos));
+	return;
+}
+
+//==============================================================================
+
+fn match_fail(parser: &Parser, kind: TokenKind): Token
+{
+	// The failure of `match()`.  A failure at the same position as the last
+	// one, e.g. the `;` that is missing right where an expression is, is the
+	// same error twice, so only the first is reported
+	const current = peek_token(parser, 0);
+
+	if parser.pos != parser.last_e20_pos
+	{
+		parser.last_e20_pos = parser.pos;
+		push_diag(&parser, "E20", current.pos);
+	}
+
+	// An unmatched token in the middle of the input is an error.  One at the
+	// end means the interactive interpreter should expect more lines
+	if parser.pos >= parser.tokens.len - 1
+		parser.expecting = true;
+
+	return new_token(kind, current.pos, NULL_CHAR);
+}
+
+fn match(parser: &Parser, kind: TokenKind): Token
+{
+	if peek_kind(parser, 0) == kind
+		return next_token(&parser);
+	return match_fail(&parser, kind);
+}
+
+fn match_keyword(parser: &Parser, keyword: Keyword): Token
+{
+	if is_keyword(parser, 0, keyword)
+		return next_token(&parser);
+	return match_fail(&parser, TokenKind.keyword);
+}
+
+fn expect(parser: &Parser, kind: TokenKind)
+{
+	// `match()` for when the token isn't needed
+	const token = match(&parser, kind);
+	return;
+}
+
+fn expect_keyword(parser: &Parser, keyword: Keyword)
+{
+	const token = match_keyword(&parser, keyword);
+	return;
+}
+
+fn unsupported(parser: &Parser): i32
+{
+	// A construct that a later milestone ports.  The diagnostic can't match
+	// the Fortran parser's, and a token is dropped so that no loop gets stuck
+	push_diag(&parser, "unsupported", peek_pos(parser, 0));
+	skip(&parser);
+	return parser.nodes.push(new_node(NodeKind.unknown));
+}
+
+//==============================================================================
+
+fn push_var(parser: &Parser): i32
+{
+	// Allocate the next variable slot, which is 0-based, so `num_vars` is also
+	// the number of slots that are used
+	const slot = parser.num_vars;
+	parser.num_vars += 1;
+	return slot;
+}
+
+fn search(parser: &const Parser, key: &const str): i32
+{
+	// The index of the entry of a variable in `parser.vars.entries`, or -1.  A
+	// global that isn't declared yet, e.g. the `count` in `let count = count;`,
+	// isn't in the table yet, since the scan only declares fns, structs, and
+	// enums
+	return parser.vars.search(key);
+}
+
+//==============================================================================
+
+// The rest of the parser is in files of their own, like the Fortran
+// src/parse_*.f90.  They aren't modules, since the fns of both call each
+// other
+#include("parse_expr.syntran");
+#include("parse_stmt.syntran");
+
+//==============================================================================
+
+fn skip_item(parser: &Parser)
+{
+	// Go past one top-level item without parsing it:  up to and including the
+	// `;` that ends it, or the `}` that closes its outermost brace.  Brackets
+	// nest, so a `;` or `}` inside them doesn't end the item.  It always goes
+	// past at least one token, unless it is at eof
+	let depth = 0;
+	while peek_kind(parser, 0) != TokenKind.eof
+	{
+		const kind = peek_kind(parser, 0);
+		skip(&parser);
+
+		switch kind
+		{
+			case TokenKind.lbrace, TokenKind.lparen, TokenKind.lbracket
+			{
+				depth += 1;
+			}
+			case TokenKind.rparen, TokenKind.rbracket
+			{
+				depth -= 1;
+			}
+			case TokenKind.rbrace
+			{
+				depth -= 1;
+				if depth <= 0
+					return;
+			}
+			case TokenKind.semicolon
+			{
+				if depth <= 0
+					return;
+			}
+		}
+	}
+	return;
+}
+
+fn scan_decls(parser: &Parser)
+{
+	// What the Fortran's pass 0 is for, without parsing everything twice:  walk
+	// the top-level items and declare the ones that can be used before they are
+	// declared, which are fns, structs, and enums.  Milestone 2 declares the fn
+	// signatures here, milestones 4 and 5 the structs and enums, and
+	// milestone 6 the names that a `use` brings in.  Until then nothing is
+	// declared, so the items are only skipped.  The scan pushes no nodes and no
+	// diagnostics, since they are the parse's
+	while peek_kind(parser, 0) != TokenKind.eof
+		skip_item(&parser);
+	return;
+}
+
+fn drop_pass1_only_diags(parser: &Parser)
+{
+	// The Fortran doesn't run pass 1 for an incomplete input, so the
+	// diagnostics that only it raises aren't there.  That is E9 so far, and
+	// each more that is behind an `ipass` test in the Fortran goes here
+	let n = 0;
+	for i in [0: parser.diags.len]
+	{
+		if parser.diags.data[i].code != "E9"
+		{
+			parser.diags.data[n] = parser.diags.data[i];
+			n += 1;
+		}
+	}
+	parser.diags.len = n;
+	return;
+}
+
+fn parse_unit(parser: &Parser): i32
+{
+	// Parse a whole input, and return the index of its translation unit in
+	// `parser.nodes`.  The declarations are scanned first, and then the same
+	// tokens are parsed once
+	scan_decls(&parser);
+	parser.pos = 0;
+	parser.last_e20_pos = -1;
+
+	let members = new_i32_vec();
+	while peek_kind(parser, 0) != TokenKind.eof
+	{
+		const pos0 = parser.pos;
+		const current = peek_token(parser, 0);
+
+		switch current.kind
+		{
+			// The declarations are milestones 2, 4, and 5
+			case TokenKind.keyword when any(current.keyword == [
+				Keyword.fn_, Keyword.struct_, Keyword.enum_,
+			])
+			{
+				members.push(unsupported(&parser));
+			}
+			default
+			{
+				members.push(parse_statement(&parser));
+			}
+		}
+
+		// Break infinite loops
+		if parser.pos == pos0
+			skip(&parser);
+	}
+
+	if parser.expecting
+		drop_pass1_only_diags(&parser);
+
+	let unit = new_node(NodeKind.translation_unit);
+	unit.members = members.to_array();
+	return parser.nodes.push(unit);
+}

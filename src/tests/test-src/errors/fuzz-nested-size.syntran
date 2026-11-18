@@ -1,0 +1,4 @@
+// Fuzz regression: array-literal sizes recurse into parse_expr, which
+// re-enters parse_size
+
+	  [ ;     [;  

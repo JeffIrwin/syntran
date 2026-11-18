@@ -13,6 +13,8 @@ module syntran__compiler_m
 	character(len = *), parameter :: fort_compiler = "gfortran"
 	integer, parameter :: fort_vers(*) = [__GNUC__, __GNUC_MINOR__, __GNUC_PATCHLEVEL__]
 
+! 10 is no longer tested in ci/cd because ubuntu 26 dropped it. I'm allowing it
+! here to not be too strict
 #if (__GNUC__ <= 9)
 #error syntran is not compatible with gfortran <= 9. upgrade to gfortran 10 through 15
 #endif

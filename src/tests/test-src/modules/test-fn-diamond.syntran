@@ -1,0 +1,10 @@
+// Regression test for a module with plain fns that is imported twice: directly
+// here, and again through fnuser.  Both copies of each fn must keep a signature
+// for the native and Fortran backends
+
+use fnuser as fnuser;
+use fnmod::*;
+
+let p = make_pt(10, 20);
+
+return add_base(sum_pt(p)) == 130 and fnuser::user_total() == 103;

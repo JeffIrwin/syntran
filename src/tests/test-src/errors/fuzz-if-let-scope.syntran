@@ -1,0 +1,12 @@
+// A braceless `if` body used to leak its `let` into the enclosing scope, so `cd`
+// was readable (and unallocated) when the `let` never ran: SIGSEGV
+
+fn poly2(m: i64): [i64; :]
+{
+	if (m == 0)
+	let cd = poly2(1'i64);
+	let d = cd[1];
+	let ans = [1'i64];
+	return ans;
+}
+let res = poly2(4'i64);

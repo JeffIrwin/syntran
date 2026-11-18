@@ -1,0 +1,10 @@
+// Module that imports fnmod.syntran unqualified, which the test also imports
+// directly
+
+use fnmod::*;
+
+fn user_total(): i32
+{
+	let p = make_pt(1, 2);
+	return add_base(sum_pt(p));
+}

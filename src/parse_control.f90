@@ -14,7 +14,7 @@ contains
 
 !===============================================================================
 
-module subroutine parse_return_statement(parser, statement)
+recursive module subroutine parse_return_statement(parser, statement)
 
 	class(parser_t) :: parser
 	type(syntax_node_t), intent(out) :: statement
@@ -106,6 +106,7 @@ module subroutine parse_break_statement(parser, statement)
 	type(syntax_token_t) :: break_token, semi
 
 	call parser%match(break_keyword, break_token)
+	call check_in_loop(parser, break_token%pos, "break")
 	statement%kind = break_statement
 	call parser%match(semicolon_token, semi)
 
@@ -121,10 +122,34 @@ module subroutine parse_continue_statement(parser, statement)
 	type(syntax_token_t) :: continue_token, semi
 
 	call parser%match(continue_keyword, continue_token)
+	call check_in_loop(parser, continue_token%pos, "continue")
 	statement%kind = continue_statement
 	call parser%match(semicolon_token, semi)
 
 end subroutine parse_continue_statement
+
+!===============================================================================
+
+subroutine check_in_loop(parser, pos, keyword)
+
+	! A `break` or `continue` in a fn body has to be in a loop in that fn body.  At the
+	! top level, a `break` can leave a block, and `continue` is a no-op, but there is
+	! no block to leave from a fn
+
+	class(parser_t) :: parser
+	integer, intent(in) :: pos
+	character(len = *), intent(in) :: keyword
+
+	!********
+
+	type(text_span_t) :: span
+
+	if (.not. parser%in_fn_body .or. parser%loop_depth > 0) return
+
+	span = new_span(pos, len(keyword))
+	call parser%diagnostics%push(err_break_outside_loop(parser%context(), span, keyword))
+
+end subroutine check_in_loop
 
 !===============================================================================
 
@@ -146,7 +171,7 @@ recursive module subroutine parse_use_statement(parser, statement)
 	character(len = :), allocatable :: mod_filename, mod_text, src_dir, fn_name
 	character(len = :), allocatable :: insert_name, var_name, struct_name
 	character(len = :), allocatable :: enum_name
-	character(len = :), allocatable :: alias_name, method_alias
+	character(len = :), allocatable :: alias_name, fn_alias
 	type(syntax_token_t) :: use_token, mod_identifier, double_colon, &
 		name_identifier, semi, star, dummy, as_identifier, alias_identifier
 	type(text_span_t) :: span
@@ -538,7 +563,7 @@ recursive module subroutine parse_use_statement(parser, statement)
 		if (qualified_import) then
 			! Methods are already namespaced by struct — adding a module prefix
 			! would break lookup.
-			if (fn%is_method) then
+			if (fn%is_method .or. index(fn_name, "#") > 0) then
 				insert_name = fn_name
 			else
 				insert_name = qualified_prefix // "::" // fn_name
@@ -560,17 +585,22 @@ recursive module subroutine parse_use_statement(parser, statement)
 		if (parser%ipass == 0) call parser%fn_names%push(insert_name)
 
 		! A module imported twice (directly and through another module) is
-		! parsed twice, so its methods have two ids under one unqualified key
-		! "0Struct::method", and the second insert above overwrites the first.
-		! The flat fn array is filled by name (syntax_parse() in core.f90), so
-		! also insert each method under a key that is unique to its id, to
-		! keep both copies alive.  The leading "0" keeps it out of spelling
+		! parsed twice, so its fns have two ids under one key, like `fn` or
+		! "0Struct::method" or `module::fn`, and the second insert above
+		! overwrites the first.  The flat fn array is filled by name
+		! (syntax_parse() in core.f90), so also insert each fn under a key that
+		! is unique to its id, to keep both copies alive.  The VM doesn't care,
+		! since it compiles fn bodies from the declaration nodes, but the native
+		! and Fortran backends read each signature from the flat array.  The
+		! leading "0" (which a method's key already has) keeps it out of spelling
 		! suggestions, and nothing looks it up by name.  A "#" means that this
-		! is already an alias, re-exported from a nested import
-		if (fn%is_method .and. index(fn_name, "#") == 0) then
-			method_alias = fn_name // "#" // str(id_index)
-			call parser%fns%insert(method_alias, fn, id_index)
-			if (parser%ipass == 0) call parser%fn_names%push(method_alias)
+		! is already an alias, re-exported from a nested import, which is
+		! inserted as is above
+		if (index(fn_name, "#") == 0) then
+			fn_alias = insert_name // "#" // str(id_index)
+			if (fn_alias(1:1) /= "0") fn_alias = "0" // fn_alias
+			call parser%fns%insert(fn_alias, fn, id_index)
+			if (parser%ipass == 0) call parser%fn_names%push(fn_alias)
 		end if
 	end do
 
@@ -748,7 +778,7 @@ recursive module subroutine parse_if_statement(parser, statement)
 			"if-statement"))
 	end if
 
-	call parser%parse_statement(if_clause)
+	call parse_scoped_statement(parser, if_clause)
 
 	statement%kind = if_statement
 	call syntax_node_move(condition, statement%condition)
@@ -756,7 +786,7 @@ recursive module subroutine parse_if_statement(parser, statement)
 
 	if (parser%current_kind() == else_keyword) then
 		call parser%match(else_keyword, else_token)
-		call parser%parse_statement(else_clause)
+		call parse_scoped_statement(parser, else_clause)
 		call syntax_node_move(else_clause, statement%else_clause)
 	end if
 
@@ -764,6 +794,26 @@ recursive module subroutine parse_if_statement(parser, statement)
 	! an else clause which contains another if statement
 
 end subroutine parse_if_statement
+
+!===============================================================================
+
+recursive subroutine parse_scoped_statement(parser, statement)
+
+	! A braceless body, like `if (c) let x = 1;`, gets its own scope like a
+	! block does, so its `let` can't leak out to code where it never ran
+
+	class(parser_t) :: parser
+	type(syntax_node_t), intent(out) :: statement
+
+	call parser%vars%push_scope()
+	call parser%locs%push_scope()
+
+	call parser%parse_statement(statement)
+
+	call parser%vars%pop_scope()
+	call parser%locs%pop_scope()
+
+end subroutine parse_scoped_statement
 
 !===============================================================================
 
@@ -840,6 +890,11 @@ recursive module subroutine parse_for_statement(parser, statement)
 		! Array iterator type could be i32 or i64, and lbound type might not
 		! match ubound type!
 		dummy%type = array%val%array%type
+
+		! `[[1]; n]` is an error (E57), but its element type is still an array,
+		! which has no array_t behind this scalar loop var to subscript
+		if (dummy%type == array_type) dummy%type = unknown_type
+
 		if (dummy%type == enum_type) then
 			! Propagate the enum identity so uses of the loop var (e.g. `s ==
 			! Suit.Clubs` inside the body) don't misfire the cross-enum
@@ -880,7 +935,9 @@ recursive module subroutine parse_for_statement(parser, statement)
 
 	end if
 
+	parser%loop_depth = parser%loop_depth + 1
 	call parser%parse_statement(body)
+	parser%loop_depth = parser%loop_depth - 1
 
 	statement%kind       = for_statement
 	statement%identifier = identifier
@@ -922,7 +979,9 @@ recursive module subroutine parse_while_statement(parser, statement)
 			"while-loop"))
 	end if
 
-	call parser%parse_statement(body)
+	parser%loop_depth = parser%loop_depth + 1
+	call parse_scoped_statement(parser, body)
+	parser%loop_depth = parser%loop_depth - 1
 
 	statement%kind = while_statement
 	call syntax_node_move(condition, statement%condition)
@@ -932,7 +991,7 @@ end subroutine parse_while_statement
 
 !===============================================================================
 
-logical function at_case_body_start(parser) result(at_body)
+recursive logical function at_case_body_start(parser) result(at_body)
 
 	! True when the parser is sitting at the start of a `case` arm's body
 	! statement rather than another match-value expression.  Used to allow a
@@ -958,7 +1017,7 @@ subroutine check_case_range_bound(parser, subj_type, subj_val, bound, beg, end_)
 
 	! Shared type check for both ends of a `case lo:hi` range: the bound must
 	! be orderable against the switch subject with `<`, mirroring the
-	! eequals_token check that plain case values get in parse_case_clause()
+	! double_equals_token check that plain case values get in parse_case_clause()
 	! below.  is_binary_op_allowed()'s greater/less-token branch already
 	! restricts ordering to numeric-vs-numeric or str-vs-str, which is exactly
 	! what excludes bool and enum range bounds
@@ -1124,7 +1183,7 @@ recursive subroutine parse_case_clause(parser, subj_type, subj_val, clause)
 				! The _val wrapper also catches two same-kind enum_type values
 				! that belong to different enums, e.g. `Suit.Hearts == Card.Jack`
 				if (is_op_allowed) is_op_allowed = &
-					is_binary_op_allowed_val(subj_val, eequals_token, val_tmp%val)
+					is_binary_op_allowed_val(subj_val, double_equals_token, val_tmp%val)
 			end if
 
 			if (.not. is_op_allowed) then
@@ -1184,7 +1243,7 @@ recursive subroutine parse_case_clause(parser, subj_type, subj_val, clause)
 
 	end if
 
-	call parser%parse_statement(body)
+	call parse_scoped_statement(parser, body)
 
 	clause%kind = case_clause
 	call syntax_node_move(body, clause%body)
@@ -1298,7 +1357,7 @@ recursive module subroutine parse_switch_statement(parser, statement)
 					parser%context(), span))
 			end if
 
-			call parser%parse_statement(def_body)
+			call parse_scoped_statement(parser, def_body)
 
 			if (.not. has_default) &
 				call syntax_node_move(def_body, statement%else_clause)

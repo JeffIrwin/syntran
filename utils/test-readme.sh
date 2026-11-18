@@ -16,6 +16,9 @@ set -eu
 #   -->
 #   <!-- syntran-end -->
 #
+# A `-->` in the output (e.g. a diagnostic's `  --> file:1:5` location line)
+# would close the comment early, so it's written as `--&gt;` in the expected output.
+#
 # Blocks sharing the same `group=` are concatenated in document order and run
 # as a single unit (needed where later blocks in a doc section reuse
 # variables from earlier ones).  `dir=NAME` puts a group in a shared temp
@@ -251,6 +254,9 @@ normalize()
 			gsub(/syntran [0-9]+\.[0-9]+\.[0-9]+/, "syntran X.Y.Z", line)
 		}
 		sub(/[ \t]+$/, "", line)
+		# A `  --> file:line:col` diagnostic location would end the HTML comment
+		# that holds the expected output, so it is stored as `--&gt;`
+		gsub(/-->/, "--\\&gt;", line)
 		if (line != "") print line
 	}'
 }

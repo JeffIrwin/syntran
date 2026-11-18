@@ -1,0 +1,49 @@
+// A name can start with an underscore, as in `_x`, but a number can't, so
+// `1_000` is still one number.  The Fortran backend has to make up names for
+// the ones that don't start with a letter, which must not clash with a `u_x`
+
+let _x = 3;
+let u_x = 10;
+const _ = 100;
+let __y = 1_000;
+
+fn _f(a: i32): i32
+{
+	let _t = a * 2;
+	let u_t = 5;
+	return _t + u_t + _x;
+}
+
+fn u_f(): i32
+{
+	return 7;
+}
+
+struct _P
+{
+	_m: i32,
+	m1: i32,
+}
+
+enum _E
+{
+	_A,
+	_B,
+}
+
+let p = _P{_m = 4, m1 = 6};
+let e = _E._B;
+
+let ok1 = _x == 3 and u_x == 10 and _ == 100 and __y == 1000;
+let ok2 = _f(2) == 4 + 5 + 3 and u_f() == 7;
+let ok3 = p._m == 4 and p.m1 == 6;
+let ok4 = e == _E._B and str(e) == "_E._B" and std::variant_of(e) == "_B";
+
+// An underscore at the start of a block's variable shadows like any other
+{
+	let _x = 30;
+	ok1 = ok1 and _x == 30;
+}
+ok1 = ok1 and _x == 3;
+
+return ok1 and ok2 and ok3 and ok4;

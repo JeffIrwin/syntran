@@ -72,6 +72,10 @@ module syntran__parse_m
 		! scope.
 		logical :: in_fn_body = .false.
 
+		! How many `for`/`while` bodies enclose the statement being parsed, within the
+		! current fn.  A `break` or `continue` in a fn body with none is E132
+		integer :: loop_depth = 0
+
 		! True while parsing an imported module's translation unit (as
 		! opposed to the main program).  See in_fn_body above.
 		logical :: is_module = .false.
@@ -168,7 +172,7 @@ module syntran__parse_m
 	interface
 		! Implemented in parse_fn.f90
 
-		module subroutine parse_fn_declaration(parser, decl, no_fn_kw)
+		recursive module subroutine parse_fn_declaration(parser, decl, no_fn_kw)
 			class(parser_t) :: parser
 			type(syntax_node_t), intent(out) :: decl
 			logical, intent(in), optional :: no_fn_kw
@@ -201,12 +205,12 @@ module syntran__parse_m
 
 		! Implemented in parse_struct.f90
 
-		module subroutine parse_struct_declaration(parser, decl)
+		recursive module subroutine parse_struct_declaration(parser, decl)
 			class(parser_t) :: parser
 			type(syntax_node_t), intent(out) :: decl
 		end subroutine parse_struct_declaration
 
-		module subroutine parse_method_declaration(parser, decl, struct, is_const, struct_name, no_fn_kw)
+		recursive module subroutine parse_method_declaration(parser, decl, struct, is_const, struct_name, no_fn_kw)
 			class(parser_t) :: parser
 			type(syntax_node_t), intent(out) :: decl
 			type(struct_t), intent(in) :: struct
@@ -232,7 +236,7 @@ module syntran__parse_m
 			character(len = *), intent(in), optional :: enum_name
 		end subroutine parse_enum_access
 
-		module subroutine parse_enum_cast(parser, expr, enum_name)
+		recursive module subroutine parse_enum_cast(parser, expr, enum_name)
 			class(parser_t), target :: parser
 			type(syntax_node_t), intent(out) :: expr
 			character(len = *), intent(in), optional :: enum_name
@@ -330,7 +334,7 @@ module syntran__parse_m
 			type(syntax_node_t), intent(out) :: expr
 		end subroutine parse_array_expr
 
-		module subroutine parse_size(parser, size)
+		recursive module subroutine parse_size(parser, size)
 			class(parser_t) :: parser
 			type(syntax_node_vector_t), intent(out) :: size
 		end subroutine parse_size
@@ -352,7 +356,7 @@ module syntran__parse_m
 			type(syntax_node_t), intent(out) :: statement
 		end subroutine parse_if_statement
 
-		module subroutine parse_return_statement(parser, statement)
+		recursive module subroutine parse_return_statement(parser, statement)
 			class(parser_t) :: parser
 			type(syntax_node_t), intent(out) :: statement
 		end subroutine parse_return_statement

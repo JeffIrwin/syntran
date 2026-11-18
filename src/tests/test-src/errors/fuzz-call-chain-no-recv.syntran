@@ -1,0 +1,14 @@
+// Fuzz regression: a fn-typed member call in a chain after malformed struct
+// declarations used to walk into an unallocated receiver while splicing
+
+struct J
+	f fn(i32): 
+}
+struct I
+	j J
+}
+struct O
+	i I
+}
+let o  O{}
+o.i.j.f(5 

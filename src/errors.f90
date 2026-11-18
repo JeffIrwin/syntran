@@ -140,6 +140,14 @@ module syntran__errors_m
 		EC_STD_UNKNOWN_NAME = "E122", &
 		EC_MOD_IMPORT_NAME = "E123", &
 		EC_FILE_ARRAY = "E124", &
+		EC_TYPED_ARRAY_SIZE = "E125", &
+		EC_INFINITE_STRUCT = "E126", &
+		EC_BAD_OPTIONAL = "E127", &
+		EC_NULL_ARRAY = "E128", &
+		EC_UNTYPED_NULL = "E129", &
+		EC_NATIVE_UNSUPPORTED = "E130", &
+		EC_MOVE_NOT_VAR = "E131", &
+		EC_BREAK_OUTSIDE_LOOP = "E132", &
 		IC_EVAL_UNARY_TYPE = "I1", &
 		IC_EVAL_BINARY_TYPES = "I2", &
 		IC_EVAL_LEN_ARRAY = "I3", &
@@ -229,6 +237,10 @@ module syntran__errors_m
 		RC_READ_FAIL = "R44", &
 		RC_BINARY_WRITE_TYPE = "R45", &
 		RC_PARSE_BOOL = "R46", &
+		RC_NULL_MEMBER = "R47", &
+		RC_BAD_ARRAY_SIZE = "R48", &
+		RC_CAST_STR_LEN = "R49", &
+		RC_REPEAT_TOO_LONG = "R50", &
 		WC_MISSING_RETURN = "W1"
 
 	! A text span indicates which characters to underline in a faulty line of
@@ -571,11 +583,11 @@ module syntran__errors_m
 			character(len = *), intent(in) :: c
 		end function err_unexpected_char
 
-		module function err_unexpected_token(context, span, got, expect) result(err)
+		module function err_unexpected_token(context, span, got, expect, label) result(err)
 			type(text_context_t) :: context
 			type(text_span_t), intent(in) :: span
 			character(len = :), allocatable :: err
-			character(len = *), intent(in) :: got, expect
+			character(len = *), intent(in) :: got, expect, label
 		end function err_unexpected_token
 
 		module function err_void_assign(context, span, var) result(err)
@@ -864,6 +876,60 @@ module syntran__errors_m
 			character(len = *), intent(in) :: elem
 		end function err_file_array
 
+		module function err_typed_array_size(context, span, size_text) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+			character(len = *), intent(in) :: size_text
+		end function err_typed_array_size
+
+		module function err_infinite_struct(context, span, struct_name, member) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+			character(len = *), intent(in) :: struct_name, member
+		end function err_infinite_struct
+
+		module function err_null_array(context, span) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+		end function err_null_array
+
+		module function err_untyped_null(context, span, var) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+			character(len = *), intent(in) :: var
+		end function err_untyped_null
+
+		module function err_move_not_var(context, span) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+		end function err_move_not_var
+
+		module function err_break_outside_loop(context, span, keyword) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+			character(len = *), intent(in) :: keyword
+		end function err_break_outside_loop
+
+		module function err_native_unsupported(context, span, what) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+			character(len = *), intent(in) :: what
+		end function err_native_unsupported
+
+		module function err_bad_optional(context, span, type_text) result(err)
+			type(text_context_t) :: context
+			type(text_span_t), intent(in) :: span
+			character(len = :), allocatable :: err
+			character(len = *), intent(in) :: type_text
+		end function err_bad_optional
+
 		module function err_missing_return(context, span, fn) result(err)
 			type(text_context_t) :: context
 			type(text_span_t), intent(in) :: span
@@ -1073,11 +1139,11 @@ module syntran__errors_m
 			character(len = *), intent(in) :: range
 		end function err_non_int_range
 
-		module function err_het_array(context, span, elem) result(err)
+		module function err_het_array(context, span, elem, expect, actual) result(err)
 			type(text_context_t) :: context
 			type(text_span_t), intent(in) :: span
 			character(len = :), allocatable :: err
-			character(len = *), intent(in) :: elem
+			character(len = *), intent(in) :: elem, expect, actual
 		end function err_het_array
 
 		module function err_unset_member(context, span, mem_name, struct_name) result(err)
@@ -1161,6 +1227,22 @@ module syntran__errors_m
 			integer(kind = 8), intent(in) :: ncopies
 			character(len = :), allocatable :: err
 		end function err_rt_repeat_negative
+
+		module function err_rt_repeat_too_long(ncopies, len_) result(err)
+			integer(kind = 8), intent(in) :: ncopies, len_
+			character(len = :), allocatable :: err
+		end function err_rt_repeat_too_long
+
+		module function err_rt_bad_array_size(sizes) result(err)
+			integer(kind = 8), intent(in) :: sizes(:)
+			character(len = :), allocatable :: err
+		end function err_rt_bad_array_size
+
+		module function err_rt_cast_str_len(fn, len_) result(err)
+			character(len = *), intent(in) :: fn
+			integer(kind = 8), intent(in) :: len_
+			character(len = :), allocatable :: err
+		end function err_rt_cast_str_len
 
 		module function err_rt_solve_shape(fn, arows, acols, brows) result(err)
 			character(len = *), intent(in) :: fn

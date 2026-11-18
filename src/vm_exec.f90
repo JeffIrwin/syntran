@@ -166,6 +166,91 @@ end subroutine vm_pop_discard
 
 !===============================================================================
 
+function store_can_move(prog, ip, tos, slot) result(can)
+	! Whether OP_STORE_* at `ip` can move TOS into `slot` instead of
+	! deep-copying it.  TOS is kept on the stack after a store, but when the
+	! next op is OP_POP nobody reads it again.  Only the values that can be
+	! arbitrarily large, and where assign_() is a plain copy anyway:
+	!
+	! - struct/null values (a linked list)
+	! - strs
+	! - arrays, unless assign_() would cast their elements to the slot's type
+	!
+	! That is also what makes `data = std::move(new_data)` and `x = [0; n]` cheap
+	type(program_t), intent(in) :: prog
+	integer, intent(in) :: ip
+	type(value_t), intent(in) :: tos, slot
+	logical :: can
+
+	can = .false.
+	select case (tos%type)
+	case (struct_type, null_type)
+		if (.not. any(slot%type == [struct_type, null_type, unknown_type])) return
+
+	case (str_type)
+		if (.not. any(slot%type == [str_type, unknown_type])) return
+
+	case (array_type)
+		if (.not. allocated(tos%array)) return
+		if (slot%type == array_type) then
+			if (.not. allocated(slot%array)) return
+			if (slot%array%type /= tos%array%type) return
+			if (slot%array%rank /= tos%array%rank) return
+		else if (slot%type /= unknown_type) then
+			return
+		end if
+
+	case default
+		return
+	end select
+	can = next_op_is_pop(prog, ip)
+
+end function store_can_move
+
+!===============================================================================
+
+function next_op_is_pop(prog, ip) result(is_pop)
+	type(program_t), intent(in) :: prog
+	integer, intent(in) :: ip
+	logical :: is_pop
+
+	is_pop = .false.
+	if (ip >= prog%len_) return
+	is_pop = prog%code(ip + 1)%op == OP_POP
+
+end function next_op_is_pop
+
+!===============================================================================
+
+subroutine store_move(tos, slot)
+	! Move TOS into a variable slot, leaving TOS an empty value for the OP_POP
+	! that follows.  See store_can_move()
+	type(value_t), intent(inout) :: tos, slot
+	call value_move(tos, slot)
+	tos%type = unknown_type
+end subroutine store_move
+
+!===============================================================================
+
+subroutine store_keep_array(prog, ip, tos, slot)
+	! `(a = 1)` of a scalar onto an array `a` broadcasts it, and the parser
+	! types that expression as `a`.  But the scalar is still on TOS after the
+	! store, so give the expression's reader the array that was stored.  Nobody
+	! reads TOS when the next op is OP_POP, which skips the copy for the usual
+	! statement `a = 1;`
+	type(program_t), intent(in) :: prog
+	integer, intent(in) :: ip
+	type(value_t), intent(inout) :: tos
+	type(value_t), intent(in) :: slot
+
+	if (slot%type /= array_type .or. tos%type == array_type) return
+	if (next_op_is_pop(prog, ip)) return
+	call value_copy(tos, slot)
+
+end subroutine store_keep_array
+
+!===============================================================================
+
 subroutine vm_stack_grow(stack)
 	! Grow the operand stack when len_ > cap.  Called from the typed-load fast
 	! path which increments len_ before checking capacity.
@@ -402,7 +487,7 @@ subroutine do_binop(left, right, op_kind, restype, res, rt_err)
 		call mul(left, right, res, '*')
 	case (matmul_token)
 		call matmul_(left, right, res, '@', rt_err)
-	case (sstar_token)
+	case (double_star_token)
 		call pow(left, right, res, '**')
 	case (slash_token)
 		call div(left, right, res, '/')
@@ -412,7 +497,7 @@ subroutine do_binop(left, right, op_kind, restype, res, rt_err)
 		call and_(left, right, res, 'and')
 	case (or_keyword)
 		call or_(left, right, res, 'or')
-	case (eequals_token)
+	case (double_equals_token)
 		call is_eq(left, right, res, '==')
 	case (bang_equals_token)
 		call is_ne(left, right, res, '!=')
@@ -424,9 +509,9 @@ subroutine do_binop(left, right, op_kind, restype, res, rt_err)
 		call is_gt(left, right, res, '>')
 	case (greater_equals_token)
 		call is_ge(left, right, res, '>=')
-	case (lless_token)
+	case (double_less_token)
 		call left_shift(left, right, res, '<<')
-	case (ggreater_token)
+	case (double_greater_token)
 		call right_shift(left, right, res, '>>')
 	case (caret_token)
 		call bit_xor(left, right, res, '^')
@@ -455,20 +540,20 @@ function op_text(op_kind) result(text)
 	case (plus_token);           text = '+'
 	case (minus_token);          text = '-'
 	case (star_token);           text = '*'
-	case (sstar_token);          text = '**'
+	case (double_star_token);    text = '**'
 	case (slash_token);          text = '/'
 	case (percent_token);        text = '%'
 	case (matmul_token);         text = '@'
 	case (and_keyword);          text = 'and'
 	case (or_keyword);           text = 'or'
-	case (eequals_token);        text = '=='
+	case (double_equals_token);  text = '=='
 	case (bang_equals_token);    text = '!='
 	case (less_token);           text = '<'
 	case (less_equals_token);    text = '<='
 	case (greater_token);        text = '>'
 	case (greater_equals_token); text = '>='
-	case (lless_token);          text = '<<'
-	case (ggreater_token);       text = '>>'
+	case (double_less_token);    text = '<<'
+	case (double_greater_token); text = '>>'
 	case (caret_token);          text = '^'
 	case (pipe_token);           text = '|'
 	case (amp_token);            text = '&'
@@ -584,7 +669,7 @@ subroutine do_array_binop_typed(left, right, op_kind, elem_type, res, rt_err)
 		case (f32_type); res%array%bool = left%array%f32 >= right%array%f32
 		case (f64_type); res%array%bool = left%array%f64 >= right%array%f64
 		end select
-	case (eequals_token)
+	case (double_equals_token)
 		res%array = mold(left%array, bool_type)
 		select case (elem_type)
 		case (i32_type);  res%array%bool = left%array%i32  == right%array%i32
@@ -948,17 +1033,23 @@ module subroutine vm_run(prog, state, res)
 		! to preserve the lhs type and cast the rhs. Raw copy for let_expr init
 		! (slot starts as unknown_type).
 		case (OP_STORE_GLOBAL)
-			if (state%vars%vals(instr%a)%type == unknown_type) then
+			if (store_can_move(prog, ip, stack%v(stack%len_), state%vars%vals(instr%a))) then
+				call store_move(stack%v(stack%len_), state%vars%vals(instr%a))
+			else if (state%vars%vals(instr%a)%type == unknown_type) then
 				state%vars%vals(instr%a) = stack%v(stack%len_)
 			else
 				call assign_(state%vars%vals(instr%a), stack%v(stack%len_), '=')
+				call store_keep_array(prog, ip, stack%v(stack%len_), state%vars%vals(instr%a))
 			end if
 
 		case (OP_STORE_LOCAL)
-			if (state%locs%vals(instr%a)%type == unknown_type) then
+			if (store_can_move(prog, ip, stack%v(stack%len_), state%locs%vals(instr%a))) then
+				call store_move(stack%v(stack%len_), state%locs%vals(instr%a))
+			else if (state%locs%vals(instr%a)%type == unknown_type) then
 				state%locs%vals(instr%a) = stack%v(stack%len_)
 			else
 				call assign_(state%locs%vals(instr%a), stack%v(stack%len_), '=')
+				call store_keep_array(prog, ip, stack%v(stack%len_), state%locs%vals(instr%a))
 			end if
 
 		! --- binary operation ---
@@ -1007,6 +1098,39 @@ module subroutine vm_run(prog, state, res)
 
 		case (OP_LOAD_REF_LOCAL)
 			call value_move(state%locs%vals(instr%a), val)
+			call vm_push_move(stack, val)
+
+		case (OP_LOAD_REF_MEMBER)
+			associate(n => prog%nodes(instr%a))
+			if (n%is_loc) then
+				call move_member_out(n, state%locs%vals(n%id_index), state, val)
+			else
+				call move_member_out(n, state%vars%vals(n%id_index), state, val)
+			end if
+			end associate
+			if (state%rt_halt) exit
+			call vm_push_move(stack, val)
+
+		! --- std::move(x): move an array or str out of x onto the stack ---------
+		! Unlike OP_LOAD_REF_*, nothing is written back, so x is left an empty
+		! array or str instead of a hollow value
+		case (OP_MOVE_GLOBAL)
+			call move_take(state%vars%vals(instr%a), val)
+			call vm_push_move(stack, val)
+
+		case (OP_MOVE_LOCAL)
+			call move_take(state%locs%vals(instr%a), val)
+			call vm_push_move(stack, val)
+
+		case (OP_MOVE_MEMBER)
+			associate(n => prog%nodes(instr%a))
+			if (n%is_loc) then
+				call move_member_take(n, state%locs%vals(n%id_index), state, val)
+			else
+				call move_member_take(n, state%vars%vals(n%id_index), state, val)
+			end if
+			end associate
+			if (state%rt_halt) exit
 			call vm_push_move(stack, val)
 
 		! --- user function call -----------------------------------------------
@@ -1234,7 +1358,17 @@ module subroutine vm_run(prog, state, res)
 				    cn%args(i)%kind == method_call_expr .or. &
 				    cn%args(i)%kind == fn_call_intr_expr .or. &
 				    cn%args(i)%root_kind /= 0) cycle
-				if (allocated(cn%args(i)%lsubscripts) .or. &
+				if (call_recv_moved(cn, i)) then
+					! Plain dot chain, moved out by OP_LOAD_REF_MEMBER
+					if (cn%args(i)%is_loc) then
+						call move_member_in(cn%args(i), &
+							state%locs%vals(cn%args(i)%id_index), state, params_pool(i))
+					else
+						call move_member_in(cn%args(i), &
+							state%vars%vals(cn%args(i)%id_index), state, params_pool(i))
+					end if
+					if (state%rt_halt) exit
+				else if (allocated(cn%args(i)%lsubscripts) .or. &
 				    cn%args(i)%kind == dot_expr) then
 					! Subscripted or dot-expr receiver: write element back via
 					! set_val, using this param's own window of the
@@ -1463,6 +1597,16 @@ module subroutine vm_run(prog, state, res)
 					block
 						integer(kind=8) :: char_pos
 						char_pos = stack%v(base_+nelem+1)%to_i64()
+						if (bounds_check) then
+							if (n%is_loc) then
+								call check_index_nat(state, char_pos, &
+									len(state%locs%vals(id)%array%str(i8+1)%s, 8))
+							else
+								call check_index_nat(state, char_pos, &
+									len(state%vars%vals(id)%array%str(i8+1)%s, 8))
+							end if
+							if (state%rt_halt) exit
+						end if
 						if (n%is_loc) then
 							state%locs%vals(id)%array%str(i8+1)%s( &
 								char_pos+1 : char_pos+1) = right%str%s
@@ -1539,6 +1683,55 @@ module subroutine vm_run(prog, state, res)
 		! nested, and subscripted member access chains.  Chain subscript
 		! slots (compile_member_chain_slots) are on TOS; pop them as a slot
 		! window with a fresh consumption cursor instead of AST-walking.
+		! --- null tests and moves for recursive structs (see bytecode.f90) ---
+		case (OP_IS_NULL)
+			block
+			logical :: is_null_
+			if (instr%c /= 0) then
+				is_null_ = state%locs%vals(instr%a)%type == null_type
+			else
+				is_null_ = state%vars%vals(instr%a)%type == null_type
+			end if
+			val%type = bool_type
+			val%sca%bool = is_null_ .neqv. (instr%b /= 0)
+			end block
+			call vm_push_move(stack, val)
+
+		case (OP_IS_NULL_MEMBER)
+			block
+			logical :: is_null_
+			associate(n => prog%nodes(instr%a))
+			if (n%is_loc) then
+				call member_is_null(n, state%locs%vals(n%id_index), state, is_null_)
+			else
+				call member_is_null(n, state%vars%vals(n%id_index), state, is_null_)
+			end if
+			end associate
+			if (state%rt_halt) exit
+			val%type = bool_type
+			val%sca%bool = is_null_ .neqv. (instr%b /= 0)
+			end block
+			call vm_push_move(stack, val)
+
+		case (OP_TAKE_MEMBER)
+			associate(n => prog%nodes(instr%a))
+			if (n%is_loc) then
+				call take_member(n, state%locs%vals(n%id_index), state)
+			else
+				call take_member(n, state%vars%vals(n%id_index), state)
+			end if
+			if (state%rt_halt) exit
+			if (next_op_is_pop(prog, ip)) then
+				! Nobody reads the value of the assignment
+				val%type = unknown_type
+				call vm_push_move(stack, val)
+			else if (n%is_loc) then
+				call vm_push_copy(stack, state%locs%vals(n%id_index))
+			else
+				call vm_push_copy(stack, state%vars%vals(n%id_index))
+			end if
+			end associate
+
 		case (OP_LOAD_MEMBER)
 			associate(n => prog%nodes(instr%a))
 			block
@@ -1591,6 +1784,23 @@ module subroutine vm_run(prog, state, res)
 		case (OP_STORE_MEMBER)
 			call vm_pop_copy(stack, right)
 			associate(n => prog%nodes(instr%a))
+			if (instr%c /= 0) then
+				! Plain `x.a.b = <struct>`: move the value into place.  The chain
+				! has no subscript slots.  Nobody reads the value of the
+				! assignment if an OP_POP follows, else push a copy
+				if (next_op_is_pop(prog, ip)) then
+					val%type = unknown_type
+				else
+					call value_copy(val, right)
+				end if
+				if (n%is_loc) then
+					call move_member_in(n, state%locs%vals(n%id_index), state, right)
+				else
+					call move_member_in(n, state%vars%vals(n%id_index), state, right)
+				end if
+				if (state%rt_halt) exit
+				call vm_push_move(stack, val)
+			else
 			block
 			integer :: nslots_, base_, pos_
 			nslots_ = chain_total_nslots(n)
@@ -1628,6 +1838,7 @@ module subroutine vm_run(prog, state, res)
 			if (state%rt_halt) exit
 			call vm_push_move(stack, val)
 			end block
+			end if
 			end associate
 
 		! --- M6: intrinsic function call -----------------------------------------
@@ -1968,7 +2179,7 @@ module subroutine vm_run(prog, state, res)
 						for_iters(fi)%len8 = for_iters(fi)%len8 * stack%v(k_)%to_i64()
 					end do
 					k_ = k_ + 1
-					for_iters(fi)%lbound_ = stack%v(k_)
+					call value_copy(for_iters(fi)%lbound_, stack%v(k_))  ! not `=`, for Intel
 
 				case default
 					write(*,*) err_int(IC_FOR_ARRAY_KIND, 'for loop: unknown array kind')
@@ -2079,35 +2290,38 @@ module subroutine vm_run(prog, state, res)
 						call rt_throw(state, err_rt(RC_FOR_STEP_ZERO, 'for loop step is 0'))
 						exit
 					end if
-					for_iters(fi)%len8 = ( &
-						for_iters(fi)%ubound_%sca%i32 - for_iters(fi)%lbound_%sca%i32 &
-						+ for_iters(fi)%step%sca%i32  &
-						- sign(1, for_iters(fi)%step%sca%i32) ) / for_iters(fi)%step%sca%i32
+					for_iters(fi)%len8 = slice_len( &
+						int(for_iters(fi)%lbound_%sca%i32, 8), &
+						int(for_iters(fi)%step%sca%i32, 8), &
+						int(for_iters(fi)%ubound_%sca%i32, 8))
 				case (i64_type)
 					if (for_iters(fi)%step%sca%i64 == 0) then
 						call rt_throw(state, err_rt(RC_FOR_STEP_ZERO, 'for loop step is 0'))
 						exit
 					end if
-					for_iters(fi)%len8 = ( &
-						for_iters(fi)%ubound_%sca%i64 - for_iters(fi)%lbound_%sca%i64 &
-						+ for_iters(fi)%step%sca%i64  &
-						- sign(int(1,8), for_iters(fi)%step%sca%i64) ) / for_iters(fi)%step%sca%i64
+					for_iters(fi)%len8 = slice_len( &
+						for_iters(fi)%lbound_%sca%i64, &
+						for_iters(fi)%step%sca%i64, &
+						for_iters(fi)%ubound_%sca%i64)
 				case (f32_type)
 					if (for_iters(fi)%step%sca%f32 == 0.0) then
 						call rt_throw(state, err_rt(RC_FOR_STEP_ZERO_F, 'for loop step is 0.0'))
 						exit
 					end if
-					for_iters(fi)%len8 = ceiling( &
-						(for_iters(fi)%ubound_%sca%f32 - for_iters(fi)%lbound_%sca%f32) &
-						/ for_iters(fi)%step%sca%f32)
+					call float_range_cap(state, &
+						real(for_iters(fi)%lbound_%sca%f32, 8), &
+						real(for_iters(fi)%step%sca%f32, 8), &
+						real(for_iters(fi)%ubound_%sca%f32, 8), for_iters(fi)%len8)
+					if (state%rt_halt) exit
 				case (f64_type)
 					if (for_iters(fi)%step%sca%f64 == 0.0d0) then
 						call rt_throw(state, err_rt(RC_FOR_STEP_ZERO_F, 'for loop step is 0.0'))
 						exit
 					end if
-					for_iters(fi)%len8 = ceiling( &
-						(for_iters(fi)%ubound_%sca%f64 - for_iters(fi)%lbound_%sca%f64) &
-						/ for_iters(fi)%step%sca%f64)
+					call float_range_cap(state, &
+						for_iters(fi)%lbound_%sca%f64, for_iters(fi)%step%sca%f64, &
+						for_iters(fi)%ubound_%sca%f64, for_iters(fi)%len8)
+					if (state%rt_halt) exit
 				case default
 					write(*,*) err_int(IC_STEP_ARRAY_TYPE, 'step array type not implemented')
 					call internal_error()
@@ -3478,16 +3692,19 @@ module subroutine vm_run(prog, state, res)
 			block
 			integer :: rk_, k_
 			integer(kind=8) :: dims_(MAX_NAT_UNIF_RANK), len_tot_
+			integer :: alloc_stat_
 			type(value_t) :: fill_
 
 			rk_     = instr%b
 			call vm_pop_copy(stack, fill_)
-			len_tot_ = 1
 			do k_ = rk_, 1, -1
 				dims_(k_) = stack%v(stack%len_)%to_i64()
 				stack%len_ = stack%len_ - 1
-				len_tot_   = len_tot_ * dims_(k_)
 			end do
+
+			! Negative or huge extents are a runtime error, not an allocation
+			call check_array_len(state, dims_(1:rk_), len_tot_)
+			if (state%rt_halt) exit
 
 			allocate(val%array)
 			val%type           = array_type
@@ -3496,7 +3713,12 @@ module subroutine vm_run(prog, state, res)
 			val%array%len_     = len_tot_
 			allocate(val%array%size(rk_))
 			val%array%size(1:rk_) = dims_(1:rk_)
-			call allocate_array(val, len_tot_)
+			call allocate_array(val, len_tot_, alloc_stat_)
+			if (alloc_stat_ /= 0) then
+				call rt_throw(state, err_rt_bad_array_size(dims_(1:rk_)))
+				val%array%len_ = 0
+				exit
+			end if
 
 			select case (instr%a)
 			case (bool_type); val%array%bool = fill_%sca%bool
@@ -3516,12 +3738,15 @@ module subroutine vm_run(prog, state, res)
 		case (OP_BOUND_ARRAY_NAT)
 			block
 			integer(kind=8) :: lb_, ub_, len_, k8_
+			integer :: alloc_stat_
 
 			ub_ = stack%v(stack%len_  )%to_i64()
 			lb_ = stack%v(stack%len_-1)%to_i64()
 			stack%len_ = stack%len_ - 2
 
 			len_ = max(0_8, ub_ - lb_)
+			call check_array_len(state, [len_], len_)
+			if (state%rt_halt) exit
 
 			allocate(val%array)
 			val%type           = array_type
@@ -3530,7 +3755,12 @@ module subroutine vm_run(prog, state, res)
 			val%array%len_     = len_
 			allocate(val%array%size(1))
 			val%array%size(1)  = len_
-			call allocate_array(val, len_)
+			call allocate_array(val, len_, alloc_stat_)
+			if (alloc_stat_ /= 0) then
+				call rt_throw(state, err_rt_bad_array_size([len_]))
+				val%array%len_ = 0
+				exit
+			end if
 
 			select case (instr%a)
 			case (i32_type)

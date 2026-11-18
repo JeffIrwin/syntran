@@ -196,9 +196,55 @@ module syntran__runtime_m
 			integer, intent(inout), optional :: pos
 		end subroutine
 
-		module subroutine allocate_array(val, cap)
+		module subroutine member_is_null(node, var, state, is_null)
+			type(syntax_node_t), intent(in), target :: node
+			type(value_t), intent(inout), target :: var
+			type(state_t), intent(inout) :: state
+			logical, intent(out) :: is_null
+		end subroutine
+
+		module subroutine take_member(node, var, state)
+			type(syntax_node_t), intent(in), target :: node
+			type(value_t), intent(inout), target :: var
+			type(state_t), intent(inout) :: state
+		end subroutine
+
+		module subroutine move_member_out(node, var, state, val)
+			type(syntax_node_t), intent(in), target :: node
+			type(value_t), intent(inout), target :: var
+			type(state_t), intent(inout) :: state
+			type(value_t), intent(out) :: val
+		end subroutine
+
+		module subroutine move_member_in(node, var, state, val)
+			type(syntax_node_t), intent(in), target :: node
+			type(value_t), intent(inout), target :: var
+			type(state_t), intent(inout) :: state
+			type(value_t), intent(inout) :: val
+		end subroutine
+
+		module subroutine move_take(v, val)
+			type(value_t), intent(inout) :: v
+			type(value_t), intent(out) :: val
+		end subroutine
+
+		module subroutine move_member_take(node, var, state, val)
+			type(syntax_node_t), intent(in), target :: node
+			type(value_t), intent(inout), target :: var
+			type(state_t), intent(inout) :: state
+			type(value_t), intent(out) :: val
+		end subroutine
+
+		module subroutine allocate_array(val, cap, stat)
 			type(value_t), intent(inout) :: val
 			integer(kind = 8), intent(in) :: cap
+			integer, intent(out), optional :: stat
+		end subroutine
+
+		module subroutine check_array_len(state, sizes, len_)
+			type(state_t), intent(inout) :: state
+			integer(kind = 8), intent(in) :: sizes(:)
+			integer(kind = 8), intent(out) :: len_
 		end subroutine
 
 		module function new_array(type, cap) result(vector)
@@ -549,29 +595,89 @@ end subroutine open_file_impl
 elemental function slice_len(lsub, ssub, usub) result(len_)
 
 	! Number of elements in the stepped slice lsub : ssub : usub, i.e.
-	! python's len(range(lsub, usub, ssub)).  Branchless apart from the
-	! max(): this is the same (u - l + s - sign(1,s)) / s formula used by
-	! OP_FOR_SETUP_NAT (vm_exec.f90) and step_array construction
+	! python's len(range(lsub, usub, ssub)).  It is also the count for
+	! OP_FOR_SETUP (vm_exec.f90) and step_array construction
 	! (runtime_control.f90's eval_array_expr, step_array kind).
 	!
+	! The empty/reversed cases are tested first, and the count is
+	! (u - l - sign(1,s)) / s + 1 rather than (u - l + s - sign(1,s)) / s, so
+	! that a big step doesn't overflow.  i32 callers widen their args to i64,
+	! so only an i64 range wider than huge(0_8) can still overflow in u - l.
+	! That is reported as huge(0_8), which check_array_len() rejects
+	!
 	! This used to be built from a `divceil` (integer division ceiling)
-	! helper plus two `if` guards to clamp an empty/reversed slice to 0.
-	! divceil() truncates toward zero, so it over-counts by one for a
-	! negative numerator (divceil(-1, 2) = 1, not the true ceil(-0.5) = 0);
-	! that made `max(0_8, divceil(u - l, s))` -- used at some call sites --
-	! silently wrong for an empty stepped slice like a[4:2:3], and made the
-	! unguarded two-`if` form work only because the guards independently
-	! covered exactly the cases divceil() got wrong.  This formula sidesteps
-	! all of that: it's the one already used elsewhere in this file for
-	! for-loops and step_array literals, verified against every combination
-	! of a slice's sign and direction
+	! helper plus two `if` guards.  divceil() truncates toward zero, so it
+	! over-counts by one for a negative numerator (divceil(-1, 2) = 1, not
+	! the true ceil(-0.5) = 0), which was wrong for an empty stepped slice
+	! like a[4:2:3]
 
 	integer(kind = 8), intent(in) :: lsub, ssub, usub
 	integer(kind = 8) :: len_
 
-	len_ = max(0_8, (usub - lsub + ssub - sign(1_8, ssub)) / ssub)
+	integer(kind = 8) :: d
+
+	if ((ssub > 0 .and. lsub >= usub) .or. (ssub < 0 .and. lsub <= usub)) then
+		len_ = 0
+		return
+	end if
+
+	d = usub - lsub
+	if ((d > 0) .neqv. (ssub > 0)) then
+		! u - l wrapped around
+		len_ = huge(0_8)
+	else
+		len_ = (d - sign(1_8, ssub)) / ssub + 1
+	end if
 
 end function slice_len
+
+!===============================================================================
+
+subroutine float_range_cap(state, lb, step, ub, cap)
+
+	! Number of elements of the float range `[lb: step: ub]`, or an R48 runtime
+	! error if there are too many to count or if lb, step, or ub isn't finite.
+	! The caller must check state%rt_halt immediately after.  The caller has
+	! already rejected a step of 0.  It is used for the capacity of the array
+	! expression (runtime_control.f90's eval_array_expr, step_array kind) and
+	! for the count of OP_FOR_SETUP (vm_exec.f90)
+	!
+	! The count is computed in f64, even for an f32 range, so that `ub - lb`
+	! can't overflow, and it's compared to huge() as a real, since ceiling()
+	! of a big or non-finite count into an integer is undefined.  The
+	! comparison to huge() is written so that a NaN fails it.  The bounds and
+	! step are tested by their bits instead of by comparing, which -Ofast /
+	! -ffinite-math-only can fold away.  The array expression's
+	! fill loop stops at cap too, and then shrinks the array to what it filled,
+	! because whole-array ops like `a + b` assume that size(a) == a%len_
+
+	type(state_t), intent(inout) :: state
+	real(kind = 8), intent(in) :: lb, step, ub
+	integer(kind = 8), intent(out) :: cap
+
+	integer(kind = 8) :: bits(3)
+	real(kind = 8) :: count_
+
+	cap = 0
+
+	! An exponent of all ones is inf or NaN
+	bits = iand(transfer([lb, step, ub], bits), huge(0_8))
+	if (any(bits >= int(z'7FF0000000000000', 8))) then
+		call rt_throw(state, err_rt(RC_BAD_ARRAY_SIZE, &
+			'float range has a bound or step that is not finite'))
+		return
+	end if
+
+	count_ = (ub - lb) / step
+	if (.not. (count_ < real(huge(cap), 8))) then
+		call rt_throw(state, err_rt(RC_BAD_ARRAY_SIZE, &
+			'float range has too many elements'))
+		return
+	end if
+
+	if (count_ > 0) cap = ceiling(count_, kind = 8)
+
+end subroutine float_range_cap
 
 !===============================================================================
 
