@@ -404,17 +404,12 @@ from `build/fuzz/work/<n>/`.
 For each bug that the fuzzer finds, reduce the reproducer, fix the bug, and add
 the `.min` file to `src/tests/test-src/` as a regression test, as described
 above.  Don't take ASan/UBSan builds as the default: they make the build very
-slow, and UBSan only instruments the C files.  `.github/workflows/fuzz.yml` runs
-it nightly, separately from `main.yml` so that a find never blocks a push.
+slow, and UBSan only instruments the C files.
 
-GitHub only runs a `schedule` or `workflow_dispatch` workflow from the copy on the
-default branch, and `main` only changes at a release.  So `fuzz.yml` must be on
-`main` for the nightly run to happen at all, and it checks out `dev` (`ref: dev`)
-so that it fuzzes the latest code.  `utils/fuzz.c` and the build come from `dev`,
-but an edit to `fuzz.yml` itself only takes effect once it is copied to `main`:
-```bash
-git switch main && git checkout dev -- .github/workflows/fuzz.yml
-```
+Fuzzing is not in CI, and it is run locally by hand.  A nightly job was tried and
+dropped: every night it failed on the same known crash and on the mutants that
+never halt (`TIMEOUT`), since CI starts with an empty `crashes/` dir, and it emailed
+a failure each time.  Don't add it back.
 
 ### Evaluating a script as a command-line string
 To run a syntran script without saving it as a file:
