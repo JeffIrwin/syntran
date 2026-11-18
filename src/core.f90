@@ -27,11 +27,10 @@ module syntran__core_m
 
 	integer, parameter ::   &
 		syntran_major =  1, &
-		syntran_minor =  7, &
+		syntran_minor =  8, &
 		syntran_patch =  0
 
 	! TODO:
-	!  - 1.8 release
 	!  - self-hosted compiler
 	!    * self-host tests need to run on windows too. currently just linux/mac
 	!      iirc
